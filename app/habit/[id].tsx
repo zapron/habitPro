@@ -4,6 +4,8 @@ import { useHabitStore } from "../../src/store/habitStore";
 import { ArrowLeft, Trash2, Check, Lock } from "lucide-react-native";
 import { Button } from "../../src/components/Button";
 import { theme } from "../../src/styles/theme";
+import { Timer } from "../../src/components/Timer";
+import { QuoteCard } from "../../src/components/QuoteCard";
 
 export default function HabitDetail() {
     const { id } = useLocalSearchParams();
@@ -68,6 +70,10 @@ export default function HabitDetail() {
                 <Text style={styles.title}>{habit.title}</Text>
                 <Text style={styles.description}>{habit.description || "No description"}</Text>
 
+                <Timer startDate={habit.startDate} />
+
+                <QuoteCard />
+
                 <View style={styles.progressCard}>
                     <View style={styles.progressHeader}>
                         <Text style={styles.progressLabel}>Progress</Text>
@@ -88,38 +94,52 @@ export default function HabitDetail() {
                 <Text style={styles.gridTitle}>The 21-Day Journey</Text>
 
                 <View style={styles.grid}>
-                    {days.map((day, index) => {
-                        const dateStr = getDayDate(index);
-                        const isCompleted = habit.completedDates.includes(dateStr);
-                        const isToday = dateStr === new Date().toISOString().split('T')[0];
+                    {(() => {
+                        const today = new Date();
+                        today.setHours(0, 0, 0, 0);
 
-                        // Conditional styles
-                        const dayButtonStyle = [
-                            styles.dayButton,
-                            isCompleted ? styles.dayButtonCompleted : styles.dayButtonIncomplete,
-                            isToday && !isCompleted ? styles.dayButtonToday : null
-                        ];
+                        return days.map((day, index) => {
+                            const dateStr = getDayDate(index);
+                            const isCompleted = habit.completedDates.includes(dateStr);
 
-                        return (
-                            <TouchableOpacity
-                                key={day}
-                                onPress={() => toggleCompletion(habit.id, dateStr)}
-                                style={dayButtonStyle}
-                                activeOpacity={0.8}
-                            >
-                                {isCompleted ? (
-                                    <Check size={20} color="white" strokeWidth={3} />
-                                ) : (
-                                    <Text style={[
-                                        styles.dayText,
-                                        isToday ? styles.dayTextToday : styles.dayTextDefault
-                                    ]}>
-                                        {day}
-                                    </Text>
-                                )}
-                            </TouchableOpacity>
-                        );
-                    })}
+                            const dayDate = new Date(dateStr);
+                            dayDate.setHours(0, 0, 0, 0);
+
+                            const isFuture = dayDate > today;
+                            const isToday = dayDate.getTime() === today.getTime();
+
+                            // Conditional styles
+                            const dayButtonStyle = [
+                                styles.dayButton,
+                                isCompleted ? styles.dayButtonCompleted : styles.dayButtonIncomplete,
+                                isToday && !isCompleted ? styles.dayButtonToday : null,
+                                isFuture ? styles.dayButtonFuture : null
+                            ];
+
+                            return (
+                                <TouchableOpacity
+                                    key={day}
+                                    onPress={() => toggleCompletion(habit.id, dateStr)}
+                                    style={dayButtonStyle}
+                                    activeOpacity={0.8}
+                                    disabled={isFuture}
+                                >
+                                    {isCompleted ? (
+                                        <Check size={20} color="white" strokeWidth={3} />
+                                    ) : isFuture ? (
+                                        <Lock size={16} color={theme.colors.slate[600]} />
+                                    ) : (
+                                        <Text style={[
+                                            styles.dayText,
+                                            isToday ? styles.dayTextToday : styles.dayTextDefault
+                                        ]}>
+                                            {day}
+                                        </Text>
+                                    )}
+                                </TouchableOpacity>
+                            );
+                        })
+                    })()}
                 </View>
             </ScrollView>
         </View>
@@ -249,6 +269,11 @@ const styles = StyleSheet.create({
     dayButtonToday: {
         borderColor: theme.colors.indigo[400],
         borderWidth: 2,
+    },
+    dayButtonFuture: {
+        opacity: 0.5,
+        backgroundColor: theme.colors.slate[800],
+        borderColor: theme.colors.slate[800],
     },
     dayText: {
         fontWeight: "bold",

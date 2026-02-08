@@ -2,43 +2,64 @@ import { View, Text, FlatList, TouchableOpacity, StyleSheet, StatusBar } from "r
 import { Link, useRouter } from "expo-router";
 import { useHabitStore } from "../src/store/habitStore";
 import { Button } from "../src/components/Button";
-import { Plus, Trophy, Flame } from "lucide-react-native";
+import { Plus, Trophy, Flame, TreePine } from "lucide-react-native";
 import { Habit } from "../src/types/habit";
 import { theme } from "../src/styles/theme";
+import { AnimatedFire } from "../src/components/AnimatedFire";
 
 export default function Home() {
     const router = useRouter();
     const habits = useHabitStore((state) => state.habits);
 
-    const renderItem = ({ item }: { item: Habit }) => (
-        <TouchableOpacity
-            style={styles.card}
-            activeOpacity={0.9}
-            onPress={() => router.push(`/habit/${item.id}`)}
-        >
-            <View style={styles.cardContent}>
-                <Text style={styles.cardTitle}>{item.title}</Text>
-                {item.description ? (
-                    <Text style={styles.cardDescription} numberOfLines={1}>
-                        {item.description}
-                    </Text>
-                ) : null}
-                <View style={styles.cardStats}>
-                    <Flame size={16} color={theme.colors.amber[500]} style={{ marginRight: 4 }} />
-                    <Text style={styles.cardStreak}>{item.streak} days</Text>
+    const renderItem = ({ item }: { item: Habit }) => {
+        const isFinished = item.completedDates.length >= item.totalDays;
+        const isActive = item.streak > 0 && !isFinished;
 
-                    <Text style={styles.cardProgress}>
-                        {Math.round((item.completedDates.length / item.totalDays) * 100)}% Complete
+        return (
+            <TouchableOpacity
+                style={styles.card}
+                activeOpacity={0.9}
+                onPress={() => router.push(`/habit/${item.id}`)}
+            >
+                <View style={styles.cardContent}>
+                    <Text style={styles.cardTitle}>{item.title}</Text>
+                    {item.description ? (
+                        <Text style={styles.cardDescription} numberOfLines={1}>
+                            {item.description}
+                        </Text>
+                    ) : null}
+                    <View style={styles.cardStats}>
+                        <View style={{ marginRight: 8 }}>
+                            {isFinished ? (
+                                <TreePine size={20} color={theme.colors.green?.[500] || "#22c55e"} />
+                            ) : isActive ? (
+                                <AnimatedFire size={20} />
+                            ) : (
+                                <Flame size={20} color={theme.colors.slate[500]} />
+                            )}
+                        </View>
+                        <Text style={[
+                            styles.cardStreak,
+                            isFinished ? { color: "#22c55e" } : isActive ? { color: theme.colors.amber[500] } : { color: theme.colors.slate[500] }
+                        ]}>
+                            {isFinished ? "Completed!" : `${item.streak} day streak`}
+                        </Text>
+
+                        {!isFinished && (
+                            <Text style={styles.cardProgress}>
+                                {Math.round((item.completedDates.length / item.totalDays) * 100)}%
+                            </Text>
+                        )}
+                    </View>
+                </View>
+                <View style={[styles.progressCircle, isFinished && styles.progressCircleCompleted]}>
+                    <Text style={[styles.progressText, isFinished && styles.progressTextCompleted]}>
+                        {isFinished ? "✓" : item.completedDates.length}
                     </Text>
                 </View>
-            </View>
-            <View style={styles.progressCircle}>
-                <Text style={styles.progressText}>
-                    {item.completedDates.length}
-                </Text>
-            </View>
-        </TouchableOpacity>
-    );
+            </TouchableOpacity>
+        );
+    };
 
     return (
         <View style={styles.container}>
@@ -178,7 +199,7 @@ const styles = StyleSheet.create({
         marginTop: 12,
     },
     cardStreak: {
-        color: theme.colors.amber[500],
+        // color set dynamically
         fontWeight: "bold",
         marginRight: 16,
     },
@@ -195,10 +216,17 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderColor: theme.colors.slate[600],
     },
+    progressCircleCompleted: {
+        backgroundColor: "#22c55e", // green-500
+        borderColor: "#16a34a", // green-600
+    },
     progressText: {
         color: theme.colors.white,
         fontWeight: "bold",
         fontSize: 18,
+    },
+    progressTextCompleted: {
+        fontSize: 22,
     },
     fabContainer: {
         position: "absolute",

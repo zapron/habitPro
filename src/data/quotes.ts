@@ -1,0 +1,17 @@
+export const quotes = [
+  "Success is not final, failure is not fatal: It is the courage to continue that counts.",
+  "Believe you can and you're halfway there.",
+  "The only way to do great work is to love what you do.",
+  "Don't watch the clock; do what it does. Keep going.",
+  "The future depends on what you do today.",
+  "It always seems impossible until it's done.",
+  "You don't have to be great to start, but you have to start to be great.",
+  "Action is the foundational key to all success.",
+  "Discipline is doing what needs to be done, even if you don't want to.",
+  "Small habits, repeated daily, lead to massive results.",
+  "Your life does not get better by chance, it gets better by change.",
+  "The secret of getting ahead is getting started.",
+  "Excellence is not an act, but a habit.",
+  "Motivation is what gets you started. Habit is what keeps you going.",
+  "You are what you repeatedly do.",
+];

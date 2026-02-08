@@ -9,7 +9,7 @@ export const useHabitStore = create<HabitStore>()(
       habits: [],
       addHabit: (title, description) => {
         const newHabit: Habit = {
-          id: Math.random().toString(36).substring(7),
+          id: Date.now().toString(36) + Math.random().toString(36).substring(2),
           title,
           description,
           startDate: new Date().toISOString(),
@@ -40,7 +40,10 @@ export const useHabitStore = create<HabitStore>()(
               completedDates: newCompletedDates,
               streak: newStreak,
               isCompleted: isCompleted,
-              status: isCompleted ? "completed" : "active",
+              status: (isCompleted ? "completed" : "active") as
+                | "active"
+                | "completed"
+                | "failed",
             };
           });
           return { habits: updatedHabits };
