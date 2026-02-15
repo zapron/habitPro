@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, StatusBar } from 'react-native';
 import { useRouter } from 'expo-router';
 import { FlashList } from '@shopify/flash-list';
-import { Trophy, Flame, Check } from 'lucide-react-native';
+import { Trophy, Flame, Check, Bolt } from 'lucide-react-native';
 import { useHabitStore } from '../src/store/habitStore';
 import { Button } from '../src/components/Button';
 import { HabitCard } from '../src/components/HabitCard';
@@ -12,6 +12,7 @@ import { theme } from '../src/styles/theme';
 export default function Home() {
     const router = useRouter();
     const habits = useHabitStore((state) => state.habits);
+    const miniMissions = useHabitStore((state) => state.miniMissions);
     const [activeTab, setActiveTab] = useState<'active' | 'completed'>('active');
 
     const today = new Date().toISOString().split('T')[0];
@@ -28,6 +29,12 @@ export default function Home() {
         const todayCheckins = habits.filter((habit) => habit.completedDates.includes(today)).length;
         return { activeCount, completedCount, todayCheckins };
     }, [habits, today]);
+
+    const miniMissionStats = useMemo(() => {
+        const queued = miniMissions.filter((m) => m.status !== 'completed').length;
+        const running = miniMissions.filter((m) => m.status === 'in_progress').length;
+        return { queued, running };
+    }, [miniMissions]);
 
     return (
         <Screen>
@@ -61,6 +68,27 @@ export default function Home() {
                     <Text style={styles.statLabel}>Check-ins</Text>
                 </View>
             </View>
+
+            <TouchableOpacity
+                style={styles.miniMissionBanner}
+                activeOpacity={0.9}
+                onPress={() => router.push('/mini')}
+            >
+                <View style={styles.miniMissionLeft}>
+                    <View style={styles.miniMissionIconWrap}>
+                        <Bolt size={16} color={theme.colors.yellow[400]} />
+                    </View>
+                    <View>
+                        <Text style={styles.miniMissionTitle}>Mini Missions</Text>
+                        <Text style={styles.miniMissionSubtitle}>
+                            {miniMissionStats.running > 0
+                                ? `${miniMissionStats.running} running now`
+                                : `${miniMissionStats.queued} queued`}
+                        </Text>
+                    </View>
+                </View>
+                <Text style={styles.miniMissionAction}>Open</Text>
+            </TouchableOpacity>
 
             <View style={styles.tabContainer}>
                 <TouchableOpacity
@@ -194,6 +222,45 @@ const styles = StyleSheet.create({
         marginBottom: 14,
         borderWidth: 1,
         borderColor: theme.colors.border,
+    },
+    miniMissionBanner: {
+        marginBottom: 14,
+        backgroundColor: theme.colors.surface,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: theme.radius.md,
+        paddingVertical: 12,
+        paddingHorizontal: 12,
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+    },
+    miniMissionLeft: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    miniMissionIconWrap: {
+        width: 32,
+        height: 32,
+        borderRadius: theme.radius.pill,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: 'rgba(251, 191, 36, 0.14)',
+        marginRight: 10,
+    },
+    miniMissionTitle: {
+        color: theme.colors.textPrimary,
+        fontWeight: '700',
+    },
+    miniMissionSubtitle: {
+        color: theme.colors.textSecondary,
+        fontSize: 12,
+        marginTop: 1,
+    },
+    miniMissionAction: {
+        color: theme.colors.cyan[400],
+        fontWeight: '700',
+        fontSize: 12,
     },
     tab: {
         flex: 1,

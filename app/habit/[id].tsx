@@ -128,21 +128,32 @@ export default function HabitDetail() {
 
                             const isFuture = dayDate > today;
                             const isToday = dayDate.getTime() === today.getTime();
+                            const yesterday = new Date(today);
+                            yesterday.setDate(yesterday.getDate() - 1);
+                            const isYesterday = dayDate.getTime() === yesterday.getTime();
+                            const isEditable = isToday || isYesterday;
 
                             const dayButtonStyle = [
                                 styles.dayButton,
                                 isCompleted ? styles.dayButtonCompleted : styles.dayButtonIncomplete,
                                 isCompleted && isMilestone ? styles.dayButtonMilestone : null,
                                 isToday && !isCompleted ? styles.dayButtonToday : null,
-                                isFuture ? styles.dayButtonFuture : null,
+                                (isFuture || !isEditable) ? styles.dayButtonFuture : null,
                             ];
 
                             return (
                                 <TouchableOpacity
                                     key={day}
                                     onPress={() => {
+                                        const changed = toggleCompletion(habit.id, dateStr);
+                                        if (!changed) {
+                                            Alert.alert(
+                                                'Locked day',
+                                                'You can only edit check-ins for today and yesterday.',
+                                            );
+                                            return;
+                                        }
                                         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                                        toggleCompletion(habit.id, dateStr);
                                     }}
                                     style={dayButtonStyle}
                                     activeOpacity={0.8}
