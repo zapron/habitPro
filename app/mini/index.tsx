@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, StatusBar } from "react-native";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { FlashList } from "@shopify/flash-list";
 import { Bolt, Clock3, CircleCheck, ArrowLeft } from "lucide-react-native";
 import { Screen } from "../../src/components/Screen";
@@ -9,7 +9,7 @@ import { theme } from "../../src/styles/theme";
 import { useHabitStore } from "../../src/store/habitStore";
 import { MiniMission } from "../../src/types/habit";
 
-type MiniTab = "active" | "done";
+type MiniTab = "active" | "queued" | "completed";
 
 function MiniMissionCard({ item }: { item: MiniMission }) {
   const router = useRouter();
@@ -47,30 +47,43 @@ function MiniMissionCard({ item }: { item: MiniMission }) {
 
 export default function MiniMissionsScreen() {
   const router = useRouter();
+  const { view, tab: tabParam } = useLocalSearchParams<{ view?: string; tab?: string }>();
   const miniMissions = useHabitStore((state) => state.miniMissions);
-  const [tab, setTab] = useState<MiniTab>("active");
+  const initialTab: MiniTab =
+    tabParam === "queued" ? "queued" : tabParam === "completed" ? "completed" : "active";
+  const [tab, setTab] = useState<MiniTab>(initialTab);
 
   const filtered = useMemo(() => {
-    if (tab === "done") {
+    if (view === "running") {
+      return miniMissions.filter((m) => m.status === "in_progress");
+    }
+    if (tab === "active") {
+      return miniMissions.filter((m) => m.status === "in_progress");
+    }
+    if (tab === "queued") {
+      return miniMissions.filter((m) => m.status === "pending" || m.status === "scheduled");
+    }
+    if (tab === "completed") {
       return miniMissions.filter((m) => m.status === "completed");
     }
-    return miniMissions.filter((m) => m.status !== "completed");
-  }, [miniMissions, tab]);
+    return [];
+  }, [miniMissions, tab, view]);
 
   const inProgressCount = miniMissions.filter((m) => m.status === "in_progress").length;
 
   return (
     <Screen>
       <StatusBar barStyle="light-content" backgroundColor={theme.colors.background} />
+      <View style={styles.headerControls}>
+        <TouchableOpacity style={styles.iconButton} onPress={() => router.back()} activeOpacity={0.8}>
+          <ArrowLeft size={20} color={theme.colors.white} />
+        </TouchableOpacity>
+        <Text style={styles.headerAccent}>Focus Queue</Text>
+      </View>
       <View style={styles.header}>
-        <View>
-          <Text style={styles.eyebrow}>MINI MISSIONS</Text>
-          <Text style={styles.title}>Quick Focus Sprints</Text>
-          <Text style={styles.subtitle}>Turn procrastinated tasks into timed actions.</Text>
-        </View>
-        <View style={styles.headerIcon}>
-          <Bolt size={20} color={theme.colors.yellow[400]} />
-        </View>
+        <Text style={styles.eyebrow}>MINI MISSIONS</Text>
+        <Text style={styles.title}>Quick Focus Sprints</Text>
+        <Text style={styles.subtitle}>Turn procrastinated tasks into timed actions.</Text>
       </View>
 
       <View style={styles.stats}>
@@ -92,16 +105,33 @@ export default function MiniMissionsScreen() {
 
       <View style={styles.tabContainer}>
         <TouchableOpacity
-          style={[styles.tab, tab === "active" && styles.activeTab]}
-          onPress={() => setTab("active")}
+          style={[styles.tab, (tab === "active" || view === "running") && styles.activeTab]}
+          onPress={() => {
+            setTab("active");
+            if (view === "running") router.replace("/mini?tab=active");
+          }}
         >
-          <Text style={[styles.tabText, tab === "active" && styles.activeTabText]}>Active</Text>
+          <Text style={[styles.tabText, (tab === "active" || view === "running") && styles.activeTabText]}>
+            Active
+          </Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.tab, tab === "done" && styles.activeTab]}
-          onPress={() => setTab("done")}
+          style={[styles.tab, tab === "queued" && styles.activeTab]}
+          onPress={() => {
+            setTab("queued");
+            if (view === "running") router.replace("/mini?tab=queued");
+          }}
         >
-          <Text style={[styles.tabText, tab === "done" && styles.activeTabText]}>Completed</Text>
+          <Text style={[styles.tabText, tab === "queued" && styles.activeTabText]}>Queued</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tab, tab === "completed" && styles.activeTab]}
+          onPress={() => {
+            setTab("completed");
+            if (view === "running") router.replace("/mini?tab=completed");
+          }}
+        >
+          <Text style={[styles.tabText, tab === "completed" && styles.activeTabText]}>Completed</Text>
         </TouchableOpacity>
       </View>
 
@@ -110,16 +140,19 @@ export default function MiniMissionsScreen() {
           <View style={styles.empty}>
             <CircleCheck size={40} color={theme.colors.slate[500]} />
             <Text style={styles.emptyTitle}>
-              {tab === "active" ? "No mini missions yet" : "No completed mini missions yet"}
+              {tab === "active"
+                ? "No active mini missions"
+                : tab === "queued"
+                  ? "No queued mini missions"
+                  : "No completed mini missions yet"}
             </Text>
             <Text style={styles.emptyText}>
               {tab === "active"
-                ? "Create one and decide exactly how much time it needs."
-                : "Complete one sprint to build momentum."}
+                ? "Start a mini mission to see it running here."
+                : tab === "queued"
+                  ? "Create mini missions and choose Start Later."
+                  : "Complete one sprint to build momentum."}
             </Text>
-            {tab === "active" && (
-              <Button title="Create Mini Mission" onPress={() => router.push("/mini/create")} />
-            )}
           </View>
         ) : (
           <FlashList
@@ -134,25 +167,35 @@ export default function MiniMissionsScreen() {
 
       <View style={styles.fab}>
         <Button
-          title="New Mini Mission"
+          title="Create Mini Mission"
           onPress={() => router.push("/mini/create")}
           style={styles.fabButton}
         />
       </View>
-      <TouchableOpacity style={styles.backButton} onPress={() => router.back()} activeOpacity={0.8}>
-        <ArrowLeft size={16} color={theme.colors.textSecondary} />
-        <Text style={styles.backText}>Home</Text>
-      </TouchableOpacity>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  header: {
+  headerControls: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    marginBottom: 12,
+  },
+  header: {
+    alignItems: "flex-start",
     marginBottom: 16,
+  },
+  iconButton: {
+    width: 40,
+    height: 40,
+    borderRadius: theme.radius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surface,
   },
   eyebrow: {
     color: theme.colors.cyan[400],
@@ -171,15 +214,11 @@ const styles = StyleSheet.create({
     marginTop: 4,
     fontSize: theme.typography.caption,
   },
-  headerIcon: {
-    width: 42,
-    height: 42,
-    borderRadius: theme.radius.pill,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: theme.colors.surface,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
+  headerAccent: {
+    color: theme.colors.textSecondary,
+    fontSize: theme.typography.caption,
+    fontWeight: "700",
+    letterSpacing: 0.3,
   },
   stats: {
     flexDirection: "row",
@@ -311,18 +350,5 @@ const styles = StyleSheet.create({
   },
   fabButton: {
     ...theme.shadow.glow,
-  },
-  backButton: {
-    position: "absolute",
-    top: 16,
-    right: 26,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    opacity: 0.8,
-  },
-  backText: {
-    color: theme.colors.textSecondary,
-    fontSize: 12,
   },
 });

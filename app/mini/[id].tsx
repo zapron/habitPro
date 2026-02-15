@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { View, Text, TouchableOpacity, StyleSheet, StatusBar, Alert } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { ArrowLeft, Clock3, Play, Check, Trash2, CircleX } from "lucide-react-native";
+import { ArrowLeft, Clock3, Check, Trash2, CircleX, Trophy } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import { Screen } from "../../src/components/Screen";
 import { Button } from "../../src/components/Button";
 import { theme } from "../../src/styles/theme";
 import { useHabitStore } from "../../src/store/habitStore";
+import { AnimatedFire } from "../../src/components/AnimatedFire";
 
 const formatDuration = (ms: number) => {
   const totalSeconds = Math.max(0, Math.floor(ms / 1000));
@@ -30,16 +31,30 @@ export default function MiniMissionDetail() {
 
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
+    if (mission?.status !== "in_progress") return;
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
-  }, []);
+  }, [mission?.status]);
 
   const countdown = useMemo(() => {
     if (!mission?.startedAt) return mission ? mission.estimatedMinutes * 60 * 1000 : 0;
     const startMs = new Date(mission.startedAt).getTime();
     const endMs = startMs + mission.estimatedMinutes * 60 * 1000;
-    return Math.max(0, endMs - now);
+    const nowAnchor =
+      mission.status === "completed" && mission.completedAt
+        ? new Date(mission.completedAt).getTime()
+        : now;
+    return Math.max(0, endMs - nowAnchor);
   }, [mission, now]);
+
+  const earlyFinishMs = useMemo(() => {
+    if (!mission || mission.status !== "completed") return 0;
+    if (!mission.startedAt || !mission.completedAt) return 0;
+    const plannedMs = mission.estimatedMinutes * 60 * 1000;
+    const actualMs =
+      new Date(mission.completedAt).getTime() - new Date(mission.startedAt).getTime();
+    return Math.max(0, plannedMs - actualMs);
+  }, [mission]);
 
   if (!mission) {
     return (
@@ -129,10 +144,26 @@ export default function MiniMissionDetail() {
             </>
           )}
           {mission.status === "completed" && (
-            <View style={styles.completedRow}>
-              <Check size={18} color={theme.colors.green[500]} />
-              <Text style={styles.completedText}>Mini mission completed</Text>
-            </View>
+            <>
+              <View style={styles.completedRow}>
+                <Check size={18} color={theme.colors.green[500]} />
+                <Text style={styles.completedText}>Mini mission completed</Text>
+              </View>
+              {earlyFinishMs > 0 && (
+                <View style={styles.rewardCard}>
+                  <View style={styles.rewardHeader}>
+                    <AnimatedFire size={18} />
+                    <Text style={styles.rewardTitle}>Early Finish Reward</Text>
+                  </View>
+                  <View style={styles.rewardRow}>
+                    <Trophy size={16} color={theme.colors.yellow[400]} />
+                    <Text style={styles.rewardText}>
+                      You beat your estimate by {formatDuration(earlyFinishMs)}.
+                    </Text>
+                  </View>
+                </View>
+              )}
+            </>
           )}
           {mission.status === "cancelled" && (
             <View style={styles.cancelledRow}>
@@ -247,6 +278,35 @@ const styles = StyleSheet.create({
   completedText: {
     color: theme.colors.green[500],
     fontWeight: "700",
+  },
+  rewardCard: {
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    borderColor: "rgba(251, 191, 36, 0.45)",
+    backgroundColor: "rgba(245, 158, 11, 0.12)",
+    padding: 12,
+    marginTop: 2,
+  },
+  rewardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 8,
+    gap: 6,
+  },
+  rewardTitle: {
+    color: theme.colors.yellow[400],
+    fontWeight: "800",
+    fontSize: 13,
+    letterSpacing: 0.4,
+  },
+  rewardRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  rewardText: {
+    color: "#fde68a",
+    fontWeight: "600",
   },
   cancelledRow: {
     flexDirection: "row",

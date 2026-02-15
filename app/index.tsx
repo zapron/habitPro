@@ -8,14 +8,13 @@ import { Button } from '../src/components/Button';
 import { HabitCard } from '../src/components/HabitCard';
 import { Screen } from '../src/components/Screen';
 import { theme } from '../src/styles/theme';
+import { AnimatedFire } from '../src/components/AnimatedFire';
 
 export default function Home() {
     const router = useRouter();
     const habits = useHabitStore((state) => state.habits);
     const miniMissions = useHabitStore((state) => state.miniMissions);
     const [activeTab, setActiveTab] = useState<'active' | 'completed'>('active');
-
-    const today = new Date().toISOString().split('T')[0];
 
     const filteredHabits = useMemo(() => {
         return habits.filter((habit) =>
@@ -26,9 +25,8 @@ export default function Home() {
     const stats = useMemo(() => {
         const activeCount = habits.filter((habit) => !habit.isCompleted).length;
         const completedCount = habits.filter((habit) => habit.isCompleted).length;
-        const todayCheckins = habits.filter((habit) => habit.completedDates.includes(today)).length;
-        return { activeCount, completedCount, todayCheckins };
-    }, [habits, today]);
+        return { activeCount, completedCount };
+    }, [habits]);
 
     const miniMissionStats = useMemo(() => {
         const queued = miniMissions.filter((m) => m.status !== 'completed').length;
@@ -62,11 +60,21 @@ export default function Home() {
                     <Text style={styles.statValue}>{stats.completedCount}</Text>
                     <Text style={styles.statLabel}>Completed</Text>
                 </View>
-                <View style={styles.statCard}>
-                    <Text style={styles.statDot}>TODAY</Text>
-                    <Text style={styles.statValue}>{stats.todayCheckins}</Text>
-                    <Text style={styles.statLabel}>Check-ins</Text>
-                </View>
+                <TouchableOpacity
+                    style={styles.statCard}
+                    activeOpacity={0.9}
+                    onPress={() => router.push('/mini?view=running')}
+                >
+                    <View style={styles.runningIconWrap}>
+                        {miniMissionStats.running > 0 ? (
+                            <AnimatedFire size={16} />
+                        ) : (
+                            <Flame size={16} color={theme.colors.slate[500]} />
+                        )}
+                    </View>
+                    <Text style={styles.statValue}>{miniMissionStats.running}</Text>
+                    <Text style={styles.statLabel}>Mini Mission Running</Text>
+                </TouchableOpacity>
             </View>
 
             <TouchableOpacity
@@ -197,12 +205,6 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
     },
-    statDot: {
-        color: theme.colors.cyan[400],
-        fontSize: 9,
-        fontWeight: '800',
-        letterSpacing: 1,
-    },
     statValue: {
         color: theme.colors.textPrimary,
         fontSize: 22,
@@ -213,6 +215,11 @@ const styles = StyleSheet.create({
         color: theme.colors.textSecondary,
         fontSize: 11,
         marginTop: 2,
+    },
+    runningIconWrap: {
+        minHeight: 20,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     tabContainer: {
         flexDirection: 'row',
