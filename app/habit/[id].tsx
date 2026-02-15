@@ -1,7 +1,7 @@
 import { View, Text, ScrollView, TouchableOpacity, Alert, StyleSheet, StatusBar } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import { ArrowLeft, Trash2, Check, Lock, RotateCcw } from 'lucide-react-native';
+import { ArrowLeft, Trash2, Lock, RotateCcw, Sparkles, Star } from 'lucide-react-native';
 import { useHabitStore } from '../../src/store/habitStore';
 import { Button } from '../../src/components/Button';
 import { Timer } from '../../src/components/Timer';
@@ -121,6 +121,7 @@ export default function HabitDetail() {
                         return days.map((day, index) => {
                             const dateStr = getDayDate(index);
                             const isCompleted = habit.completedDates.includes(dateStr);
+                            const isMilestone = day === 7 || day === 14 || day === 21;
 
                             const dayDate = new Date(dateStr);
                             dayDate.setHours(0, 0, 0, 0);
@@ -131,6 +132,7 @@ export default function HabitDetail() {
                             const dayButtonStyle = [
                                 styles.dayButton,
                                 isCompleted ? styles.dayButtonCompleted : styles.dayButtonIncomplete,
+                                isCompleted && isMilestone ? styles.dayButtonMilestone : null,
                                 isToday && !isCompleted ? styles.dayButtonToday : null,
                                 isFuture ? styles.dayButtonFuture : null,
                             ];
@@ -147,7 +149,38 @@ export default function HabitDetail() {
                                     disabled={isFuture}
                                 >
                                     {isCompleted ? (
-                                        <Check size={20} color={theme.colors.white} strokeWidth={3} />
+                                        <View style={styles.badgeWrap}>
+                                            {isMilestone ? <View style={styles.milestoneHalo} /> : null}
+                                            <View
+                                                style={[
+                                                    styles.badgeCore,
+                                                    isMilestone ? styles.badgeCoreMilestone : null,
+                                                ]}
+                                            >
+                                                <Text
+                                                    style={[
+                                                        styles.completedDayText,
+                                                        isMilestone ? styles.completedDayTextMilestone : null,
+                                                    ]}
+                                                >
+                                                    {day}
+                                                </Text>
+                                            </View>
+                                            {isMilestone ? (
+                                                <Star
+                                                    size={9}
+                                                    color={theme.colors.yellow[400]}
+                                                    fill={theme.colors.yellow[400]}
+                                                    style={styles.badgeAccent}
+                                                />
+                                            ) : (
+                                                <Sparkles
+                                                    size={9}
+                                                    color={theme.colors.cyan[400]}
+                                                    style={styles.badgeAccent}
+                                                />
+                                            )}
+                                        </View>
                                     ) : isFuture ? (
                                         <Lock size={15} color={theme.colors.textMuted} />
                                     ) : (
@@ -287,6 +320,14 @@ const styles = StyleSheet.create({
         backgroundColor: theme.colors.indigo[600],
         ...theme.shadow.glow,
     },
+    dayButtonMilestone: {
+        backgroundColor: '#4b3dc2',
+        shadowColor: theme.colors.yellow[400],
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: 0.45,
+        shadowRadius: 14,
+        elevation: 8,
+    },
     dayButtonIncomplete: {
         backgroundColor: theme.colors.surface,
         borderWidth: 1,
@@ -308,5 +349,45 @@ const styles = StyleSheet.create({
     },
     dayTextDefault: {
         color: theme.colors.textMuted,
+    },
+    badgeWrap: {
+        width: '100%',
+        height: '100%',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    milestoneHalo: {
+        position: 'absolute',
+        width: '90%',
+        height: '90%',
+        borderRadius: 10,
+        backgroundColor: 'rgba(251, 191, 36, 0.16)',
+    },
+    badgeCore: {
+        width: '72%',
+        height: '72%',
+        borderRadius: 9999,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: 'rgba(255, 255, 255, 0.16)',
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.26)',
+    },
+    badgeCoreMilestone: {
+        backgroundColor: 'rgba(251, 191, 36, 0.24)',
+        borderColor: 'rgba(251, 191, 36, 0.58)',
+    },
+    completedDayText: {
+        color: theme.colors.white,
+        fontSize: 14,
+        fontWeight: '800',
+    },
+    completedDayTextMilestone: {
+        color: '#fff7dc',
+    },
+    badgeAccent: {
+        position: 'absolute',
+        top: 6,
+        right: 6,
     },
 });
