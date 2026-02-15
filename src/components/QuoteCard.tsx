@@ -27,14 +27,15 @@ export function QuoteCard() {
 
 const styles = StyleSheet.create({
     container: {
-        backgroundColor: theme.colors.slate[800],
+        backgroundColor: theme.colors.surface,
         padding: 20,
-        borderRadius: 20,
+        borderRadius: theme.radius.lg,
         marginBottom: 32,
         borderWidth: 1,
-        borderColor: theme.colors.slate[700],
+        borderColor: theme.colors.border,
         flexDirection: 'row',
         alignItems: 'flex-start',
+        ...theme.shadow.card,
     },
     iconContainer: {
         marginRight: 16,
@@ -44,7 +45,7 @@ const styles = StyleSheet.create({
         flex: 1,
     },
     label: {
-        color: theme.colors.slate[500],
+        color: theme.colors.textMuted,
         fontSize: 10,
         fontWeight: 'bold',
         letterSpacing: 1.5,
@@ -52,7 +53,7 @@ const styles = StyleSheet.create({
         textTransform: 'uppercase',
     },
     text: {
-        color: theme.colors.slate[200],
+        color: theme.colors.textPrimary,
         fontSize: 16,
         lineHeight: 24,
         fontStyle: 'italic',

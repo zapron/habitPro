@@ -54,6 +54,21 @@ export const useHabitStore = create<HabitStore>()(
           habits: state.habits.filter((h) => h.id !== id),
         }));
       },
+      resetHabit: (id) => {
+        set((state) => ({
+          habits: state.habits.map((h) => {
+            if (h.id !== id) return h;
+            return {
+              ...h,
+              completedDates: [],
+              streak: 0,
+              isCompleted: false,
+              status: "active",
+              startDate: new Date().toISOString(),
+            };
+          }),
+        }));
+      },
       getHabit: (id) => {
         return get().habits.find((h) => h.id === id);
       },

@@ -50,32 +50,32 @@ export function Button({
 
 const styles = StyleSheet.create({
     baseButton: {
+        minHeight: 52,
         paddingVertical: 12,
-        paddingHorizontal: 24,
-        borderRadius: 12,
+        paddingHorizontal: 20,
+        borderRadius: theme.radius.md,
         flexDirection: "row",
         justifyContent: "center",
         alignItems: "center",
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.1,
-        shadowRadius: 2,
-        elevation: 2,
+        ...theme.shadow.card,
     },
     primaryButton: {
         backgroundColor: theme.colors.indigo[600],
+        borderWidth: 1,
+        borderColor: theme.colors.indigo[500],
     },
     secondaryButton: {
-        backgroundColor: theme.colors.slate[700],
+        backgroundColor: theme.colors.surfaceElevated,
         borderWidth: 1,
-        borderColor: theme.colors.slate[600],
+        borderColor: theme.colors.border,
     },
     dangerButton: {
         backgroundColor: theme.colors.red[500],
     },
     baseText: {
-        fontSize: 18,
-        fontWeight: "600",
+        fontSize: theme.typography.body,
+        fontWeight: "700",
+        letterSpacing: 0.3,
         textAlign: "center",
     },
     primaryText: {

@@ -63,17 +63,13 @@ const styles = StyleSheet.create({
     container: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: theme.colors.slate[800],
+        backgroundColor: theme.colors.surface,
         padding: 20,
-        borderRadius: 20,
+        borderRadius: theme.radius.lg,
         marginBottom: 32,
         borderWidth: 1,
-        borderColor: theme.colors.slate[700],
-        shadowColor: theme.colors.indigo[500],
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.2,
-        shadowRadius: 12,
-        elevation: 5,
+        borderColor: theme.colors.border,
+        ...theme.shadow.card,
     },
     iconContainer: {
         marginRight: 20,
@@ -87,7 +83,7 @@ const styles = StyleSheet.create({
         flex: 1,
     },
     label: {
-        color: theme.colors.slate[400],
+        color: theme.colors.textSecondary,
         fontSize: 12,
         fontWeight: 'bold',
         letterSpacing: 1.5,
@@ -95,7 +91,7 @@ const styles = StyleSheet.create({
         textTransform: 'uppercase',
     },
     time: {
-        color: theme.colors.white,
+        color: theme.colors.textPrimary,
         fontWeight: 'bold',
         fontSize: 32,
         fontVariant: ['tabular-nums'],
@@ -112,7 +108,7 @@ const styles = StyleSheet.create({
         marginTop: 4,
     },
     legendText: {
-        color: theme.colors.slate[500],
+        color: theme.colors.textMuted,
         fontSize: 10,
         fontWeight: 'bold',
         width: '22%', // Roughly distribute

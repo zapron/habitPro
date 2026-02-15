@@ -15,5 +15,6 @@ export type HabitStore = {
   addHabit: (title: string, description?: string) => void;
   toggleCompletion: (id: string, date: string) => void;
   deleteHabit: (id: string) => void;
+  resetHabit: (id: string) => void;
   getHabit: (id: string) => Habit | undefined;
 };

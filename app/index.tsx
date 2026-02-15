@@ -1,244 +1,261 @@
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, StatusBar } from "react-native";
-import { Link, useRouter } from "expo-router";
-import { useHabitStore } from "../src/store/habitStore";
-import { Button } from "../src/components/Button";
-import { Plus, Trophy, Flame, TreePine } from "lucide-react-native";
-import { Habit } from "../src/types/habit";
-import { theme } from "../src/styles/theme";
-import { AnimatedFire } from "../src/components/AnimatedFire";
+import React, { useMemo, useState } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, StatusBar } from 'react-native';
+import { useRouter } from 'expo-router';
+import { FlashList } from '@shopify/flash-list';
+import { Trophy, Flame, Check } from 'lucide-react-native';
+import { useHabitStore } from '../src/store/habitStore';
+import { Button } from '../src/components/Button';
+import { HabitCard } from '../src/components/HabitCard';
+import { Screen } from '../src/components/Screen';
+import { theme } from '../src/styles/theme';
 
 export default function Home() {
     const router = useRouter();
     const habits = useHabitStore((state) => state.habits);
+    const [activeTab, setActiveTab] = useState<'active' | 'completed'>('active');
 
-    const renderItem = ({ item }: { item: Habit }) => {
-        const isFinished = item.completedDates.length >= item.totalDays;
-        const isActive = item.streak > 0 && !isFinished;
+    const today = new Date().toISOString().split('T')[0];
 
-        return (
-            <TouchableOpacity
-                style={styles.card}
-                activeOpacity={0.9}
-                onPress={() => router.push(`/habit/${item.id}`)}
-            >
-                <View style={styles.cardContent}>
-                    <Text style={styles.cardTitle}>{item.title}</Text>
-                    {item.description ? (
-                        <Text style={styles.cardDescription} numberOfLines={1}>
-                            {item.description}
-                        </Text>
-                    ) : null}
-                    <View style={styles.cardStats}>
-                        <View style={{ marginRight: 8 }}>
-                            {isFinished ? (
-                                <TreePine size={20} color={theme.colors.green?.[500] || "#22c55e"} />
-                            ) : isActive ? (
-                                <AnimatedFire size={20} />
-                            ) : (
-                                <Flame size={20} color={theme.colors.slate[500]} />
-                            )}
-                        </View>
-                        <Text style={[
-                            styles.cardStreak,
-                            isFinished ? { color: "#22c55e" } : isActive ? { color: theme.colors.amber[500] } : { color: theme.colors.slate[500] }
-                        ]}>
-                            {isFinished ? "Completed!" : `${item.streak} day streak`}
-                        </Text>
-
-                        {!isFinished && (
-                            <Text style={styles.cardProgress}>
-                                {Math.round((item.completedDates.length / item.totalDays) * 100)}%
-                            </Text>
-                        )}
-                    </View>
-                </View>
-                <View style={[styles.progressCircle, isFinished && styles.progressCircleCompleted]}>
-                    <Text style={[styles.progressText, isFinished && styles.progressTextCompleted]}>
-                        {isFinished ? "✓" : item.completedDates.length}
-                    </Text>
-                </View>
-            </TouchableOpacity>
+    const filteredHabits = useMemo(() => {
+        return habits.filter((habit) =>
+            activeTab === 'active' ? !habit.isCompleted : habit.isCompleted,
         );
-    };
+    }, [habits, activeTab]);
+
+    const stats = useMemo(() => {
+        const activeCount = habits.filter((habit) => !habit.isCompleted).length;
+        const completedCount = habits.filter((habit) => habit.isCompleted).length;
+        const todayCheckins = habits.filter((habit) => habit.completedDates.includes(today)).length;
+        return { activeCount, completedCount, todayCheckins };
+    }, [habits, today]);
 
     return (
-        <View style={styles.container}>
-            <StatusBar barStyle="light-content" backgroundColor={theme.colors.slate[900]} />
+        <Screen>
+            <StatusBar barStyle='light-content' backgroundColor={theme.colors.background} />
+
             <View style={styles.header}>
                 <View>
+                    <Text style={styles.headerEyebrow}>MISSION CONTROL</Text>
                     <Text style={styles.headerTitle}>HabitPro</Text>
-                    <Text style={styles.headerSubtitle}>Your Daily Missions</Text>
+                    <Text style={styles.headerSubtitle}>Build discipline in 21-day campaigns.</Text>
                 </View>
-                <TouchableOpacity style={styles.trophyButton}>
-                    <Trophy size={24} color={theme.colors.yellow[400]} />
+                <View style={styles.headerBadge}>
+                    <Trophy size={22} color={theme.colors.yellow[400]} />
+                </View>
+            </View>
+
+            <View style={styles.statsRow}>
+                <View style={styles.statCard}>
+                    <Flame size={16} color={theme.colors.amber[500]} />
+                    <Text style={styles.statValue}>{stats.activeCount}</Text>
+                    <Text style={styles.statLabel}>Active</Text>
+                </View>
+                <View style={styles.statCard}>
+                    <Check size={16} color={theme.colors.green[500]} />
+                    <Text style={styles.statValue}>{stats.completedCount}</Text>
+                    <Text style={styles.statLabel}>Completed</Text>
+                </View>
+                <View style={styles.statCard}>
+                    <Text style={styles.statDot}>TODAY</Text>
+                    <Text style={styles.statValue}>{stats.todayCheckins}</Text>
+                    <Text style={styles.statLabel}>Check-ins</Text>
+                </View>
+            </View>
+
+            <View style={styles.tabContainer}>
+                <TouchableOpacity
+                    style={[styles.tab, activeTab === 'active' && styles.activeTab]}
+                    onPress={() => setActiveTab('active')}
+                    activeOpacity={0.8}
+                >
+                    <Text style={[styles.tabText, activeTab === 'active' && styles.activeTabText]}>Active</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                    style={[styles.tab, activeTab === 'completed' && styles.activeTab]}
+                    onPress={() => setActiveTab('completed')}
+                    activeOpacity={0.8}
+                >
+                    <Text style={[styles.tabText, activeTab === 'completed' && styles.activeTabText]}>Completed</Text>
                 </TouchableOpacity>
             </View>
 
-            {habits.length === 0 ? (
-                <View style={styles.emptyState}>
-                    <View style={styles.emptyIconContainer}>
-                        <Trophy size={64} color={theme.colors.slate[600]} />
+            <View style={styles.listWrap}>
+                {filteredHabits.length === 0 ? (
+                    <View style={styles.emptyState}>
+                        <View style={styles.emptyIconContainer}>
+                            <Trophy size={50} color={theme.colors.slate[500]} />
+                        </View>
+                        <Text style={styles.emptyTitle}>
+                            {activeTab === 'active' ? 'No active missions' : 'No completed missions yet'}
+                        </Text>
+                        <Text style={styles.emptyDescription}>
+                            {activeTab === 'active'
+                                ? 'Start your first 21-day mission and keep momentum daily.'
+                                : 'Complete your first mission to unlock this section.'}
+                        </Text>
+                        {activeTab === 'active' && (
+                            <Button
+                                title='Start 21-Day Mission'
+                                onPress={() => router.push('/create')}
+                                style={styles.emptyButton}
+                            />
+                        )}
                     </View>
-                    <Text style={styles.emptyTitle}>No active missions</Text>
-                    <Text style={styles.emptyDescription}>
-                        Start a 21-day challenge to transform your life.
-                    </Text>
-                    <Button
-                        title="Start New Challenge"
-                        onPress={() => router.push("/create")}
-                        style={styles.fullWidthButton}
-                    />
-                </View>
-            ) : (
-                <>
-                    <FlatList
-                        data={habits}
-                        keyExtractor={(item) => item.id}
-                        renderItem={renderItem}
+                ) : (
+                    <FlashList
+                        data={filteredHabits}
+                        renderItem={({ item }) => <HabitCard item={item} />}
                         contentContainerStyle={styles.listContent}
                         showsVerticalScrollIndicator={false}
+                        keyExtractor={(item) => item.id}
                     />
-                    <View style={styles.fabContainer}>
-                        <Button
-                            title="New Mission"
-                            onPress={() => router.push("/create")}
-                            style={styles.fabButton}
-                        />
-                    </View>
-                </>
-            )}
-        </View>
+                )}
+            </View>
+
+            <View style={styles.fabContainer}>
+                <Button title='New Mission' onPress={() => router.push('/create')} style={styles.fabButton} />
+            </View>
+        </Screen>
     );
 }
 
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: theme.colors.slate[900],
-        paddingTop: 48,
-        paddingHorizontal: 24,
-    },
     header: {
-        flexDirection: "row",
-        justifyContent: "space-between",
-        alignItems: "center",
-        marginBottom: 32,
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 18,
+    },
+    headerEyebrow: {
+        color: theme.colors.cyan[400],
+        fontSize: theme.typography.micro,
+        fontWeight: '700',
+        letterSpacing: 1.3,
+        marginBottom: 6,
     },
     headerTitle: {
-        fontSize: 30,
-        fontWeight: "bold",
-        color: theme.colors.white,
+        fontSize: theme.typography.h1,
+        fontWeight: '800',
+        color: theme.colors.textPrimary,
     },
     headerSubtitle: {
-        color: theme.colors.slate[400],
+        color: theme.colors.textSecondary,
         marginTop: 4,
+        fontSize: theme.typography.caption,
     },
-    trophyButton: {
-        backgroundColor: theme.colors.slate[800],
-        padding: 12,
-        borderRadius: 9999,
+    headerBadge: {
+        width: 46,
+        height: 46,
+        borderRadius: theme.radius.pill,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: theme.colors.surface,
         borderWidth: 1,
-        borderColor: theme.colors.slate[700],
+        borderColor: theme.colors.border,
+    },
+    statsRow: {
+        flexDirection: 'row',
+        gap: 10,
+        marginBottom: 20,
+    },
+    statCard: {
+        flex: 1,
+        backgroundColor: theme.colors.surface,
+        borderRadius: theme.radius.md,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        paddingVertical: 10,
+        paddingHorizontal: 10,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    statDot: {
+        color: theme.colors.cyan[400],
+        fontSize: 9,
+        fontWeight: '800',
+        letterSpacing: 1,
+    },
+    statValue: {
+        color: theme.colors.textPrimary,
+        fontSize: 22,
+        fontWeight: '800',
+        marginTop: 3,
+    },
+    statLabel: {
+        color: theme.colors.textSecondary,
+        fontSize: 11,
+        marginTop: 2,
+    },
+    tabContainer: {
+        flexDirection: 'row',
+        backgroundColor: theme.colors.surface,
+        borderRadius: theme.radius.md,
+        padding: 4,
+        marginBottom: 14,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+    },
+    tab: {
+        flex: 1,
+        paddingVertical: 10,
+        alignItems: 'center',
+        borderRadius: 10,
+    },
+    activeTab: {
+        backgroundColor: theme.colors.indigo[600],
+        ...theme.shadow.glow,
+    },
+    tabText: {
+        color: theme.colors.textSecondary,
+        fontWeight: '700',
+    },
+    activeTabText: {
+        color: theme.colors.white,
+    },
+    listWrap: {
+        flex: 1,
+    },
+    listContent: {
+        paddingBottom: 110,
     },
     emptyState: {
         flex: 1,
-        justifyContent: "center",
-        alignItems: "center",
+        justifyContent: 'center',
+        alignItems: 'center',
     },
     emptyIconContainer: {
-        backgroundColor: theme.colors.slate[800],
-        padding: 24,
-        borderRadius: 9999,
-        marginBottom: 24,
+        backgroundColor: theme.colors.surface,
+        width: 94,
+        height: 94,
+        borderRadius: theme.radius.pill,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        marginBottom: 16,
     },
     emptyTitle: {
-        fontSize: 20,
-        fontWeight: "bold",
-        color: theme.colors.white,
+        fontSize: theme.typography.h3,
+        fontWeight: '700',
+        color: theme.colors.textPrimary,
         marginBottom: 8,
     },
     emptyDescription: {
-        color: theme.colors.slate[400],
-        textAlign: "center",
-        marginBottom: 32,
-        paddingHorizontal: 32,
+        color: theme.colors.textSecondary,
+        textAlign: 'center',
+        marginBottom: 20,
+        paddingHorizontal: 24,
     },
-    fullWidthButton: {
-        width: "100%",
-    },
-    listContent: {
-        paddingBottom: 100,
-    },
-    card: {
-        backgroundColor: theme.colors.slate[800],
-        padding: 20,
-        borderRadius: 16,
-        marginBottom: 16,
-        borderWidth: 1,
-        borderColor: theme.colors.slate[700],
-        flexDirection: "row",
-        justifyContent: "space-between",
-        alignItems: "center",
-    },
-    cardContent: {
-        flex: 1,
-    },
-    cardTitle: {
-        fontSize: 20,
-        fontWeight: "bold",
-        color: theme.colors.white,
-        marginBottom: 4,
-    },
-    cardDescription: {
-        color: theme.colors.slate[400],
-        fontSize: 14,
-    },
-    cardStats: {
-        flexDirection: "row",
-        alignItems: "center",
-        marginTop: 12,
-    },
-    cardStreak: {
-        // color set dynamically
-        fontWeight: "bold",
-        marginRight: 16,
-    },
-    cardProgress: {
-        color: theme.colors.slate[500],
-    },
-    progressCircle: {
-        height: 48,
-        width: 48,
-        borderRadius: 24,
-        backgroundColor: theme.colors.slate[700],
-        alignItems: "center",
-        justifyContent: "center",
-        borderWidth: 1,
-        borderColor: theme.colors.slate[600],
-    },
-    progressCircleCompleted: {
-        backgroundColor: "#22c55e", // green-500
-        borderColor: "#16a34a", // green-600
-    },
-    progressText: {
-        color: theme.colors.white,
-        fontWeight: "bold",
-        fontSize: 18,
-    },
-    progressTextCompleted: {
-        fontSize: 22,
+    emptyButton: {
+        width: '100%',
     },
     fabContainer: {
-        position: "absolute",
+        position: 'absolute',
         bottom: 32,
-        right: 24,
-        left: 24,
+        left: theme.spacing.lg,
+        right: theme.spacing.lg,
     },
     fabButton: {
-        shadowColor: theme.colors.indigo[500],
-        shadowOffset: { width: 0, height: 10 },
-        shadowOpacity: 0.3,
-        shadowRadius: 20,
-        elevation: 10,
+        ...theme.shadow.glow,
     },
 });
