@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, StatusBar } from 'react-native';
 import { useRouter } from 'expo-router';
 import { FlashList } from '@shopify/flash-list';
-import { Trophy, Flame, Check, Bolt } from 'lucide-react-native';
+import { Trophy, Flame, Check, Bolt, Target, Plus, ChevronRight } from 'lucide-react-native';
 import { useHabitStore } from '../src/store/habitStore';
 import { Button } from '../src/components/Button';
 import { HabitCard } from '../src/components/HabitCard';
@@ -73,30 +73,46 @@ export default function Home() {
                         )}
                     </View>
                     <Text style={styles.statValue}>{miniMissionStats.running}</Text>
-                    <Text style={styles.statLabel}>Mini Mission Running</Text>
+                    <Text style={styles.statLabel}>Mini Running</Text>
                 </TouchableOpacity>
             </View>
 
-            <TouchableOpacity
-                style={styles.miniMissionBanner}
-                activeOpacity={0.9}
-                onPress={() => router.push('/mini')}
-            >
-                <View style={styles.miniMissionLeft}>
-                    <View style={styles.miniMissionIconWrap}>
-                        <Bolt size={16} color={theme.colors.yellow[400]} />
+            {/* ── Command Center ── */}
+            <View style={styles.commandRow}>
+                <TouchableOpacity
+                    style={styles.commandCardMain}
+                    activeOpacity={0.85}
+                    onPress={() => router.push('/create')}
+                >
+                    <View style={styles.commandIconMain}>
+                        <Target size={18} color={theme.colors.cyan[400]} />
                     </View>
-                    <View>
-                        <Text style={styles.miniMissionTitle}>Mini Missions</Text>
-                        <Text style={styles.miniMissionSubtitle}>
-                            {miniMissionStats.running > 0
-                                ? `${miniMissionStats.running} running now`
-                                : `${miniMissionStats.queued} queued`}
-                        </Text>
+                    <Text style={styles.commandTitleMain}>New Mission</Text>
+                    <Text style={styles.commandHintMain}>21-day or custom</Text>
+                    <View style={styles.commandCta}>
+                        <Plus size={14} color={theme.colors.white} strokeWidth={3} />
                     </View>
-                </View>
-                <Text style={styles.miniMissionAction}>Open</Text>
-            </TouchableOpacity>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                    style={styles.commandCardMini}
+                    activeOpacity={0.85}
+                    onPress={() => router.push('/mini')}
+                >
+                    <View style={styles.commandIconMini}>
+                        <Bolt size={18} color={theme.colors.yellow[400]} />
+                    </View>
+                    <Text style={styles.commandTitleMini}>Mini Missions</Text>
+                    <Text style={styles.commandHintMini}>
+                        {miniMissionStats.running > 0
+                            ? `${miniMissionStats.running} running`
+                            : `${miniMissionStats.queued} queued`}
+                    </Text>
+                    <View style={styles.commandCtaMini}>
+                        <ChevronRight size={14} color={theme.colors.amber[500]} strokeWidth={3} />
+                    </View>
+                </TouchableOpacity>
+            </View>
 
             <View style={styles.tabContainer}>
                 <TouchableOpacity
@@ -126,12 +142,12 @@ export default function Home() {
                         </Text>
                         <Text style={styles.emptyDescription}>
                             {activeTab === 'active'
-                                ? 'Start your first 21-day mission and keep momentum daily.'
+                                ? 'Start your first mission and keep momentum daily.'
                                 : 'Complete your first mission to unlock this section.'}
                         </Text>
                         {activeTab === 'active' && (
                             <Button
-                                title='Start 21-Day Mission'
+                                title='Start a Mission'
                                 onPress={() => router.push('/create')}
                                 style={styles.emptyButton}
                             />
@@ -147,12 +163,6 @@ export default function Home() {
                     />
                 )}
             </View>
-
-            {habits.length > 0 && (
-                <View style={styles.fabContainer}>
-                    <Button title='New Mission' onPress={() => router.push('/create')} style={styles.fabButton} />
-                </View>
-            )}
         </Screen>
     );
 }
@@ -194,7 +204,7 @@ const styles = StyleSheet.create({
     statsRow: {
         flexDirection: 'row',
         gap: 10,
-        marginBottom: 20,
+        marginBottom: 14,
     },
     statCard: {
         flex: 1,
@@ -223,6 +233,102 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
     },
+
+    /* ── Command Center ── */
+    commandRow: {
+        flexDirection: 'row',
+        gap: 10,
+        marginBottom: 14,
+    },
+    commandCardMain: {
+        flex: 1,
+        backgroundColor: theme.colors.surface,
+        borderRadius: theme.radius.lg,
+        borderWidth: 1,
+        borderColor: 'rgba(34, 211, 238, 0.3)',
+        paddingVertical: 16,
+        paddingHorizontal: 14,
+        position: 'relative',
+        overflow: 'hidden',
+    },
+    commandCardMini: {
+        flex: 1,
+        backgroundColor: theme.colors.surface,
+        borderRadius: theme.radius.lg,
+        borderWidth: 1,
+        borderColor: 'rgba(245, 158, 11, 0.3)',
+        paddingVertical: 16,
+        paddingHorizontal: 14,
+        position: 'relative',
+        overflow: 'hidden',
+    },
+    commandIconMain: {
+        width: 36,
+        height: 36,
+        borderRadius: theme.radius.pill,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: 'rgba(34, 211, 238, 0.12)',
+        marginBottom: 10,
+    },
+    commandIconMini: {
+        width: 36,
+        height: 36,
+        borderRadius: theme.radius.pill,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: 'rgba(251, 191, 36, 0.14)',
+        marginBottom: 10,
+    },
+    commandTitleMain: {
+        color: theme.colors.textPrimary,
+        fontWeight: '700',
+        fontSize: 15,
+        marginBottom: 2,
+    },
+    commandTitleMini: {
+        color: theme.colors.textPrimary,
+        fontWeight: '700',
+        fontSize: 15,
+        marginBottom: 2,
+    },
+    commandHintMain: {
+        color: theme.colors.textMuted,
+        fontSize: 11,
+        marginBottom: 6,
+    },
+    commandHintMini: {
+        color: theme.colors.textMuted,
+        fontSize: 11,
+        marginBottom: 6,
+    },
+    commandCta: {
+        position: 'absolute',
+        bottom: 12,
+        right: 12,
+        width: 28,
+        height: 28,
+        borderRadius: theme.radius.pill,
+        backgroundColor: theme.colors.indigo[600],
+        alignItems: 'center',
+        justifyContent: 'center',
+        ...theme.shadow.glow,
+    },
+    commandCtaMini: {
+        position: 'absolute',
+        bottom: 12,
+        right: 12,
+        width: 28,
+        height: 28,
+        borderRadius: theme.radius.pill,
+        backgroundColor: 'rgba(245, 158, 11, 0.15)',
+        borderWidth: 1,
+        borderColor: 'rgba(245, 158, 11, 0.3)',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+
+    /* ── Tabs ── */
     tabContainer: {
         flexDirection: 'row',
         backgroundColor: theme.colors.surface,
@@ -231,45 +337,6 @@ const styles = StyleSheet.create({
         marginBottom: 14,
         borderWidth: 1,
         borderColor: theme.colors.border,
-    },
-    miniMissionBanner: {
-        marginBottom: 14,
-        backgroundColor: theme.colors.surface,
-        borderWidth: 1,
-        borderColor: theme.colors.border,
-        borderRadius: theme.radius.md,
-        paddingVertical: 12,
-        paddingHorizontal: 12,
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-    },
-    miniMissionLeft: {
-        flexDirection: 'row',
-        alignItems: 'center',
-    },
-    miniMissionIconWrap: {
-        width: 32,
-        height: 32,
-        borderRadius: theme.radius.pill,
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: 'rgba(251, 191, 36, 0.14)',
-        marginRight: 10,
-    },
-    miniMissionTitle: {
-        color: theme.colors.textPrimary,
-        fontWeight: '700',
-    },
-    miniMissionSubtitle: {
-        color: theme.colors.textSecondary,
-        fontSize: 12,
-        marginTop: 1,
-    },
-    miniMissionAction: {
-        color: theme.colors.cyan[400],
-        fontWeight: '700',
-        fontSize: 12,
     },
     tab: {
         flex: 1,
@@ -292,7 +359,7 @@ const styles = StyleSheet.create({
         flex: 1,
     },
     listContent: {
-        paddingBottom: 110,
+        paddingBottom: 40,
     },
     emptyState: {
         flex: 1,
@@ -324,14 +391,5 @@ const styles = StyleSheet.create({
     },
     emptyButton: {
         width: '100%',
-    },
-    fabContainer: {
-        position: 'absolute',
-        bottom: 32,
-        left: theme.spacing.lg,
-        right: theme.spacing.lg,
-    },
-    fabButton: {
-        ...theme.shadow.glow,
     },
 });
