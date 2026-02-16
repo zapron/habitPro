@@ -26,6 +26,7 @@ export interface MiniMission {
   title: string;
   objective?: string;
   estimatedMinutes: number;
+  extendedMinutes: number; // extra time added via "5 More Minutes"
   status: MiniMissionStatus;
   createdAt: string;
   scheduledStartAt?: string;
@@ -56,6 +57,7 @@ export type HabitStore = {
   }) => string;
   startMiniMission: (id: string) => void;
   completeMiniMission: (id: string) => void;
+  extendMiniMission: (id: string, extraMinutes: number) => void;
   cancelMiniMission: (id: string) => void;
   deleteMiniMission: (id: string) => void;
   getMiniMission: (id: string) => MiniMission | undefined;

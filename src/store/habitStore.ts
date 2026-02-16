@@ -150,6 +150,7 @@ export const useHabitStore = create<HabitStore>()(
           title,
           objective,
           estimatedMinutes: normalizedMinutes,
+          extendedMinutes: 0,
           status: startMode === "now" ? "in_progress" : "pending",
           createdAt: now,
           startedAt: startMode === "now" ? now : undefined,
@@ -202,6 +203,18 @@ export const useHabitStore = create<HabitStore>()(
           }),
         }));
       },
+      extendMiniMission: (id, extraMinutes) => {
+        set((state) => ({
+          miniMissions: state.miniMissions.map((mission) => {
+            if (mission.id !== id) return mission;
+            if (mission.status !== "in_progress") return mission;
+            return {
+              ...mission,
+              extendedMinutes: mission.extendedMinutes + extraMinutes,
+            };
+          }),
+        }));
+      },
       deleteMiniMission: (id) => {
         set((state) => ({
           miniMissions: state.miniMissions.filter(
@@ -220,6 +233,11 @@ export const useHabitStore = create<HabitStore>()(
       onRehydrateStorage: () => (state) => {
         if (state) {
           state.habits = state.habits.map(migrateHabit);
+          // Migrate legacy mini missions missing extendedMinutes
+          state.miniMissions = state.miniMissions.map((m) => ({
+            ...m,
+            extendedMinutes: m.extendedMinutes ?? 0,
+          }));
         }
       },
     },

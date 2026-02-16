@@ -64,7 +64,7 @@ export default function MiniMissionsScreen() {
       return miniMissions.filter((m) => m.status === "pending" || m.status === "scheduled");
     }
     if (tab === "completed") {
-      return miniMissions.filter((m) => m.status === "completed");
+      return miniMissions.filter((m) => m.status === "completed" || m.status === "cancelled");
     }
     return [];
   }, [miniMissions, tab, view]);

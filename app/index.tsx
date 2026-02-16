@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, StatusBar } from 'react-native';
 import { useRouter } from 'expo-router';
 import { FlashList } from '@shopify/flash-list';
-import { Trophy, Flame, Check, Bolt, Target, Plus, ChevronRight } from 'lucide-react-native';
+import { Trophy, Bolt, Target, Plus, ChevronRight } from 'lucide-react-native';
 import { useHabitStore } from '../src/store/habitStore';
 import { Button } from '../src/components/Button';
 import { HabitCard } from '../src/components/HabitCard';
@@ -34,6 +34,8 @@ export default function Home() {
         return { queued, running };
     }, [miniMissions]);
 
+    const miniCount = miniMissionStats.running > 0 ? miniMissionStats.running : miniMissionStats.queued;
+
     return (
         <Screen>
             <StatusBar barStyle='light-content' backgroundColor={theme.colors.background} />
@@ -49,34 +51,6 @@ export default function Home() {
                 </View>
             </View>
 
-            <View style={styles.statsRow}>
-                <View style={styles.statCard}>
-                    <Flame size={16} color={theme.colors.amber[500]} />
-                    <Text style={styles.statValue}>{stats.activeCount}</Text>
-                    <Text style={styles.statLabel}>Active</Text>
-                </View>
-                <View style={styles.statCard}>
-                    <Check size={16} color={theme.colors.green[500]} />
-                    <Text style={styles.statValue}>{stats.completedCount}</Text>
-                    <Text style={styles.statLabel}>Completed</Text>
-                </View>
-                <TouchableOpacity
-                    style={styles.statCard}
-                    activeOpacity={0.9}
-                    onPress={() => router.push('/mini?view=running')}
-                >
-                    <View style={styles.runningIconWrap}>
-                        {miniMissionStats.running > 0 ? (
-                            <AnimatedFire size={16} />
-                        ) : (
-                            <Flame size={16} color={theme.colors.slate[500]} />
-                        )}
-                    </View>
-                    <Text style={styles.statValue}>{miniMissionStats.running}</Text>
-                    <Text style={styles.statLabel}>Mini Running</Text>
-                </TouchableOpacity>
-            </View>
-
             {/* ── Command Center ── */}
             <View style={styles.commandRow}>
                 <TouchableOpacity
@@ -84,11 +58,20 @@ export default function Home() {
                     activeOpacity={0.85}
                     onPress={() => router.push('/create')}
                 >
-                    <View style={styles.commandIconMain}>
-                        <Target size={18} color={theme.colors.cyan[400]} />
+                    <View style={styles.commandTopRow}>
+                        <View style={styles.commandIconMain}>
+                            {stats.activeCount > 0 ? (
+                                <AnimatedFire size={14} color={theme.colors.cyan[400]} />
+                            ) : (
+                                <Target size={18} color={theme.colors.cyan[400]} />
+                            )}
+                        </View>
+                        {stats.activeCount > 0 && (
+                            <Text style={styles.countMain}>{stats.activeCount}</Text>
+                        )}
                     </View>
-                    <Text style={styles.commandTitleMain}>New Mission</Text>
-                    <Text style={styles.commandHintMain}>21-day or custom</Text>
+                    <Text style={styles.commandTitle}>New Mission</Text>
+                    <Text style={styles.commandHint}>21-day or custom</Text>
                     <View style={styles.commandCta}>
                         <Plus size={14} color={theme.colors.white} strokeWidth={3} />
                     </View>
@@ -99,14 +82,21 @@ export default function Home() {
                     activeOpacity={0.85}
                     onPress={() => router.push('/mini')}
                 >
-                    <View style={styles.commandIconMini}>
-                        <Bolt size={18} color={theme.colors.yellow[400]} />
+                    <View style={styles.commandTopRow}>
+                        <View style={styles.commandIconMini}>
+                            {miniCount > 0 ? (
+                                <AnimatedFire size={14} color={theme.colors.amber[500]} />
+                            ) : (
+                                <Bolt size={18} color={theme.colors.yellow[400]} />
+                            )}
+                        </View>
+                        {miniCount > 0 && (
+                            <Text style={styles.countMini}>{miniCount}</Text>
+                        )}
                     </View>
-                    <Text style={styles.commandTitleMini}>Mini Missions</Text>
-                    <Text style={styles.commandHintMini}>
-                        {miniMissionStats.running > 0
-                            ? `${miniMissionStats.running} running`
-                            : `${miniMissionStats.queued} queued`}
+                    <Text style={styles.commandTitle}>Mini Missions</Text>
+                    <Text style={styles.commandHint}>
+                        {miniMissionStats.running > 0 ? 'running now' : 'queued'}
                     </Text>
                     <View style={styles.commandCtaMini}>
                         <ChevronRight size={14} color={theme.colors.amber[500]} strokeWidth={3} />
@@ -114,20 +104,25 @@ export default function Home() {
                 </TouchableOpacity>
             </View>
 
+            {/* ── Tabs with counts ── */}
             <View style={styles.tabContainer}>
                 <TouchableOpacity
                     style={[styles.tab, activeTab === 'active' && styles.activeTab]}
                     onPress={() => setActiveTab('active')}
                     activeOpacity={0.8}
                 >
-                    <Text style={[styles.tabText, activeTab === 'active' && styles.activeTabText]}>Active</Text>
+                    <Text style={[styles.tabText, activeTab === 'active' && styles.activeTabText]}>
+                        Active{stats.activeCount > 0 ? ` (${stats.activeCount})` : ''}
+                    </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                     style={[styles.tab, activeTab === 'completed' && styles.activeTab]}
                     onPress={() => setActiveTab('completed')}
                     activeOpacity={0.8}
                 >
-                    <Text style={[styles.tabText, activeTab === 'completed' && styles.activeTabText]}>Completed</Text>
+                    <Text style={[styles.tabText, activeTab === 'completed' && styles.activeTabText]}>
+                        Completed{stats.completedCount > 0 ? ` (${stats.completedCount})` : ''}
+                    </Text>
                 </TouchableOpacity>
             </View>
 
@@ -201,38 +196,6 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderColor: theme.colors.border,
     },
-    statsRow: {
-        flexDirection: 'row',
-        gap: 10,
-        marginBottom: 14,
-    },
-    statCard: {
-        flex: 1,
-        backgroundColor: theme.colors.surface,
-        borderRadius: theme.radius.md,
-        borderWidth: 1,
-        borderColor: theme.colors.border,
-        paddingVertical: 10,
-        paddingHorizontal: 10,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    statValue: {
-        color: theme.colors.textPrimary,
-        fontSize: 22,
-        fontWeight: '800',
-        marginTop: 3,
-    },
-    statLabel: {
-        color: theme.colors.textSecondary,
-        fontSize: 11,
-        marginTop: 2,
-    },
-    runningIconWrap: {
-        minHeight: 20,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
 
     /* ── Command Center ── */
     commandRow: {
@@ -246,7 +209,7 @@ const styles = StyleSheet.create({
         borderRadius: theme.radius.lg,
         borderWidth: 1,
         borderColor: 'rgba(34, 211, 238, 0.3)',
-        paddingVertical: 16,
+        paddingVertical: 14,
         paddingHorizontal: 14,
         position: 'relative',
         overflow: 'hidden',
@@ -257,10 +220,16 @@ const styles = StyleSheet.create({
         borderRadius: theme.radius.lg,
         borderWidth: 1,
         borderColor: 'rgba(245, 158, 11, 0.3)',
-        paddingVertical: 16,
+        paddingVertical: 14,
         paddingHorizontal: 14,
         position: 'relative',
         overflow: 'hidden',
+    },
+    commandTopRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: 10,
     },
     commandIconMain: {
         width: 36,
@@ -269,7 +238,6 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
         backgroundColor: 'rgba(34, 211, 238, 0.12)',
-        marginBottom: 10,
     },
     commandIconMini: {
         width: 36,
@@ -278,29 +246,26 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
         backgroundColor: 'rgba(251, 191, 36, 0.14)',
-        marginBottom: 10,
     },
-    commandTitleMain: {
+    countMain: {
+        fontSize: 20,
+        fontWeight: '800',
+        color: theme.colors.cyan[400],
+    },
+    countMini: {
+        fontSize: 20,
+        fontWeight: '800',
+        color: theme.colors.amber[500],
+    },
+    commandTitle: {
         color: theme.colors.textPrimary,
         fontWeight: '700',
         fontSize: 15,
         marginBottom: 2,
     },
-    commandTitleMini: {
-        color: theme.colors.textPrimary,
-        fontWeight: '700',
-        fontSize: 15,
-        marginBottom: 2,
-    },
-    commandHintMain: {
+    commandHint: {
         color: theme.colors.textMuted,
         fontSize: 11,
-        marginBottom: 6,
-    },
-    commandHintMini: {
-        color: theme.colors.textMuted,
-        fontSize: 11,
-        marginBottom: 6,
     },
     commandCta: {
         position: 'absolute',
