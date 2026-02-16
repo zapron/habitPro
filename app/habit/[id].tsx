@@ -152,7 +152,7 @@ export default function HabitDetail() {
                         const today = new Date();
                         today.setHours(0, 0, 0, 0);
 
-                        return days.map((day, index) => {
+                        const items = days.map((day, index) => {
                             const dateStr = getDayDate(index);
                             const isCompleted = habit.completedDates.includes(dateStr);
                             const isMilestone = milestones.includes(day);
@@ -241,6 +241,20 @@ export default function HabitDetail() {
                                 </TouchableOpacity>
                             );
                         });
+
+                        // Add invisible placeholders to fill the last row (7 columns)
+                        const cols = 7;
+                        const remainder = totalDays % cols;
+                        if (remainder !== 0) {
+                            const placeholders = cols - remainder;
+                            for (let i = 0; i < placeholders; i++) {
+                                items.push(
+                                    <View key={`placeholder-${i}`} style={styles.dayButtonPlaceholder} />,
+                                );
+                            }
+                        }
+
+                        return items;
                     })()}
                 </View>
             </ScrollView>
@@ -465,5 +479,10 @@ const styles = StyleSheet.create({
         position: 'absolute',
         top: 6,
         right: 6,
+    },
+    dayButtonPlaceholder: {
+        width: '13%',
+        aspectRatio: 1,
+        marginBottom: 14,
     },
 });
