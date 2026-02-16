@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Text, StyleSheet, View } from 'react-native';
+import { Text, StyleSheet, View, Platform } from 'react-native';
 import { theme } from '../styles/theme';
 import { AnimatedFire } from './AnimatedFire';
 
@@ -74,8 +74,8 @@ const styles = StyleSheet.create({
     iconContainer: {
         marginRight: 20,
         backgroundColor: 'rgba(245, 158, 11, 0.1)', // Amber with opacity
-        padding: 12,
-        borderRadius: 9999,
+        padding: 10,
+        borderRadius: 18,
         borderWidth: 1,
         borderColor: 'rgba(245, 158, 11, 0.3)',
     },
@@ -94,11 +94,18 @@ const styles = StyleSheet.create({
         color: theme.colors.textPrimary,
         fontWeight: 'bold',
         fontSize: 32,
-        fontVariant: ['tabular-nums'],
+        lineHeight: 34,
         letterSpacing: 2,
+        fontVariant: ['tabular-nums'],
         textShadowColor: 'rgba(99, 102, 241, 0.5)', // Indigo glow
         textShadowOffset: { width: 0, height: 2 },
         textShadowRadius: 8,
+        ...(Platform.OS === 'android'
+            ? {
+                includeFontPadding: false,
+                textAlignVertical: 'center',
+            }
+            : {}),
     },
     legendContainer: {
         flexDirection: 'row',

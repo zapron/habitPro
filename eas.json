@@ -1,0 +1,22 @@
+{
+  "cli": {
+    "version": ">= 16.0.0"
+  },
+  "build": {
+    "preview": {
+      "env": {
+        "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
+        "EXPO_DOCTOR_SKIP_DEPENDENCY_VERSION_CHECK": "1"
+      },
+      "android": {
+        "buildType": "apk"
+      }
+    },
+    "production": {
+      "env": {
+        "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
+        "EXPO_DOCTOR_SKIP_DEPENDENCY_VERSION_CHECK": "1"
+      }
+    }
+  }
+}
