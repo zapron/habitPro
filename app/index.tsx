@@ -148,9 +148,11 @@ export default function Home() {
                 )}
             </View>
 
-            <View style={styles.fabContainer}>
-                <Button title='New Mission' onPress={() => router.push('/create')} style={styles.fabButton} />
-            </View>
+            {habits.length > 0 && (
+                <View style={styles.fabContainer}>
+                    <Button title='New Mission' onPress={() => router.push('/create')} style={styles.fabButton} />
+                </View>
+            )}
         </Screen>
     );
 }
