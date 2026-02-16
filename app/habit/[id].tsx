@@ -1,5 +1,5 @@
-import { useMemo } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Alert, StyleSheet, StatusBar } from 'react-native';
+import { useCallback, useMemo, useRef, useState } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, Alert, StyleSheet, StatusBar, Animated, Easing, LayoutChangeEvent } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { ArrowLeft, Trash2, Lock, RotateCcw, Sparkles, Star, Plane, Gamepad2 } from 'lucide-react-native';
@@ -9,16 +9,182 @@ import { Timer } from '../../src/components/Timer';
 import { QuoteCard } from '../../src/components/QuoteCard';
 import { Screen } from '../../src/components/Screen';
 import { theme } from '../../src/styles/theme';
+import { ConfettiBurst } from '../../src/components/ConfettiBurst';
+import { StreakBanner } from '../../src/components/StreakBanner';
 
 /** Calculate milestones dynamically based on totalDays and mode. */
 function getMilestones(totalDays: number, mode: string): number[] {
     if (mode === 'autopilot') return [7, 14, 21];
-    // Manual: ~33%, ~66%, 100%
     const m1 = Math.round(totalDays / 3);
     const m2 = Math.round((totalDays * 2) / 3);
     const m3 = totalDays;
-    // Deduplicate in case of very short missions
     return [...new Set([m1, m2, m3])];
+}
+
+/** Animated day cell with bounce on tap */
+function AnimatedDayCell({
+    day,
+    isCompleted,
+    isMilestone,
+    isToday,
+    isYesterday,
+    isFuture,
+    onPress,
+}: {
+    day: number;
+    isCompleted: boolean;
+    isMilestone: boolean;
+    isToday: boolean;
+    isYesterday: boolean;
+    isFuture: boolean;
+    onPress: () => void;
+}) {
+    const scale = useRef(new Animated.Value(1)).current;
+    const shimmer = useRef(new Animated.Value(0)).current;
+    const todayPulse = useRef(new Animated.Value(1)).current;
+    const isEditable = isToday || isYesterday;
+
+    // Pulsing effect for today
+    useMemo(() => {
+        if (isToday && !isCompleted) {
+            Animated.loop(
+                Animated.sequence([
+                    Animated.timing(todayPulse, {
+                        toValue: 1.06,
+                        duration: 1400,
+                        easing: Easing.inOut(Easing.ease),
+                        useNativeDriver: true,
+                    }),
+                    Animated.timing(todayPulse, {
+                        toValue: 1,
+                        duration: 1400,
+                        easing: Easing.inOut(Easing.ease),
+                        useNativeDriver: true,
+                    }),
+                ]),
+            ).start();
+        }
+    }, [isToday, isCompleted, todayPulse]);
+
+    // Shimmer for milestones
+    useMemo(() => {
+        if (isMilestone && isCompleted) {
+            Animated.loop(
+                Animated.sequence([
+                    Animated.timing(shimmer, {
+                        toValue: 1,
+                        duration: 2000,
+                        easing: Easing.inOut(Easing.ease),
+                        useNativeDriver: true,
+                    }),
+                    Animated.timing(shimmer, {
+                        toValue: 0,
+                        duration: 2000,
+                        easing: Easing.inOut(Easing.ease),
+                        useNativeDriver: true,
+                    }),
+                ]),
+            ).start();
+        }
+    }, [isMilestone, isCompleted, shimmer]);
+
+    const handlePress = useCallback(() => {
+        // Bounce animation
+        Animated.sequence([
+            Animated.spring(scale, {
+                toValue: 0.82,
+                tension: 250,
+                friction: 6,
+                useNativeDriver: true,
+            }),
+            Animated.spring(scale, {
+                toValue: 1,
+                tension: 200,
+                friction: 5,
+                useNativeDriver: true,
+            }),
+        ]).start();
+        onPress();
+    }, [onPress, scale]);
+
+    const shimmerOpacity = shimmer.interpolate({
+        inputRange: [0, 1],
+        outputRange: [0.7, 1],
+    });
+
+    const dayButtonStyle = [
+        styles.dayButton,
+        isCompleted ? styles.dayButtonCompleted : styles.dayButtonIncomplete,
+        isCompleted && isMilestone ? styles.dayButtonMilestone : null,
+        isToday && !isCompleted ? styles.dayButtonToday : null,
+        (isFuture || !isEditable) ? styles.dayButtonFuture : null,
+    ];
+
+    const animatedScale = isToday && !isCompleted ? Animated.multiply(scale, todayPulse) : scale;
+
+    return (
+        <Animated.View
+            style={{
+                width: '13%',
+                aspectRatio: 1,
+                marginBottom: 14,
+                transform: [{ scale: animatedScale as any }],
+            }}
+        >
+            <TouchableOpacity
+                onPress={handlePress}
+                style={dayButtonStyle}
+                activeOpacity={0.8}
+                disabled={isFuture}
+            >
+                {isCompleted ? (
+                    <Animated.View style={[styles.badgeWrap, isMilestone && { opacity: shimmerOpacity }]}>
+                        {isMilestone ? <View style={styles.milestoneHalo} /> : null}
+                        <View
+                            style={[
+                                styles.badgeCore,
+                                isMilestone ? styles.badgeCoreMilestone : null,
+                            ]}
+                        >
+                            <Text
+                                style={[
+                                    styles.completedDayText,
+                                    isMilestone ? styles.completedDayTextMilestone : null,
+                                ]}
+                            >
+                                {day}
+                            </Text>
+                        </View>
+                        {isMilestone ? (
+                            <Star
+                                size={9}
+                                color={theme.colors.yellow[400]}
+                                fill={theme.colors.yellow[400]}
+                                style={styles.badgeAccent}
+                            />
+                        ) : (
+                            <Sparkles
+                                size={9}
+                                color={theme.colors.cyan[400]}
+                                style={styles.badgeAccent}
+                            />
+                        )}
+                    </Animated.View>
+                ) : isFuture ? (
+                    <Lock size={15} color={theme.colors.textMuted} />
+                ) : (
+                    <Text
+                        style={[
+                            styles.dayText,
+                            isToday ? styles.dayTextToday : styles.dayTextDefault,
+                        ]}
+                    >
+                        {day}
+                    </Text>
+                )}
+            </TouchableOpacity>
+        </Animated.View>
+    );
 }
 
 export default function HabitDetail() {
@@ -34,6 +200,16 @@ export default function HabitDetail() {
     const mode = habit?.mode ?? 'autopilot';
     const totalDays = habit?.totalDays ?? 21;
     const milestones = useMemo(() => getMilestones(totalDays, mode), [totalDays, mode]);
+
+    // Confetti state
+    const [confetti, setConfetti] = useState<{ active: boolean; milestone: boolean; x: number; y: number }>({
+        active: false,
+        milestone: false,
+        x: 0,
+        y: 0,
+    });
+    const gridRef = useRef<View>(null);
+    const [gridLayout, setGridLayout] = useState({ x: 0, y: 0 });
 
     if (!habit) {
         return (
@@ -84,7 +260,43 @@ export default function HabitDetail() {
         return start.toISOString().split('T')[0];
     };
 
+    const handleDayPress = (dayIndex: number, day: number) => {
+        const dateStr = getDayDate(dayIndex);
+        const wasCompleted = habit.completedDates.includes(dateStr);
+        const changed = toggleCompletion(habit.id, dateStr);
+        if (!changed) {
+            Alert.alert('Locked day', 'You can only edit check-ins for today and yesterday.');
+            return;
+        }
+
+        if (!wasCompleted) {
+            // Just checked in — fire confetti!
+            const isMilestone = milestones.includes(day);
+            const col = dayIndex % 7;
+            const row = Math.floor(dayIndex / 7);
+            const cellSize = 50; // approximate
+            const x = col * cellSize + cellSize / 2;
+            const y = row * cellSize + cellSize / 2;
+
+            setConfetti({ active: false, milestone: false, x: 0, y: 0 });
+            setTimeout(() => {
+                setConfetti({ active: true, milestone: isMilestone, x, y });
+            }, 50);
+
+            Haptics.notificationAsync(
+                isMilestone
+                    ? Haptics.NotificationFeedbackType.Success
+                    : Haptics.NotificationFeedbackType.Success,
+            );
+        } else {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        }
+    };
+
     const isManual = mode === 'manual';
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
 
     return (
         <Screen>
@@ -121,6 +333,9 @@ export default function HabitDetail() {
                 <Text style={styles.title}>{habit.title}</Text>
                 <Text style={styles.description}>{habit.description || 'No brief added yet.'}</Text>
 
+                {/* Streak Banner */}
+                <StreakBanner streak={habit.streak} />
+
                 <Timer startDate={habit.startDate} mode={mode} endDate={habit.endDate} />
                 <QuoteCard />
 
@@ -147,114 +362,58 @@ export default function HabitDetail() {
                     {isManual ? `${totalDays}-Day Grid` : '21-Day Grid'}
                 </Text>
 
-                <View style={styles.grid}>
+                <View
+                    style={styles.grid}
+                    ref={gridRef}
+                    onLayout={(e: LayoutChangeEvent) => {
+                        setGridLayout({ x: e.nativeEvent.layout.x, y: e.nativeEvent.layout.y });
+                    }}
+                >
+                    {/* Confetti layer */}
+                    {confetti.active && (
+                        <ConfettiBurst
+                            active={confetti.active}
+                            isMilestone={confetti.milestone}
+                            originX={confetti.x}
+                            originY={confetti.y}
+                        />
+                    )}
+
+                    {days.map((day, index) => {
+                        const dateStr = getDayDate(index);
+                        const isCompleted = habit.completedDates.includes(dateStr);
+                        const isMilestone = milestones.includes(day);
+
+                        const dayDate = new Date(dateStr);
+                        dayDate.setHours(0, 0, 0, 0);
+
+                        const isFuture = dayDate > today;
+                        const isTodayCell = dayDate.getTime() === today.getTime();
+                        const yesterday = new Date(today);
+                        yesterday.setDate(yesterday.getDate() - 1);
+                        const isYesterday = dayDate.getTime() === yesterday.getTime();
+
+                        return (
+                            <AnimatedDayCell
+                                key={day}
+                                day={day}
+                                isCompleted={isCompleted}
+                                isMilestone={isMilestone}
+                                isToday={isTodayCell}
+                                isYesterday={isYesterday}
+                                isFuture={isFuture}
+                                onPress={() => handleDayPress(index, day)}
+                            />
+                        );
+                    })}
+
+                    {/* Placeholders for last row alignment */}
                     {(() => {
-                        const today = new Date();
-                        today.setHours(0, 0, 0, 0);
-
-                        const items = days.map((day, index) => {
-                            const dateStr = getDayDate(index);
-                            const isCompleted = habit.completedDates.includes(dateStr);
-                            const isMilestone = milestones.includes(day);
-
-                            const dayDate = new Date(dateStr);
-                            dayDate.setHours(0, 0, 0, 0);
-
-                            const isFuture = dayDate > today;
-                            const isToday = dayDate.getTime() === today.getTime();
-                            const yesterday = new Date(today);
-                            yesterday.setDate(yesterday.getDate() - 1);
-                            const isYesterday = dayDate.getTime() === yesterday.getTime();
-                            const isEditable = isToday || isYesterday;
-
-                            const dayButtonStyle = [
-                                styles.dayButton,
-                                isCompleted ? styles.dayButtonCompleted : styles.dayButtonIncomplete,
-                                isCompleted && isMilestone ? styles.dayButtonMilestone : null,
-                                isToday && !isCompleted ? styles.dayButtonToday : null,
-                                (isFuture || !isEditable) ? styles.dayButtonFuture : null,
-                            ];
-
-                            return (
-                                <TouchableOpacity
-                                    key={day}
-                                    onPress={() => {
-                                        const changed = toggleCompletion(habit.id, dateStr);
-                                        if (!changed) {
-                                            Alert.alert(
-                                                'Locked day',
-                                                'You can only edit check-ins for today and yesterday.',
-                                            );
-                                            return;
-                                        }
-                                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                                    }}
-                                    style={dayButtonStyle}
-                                    activeOpacity={0.8}
-                                    disabled={isFuture}
-                                >
-                                    {isCompleted ? (
-                                        <View style={styles.badgeWrap}>
-                                            {isMilestone ? <View style={styles.milestoneHalo} /> : null}
-                                            <View
-                                                style={[
-                                                    styles.badgeCore,
-                                                    isMilestone ? styles.badgeCoreMilestone : null,
-                                                ]}
-                                            >
-                                                <Text
-                                                    style={[
-                                                        styles.completedDayText,
-                                                        isMilestone ? styles.completedDayTextMilestone : null,
-                                                    ]}
-                                                >
-                                                    {day}
-                                                </Text>
-                                            </View>
-                                            {isMilestone ? (
-                                                <Star
-                                                    size={9}
-                                                    color={theme.colors.yellow[400]}
-                                                    fill={theme.colors.yellow[400]}
-                                                    style={styles.badgeAccent}
-                                                />
-                                            ) : (
-                                                <Sparkles
-                                                    size={9}
-                                                    color={theme.colors.cyan[400]}
-                                                    style={styles.badgeAccent}
-                                                />
-                                            )}
-                                        </View>
-                                    ) : isFuture ? (
-                                        <Lock size={15} color={theme.colors.textMuted} />
-                                    ) : (
-                                        <Text
-                                            style={[
-                                                styles.dayText,
-                                                isToday ? styles.dayTextToday : styles.dayTextDefault,
-                                            ]}
-                                        >
-                                            {day}
-                                        </Text>
-                                    )}
-                                </TouchableOpacity>
-                            );
-                        });
-
-                        // Add invisible placeholders to fill the last row (7 columns)
-                        const cols = 7;
-                        const remainder = totalDays % cols;
-                        if (remainder !== 0) {
-                            const placeholders = cols - remainder;
-                            for (let i = 0; i < placeholders; i++) {
-                                items.push(
-                                    <View key={`placeholder-${i}`} style={styles.dayButtonPlaceholder} />,
-                                );
-                            }
-                        }
-
-                        return items;
+                        const remainder = totalDays % 7;
+                        if (remainder === 0) return null;
+                        return Array.from({ length: 7 - remainder }, (_, i) => (
+                            <View key={`ph-${i}`} style={styles.dayButtonPlaceholder} />
+                        ));
                     })()}
                 </View>
             </ScrollView>
@@ -338,7 +497,7 @@ const styles = StyleSheet.create({
     },
     description: {
         color: theme.colors.textSecondary,
-        marginBottom: 28,
+        marginBottom: 20,
         fontSize: theme.typography.body,
     },
     progressCard: {
@@ -397,14 +556,14 @@ const styles = StyleSheet.create({
         flexWrap: 'wrap',
         justifyContent: 'space-between',
         paddingBottom: 24,
+        position: 'relative',
     },
     dayButton: {
-        width: '13%',
-        aspectRatio: 1,
+        width: '100%',
+        height: '100%',
         borderRadius: 12,
         alignItems: 'center',
         justifyContent: 'center',
-        marginBottom: 14,
     },
     dayButtonCompleted: {
         backgroundColor: theme.colors.indigo[600],

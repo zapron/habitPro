@@ -1,14 +1,37 @@
-import React, { useMemo, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, StatusBar } from 'react-native';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, StatusBar, Animated } from 'react-native';
 import { useRouter } from 'expo-router';
 import { FlashList } from '@shopify/flash-list';
-import { Trophy, Bolt, Target, Plus, ChevronRight } from 'lucide-react-native';
+import { Trophy, Bolt, Target, Plus, ChevronRight, Sun, Moon, Sunrise, Sunset } from 'lucide-react-native';
 import { useHabitStore } from '../src/store/habitStore';
 import { Button } from '../src/components/Button';
 import { HabitCard } from '../src/components/HabitCard';
 import { Screen } from '../src/components/Screen';
 import { theme } from '../src/styles/theme';
 import { AnimatedFire } from '../src/components/AnimatedFire';
+
+/** Dynamic greeting based on time of day */
+function getGreeting(): { text: string; emoji: string; Icon: typeof Sun } {
+    const hour = new Date().getHours();
+    if (hour < 5) return { text: 'Burning the midnight oil', emoji: '🌙', Icon: Moon };
+    if (hour < 12) return { text: 'Good morning, warrior', emoji: '☀️', Icon: Sunrise };
+    if (hour < 17) return { text: 'Keep pushing forward', emoji: '💪', Icon: Sun };
+    if (hour < 21) return { text: 'Evening focus mode', emoji: '🌅', Icon: Sunset };
+    return { text: 'Night owl mode', emoji: '🌙', Icon: Moon };
+}
+
+const MOTIVATIONAL_LINES = [
+    'Small steps, big results.',
+    'Consistency beats intensity.',
+    'Show up. That\'s the whole game.',
+    'Your future self will thank you.',
+    'Discipline is freedom.',
+    'One day or day one — you decide.',
+    'Progress, not perfection.',
+    'The streak doesn\'t build itself.',
+];
+
+
 
 export default function Home() {
     const router = useRouter();
@@ -36,22 +59,47 @@ export default function Home() {
 
     const miniCount = miniMissionStats.running > 0 ? miniMissionStats.running : miniMissionStats.queued;
 
+    const greeting = useMemo(() => getGreeting(), []);
+    const motivation = useMemo(() => {
+        // Rotate daily based on date
+        const dayIndex = new Date().getDate() % MOTIVATIONAL_LINES.length;
+        return MOTIVATIONAL_LINES[dayIndex];
+    }, []);
+
+    // Header fade-in
+    const headerOpacity = useRef(new Animated.Value(0)).current;
+    const headerSlide = useRef(new Animated.Value(-15)).current;
+
+    useEffect(() => {
+        Animated.parallel([
+            Animated.timing(headerOpacity, { toValue: 1, duration: 600, useNativeDriver: true }),
+            Animated.spring(headerSlide, { toValue: 0, tension: 50, friction: 10, useNativeDriver: true }),
+        ]).start();
+    }, [headerOpacity, headerSlide]);
+
     return (
         <Screen>
             <StatusBar barStyle='light-content' backgroundColor={theme.colors.background} />
 
-            <View style={styles.header}>
+            <Animated.View
+                style={[
+                    styles.header,
+                    { opacity: headerOpacity, transform: [{ translateY: headerSlide }] },
+                ]}
+            >
                 <View>
                     <Text style={styles.headerEyebrow}>MISSION CONTROL</Text>
-                    <Text style={styles.headerTitle}>HabitPro</Text>
-                    <Text style={styles.headerSubtitle}>Build discipline in 21-day campaigns.</Text>
+                    <Text style={styles.headerTitle}>
+                        {greeting.text} {greeting.emoji}
+                    </Text>
+                    <Text style={styles.headerSubtitle}>{motivation}</Text>
                 </View>
                 <View style={styles.headerBadge}>
                     <Trophy size={22} color={theme.colors.yellow[400]} />
                 </View>
-            </View>
+            </Animated.View>
 
-            {/* ── Command Center ── */}
+            {/* ── Glassmorphism Command Center ── */}
             <View style={styles.commandRow}>
                 <TouchableOpacity
                     style={styles.commandCardMain}
@@ -177,7 +225,7 @@ const styles = StyleSheet.create({
         marginBottom: 6,
     },
     headerTitle: {
-        fontSize: theme.typography.h1,
+        fontSize: 22,
         fontWeight: '800',
         color: theme.colors.textPrimary,
     },
@@ -185,6 +233,7 @@ const styles = StyleSheet.create({
         color: theme.colors.textSecondary,
         marginTop: 4,
         fontSize: theme.typography.caption,
+        fontStyle: 'italic',
     },
     headerBadge: {
         width: 46,
@@ -197,7 +246,7 @@ const styles = StyleSheet.create({
         borderColor: theme.colors.border,
     },
 
-    /* ── Command Center ── */
+    /* ── Glassmorphism Command Center ── */
     commandRow: {
         flexDirection: 'row',
         gap: 10,

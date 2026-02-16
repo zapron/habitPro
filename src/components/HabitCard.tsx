@@ -5,6 +5,7 @@ import { TreePine, Flame, Check, Plane, Gamepad2 } from 'lucide-react-native';
 import { theme } from '../styles/theme';
 import { Habit } from '../types/habit';
 import { AnimatedFire } from './AnimatedFire';
+import { ProgressRing } from './ProgressRing';
 
 interface HabitCardProps {
     item: Habit;
@@ -16,6 +17,7 @@ export const HabitCard = memo(({ item }: HabitCardProps) => {
     const isFinished = item.completedDates.length >= totalDays;
     const isActive = item.streak > 0 && !isFinished;
     const isManual = (item.mode ?? 'autopilot') === 'manual';
+    const progress = Math.min(item.completedDates.length / totalDays, 1);
 
     return (
         <TouchableOpacity
@@ -48,7 +50,7 @@ export const HabitCard = memo(({ item }: HabitCardProps) => {
                         <View
                             style={{
                                 height: '100%',
-                                width: `${(item.completedDates.length / totalDays) * 100}%`,
+                                width: `${progress * 100}%`,
                                 backgroundColor: isManual
                                     ? theme.colors.amber[500]
                                     : isActive
@@ -85,19 +87,24 @@ export const HabitCard = memo(({ item }: HabitCardProps) => {
 
                     {!isFinished && (
                         <Text style={styles.cardProgress}>
-                            {Math.round((item.completedDates.length / totalDays) * 100)}%
+                            {Math.round(progress * 100)}%
                         </Text>
                     )}
                 </View>
             </View>
 
-            <View style={[styles.progressCircle, isFinished && styles.progressCircleCompleted]}>
+            <ProgressRing
+                progress={progress}
+                size={52}
+                strokeWidth={3}
+                color={isManual ? theme.colors.amber[500] : isFinished ? theme.colors.green[500] : theme.colors.indigo[500]}
+            >
                 {isFinished ? (
-                    <Check size={22} color={theme.colors.white} strokeWidth={3} />
+                    <Check size={20} color={theme.colors.green[500]} strokeWidth={3} />
                 ) : (
                     <Text style={styles.progressText}>{item.completedDates.length}</Text>
                 )}
-            </View>
+            </ProgressRing>
         </TouchableOpacity>
     );
 });
@@ -167,21 +174,6 @@ const styles = StyleSheet.create({
     },
     cardProgress: {
         color: theme.colors.textMuted,
-    },
-    progressCircle: {
-        height: 48,
-        width: 48,
-        borderRadius: 24,
-        backgroundColor: theme.colors.surfaceElevated,
-        alignItems: 'center',
-        justifyContent: 'center',
-        borderWidth: 1,
-        borderColor: theme.colors.border,
-        marginLeft: 12,
-    },
-    progressCircleCompleted: {
-        backgroundColor: theme.colors.green[500],
-        borderColor: theme.colors.green[600],
     },
     progressText: {
         color: theme.colors.white,
