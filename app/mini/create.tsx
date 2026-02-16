@@ -8,8 +8,6 @@ import {
   StyleSheet,
   StatusBar,
   Alert,
-  KeyboardAvoidingView,
-  Platform,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { ArrowLeft, Zap } from "lucide-react-native";
@@ -58,103 +56,94 @@ export default function CreateMiniMission() {
   return (
     <Screen>
       <StatusBar barStyle="light-content" backgroundColor={theme.colors.background} />
-      <KeyboardAvoidingView
-        style={styles.keyboardWrap}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 12 : 0}
+      <View style={styles.header}>
+        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+          <ArrowLeft size={20} color={theme.colors.white} />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>New Mini Mission</Text>
+      </View>
+
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={styles.scrollContent}
       >
-        <View style={styles.header}>
-          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-            <ArrowLeft size={20} color={theme.colors.white} />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>New Mini Mission</Text>
+        <View style={styles.heroCard}>
+          <View style={styles.heroIconWrap}>
+            <Zap size={18} color={theme.colors.yellow[400]} />
+          </View>
+          <Text style={styles.heroTitle}>Take Action In Small Time Blocks</Text>
+          <Text style={styles.heroText}>
+            Define the mission, state the objective, and commit to a time estimate.
+          </Text>
         </View>
 
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-          contentContainerStyle={styles.scrollContent}
-        >
-          <View style={styles.heroCard}>
-            <View style={styles.heroIconWrap}>
-              <Zap size={18} color={theme.colors.yellow[400]} />
-            </View>
-            <Text style={styles.heroTitle}>Take Action In Small Time Blocks</Text>
-            <Text style={styles.heroText}>
-              Define the mission, state the objective, and commit to a time estimate.
+        <Text style={styles.label}>Mission</Text>
+        <TextInput
+          style={[styles.input, focused === "title" && styles.inputFocused]}
+          placeholder="e.g., Take bath now"
+          placeholderTextColor={theme.colors.textMuted}
+          value={title}
+          onChangeText={setTitle}
+          onFocus={() => setFocused("title")}
+          onBlur={() => setFocused(null)}
+          autoFocus
+        />
+
+        <Text style={styles.label}>Objective (Optional)</Text>
+        <TextInput
+          style={[styles.input, styles.textArea, focused === "objective" && styles.inputFocused]}
+          placeholder="What does done look like?"
+          placeholderTextColor={theme.colors.textMuted}
+          value={objective}
+          onChangeText={setObjective}
+          onFocus={() => setFocused("objective")}
+          onBlur={() => setFocused(null)}
+          multiline
+          textAlignVertical="top"
+        />
+
+        <Text style={styles.label}>Estimated Time (Minutes)</Text>
+        <TextInput
+          style={[styles.input, focused === "minutes" && styles.inputFocused]}
+          placeholder="15"
+          placeholderTextColor={theme.colors.textMuted}
+          value={estimatedMinutes}
+          onChangeText={setEstimatedMinutes}
+          onFocus={() => setFocused("minutes")}
+          onBlur={() => setFocused(null)}
+          keyboardType="number-pad"
+        />
+
+        <Text style={styles.label}>Start</Text>
+        <View style={styles.startModeRow}>
+          <TouchableOpacity
+            style={[styles.modeButton, startMode === "now" && styles.modeButtonActive]}
+            onPress={() => setStartMode("now")}
+            activeOpacity={0.85}
+          >
+            <Text style={[styles.modeText, startMode === "now" && styles.modeTextActive]}>
+              Let's Go Now
             </Text>
-          </View>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.modeButton, startMode === "later" && styles.modeButtonActive]}
+            onPress={() => setStartMode("later")}
+            activeOpacity={0.85}
+          >
+            <Text style={[styles.modeText, startMode === "later" && styles.modeTextActive]}>
+              Start Later
+            </Text>
+          </TouchableOpacity>
+        </View>
 
-          <Text style={styles.label}>Mission</Text>
-          <TextInput
-            style={[styles.input, focused === "title" && styles.inputFocused]}
-            placeholder="e.g., Take bath now"
-            placeholderTextColor={theme.colors.textMuted}
-            value={title}
-            onChangeText={setTitle}
-            onFocus={() => setFocused("title")}
-            onBlur={() => setFocused(null)}
-            autoFocus
-          />
-
-          <Text style={styles.label}>Objective (Optional)</Text>
-          <TextInput
-            style={[styles.input, styles.textArea, focused === "objective" && styles.inputFocused]}
-            placeholder="What does done look like?"
-            placeholderTextColor={theme.colors.textMuted}
-            value={objective}
-            onChangeText={setObjective}
-            onFocus={() => setFocused("objective")}
-            onBlur={() => setFocused(null)}
-            multiline
-            textAlignVertical="top"
-          />
-
-          <Text style={styles.label}>Estimated Time (Minutes)</Text>
-          <TextInput
-            style={[styles.input, focused === "minutes" && styles.inputFocused]}
-            placeholder="15"
-            placeholderTextColor={theme.colors.textMuted}
-            value={estimatedMinutes}
-            onChangeText={setEstimatedMinutes}
-            onFocus={() => setFocused("minutes")}
-            onBlur={() => setFocused(null)}
-            keyboardType="number-pad"
-          />
-
-          <Text style={styles.label}>Start</Text>
-          <View style={styles.startModeRow}>
-            <TouchableOpacity
-              style={[styles.modeButton, startMode === "now" && styles.modeButtonActive]}
-              onPress={() => setStartMode("now")}
-              activeOpacity={0.85}
-            >
-              <Text style={[styles.modeText, startMode === "now" && styles.modeTextActive]}>
-                Let's Go Now
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.modeButton, startMode === "later" && styles.modeButtonActive]}
-              onPress={() => setStartMode("later")}
-              activeOpacity={0.85}
-            >
-              <Text style={[styles.modeText, startMode === "later" && styles.modeTextActive]}>
-                Start Later
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          <Button title="Create Mini Mission" onPress={handleCreate} style={styles.cta} />
-        </ScrollView>
-      </KeyboardAvoidingView>
+        <Button title="Create Mini Mission" onPress={handleCreate} style={styles.cta} />
+      </ScrollView>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  keyboardWrap: {
-    flex: 1,
-  },
   scrollContent: {
     paddingBottom: 24,
   },

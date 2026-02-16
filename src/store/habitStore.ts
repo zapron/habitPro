@@ -34,20 +34,45 @@ const getDerivedState = (completedDates: string[], totalDays: number) => {
   return { normalized, streak, isCompleted, status };
 };
 
+/** Calculate endDate by adding `totalDays` to a start ISO string. */
+const calculateEndDate = (startIso: string, totalDays: number): string => {
+  const d = new Date(startIso);
+  d.setDate(d.getDate() + totalDays);
+  return d.toISOString();
+};
+
+/**
+ * Migrate legacy habits that were created before the mode field existed.
+ * They become autopilot missions with totalDays 21.
+ */
+const migrateHabit = (h: any): Habit => ({
+  ...h,
+  mode: h.mode ?? "autopilot",
+  totalDays: h.totalDays ?? 21,
+  // endDate is intentionally left undefined for autopilot
+});
+
 export const useHabitStore = create<HabitStore>()(
   persist(
     (set, get) => ({
       habits: [],
       miniMissions: [],
-      addHabit: (title, description) => {
+      addHabit: ({ title, description, mode, totalDays: customDays }) => {
+        const now = new Date().toISOString();
+        const totalDays =
+          mode === "manual" ? Math.max(3, Math.min(365, customDays ?? 21)) : 21;
+
         const newHabit: Habit = {
           id: Date.now().toString(36) + Math.random().toString(36).substring(2),
           title,
           description,
-          startDate: new Date().toISOString(),
+          mode,
+          startDate: now,
+          endDate:
+            mode === "manual" ? calculateEndDate(now, totalDays) : undefined,
           completedDates: [],
           streak: 0,
-          totalDays: 21,
+          totalDays,
           isCompleted: false,
           status: "active",
         };
@@ -95,13 +120,18 @@ export const useHabitStore = create<HabitStore>()(
         set((state) => ({
           habits: state.habits.map((h) => {
             if (h.id !== id) return h;
+            const now = new Date().toISOString();
             return {
               ...h,
               completedDates: [],
               streak: 0,
               isCompleted: false,
               status: "active",
-              startDate: new Date().toISOString(),
+              startDate: now,
+              endDate:
+                h.mode === "manual"
+                  ? calculateEndDate(now, h.totalDays)
+                  : undefined,
             };
           }),
         }));
@@ -174,7 +204,9 @@ export const useHabitStore = create<HabitStore>()(
       },
       deleteMiniMission: (id) => {
         set((state) => ({
-          miniMissions: state.miniMissions.filter((mission) => mission.id !== id),
+          miniMissions: state.miniMissions.filter(
+            (mission) => mission.id !== id,
+          ),
         }));
       },
       getMiniMission: (id) => {
@@ -184,6 +216,12 @@ export const useHabitStore = create<HabitStore>()(
     {
       name: "habit-storage",
       storage: createJSONStorage(() => AsyncStorage),
+      // Migrate legacy habits on rehydration
+      onRehydrateStorage: () => (state) => {
+        if (state) {
+          state.habits = state.habits.map(migrateHabit);
+        }
+      },
     },
   ),
 );

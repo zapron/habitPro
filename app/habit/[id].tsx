@@ -1,13 +1,25 @@
+import { useMemo } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, Alert, StyleSheet, StatusBar } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import { ArrowLeft, Trash2, Lock, RotateCcw, Sparkles, Star } from 'lucide-react-native';
+import { ArrowLeft, Trash2, Lock, RotateCcw, Sparkles, Star, Plane, Gamepad2 } from 'lucide-react-native';
 import { useHabitStore } from '../../src/store/habitStore';
 import { Button } from '../../src/components/Button';
 import { Timer } from '../../src/components/Timer';
 import { QuoteCard } from '../../src/components/QuoteCard';
 import { Screen } from '../../src/components/Screen';
 import { theme } from '../../src/styles/theme';
+
+/** Calculate milestones dynamically based on totalDays and mode. */
+function getMilestones(totalDays: number, mode: string): number[] {
+    if (mode === 'autopilot') return [7, 14, 21];
+    // Manual: ~33%, ~66%, 100%
+    const m1 = Math.round(totalDays / 3);
+    const m2 = Math.round((totalDays * 2) / 3);
+    const m3 = totalDays;
+    // Deduplicate in case of very short missions
+    return [...new Set([m1, m2, m3])];
+}
 
 export default function HabitDetail() {
     const { id } = useLocalSearchParams<{ id?: string | string[] }>();
@@ -18,6 +30,10 @@ export default function HabitDetail() {
     const toggleCompletion = useHabitStore((state) => state.toggleCompletion);
     const resetHabit = useHabitStore((state) => state.resetHabit);
     const deleteHabit = useHabitStore((state) => state.deleteHabit);
+
+    const mode = habit?.mode ?? 'autopilot';
+    const totalDays = habit?.totalDays ?? 21;
+    const milestones = useMemo(() => getMilestones(totalDays, mode), [totalDays, mode]);
 
     if (!habit) {
         return (
@@ -60,13 +76,15 @@ export default function HabitDetail() {
         ]);
     };
 
-    const days = Array.from({ length: 21 }, (_, i) => i + 1);
+    const days = Array.from({ length: totalDays }, (_, i) => i + 1);
 
     const getDayDate = (dayIndex: number) => {
         const start = new Date(habit.startDate);
         start.setDate(start.getDate() + dayIndex);
         return start.toISOString().split('T')[0];
     };
+
+    const isManual = mode === 'manual';
 
     return (
         <Screen>
@@ -88,30 +106,46 @@ export default function HabitDetail() {
             </View>
 
             <ScrollView showsVerticalScrollIndicator={false}>
+                {/* Mode Badge */}
+                <View style={[styles.modeBadge, isManual && styles.modeBadgeManual]}>
+                    {isManual ? (
+                        <Gamepad2 size={13} color={theme.colors.amber[500]} />
+                    ) : (
+                        <Plane size={13} color={theme.colors.cyan[400]} />
+                    )}
+                    <Text style={[styles.modeBadgeText, isManual && styles.modeBadgeTextManual]}>
+                        {isManual ? 'MANUAL CONTROL' : 'AUTOPILOT'}
+                    </Text>
+                </View>
+
                 <Text style={styles.title}>{habit.title}</Text>
                 <Text style={styles.description}>{habit.description || 'No brief added yet.'}</Text>
 
-                <Timer startDate={habit.startDate} />
+                <Timer startDate={habit.startDate} mode={mode} endDate={habit.endDate} />
                 <QuoteCard />
 
                 <View style={styles.progressCard}>
                     <View style={styles.progressHeader}>
                         <Text style={styles.progressLabel}>Campaign Progress</Text>
                         <Text style={styles.progressValue}>
-                            {habit.completedDates.length} <Text style={styles.progressTotal}>/ 21</Text>
+                            {habit.completedDates.length}{' '}
+                            <Text style={styles.progressTotal}>/ {totalDays}</Text>
                         </Text>
                     </View>
                     <View style={styles.progressBarBackground}>
                         <View
                             style={[
                                 styles.progressBarFill,
-                                { width: `${(habit.completedDates.length / 21) * 100}%` },
+                                isManual && styles.progressBarFillManual,
+                                { width: `${(habit.completedDates.length / totalDays) * 100}%` },
                             ]}
                         />
                     </View>
                 </View>
 
-                <Text style={styles.gridTitle}>21-Day Grid</Text>
+                <Text style={styles.gridTitle}>
+                    {isManual ? `${totalDays}-Day Grid` : '21-Day Grid'}
+                </Text>
 
                 <View style={styles.grid}>
                     {(() => {
@@ -121,7 +155,7 @@ export default function HabitDetail() {
                         return days.map((day, index) => {
                             const dateStr = getDayDate(index);
                             const isCompleted = habit.completedDates.includes(dateStr);
-                            const isMilestone = day === 7 || day === 14 || day === 21;
+                            const isMilestone = milestones.includes(day);
 
                             const dayDate = new Date(dateStr);
                             dayDate.setHours(0, 0, 0, 0);
@@ -254,6 +288,34 @@ const styles = StyleSheet.create({
         borderRadius: theme.radius.pill,
         backgroundColor: 'rgba(239, 68, 68, 0.14)',
     },
+    /* ── Mode badge ── */
+    modeBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        alignSelf: 'flex-start',
+        gap: 6,
+        paddingVertical: 4,
+        paddingHorizontal: 10,
+        borderRadius: theme.radius.pill,
+        backgroundColor: 'rgba(34, 211, 238, 0.1)',
+        borderWidth: 1,
+        borderColor: 'rgba(34, 211, 238, 0.3)',
+        marginBottom: 10,
+    },
+    modeBadgeManual: {
+        backgroundColor: 'rgba(245, 158, 11, 0.1)',
+        borderColor: 'rgba(245, 158, 11, 0.3)',
+    },
+    modeBadgeText: {
+        color: theme.colors.cyan[400],
+        fontSize: 11,
+        fontWeight: '800',
+        letterSpacing: 1,
+    },
+    modeBadgeTextManual: {
+        color: theme.colors.amber[500],
+    },
+    /* ── Content ── */
     title: {
         fontSize: theme.typography.h1,
         fontWeight: '800',
@@ -306,6 +368,9 @@ const styles = StyleSheet.create({
         height: '100%',
         backgroundColor: theme.colors.indigo[500],
         borderRadius: theme.radius.pill,
+    },
+    progressBarFillManual: {
+        backgroundColor: theme.colors.amber[500],
     },
     gridTitle: {
         fontSize: theme.typography.h3,

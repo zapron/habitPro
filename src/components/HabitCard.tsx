@@ -1,7 +1,7 @@
 import React, { memo } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
-import { TreePine, Flame, Check } from 'lucide-react-native';
+import { TreePine, Flame, Check, Plane, Gamepad2 } from 'lucide-react-native';
 import { theme } from '../styles/theme';
 import { Habit } from '../types/habit';
 import { AnimatedFire } from './AnimatedFire';
@@ -12,8 +12,10 @@ interface HabitCardProps {
 
 export const HabitCard = memo(({ item }: HabitCardProps) => {
     const router = useRouter();
-    const isFinished = item.completedDates.length >= item.totalDays;
+    const totalDays = item.totalDays ?? 21;
+    const isFinished = item.completedDates.length >= totalDays;
     const isActive = item.streak > 0 && !isFinished;
+    const isManual = (item.mode ?? 'autopilot') === 'manual';
 
     return (
         <TouchableOpacity
@@ -22,6 +24,18 @@ export const HabitCard = memo(({ item }: HabitCardProps) => {
             onPress={() => router.push(`/habit/${item.id}`)}
         >
             <View style={styles.cardContent}>
+                {/* Mode indicator pill */}
+                <View style={[styles.modePill, isManual && styles.modePillManual]}>
+                    {isManual ? (
+                        <Gamepad2 size={10} color={theme.colors.amber[500]} />
+                    ) : (
+                        <Plane size={10} color={theme.colors.cyan[400]} />
+                    )}
+                    <Text style={[styles.modePillText, isManual && styles.modePillTextManual]}>
+                        {isManual ? `MANUAL · ${totalDays}D` : 'AUTOPILOT'}
+                    </Text>
+                </View>
+
                 <Text style={styles.cardTitle}>{item.title}</Text>
                 {item.description ? (
                     <Text style={styles.cardDescription} numberOfLines={1}>
@@ -34,8 +48,12 @@ export const HabitCard = memo(({ item }: HabitCardProps) => {
                         <View
                             style={{
                                 height: '100%',
-                                width: `${(item.completedDates.length / item.totalDays) * 100}%`,
-                                backgroundColor: isActive ? theme.colors.amber[500] : theme.colors.cyan[500],
+                                width: `${(item.completedDates.length / totalDays) * 100}%`,
+                                backgroundColor: isManual
+                                    ? theme.colors.amber[500]
+                                    : isActive
+                                        ? theme.colors.amber[500]
+                                        : theme.colors.cyan[500],
                                 borderRadius: 2,
                             }}
                         />
@@ -58,8 +76,8 @@ export const HabitCard = memo(({ item }: HabitCardProps) => {
                             isFinished
                                 ? { color: theme.colors.green[500] }
                                 : isActive
-                                  ? { color: theme.colors.amber[500] }
-                                  : { color: theme.colors.textMuted },
+                                    ? { color: theme.colors.amber[500] }
+                                    : { color: theme.colors.textMuted },
                         ]}
                     >
                         {isFinished ? 'Completed!' : `${item.streak} day streak`}
@@ -67,7 +85,7 @@ export const HabitCard = memo(({ item }: HabitCardProps) => {
 
                     {!isFinished && (
                         <Text style={styles.cardProgress}>
-                            {Math.round((item.completedDates.length / item.totalDays) * 100)}%
+                            {Math.round((item.completedDates.length / totalDays) * 100)}%
                         </Text>
                     )}
                 </View>
@@ -100,6 +118,31 @@ const styles = StyleSheet.create({
     cardContent: {
         flex: 1,
     },
+    /* ── Mode pill ── */
+    modePill: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        alignSelf: 'flex-start',
+        gap: 4,
+        paddingVertical: 2,
+        paddingHorizontal: 8,
+        borderRadius: theme.radius.pill,
+        backgroundColor: 'rgba(34, 211, 238, 0.1)',
+        marginBottom: 6,
+    },
+    modePillManual: {
+        backgroundColor: 'rgba(245, 158, 11, 0.1)',
+    },
+    modePillText: {
+        color: theme.colors.cyan[400],
+        fontSize: 9,
+        fontWeight: '800',
+        letterSpacing: 0.8,
+    },
+    modePillTextManual: {
+        color: theme.colors.amber[500],
+    },
+    /* ── Card content ── */
     cardTitle: {
         fontSize: theme.typography.h3,
         fontWeight: '700',

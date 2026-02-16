@@ -1,5 +1,5 @@
 import React, { ReactNode } from "react";
-import { StyleProp, StyleSheet, View, ViewStyle } from "react-native";
+import { KeyboardAvoidingView, Platform, StyleProp, StyleSheet, View, ViewStyle } from "react-native";
 import { theme } from "../styles/theme";
 
 type ScreenProps = {
@@ -12,7 +12,13 @@ export function Screen({ children, style }: ScreenProps) {
     <View style={[styles.container, style]}>
       <View pointerEvents="none" style={[styles.glowOrb, styles.glowTop]} />
       <View pointerEvents="none" style={[styles.glowOrb, styles.glowBottom]} />
-      <View style={styles.content}>{children}</View>
+      <KeyboardAvoidingView
+        style={styles.content}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 12 : 0}
+      >
+        {children}
+      </KeyboardAvoidingView>
     </View>
   );
 }

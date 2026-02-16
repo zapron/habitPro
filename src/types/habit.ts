@@ -1,11 +1,15 @@
+export type HabitMode = "autopilot" | "manual";
+
 export interface Habit {
   id: string;
   title: string;
   description?: string;
+  mode: HabitMode;
   startDate: string; // ISO string
+  endDate?: string; // ISO string — only set for manual mode
   completedDates: string[]; // Array of ISO date strings (YYYY-MM-DD)
   streak: number;
-  totalDays: number; // Target is 21
+  totalDays: number; // Fixed 21 for autopilot, user-defined for manual
   isCompleted: boolean;
   status: "active" | "completed" | "failed";
 }
@@ -29,10 +33,17 @@ export interface MiniMission {
   completedAt?: string;
 }
 
+export type AddHabitInput = {
+  title: string;
+  description?: string;
+  mode: HabitMode;
+  totalDays?: number; // required for manual, defaults to 21 for autopilot
+};
+
 export type HabitStore = {
   habits: Habit[];
   miniMissions: MiniMission[];
-  addHabit: (title: string, description?: string) => void;
+  addHabit: (input: AddHabitInput) => void;
   toggleCompletion: (id: string, date: string) => boolean;
   deleteHabit: (id: string) => void;
   resetHabit: (id: string) => void;
