@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Text, StyleSheet, View, Platform } from 'react-native';
-import { theme } from '../styles/theme';
+import { useTheme } from '../context/ThemeContext';
 import { AnimatedFire } from './AnimatedFire';
 import type { HabitMode } from '../types/habit';
 
@@ -11,6 +11,7 @@ interface TimerProps {
 }
 
 export function Timer({ startDate, mode = 'autopilot', endDate }: TimerProps) {
+    const { theme } = useTheme();
     const [display, setDisplay] = useState('');
     const [isExpired, setIsExpired] = useState(false);
 
@@ -19,7 +20,6 @@ export function Timer({ startDate, mode = 'autopilot', endDate }: TimerProps) {
             const now = Date.now();
 
             if (mode === 'manual' && endDate) {
-                // ── Countdown mode ──
                 const end = new Date(endDate).getTime();
                 const diff = end - now;
 
@@ -39,7 +39,6 @@ export function Timer({ startDate, mode = 'autopilot', endDate }: TimerProps) {
                     `${days.toString().padStart(2, '0')}:${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`,
                 );
             } else {
-                // ── Count-up mode (autopilot) ──
                 const start = new Date(startDate).getTime();
                 const diff = now - start;
 
@@ -68,22 +67,43 @@ export function Timer({ startDate, mode = 'autopilot', endDate }: TimerProps) {
     const isCountdown = mode === 'manual';
 
     return (
-        <View style={[styles.container, isCountdown && styles.containerManual]}>
-            <View style={[styles.iconContainer, isCountdown && styles.iconContainerManual]}>
-                <AnimatedFire size={32} color={isCountdown ? theme.colors.amber[500] : theme.colors.amber[500]} />
+        <View
+            style={[
+                styles.container,
+                {
+                    backgroundColor: theme.colors.surface,
+                    borderRadius: theme.radius.lg,
+                    borderColor: isCountdown ? 'rgba(245, 158, 11, 0.35)' : theme.colors.border,
+                    ...theme.shadow.card,
+                },
+            ]}
+        >
+            <View
+                style={[
+                    styles.iconContainer,
+                    isCountdown && { backgroundColor: 'rgba(245, 158, 11, 0.15)', borderColor: 'rgba(245, 158, 11, 0.4)' },
+                ]}
+            >
+                <AnimatedFire size={32} color={theme.colors.amber[500]} />
             </View>
             <View style={styles.contentContainer}>
-                <Text style={styles.label}>
+                <Text style={[styles.label, { color: theme.colors.textSecondary }]}>
                     {isExpired ? "TIME'S UP" : isCountdown ? 'COUNTDOWN' : 'MISSION ACTIVE'}
                 </Text>
-                <Text style={[styles.time, isExpired && styles.timeExpired]}>
+                <Text
+                    style={[
+                        styles.time,
+                        { color: theme.colors.textPrimary },
+                        isExpired && { color: theme.colors.red[500], textShadowColor: 'rgba(239, 68, 68, 0.5)' },
+                    ]}
+                >
                     {display}
                 </Text>
                 <View style={styles.legendContainer}>
-                    <Text style={styles.legendText}>DAYS</Text>
-                    <Text style={styles.legendText}>HRS</Text>
-                    <Text style={styles.legendText}>MIN</Text>
-                    <Text style={styles.legendText}>SEC</Text>
+                    <Text style={[styles.legendText, { color: theme.colors.textMuted }]}>DAYS</Text>
+                    <Text style={[styles.legendText, { color: theme.colors.textMuted }]}>HRS</Text>
+                    <Text style={[styles.legendText, { color: theme.colors.textMuted }]}>MIN</Text>
+                    <Text style={[styles.legendText, { color: theme.colors.textMuted }]}>SEC</Text>
                 </View>
             </View>
         </View>
@@ -94,16 +114,9 @@ const styles = StyleSheet.create({
     container: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: theme.colors.surface,
         padding: 20,
-        borderRadius: theme.radius.lg,
         marginBottom: 32,
         borderWidth: 1,
-        borderColor: theme.colors.border,
-        ...theme.shadow.card,
-    },
-    containerManual: {
-        borderColor: 'rgba(245, 158, 11, 0.35)',
     },
     iconContainer: {
         marginRight: 20,
@@ -113,15 +126,10 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderColor: 'rgba(245, 158, 11, 0.3)',
     },
-    iconContainerManual: {
-        backgroundColor: 'rgba(245, 158, 11, 0.15)',
-        borderColor: 'rgba(245, 158, 11, 0.4)',
-    },
     contentContainer: {
         flex: 1,
     },
     label: {
-        color: theme.colors.textSecondary,
         fontSize: 12,
         fontWeight: 'bold',
         letterSpacing: 1.5,
@@ -129,7 +137,6 @@ const styles = StyleSheet.create({
         textTransform: 'uppercase',
     },
     time: {
-        color: theme.colors.textPrimary,
         fontWeight: 'bold',
         fontSize: 32,
         lineHeight: 34,
@@ -139,15 +146,8 @@ const styles = StyleSheet.create({
         textShadowOffset: { width: 0, height: 2 },
         textShadowRadius: 8,
         ...(Platform.OS === 'android'
-            ? {
-                includeFontPadding: false,
-                textAlignVertical: 'center',
-            }
+            ? { includeFontPadding: false, textAlignVertical: 'center' as const }
             : {}),
-    },
-    timeExpired: {
-        color: theme.colors.red[500],
-        textShadowColor: 'rgba(239, 68, 68, 0.5)',
     },
     legendContainer: {
         flexDirection: 'row',
@@ -157,7 +157,6 @@ const styles = StyleSheet.create({
         marginTop: 4,
     },
     legendText: {
-        color: theme.colors.textMuted,
         fontSize: 10,
         fontWeight: 'bold',
         width: '22%',

@@ -1,5 +1,5 @@
 import { TouchableOpacity, Text, TouchableOpacityProps, StyleSheet, ViewStyle, TextStyle } from "react-native";
-import { theme } from "../styles/theme";
+import { useTheme } from "../context/ThemeContext";
 
 interface ButtonProps extends TouchableOpacityProps {
     title: string;
@@ -15,33 +15,32 @@ export function Button({
     textStyle,
     ...props
 }: ButtonProps) {
-    const getButtonStyle = (): ViewStyle => {
-        switch (variant) {
-            case "secondary":
-                return styles.secondaryButton;
-            case "danger":
-                return styles.dangerButton;
-            default:
-                return styles.primaryButton;
-        }
-    };
+    const { theme } = useTheme();
 
-    const getTextStyle = (): TextStyle => {
-        switch (variant) {
-            case "secondary":
-                return styles.secondaryText;
-            default:
-                return styles.primaryText; // Primary and Danger use white text
-        }
-    };
+    const variantButton: ViewStyle =
+        variant === "secondary"
+            ? { backgroundColor: theme.colors.surfaceElevated, borderWidth: 1, borderColor: theme.colors.border }
+            : variant === "danger"
+                ? { backgroundColor: theme.colors.red[500] }
+                : { backgroundColor: theme.colors.indigo[600], borderWidth: 1, borderColor: theme.colors.indigo[500] };
+
+    const variantText: TextStyle =
+        variant === "secondary"
+            ? { color: theme.colors.slate[200] }
+            : { color: theme.colors.white };
 
     return (
         <TouchableOpacity
-            style={[styles.baseButton, getButtonStyle(), style]}
+            style={[
+                styles.baseButton,
+                { borderRadius: theme.radius.md, ...theme.shadow.card },
+                variantButton,
+                style,
+            ]}
             activeOpacity={0.8}
             {...props}
         >
-            <Text style={[styles.baseText, getTextStyle(), textStyle]}>
+            <Text style={[styles.baseText, { fontSize: theme.typography.body }, variantText, textStyle]}>
                 {title}
             </Text>
         </TouchableOpacity>
@@ -53,35 +52,13 @@ const styles = StyleSheet.create({
         minHeight: 52,
         paddingVertical: 12,
         paddingHorizontal: 20,
-        borderRadius: theme.radius.md,
         flexDirection: "row",
         justifyContent: "center",
         alignItems: "center",
-        ...theme.shadow.card,
-    },
-    primaryButton: {
-        backgroundColor: theme.colors.indigo[600],
-        borderWidth: 1,
-        borderColor: theme.colors.indigo[500],
-    },
-    secondaryButton: {
-        backgroundColor: theme.colors.surfaceElevated,
-        borderWidth: 1,
-        borderColor: theme.colors.border,
-    },
-    dangerButton: {
-        backgroundColor: theme.colors.red[500],
     },
     baseText: {
-        fontSize: theme.typography.body,
         fontWeight: "700",
         letterSpacing: 0.3,
         textAlign: "center",
-    },
-    primaryText: {
-        color: theme.colors.white,
-    },
-    secondaryText: {
-        color: theme.colors.slate[200],
     },
 });

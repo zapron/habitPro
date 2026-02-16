@@ -1,9 +1,9 @@
 import React, { useEffect, useRef } from 'react';
 import { Animated, View, StyleSheet, Easing } from 'react-native';
-import { theme } from '../styles/theme';
+import { useTheme } from '../context/ThemeContext';
 
 interface ProgressRingProps {
-    progress: number; // 0 to 1
+    progress: number;
     size?: number;
     strokeWidth?: number;
     color?: string;
@@ -11,22 +11,22 @@ interface ProgressRingProps {
     children?: React.ReactNode;
 }
 
-/**
- * Animated progress ring using pure RN border tricks.
- * Shows a circular progress indicator that fills clockwise.
- */
 export function ProgressRing({
     progress,
     size = 52,
     strokeWidth = 3,
-    color = theme.colors.indigo[500],
+    color,
     glowOnNearComplete = true,
     children,
 }: ProgressRingProps) {
+    const { theme } = useTheme();
+    const activeColor = color ?? theme.colors.indigo[500];
     const animatedProgress = useRef(new Animated.Value(0)).current;
     const glowPulse = useRef(new Animated.Value(0)).current;
     const isNearComplete = progress >= 0.8;
     const isComplete = progress >= 1;
+    const ringColor = isComplete ? theme.colors.green[500] : activeColor;
+    const bgColor = theme.colors.slate[700];
 
     useEffect(() => {
         Animated.spring(animatedProgress, {
@@ -58,12 +58,8 @@ export function ProgressRing({
         }
     }, [isNearComplete, isComplete, glowOnNearComplete, glowPulse]);
 
-    // We use a "two halves" technique for the ring
     const halfSize = size / 2;
-    const activeColor = isComplete ? theme.colors.green[500] : color;
-    const bgColor = theme.colors.slate[700];
 
-    // Calculate the rotation for each half
     const rightRotation = animatedProgress.interpolate({
         inputRange: [0, 0.5, 1],
         outputRange: ['0deg', '180deg', '180deg'],
@@ -88,42 +84,10 @@ export function ProgressRing({
     });
 
     return (
-        <View
-            style={[
-                styles.container,
-                {
-                    width: size,
-                    height: size,
-                    borderRadius: halfSize,
-                },
-            ]}
-        >
-            {/* Background ring */}
-            <View
-                style={[
-                    styles.ring,
-                    {
-                        width: size,
-                        height: size,
-                        borderRadius: halfSize,
-                        borderWidth: strokeWidth,
-                        borderColor: bgColor,
-                    },
-                ]}
-            />
+        <View style={[styles.container, { width: size, height: size, borderRadius: halfSize }]}>
+            <View style={[styles.ring, { width: size, height: size, borderRadius: halfSize, borderWidth: strokeWidth, borderColor: bgColor }]} />
 
-            {/* Right half */}
-            <View
-                style={[
-                    styles.halfClip,
-                    {
-                        width: halfSize,
-                        height: size,
-                        left: halfSize,
-                        overflow: 'hidden',
-                    },
-                ]}
-            >
+            <View style={[styles.halfClip, { width: halfSize, height: size, left: halfSize, overflow: 'hidden' }]}>
                 <Animated.View
                     style={{
                         width: halfSize,
@@ -132,7 +96,7 @@ export function ProgressRing({
                         borderBottomRightRadius: halfSize,
                         borderWidth: strokeWidth,
                         borderLeftWidth: 0,
-                        borderColor: activeColor,
+                        borderColor: ringColor,
                         position: 'absolute',
                         left: 0,
                         transform: [
@@ -145,19 +109,7 @@ export function ProgressRing({
                 />
             </View>
 
-            {/* Left half */}
-            <Animated.View
-                style={[
-                    styles.halfClip,
-                    {
-                        width: halfSize,
-                        height: size,
-                        left: 0,
-                        overflow: 'hidden',
-                        opacity: leftOpacity,
-                    },
-                ]}
-            >
+            <Animated.View style={[styles.halfClip, { width: halfSize, height: size, left: 0, overflow: 'hidden', opacity: leftOpacity }]}>
                 <Animated.View
                     style={{
                         width: halfSize,
@@ -166,7 +118,7 @@ export function ProgressRing({
                         borderBottomLeftRadius: halfSize,
                         borderWidth: strokeWidth,
                         borderRightWidth: 0,
-                        borderColor: activeColor,
+                        borderColor: ringColor,
                         position: 'absolute',
                         right: 0,
                         transform: [
@@ -179,35 +131,14 @@ export function ProgressRing({
                 />
             </Animated.View>
 
-            {/* Glow for near-complete */}
             {isNearComplete && glowOnNearComplete && !isComplete && (
                 <Animated.View
-                    style={[
-                        styles.glow,
-                        {
-                            width: size + 8,
-                            height: size + 8,
-                            borderRadius: (size + 8) / 2,
-                            borderWidth: 2,
-                            borderColor: activeColor,
-                            opacity: shadowOpacity,
-                        },
-                    ]}
+                    style={[styles.glow, { width: size + 8, height: size + 8, borderRadius: (size + 8) / 2, borderWidth: 2, borderColor: ringColor, opacity: shadowOpacity }]}
                     pointerEvents="none"
                 />
             )}
 
-            {/* Center content */}
-            <View
-                style={[
-                    styles.center,
-                    {
-                        width: size - strokeWidth * 2 - 4,
-                        height: size - strokeWidth * 2 - 4,
-                        borderRadius: (size - strokeWidth * 2 - 4) / 2,
-                    },
-                ]}
-            >
+            <View style={[styles.center, { width: size - strokeWidth * 2 - 4, height: size - strokeWidth * 2 - 4, borderRadius: (size - strokeWidth * 2 - 4) / 2, backgroundColor: theme.colors.surfaceElevated }]}>
                 {children}
             </View>
         </View>
@@ -215,24 +146,9 @@ export function ProgressRing({
 }
 
 const styles = StyleSheet.create({
-    container: {
-        position: 'relative',
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    ring: {
-        position: 'absolute',
-    },
-    halfClip: {
-        position: 'absolute',
-        top: 0,
-    },
-    glow: {
-        position: 'absolute',
-    },
-    center: {
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: theme.colors.surfaceElevated,
-    },
+    container: { position: 'relative', alignItems: 'center', justifyContent: 'center' },
+    ring: { position: 'absolute' },
+    halfClip: { position: 'absolute', top: 0 },
+    glow: { position: 'absolute' },
+    center: { alignItems: 'center', justifyContent: 'center' },
 });

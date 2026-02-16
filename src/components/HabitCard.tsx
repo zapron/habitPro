@@ -2,7 +2,7 @@ import React, { memo } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { TreePine, Flame, Check, Plane, Gamepad2 } from 'lucide-react-native';
-import { theme } from '../styles/theme';
+import { useTheme } from '../context/ThemeContext';
 import { Habit } from '../types/habit';
 import { AnimatedFire } from './AnimatedFire';
 import { ProgressRing } from './ProgressRing';
@@ -13,6 +13,7 @@ interface HabitCardProps {
 
 export const HabitCard = memo(({ item }: HabitCardProps) => {
     const router = useRouter();
+    const { theme } = useTheme();
     const totalDays = item.totalDays ?? 21;
     const isFinished = item.completedDates.length >= totalDays;
     const isActive = item.streak > 0 && !isFinished;
@@ -21,26 +22,33 @@ export const HabitCard = memo(({ item }: HabitCardProps) => {
 
     return (
         <TouchableOpacity
-            style={styles.card}
+            style={[
+                styles.card,
+                {
+                    backgroundColor: theme.colors.surface,
+                    borderRadius: theme.radius.lg,
+                    borderColor: theme.colors.border,
+                    ...theme.shadow.card,
+                },
+            ]}
             activeOpacity={0.9}
             onPress={() => router.push(`/habit/${item.id}`)}
         >
             <View style={styles.cardContent}>
-                {/* Mode indicator pill */}
                 <View style={[styles.modePill, isManual && styles.modePillManual]}>
                     {isManual ? (
                         <Gamepad2 size={10} color={theme.colors.amber[500]} />
                     ) : (
                         <Plane size={10} color={theme.colors.cyan[400]} />
                     )}
-                    <Text style={[styles.modePillText, isManual && styles.modePillTextManual]}>
+                    <Text style={[styles.modePillText, { color: theme.colors.cyan[400] }, isManual && { color: theme.colors.amber[500] }]}>
                         {isManual ? `MANUAL · ${totalDays}D` : 'AUTOPILOT'}
                     </Text>
                 </View>
 
-                <Text style={styles.cardTitle}>{item.title}</Text>
+                <Text style={[styles.cardTitle, { color: theme.colors.textPrimary, fontSize: theme.typography.h3 }]}>{item.title}</Text>
                 {item.description ? (
-                    <Text style={styles.cardDescription} numberOfLines={1}>
+                    <Text style={[styles.cardDescription, { color: theme.colors.textSecondary }]} numberOfLines={1}>
                         {item.description}
                     </Text>
                 ) : null}
@@ -84,9 +92,8 @@ export const HabitCard = memo(({ item }: HabitCardProps) => {
                     >
                         {isFinished ? 'Completed!' : `${item.streak} day streak`}
                     </Text>
-
                     {!isFinished && (
-                        <Text style={styles.cardProgress}>
+                        <Text style={[styles.cardProgress, { color: theme.colors.textMuted }]}>
                             {Math.round(progress * 100)}%
                         </Text>
                     )}
@@ -102,7 +109,7 @@ export const HabitCard = memo(({ item }: HabitCardProps) => {
                 {isFinished ? (
                     <Check size={20} color={theme.colors.green[500]} strokeWidth={3} />
                 ) : (
-                    <Text style={styles.progressText}>{item.completedDates.length}</Text>
+                    <Text style={[styles.progressText, { color: theme.colors.textPrimary }]}>{item.completedDates.length}</Text>
                 )}
             </ProgressRing>
         </TouchableOpacity>
@@ -111,21 +118,14 @@ export const HabitCard = memo(({ item }: HabitCardProps) => {
 
 const styles = StyleSheet.create({
     card: {
-        backgroundColor: theme.colors.surface,
         padding: 20,
-        borderRadius: theme.radius.lg,
         marginBottom: 16,
         borderWidth: 1,
-        borderColor: theme.colors.border,
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        ...theme.shadow.card,
     },
-    cardContent: {
-        flex: 1,
-    },
-    /* ── Mode pill ── */
+    cardContent: { flex: 1 },
     modePill: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -133,56 +133,22 @@ const styles = StyleSheet.create({
         gap: 4,
         paddingVertical: 2,
         paddingHorizontal: 8,
-        borderRadius: theme.radius.pill,
+        borderRadius: 9999,
         backgroundColor: 'rgba(34, 211, 238, 0.1)',
         marginBottom: 6,
     },
-    modePillManual: {
-        backgroundColor: 'rgba(245, 158, 11, 0.1)',
-    },
-    modePillText: {
-        color: theme.colors.cyan[400],
-        fontSize: 9,
-        fontWeight: '800',
-        letterSpacing: 0.8,
-    },
-    modePillTextManual: {
-        color: theme.colors.amber[500],
-    },
-    /* ── Card content ── */
-    cardTitle: {
-        fontSize: theme.typography.h3,
-        fontWeight: '700',
-        color: theme.colors.textPrimary,
-        marginBottom: 4,
-    },
-    cardDescription: {
-        color: theme.colors.textSecondary,
-        fontSize: 14,
-    },
-    cardStats: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginTop: 12,
-    },
-    statIcon: {
-        marginRight: 8,
-    },
-    cardStreak: {
-        fontWeight: '700',
-        marginRight: 16,
-    },
-    cardProgress: {
-        color: theme.colors.textMuted,
-    },
-    progressText: {
-        color: theme.colors.white,
-        fontWeight: '700',
-        fontSize: 18,
-    },
+    modePillManual: { backgroundColor: 'rgba(245, 158, 11, 0.1)' },
+    modePillText: { fontSize: 9, fontWeight: '800', letterSpacing: 0.8 },
+    cardTitle: { fontWeight: '700', marginBottom: 4 },
+    cardDescription: { fontSize: 14 },
+    cardStats: { flexDirection: 'row', alignItems: 'center', marginTop: 12 },
+    statIcon: { marginRight: 8 },
+    cardStreak: { fontWeight: '700', marginRight: 16 },
+    cardProgress: {},
+    progressText: { fontWeight: '700', fontSize: 18 },
     progressBarBg: {
         height: 4,
-        backgroundColor: theme.colors.slate[700],
+        backgroundColor: 'rgba(100, 116, 139, 0.3)',
         borderRadius: 2,
         marginTop: 8,
         overflow: 'hidden',

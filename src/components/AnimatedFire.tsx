@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { View, StyleSheet, Animated, Easing } from 'react-native';
 import { Flame } from 'lucide-react-native';
-import { theme } from '../styles/theme';
+import { useTheme } from '../context/ThemeContext';
 
 interface AnimatedFireProps {
     size?: number;
@@ -17,7 +17,10 @@ type Ember = {
 
 const EMBER_COUNT = 7;
 
-export function AnimatedFire({ size = 24, color = theme.colors.amber[500] }: AnimatedFireProps) {
+export function AnimatedFire({ size = 24, color }: AnimatedFireProps) {
+    const { theme } = useTheme();
+    const fireColor = color ?? theme.colors.amber[500];
+
     const scale1 = useRef(new Animated.Value(1)).current;
     const opacity1 = useRef(new Animated.Value(0.9)).current;
     const scale2 = useRef(new Animated.Value(0.9)).current;
@@ -30,7 +33,7 @@ export function AnimatedFire({ size = 24, color = theme.colors.amber[500] }: Ani
         Array.from({ length: EMBER_COUNT }, (_, i) => ({
             progress: new Animated.Value(0),
             driftX: new Animated.Value((Math.random() - 0.5) * size * 0.35),
-            tint: i % 3 === 0 ? theme.colors.yellow[400] : i % 2 === 0 ? color : '#ff6b35',
+            tint: i % 3 === 0 ? theme.colors.yellow[400] : i % 2 === 0 ? fireColor : '#ff6b35',
             dotSize: Math.max(2, Math.round(size * (0.1 + Math.random() * 0.08))),
         })),
     ).current;
@@ -43,112 +46,50 @@ export function AnimatedFire({ size = 24, color = theme.colors.amber[500] }: Ani
 
         const coreScaleLoop = Animated.loop(
             Animated.sequence([
-                Animated.timing(scale1, {
-                    toValue: 1.12,
-                    duration: 960,
-                    easing: ease,
-                    useNativeDriver: true,
-                }),
-                Animated.timing(scale1, {
-                    toValue: 1,
-                    duration: 1200,
-                    easing: ease,
-                    useNativeDriver: true,
-                }),
+                Animated.timing(scale1, { toValue: 1.12, duration: 960, easing: ease, useNativeDriver: true }),
+                Animated.timing(scale1, { toValue: 1, duration: 1200, easing: ease, useNativeDriver: true }),
             ]),
         );
 
         const coreOpacityLoop = Animated.loop(
             Animated.sequence([
-                Animated.timing(opacity1, {
-                    toValue: 0.95,
-                    duration: 600,
-                    useNativeDriver: true,
-                }),
-                Animated.timing(opacity1, {
-                    toValue: 1,
-                    duration: 840,
-                    useNativeDriver: true,
-                }),
+                Animated.timing(opacity1, { toValue: 0.95, duration: 600, useNativeDriver: true }),
+                Animated.timing(opacity1, { toValue: 1, duration: 840, useNativeDriver: true }),
             ]),
         );
 
         const innerScaleLoop = Animated.loop(
             Animated.sequence([
-                Animated.timing(scale2, {
-                    toValue: 1.03,
-                    duration: 640,
-                    easing: ease,
-                    useNativeDriver: true,
-                }),
-                Animated.timing(scale2, {
-                    toValue: 0.9,
-                    duration: 800,
-                    easing: ease,
-                    useNativeDriver: true,
-                }),
+                Animated.timing(scale2, { toValue: 1.03, duration: 640, easing: ease, useNativeDriver: true }),
+                Animated.timing(scale2, { toValue: 0.9, duration: 800, easing: ease, useNativeDriver: true }),
             ]),
         );
 
         const innerOpacityLoop = Animated.loop(
             Animated.sequence([
-                Animated.timing(opacity2, {
-                    toValue: 0.86,
-                    duration: 420,
-                    useNativeDriver: true,
-                }),
-                Animated.timing(opacity2, {
-                    toValue: 0.62,
-                    duration: 560,
-                    useNativeDriver: true,
-                }),
+                Animated.timing(opacity2, { toValue: 0.86, duration: 420, useNativeDriver: true }),
+                Animated.timing(opacity2, { toValue: 0.62, duration: 560, useNativeDriver: true }),
             ]),
         );
 
         const innerTranslateLoop = Animated.loop(
             Animated.sequence([
-                Animated.timing(translateY2, {
-                    toValue: -2,
-                    duration: 460,
-                    useNativeDriver: true,
-                }),
-                Animated.timing(translateY2, {
-                    toValue: 1,
-                    duration: 320,
-                    useNativeDriver: true,
-                }),
+                Animated.timing(translateY2, { toValue: -2, duration: 460, useNativeDriver: true }),
+                Animated.timing(translateY2, { toValue: 1, duration: 320, useNativeDriver: true }),
             ]),
         );
 
         const outerScaleLoop = Animated.loop(
             Animated.sequence([
-                Animated.timing(scale3, {
-                    toValue: 1.24,
-                    duration: 1600,
-                    easing: ease,
-                    useNativeDriver: true,
-                }),
-                Animated.timing(scale3, {
-                    toValue: 1.1,
-                    duration: 2000,
-                    easing: ease,
-                    useNativeDriver: true,
-                }),
+                Animated.timing(scale3, { toValue: 1.24, duration: 1600, easing: ease, useNativeDriver: true }),
+                Animated.timing(scale3, { toValue: 1.1, duration: 2000, easing: ease, useNativeDriver: true }),
             ]),
         );
 
         const outerOpacityLoop = Animated.loop(
             Animated.sequence([
-                Animated.timing(opacity3, {
-                    toValue: 0.66,
-                    duration: 1000,
-                    useNativeDriver: true,
-                }),
-                Animated.timing(opacity3, {
-                    toValue: 0.4,
-                    duration: 1400,
-                    useNativeDriver: true,
-                }),
+                Animated.timing(opacity3, { toValue: 0.66, duration: 1000, useNativeDriver: true }),
+                Animated.timing(opacity3, { toValue: 0.4, duration: 1400, useNativeDriver: true }),
             ]),
         );
 
@@ -162,18 +103,8 @@ export function AnimatedFire({ size = 24, color = theme.colors.amber[500] }: Ani
             const duration = 850 + Math.random() * 650;
 
             const emberAnim = Animated.parallel([
-                Animated.timing(ember.progress, {
-                    toValue: 1,
-                    duration,
-                    easing: Easing.out(Easing.cubic),
-                    useNativeDriver: true,
-                }),
-                Animated.timing(ember.driftX, {
-                    toValue: driftTarget,
-                    duration,
-                    easing: Easing.inOut(Easing.quad),
-                    useNativeDriver: true,
-                }),
+                Animated.timing(ember.progress, { toValue: 1, duration, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+                Animated.timing(ember.driftX, { toValue: driftTarget, duration, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
             ]);
 
             runningAnimations.push(emberAnim);
@@ -210,7 +141,7 @@ export function AnimatedFire({ size = 24, color = theme.colors.amber[500] }: Ani
             runningAnimations.forEach((anim) => anim.stop());
             timers.forEach((timer) => clearTimeout(timer));
         };
-    }, [color, embers, opacity1, opacity2, opacity3, scale1, scale2, scale3, size, translateY2]);
+    }, [fireColor, embers, opacity1, opacity2, opacity3, scale1, scale2, scale3, size, translateY2]);
 
     return (
         <View style={[styles.container, { width: size * 1.8, height: size * 1.8 }]}>
@@ -269,7 +200,7 @@ export function AnimatedFire({ size = 24, color = theme.colors.amber[500] }: Ani
                     { transform: [{ scale: scale2 }, { translateY: translateY2 }], opacity: opacity2 },
                 ]}
             >
-                <Flame size={size * 1.18} color={color} fill={color} />
+                <Flame size={size * 1.18} color={fireColor} fill={fireColor} />
             </Animated.View>
 
             <Animated.View
@@ -286,20 +217,8 @@ export function AnimatedFire({ size = 24, color = theme.colors.amber[500] }: Ani
 }
 
 const styles = StyleSheet.create({
-    container: {
-        alignItems: 'center',
-        justifyContent: 'center',
-        overflow: 'visible',
-    },
-    center: {
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    glow: {
-        position: 'absolute',
-    },
-    ember: {
-        position: 'absolute',
-        bottom: 0,
-    },
+    container: { alignItems: 'center', justifyContent: 'center', overflow: 'visible' },
+    center: { alignItems: 'center', justifyContent: 'center' },
+    glow: { position: 'absolute' },
+    ember: { position: 'absolute', bottom: 0 },
 });

@@ -24,11 +24,11 @@ import * as Notifications from "expo-notifications";
 import { Audio } from "expo-av";
 import { Screen } from "../../src/components/Screen";
 import { Button } from "../../src/components/Button";
-import { theme } from "../../src/styles/theme";
+import { useTheme } from "../../src/context/ThemeContext";
 import { useHabitStore } from "../../src/store/habitStore";
 import { AnimatedFire } from "../../src/components/AnimatedFire";
 
-// Configure notification handler (works in prod/dev builds, no-op in Expo Go)
+// Configure notification handler
 try {
   Notifications.setNotificationHandler({
     handleNotification: async () => ({
@@ -43,7 +43,6 @@ try {
   // Expo Go — notifications unavailable
 }
 
-/** Play a short beep via expo-av as fallback sound */
 async function playAlarmSound() {
   try {
     await Audio.setAudioModeAsync({ playsInSilentModeIOS: true });
@@ -57,7 +56,7 @@ async function playAlarmSound() {
       }
     });
   } catch {
-    // Sound unavailable — vibration still works
+    // Sound unavailable
   }
 }
 
@@ -71,6 +70,7 @@ const formatDuration = (ms: number) => {
 export default function MiniMissionDetail() {
   const { id } = useLocalSearchParams<{ id?: string | string[] }>();
   const router = useRouter();
+  const { theme, isDark } = useTheme();
   const missionId = Array.isArray(id) ? id[0] : id;
 
   const mission = useHabitStore((state) =>
@@ -92,7 +92,6 @@ export default function MiniMissionDetail() {
     return () => clearInterval(timer);
   }, [mission?.status]);
 
-  // Total time = estimated + any extended minutes
   const totalMinutes = mission
     ? mission.estimatedMinutes + (mission.extendedMinutes ?? 0)
     : 0;
@@ -110,15 +109,12 @@ export default function MiniMissionDetail() {
 
   const isTimerUp = mission?.status === "in_progress" && countdown === 0;
 
-  // Vibrate + haptic + sound when timer first hits zero
   useEffect(() => {
     if (isTimerUp && !hasVibrated.current) {
       hasVibrated.current = true;
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       Vibration.vibrate([0, 400, 200, 400, 200, 400]);
-      // Play alarm sound via expo-av
       playAlarmSound();
-      // Also fire an immediate notification (works in prod, silent fail in Expo Go)
       Notifications.scheduleNotificationAsync({
         content: {
           title: "⏰ Time's Up!",
@@ -130,14 +126,10 @@ export default function MiniMissionDetail() {
     }
   }, [isTimerUp, mission?.title]);
 
-  // Reset vibration flag when timer gets extended
   useEffect(() => {
-    if (!isTimerUp) {
-      hasVibrated.current = false;
-    }
+    if (!isTimerUp) hasVibrated.current = false;
   }, [isTimerUp]);
 
-  // Schedule notification when mission starts or gets extended (prod/dev build)
   useEffect(() => {
     if (!mission || mission.status !== "in_progress" || !mission.startedAt) return;
 
@@ -146,7 +138,6 @@ export default function MiniMissionDetail() {
         if (notificationId.current) {
           await Notifications.cancelScheduledNotificationAsync(notificationId.current);
         }
-
         const startMs = new Date(mission.startedAt!).getTime();
         const endMs = startMs + totalMinutes * 60 * 1000;
         const secondsUntilEnd = Math.max(1, Math.floor((endMs - Date.now()) / 1000));
@@ -166,7 +157,7 @@ export default function MiniMissionDetail() {
           notificationId.current = nId;
         }
       } catch {
-        // Notifications unavailable (Expo Go)
+        // Notifications unavailable
       }
     };
 
@@ -192,7 +183,7 @@ export default function MiniMissionDetail() {
     return (
       <Screen>
         <View style={styles.centered}>
-          <Text style={styles.notFound}>Mini mission not found</Text>
+          <Text style={[styles.notFound, { color: theme.colors.textPrimary }]}>Mini mission not found</Text>
           <Button title="Go Back" onPress={() => router.back()} />
         </View>
       </Screen>
@@ -200,10 +191,7 @@ export default function MiniMissionDetail() {
   }
 
   const handleStart = async () => {
-    // Request notification permissions (silent fail in Expo Go)
-    try {
-      await Notifications.requestPermissionsAsync();
-    } catch { }
+    try { await Notifications.requestPermissionsAsync(); } catch { }
     startMiniMission(mission.id);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
   };
@@ -248,28 +236,28 @@ export default function MiniMissionDetail() {
 
   return (
     <Screen>
-      <StatusBar barStyle="light-content" backgroundColor={theme.colors.background} />
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={theme.colors.background} />
       <View style={styles.header}>
-        <TouchableOpacity style={styles.iconButton} onPress={() => router.back()}>
-          <ArrowLeft size={20} color={theme.colors.white} />
+        <TouchableOpacity style={[styles.iconButton, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]} onPress={() => router.back()}>
+          <ArrowLeft size={20} color={theme.colors.textPrimary} />
         </TouchableOpacity>
-        <TouchableOpacity style={styles.iconButton} onPress={handleDelete}>
+        <TouchableOpacity style={[styles.iconButton, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]} onPress={handleDelete}>
           <Trash2 size={18} color={theme.colors.red[500]} />
         </TouchableOpacity>
       </View>
 
       <View style={styles.content}>
-        <Text style={styles.title}>{mission.title}</Text>
-        {!!mission.objective && <Text style={styles.objective}>{mission.objective}</Text>}
+        <Text style={[styles.title, { color: theme.colors.textPrimary, fontSize: theme.typography.h1 }]}>{mission.title}</Text>
+        {!!mission.objective && <Text style={[styles.objective, { color: theme.colors.textSecondary, fontSize: theme.typography.body }]}>{mission.objective}</Text>}
 
-        <View style={[styles.timerCard, isTimerUp && styles.timerCardExpired]}>
-          <Text style={styles.timerLabel}>
+        <View style={[styles.timerCard, { borderRadius: theme.radius.lg, borderColor: theme.colors.border, backgroundColor: theme.colors.surface, ...theme.shadow.card }, isTimerUp && styles.timerCardExpired]}>
+          <Text style={[styles.timerLabel, { color: theme.colors.textMuted }]}>
             {isTimerUp ? "TIME'S UP!" : "Estimated Sprint"}
           </Text>
-          <Text style={[styles.timerValue, isTimerUp && styles.timerValueExpired]}>
+          <Text style={[styles.timerValue, { color: theme.colors.textPrimary }, isTimerUp && { color: theme.colors.red[500] }]}>
             {formatDuration(countdown)}
           </Text>
-          <Text style={styles.timerHint}>
+          <Text style={[styles.timerHint, { color: theme.colors.textSecondary }]}>
             {mission.status === "completed"
               ? "Completed"
               : isTimerUp
@@ -281,23 +269,19 @@ export default function MiniMissionDetail() {
         </View>
 
         <View style={styles.metaRow}>
-          <View style={styles.metaPill}>
+          <View style={[styles.metaPill, { borderColor: theme.colors.border, backgroundColor: theme.colors.surfaceElevated }]}>
             <Clock3 size={14} color={theme.colors.cyan[400]} />
-            <Text style={styles.metaText}>
+            <Text style={[styles.metaText, { color: theme.colors.textPrimary }]}>
               {totalMinutes} minutes {mission.extendedMinutes > 0 ? `(+${mission.extendedMinutes})` : "planned"}
             </Text>
           </View>
         </View>
 
         <View style={styles.actions}>
-          {/* Not started yet */}
-          {mission.status !== "in_progress" &&
-            mission.status !== "completed" &&
-            mission.status !== "cancelled" && (
-              <Button title="Start Now" onPress={handleStart} />
-            )}
+          {mission.status !== "in_progress" && mission.status !== "completed" && mission.status !== "cancelled" && (
+            <Button title="Start Now" onPress={handleStart} />
+          )}
 
-          {/* In progress but timer still running */}
           {mission.status === "in_progress" && !isTimerUp && (
             <>
               <Button title="Mark Complete" onPress={handleComplete} />
@@ -305,37 +289,35 @@ export default function MiniMissionDetail() {
             </>
           )}
 
-          {/* Timer expired — show "I Did It" / "5 More Minutes" */}
           {isTimerUp && (
             <>
-              <TouchableOpacity style={styles.doneButton} onPress={handleComplete} activeOpacity={0.85}>
+              <TouchableOpacity style={[styles.doneButton, { backgroundColor: theme.colors.green[500], borderRadius: theme.radius.md, ...theme.shadow.glow }]} onPress={handleComplete} activeOpacity={0.85}>
                 <CheckCircle2 size={20} color={theme.colors.white} />
-                <Text style={styles.doneButtonText}>I Did It!</Text>
+                <Text style={[styles.doneButtonText, { color: theme.colors.white }]}>I Did It!</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.extendButton} onPress={handleExtend} activeOpacity={0.85}>
+              <TouchableOpacity style={[styles.extendButton, { borderRadius: theme.radius.md }]} onPress={handleExtend} activeOpacity={0.85}>
                 <TimerReset size={20} color={theme.colors.amber[500]} />
-                <Text style={styles.extendButtonText}>5 More Minutes</Text>
+                <Text style={[styles.extendButtonText, { color: theme.colors.amber[500] }]}>5 More Minutes</Text>
               </TouchableOpacity>
               <Button title="Cancel Mission" variant="secondary" onPress={handleCancel} />
             </>
           )}
 
-          {/* Completed */}
           {mission.status === "completed" && (
             <>
               <View style={styles.completedRow}>
                 <Check size={18} color={theme.colors.green[500]} />
-                <Text style={styles.completedText}>Mini mission completed</Text>
+                <Text style={[styles.completedText, { color: theme.colors.green[500] }]}>Mini mission completed</Text>
               </View>
               {earlyFinishMs > 0 && (
-                <View style={styles.rewardCard}>
+                <View style={[styles.rewardCard, { borderRadius: theme.radius.md }]}>
                   <View style={styles.rewardHeader}>
                     <AnimatedFire size={18} />
-                    <Text style={styles.rewardTitle}>Early Finish Reward</Text>
+                    <Text style={[styles.rewardTitle, { color: theme.colors.yellow[400] }]}>Early Finish Reward</Text>
                   </View>
                   <View style={styles.rewardRow}>
                     <Trophy size={16} color={theme.colors.yellow[400]} />
-                    <Text style={styles.rewardText}>
+                    <Text style={[styles.rewardText, { color: isDark ? '#fde68a' : theme.colors.amber[500] }]}>
                       You beat your estimate by {formatDuration(earlyFinishMs)}.
                     </Text>
                   </View>
@@ -344,11 +326,10 @@ export default function MiniMissionDetail() {
             </>
           )}
 
-          {/* Cancelled */}
           {mission.status === "cancelled" && (
             <View style={styles.cancelledRow}>
               <CircleX size={18} color={theme.colors.red[500]} />
-              <Text style={styles.cancelledText}>This mini mission is cancelled</Text>
+              <Text style={[styles.cancelledText, { color: theme.colors.red[500] }]}>This mini mission is cancelled</Text>
             </View>
           )}
         </View>
@@ -358,182 +339,33 @@ export default function MiniMissionDetail() {
 }
 
 const styles = StyleSheet.create({
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 20,
-  },
-  iconButton: {
-    width: 40,
-    height: 40,
-    borderRadius: theme.radius.pill,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: theme.colors.surface,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-  },
-  centered: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  notFound: {
-    color: theme.colors.textPrimary,
-    marginBottom: 12,
-  },
-  content: {
-    flex: 1,
-  },
-  title: {
-    color: theme.colors.textPrimary,
-    fontSize: theme.typography.h1,
-    fontWeight: "800",
-    marginBottom: 8,
-  },
-  objective: {
-    color: theme.colors.textSecondary,
-    fontSize: theme.typography.body,
-    marginBottom: 20,
-    lineHeight: 23,
-  },
-  timerCard: {
-    borderRadius: theme.radius.lg,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    backgroundColor: theme.colors.surface,
-    alignItems: "center",
-    paddingVertical: 24,
-    paddingHorizontal: 16,
-    ...theme.shadow.card,
-  },
-  timerCardExpired: {
-    borderColor: "rgba(239, 68, 68, 0.5)",
-    backgroundColor: "rgba(239, 68, 68, 0.08)",
-  },
-  timerLabel: {
-    color: theme.colors.textMuted,
-    textTransform: "uppercase",
-    letterSpacing: 1,
-    fontWeight: "700",
-    fontSize: 11,
-  },
-  timerValue: {
-    color: theme.colors.textPrimary,
-    fontSize: 52,
-    fontWeight: "800",
-    marginTop: 6,
-    marginBottom: 6,
-  },
-  timerValueExpired: {
-    color: theme.colors.red[500],
-  },
-  timerHint: {
-    color: theme.colors.textSecondary,
-    textAlign: "center",
-  },
-  metaRow: {
-    marginTop: 16,
-    marginBottom: 20,
-  },
-  metaPill: {
-    alignSelf: "flex-start",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    borderRadius: theme.radius.pill,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    backgroundColor: theme.colors.surfaceElevated,
-    paddingVertical: 7,
-    paddingHorizontal: 12,
-  },
-  metaText: {
-    color: theme.colors.textPrimary,
-    fontWeight: "700",
-  },
-  actions: {
-    gap: 10,
-  },
-  doneButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 10,
-    backgroundColor: theme.colors.green[500],
-    borderRadius: theme.radius.md,
-    paddingVertical: 14,
-    ...theme.shadow.glow,
-  },
-  doneButtonText: {
-    color: theme.colors.white,
-    fontWeight: "800",
-    fontSize: 16,
-  },
-  extendButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 10,
-    backgroundColor: "rgba(245, 158, 11, 0.12)",
-    borderWidth: 1,
-    borderColor: "rgba(245, 158, 11, 0.35)",
-    borderRadius: theme.radius.md,
-    paddingVertical: 14,
-  },
-  extendButtonText: {
-    color: theme.colors.amber[500],
-    fontWeight: "700",
-    fontSize: 15,
-  },
-  completedRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingVertical: 10,
-  },
-  completedText: {
-    color: theme.colors.green[500],
-    fontWeight: "700",
-  },
-  rewardCard: {
-    borderRadius: theme.radius.md,
-    borderWidth: 1,
-    borderColor: "rgba(251, 191, 36, 0.45)",
-    backgroundColor: "rgba(245, 158, 11, 0.12)",
-    padding: 12,
-    marginTop: 2,
-  },
-  rewardHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 8,
-    gap: 6,
-  },
-  rewardTitle: {
-    color: theme.colors.yellow[400],
-    fontWeight: "800",
-    fontSize: 13,
-    letterSpacing: 0.4,
-  },
-  rewardRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  rewardText: {
-    color: "#fde68a",
-    fontWeight: "600",
-  },
-  cancelledRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingVertical: 10,
-  },
-  cancelledText: {
-    color: theme.colors.red[500],
-    fontWeight: "700",
-  },
+  header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 20 },
+  iconButton: { width: 40, height: 40, borderRadius: 9999, alignItems: "center", justifyContent: "center", borderWidth: 1 },
+  centered: { flex: 1, alignItems: "center", justifyContent: "center" },
+  notFound: { marginBottom: 12 },
+  content: { flex: 1 },
+  title: { fontWeight: "800", marginBottom: 8 },
+  objective: { marginBottom: 20, lineHeight: 23 },
+  timerCard: { borderWidth: 1, alignItems: "center", paddingVertical: 24, paddingHorizontal: 16 },
+  timerCardExpired: { borderColor: "rgba(239, 68, 68, 0.5)", backgroundColor: "rgba(239, 68, 68, 0.08)" },
+  timerLabel: { textTransform: "uppercase", letterSpacing: 1, fontWeight: "700", fontSize: 11 },
+  timerValue: { fontSize: 52, fontWeight: "800", marginTop: 6, marginBottom: 6 },
+  timerHint: { textAlign: "center" },
+  metaRow: { marginTop: 16, marginBottom: 20 },
+  metaPill: { alignSelf: "flex-start", flexDirection: "row", alignItems: "center", gap: 8, borderRadius: 9999, borderWidth: 1, paddingVertical: 7, paddingHorizontal: 12 },
+  metaText: { fontWeight: "700" },
+  actions: { gap: 10 },
+  doneButton: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, paddingVertical: 14 },
+  doneButtonText: { fontWeight: "800", fontSize: 16 },
+  extendButton: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, backgroundColor: "rgba(245, 158, 11, 0.12)", borderWidth: 1, borderColor: "rgba(245, 158, 11, 0.35)", paddingVertical: 14 },
+  extendButtonText: { fontWeight: "700", fontSize: 15 },
+  completedRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 10 },
+  completedText: { fontWeight: "700" },
+  rewardCard: { borderWidth: 1, borderColor: "rgba(251, 191, 36, 0.45)", backgroundColor: "rgba(245, 158, 11, 0.12)", padding: 12, marginTop: 2 },
+  rewardHeader: { flexDirection: "row", alignItems: "center", marginBottom: 8, gap: 6 },
+  rewardTitle: { fontWeight: "800", fontSize: 13, letterSpacing: 0.4 },
+  rewardRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  rewardText: { fontWeight: "600" },
+  cancelledRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 10 },
+  cancelledText: { fontWeight: "700" },
 });

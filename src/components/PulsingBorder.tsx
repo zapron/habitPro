@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { Animated, StyleSheet, View, Easing } from 'react-native';
-import { theme } from '../styles/theme';
+import { useTheme } from '../context/ThemeContext';
 
 interface PulsingBorderProps {
     children: React.ReactNode;
@@ -8,7 +8,9 @@ interface PulsingBorderProps {
     color?: string;
 }
 
-export function PulsingBorder({ children, active, color = theme.colors.cyan[400] }: PulsingBorderProps) {
+export function PulsingBorder({ children, active, color }: PulsingBorderProps) {
+    const { theme } = useTheme();
+    const borderColor = color ?? theme.colors.cyan[400];
     const pulse = useRef(new Animated.Value(1)).current;
 
     useEffect(() => {
@@ -50,7 +52,7 @@ export function PulsingBorder({ children, active, color = theme.colors.cyan[400]
                 style={[
                     styles.halo,
                     {
-                        borderColor: color,
+                        borderColor,
                         transform: [{ scale: pulse }],
                         opacity,
                     },

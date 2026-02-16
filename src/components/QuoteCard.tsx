@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { theme } from '../styles/theme';
+import { useTheme } from '../context/ThemeContext';
 import { quotes } from '../data/quotes';
 import { Quote } from 'lucide-react-native';
 
 export function QuoteCard() {
+    const { theme } = useTheme();
     const [quote, setQuote] = useState('');
 
     useEffect(() => {
@@ -13,13 +14,23 @@ export function QuoteCard() {
     }, []);
 
     return (
-        <View style={styles.container}>
+        <View
+            style={[
+                styles.container,
+                {
+                    backgroundColor: theme.colors.surface,
+                    borderRadius: theme.radius.lg,
+                    borderColor: theme.colors.border,
+                    ...theme.shadow.card,
+                },
+            ]}
+        >
             <View style={styles.iconContainer}>
                 <Quote size={20} color={theme.colors.indigo[400]} fill={theme.colors.indigo[400]} />
             </View>
             <View style={styles.content}>
-                <Text style={styles.label}>DAILY WISDOM</Text>
-                <Text style={styles.text}>"{quote}"</Text>
+                <Text style={[styles.label, { color: theme.colors.textMuted }]}>DAILY WISDOM</Text>
+                <Text style={[styles.text, { color: theme.colors.textPrimary }]}>"{quote}"</Text>
             </View>
         </View>
     );
@@ -27,15 +38,11 @@ export function QuoteCard() {
 
 const styles = StyleSheet.create({
     container: {
-        backgroundColor: theme.colors.surface,
         padding: 20,
-        borderRadius: theme.radius.lg,
         marginBottom: 32,
         borderWidth: 1,
-        borderColor: theme.colors.border,
         flexDirection: 'row',
         alignItems: 'flex-start',
-        ...theme.shadow.card,
     },
     iconContainer: {
         marginRight: 16,
@@ -45,7 +52,6 @@ const styles = StyleSheet.create({
         flex: 1,
     },
     label: {
-        color: theme.colors.textMuted,
         fontSize: 10,
         fontWeight: 'bold',
         letterSpacing: 1.5,
@@ -53,7 +59,6 @@ const styles = StyleSheet.create({
         textTransform: 'uppercase',
     },
     text: {
-        color: theme.colors.textPrimary,
         fontSize: 16,
         lineHeight: 24,
         fontStyle: 'italic',

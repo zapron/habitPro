@@ -1,13 +1,14 @@
 import React, { useEffect, useRef } from 'react';
 import { Animated, View, Text, StyleSheet, Easing } from 'react-native';
 import { Flame, Zap, Crown } from 'lucide-react-native';
-import { theme } from '../styles/theme';
+import { useTheme } from '../context/ThemeContext';
 
 interface StreakBannerProps {
     streak: number;
 }
 
 export function StreakBanner({ streak }: StreakBannerProps) {
+    const { theme } = useTheme();
     const slideIn = useRef(new Animated.Value(-60)).current;
     const opacity = useRef(new Animated.Value(0)).current;
     const glow = useRef(new Animated.Value(0)).current;
@@ -28,7 +29,6 @@ export function StreakBanner({ streak }: StreakBannerProps) {
             }),
         ]).start();
 
-        // Pulse glow
         Animated.loop(
             Animated.sequence([
                 Animated.timing(glow, {
@@ -95,6 +95,7 @@ export function StreakBanner({ streak }: StreakBannerProps) {
                 {
                     backgroundColor: bgColor,
                     borderColor,
+                    borderRadius: theme.radius.md,
                     transform: [{ translateY: slideIn }],
                     opacity: Animated.multiply(opacity, glowOpacity),
                 },
@@ -113,7 +114,6 @@ const styles = StyleSheet.create({
         gap: 8,
         paddingVertical: 10,
         paddingHorizontal: 14,
-        borderRadius: theme.radius.md,
         borderWidth: 1,
         marginBottom: 16,
     },
