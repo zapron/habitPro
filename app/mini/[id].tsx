@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   StatusBar,
   Alert,
   Vibration,
+  Animated,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import {
@@ -18,47 +19,37 @@ import {
   Trophy,
   TimerReset,
   CheckCircle2,
+  Flame,
 } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
-import * as Notifications from "expo-notifications";
-import { Audio } from "expo-av";
+import {
+  scheduleTimerNotification,
+  fireImmediateNotification,
+  cancelNotification,
+  showOngoingMissionNotification,
+  dismissOngoingNotification,
+} from "../../src/utils/notifications";
 import { Screen } from "../../src/components/Screen";
 import { Button } from "../../src/components/Button";
 import { useTheme } from "../../src/context/ThemeContext";
 import { useHabitStore } from "../../src/store/habitStore";
-import { AnimatedFire } from "../../src/components/AnimatedFire";
 
-// Configure notification handler
-try {
-  Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldShowAlert: true,
-      shouldPlaySound: true,
-      shouldSetBadge: false,
-      shouldShowBanner: true,
-      shouldShowList: true,
-    }),
-  });
-} catch {
-  // Expo Go — notifications unavailable
-}
+// Notification handler is configured globally in _layout.tsx via setupNotifications()
 
-async function playAlarmSound() {
-  try {
-    await Audio.setAudioModeAsync({ playsInSilentModeIOS: true });
-    const { sound } = await Audio.Sound.createAsync(
-      { uri: "https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg" },
-      { shouldPlay: true, volume: 1.0 },
-    );
-    sound.setOnPlaybackStatusUpdate((status) => {
-      if (status.isLoaded && status.didJustFinish) {
-        sound.unloadAsync();
-      }
-    });
-  } catch {
-    // Sound unavailable
-  }
-}
+const QUOTES = [
+  { text: "The secret of getting ahead is getting started.", author: "Mark Twain" },
+  { text: "Focus on being productive instead of busy.", author: "Tim Ferriss" },
+  { text: "Small steps every day lead to big results.", author: "Unknown" },
+  { text: "You don't have to be great to start, but you have to start to be great.", author: "Zig Ziglar" },
+  { text: "The only way to do great work is to love what you do.", author: "Steve Jobs" },
+  { text: "Done is better than perfect.", author: "Sheryl Sandberg" },
+  { text: "Discipline is choosing between what you want now and what you want most.", author: "Abraham Lincoln" },
+  { text: "It always seems impossible until it's done.", author: "Nelson Mandela" },
+  { text: "Action is the foundational key to all success.", author: "Pablo Picasso" },
+  { text: "What we do today determines where we'll be tomorrow.", author: "Unknown" },
+  { text: "Progress, not perfection.", author: "Unknown" },
+  { text: "You are one decision away from a completely different life.", author: "Unknown" },
+];
 
 const formatDuration = (ms: number) => {
   const totalSeconds = Math.max(0, Math.floor(ms / 1000));
@@ -83,8 +74,32 @@ export default function MiniMissionDetail() {
   const deleteMiniMission = useHabitStore((state) => state.deleteMiniMission);
 
   const [now, setNow] = useState(Date.now());
-  const hasVibrated = useRef(false);
+  const hasTriggered = useRef(false);
   const notificationId = useRef<string | null>(null);
+  const ongoingNotifId = useRef<string | null>(null);
+
+  // Motivational quotes
+  const [quoteIdx, setQuoteIdx] = useState(() => Math.floor(Math.random() * QUOTES.length));
+  const quoteIdxRef = useRef(quoteIdx);
+  quoteIdxRef.current = quoteIdx;
+  const quoteFade = useRef(new Animated.Value(1)).current;
+
+  const animateQuoteChange = useCallback((nextIdx: number) => {
+    Animated.timing(quoteFade, { toValue: 0, duration: 200, useNativeDriver: true }).start(() => {
+      setQuoteIdx(nextIdx);
+      Animated.timing(quoteFade, { toValue: 1, duration: 300, useNativeDriver: true }).start();
+    });
+  }, [quoteFade]);
+
+  // Auto-rotate quotes every 5s when in progress
+  useEffect(() => {
+    if (mission?.status !== "in_progress") return;
+    const interval = setInterval(() => {
+      const next = (quoteIdxRef.current + 1) % QUOTES.length;
+      animateQuoteChange(next);
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [mission?.status, animateQuoteChange]);
 
   useEffect(() => {
     if (mission?.status !== "in_progress") return;
@@ -109,64 +124,57 @@ export default function MiniMissionDetail() {
 
   const isTimerUp = mission?.status === "in_progress" && countdown === 0;
 
+  // Timer expiry: vibrate + notify
   useEffect(() => {
-    if (isTimerUp && !hasVibrated.current) {
-      hasVibrated.current = true;
+    if (isTimerUp && !hasTriggered.current) {
+      hasTriggered.current = true;
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       Vibration.vibrate([0, 400, 200, 400, 200, 400]);
-      playAlarmSound();
-      Notifications.scheduleNotificationAsync({
-        content: {
-          title: "⏰ Time's Up!",
-          body: `"${mission?.title}" timer has finished. Did you complete it?`,
-          sound: true,
-        },
-        trigger: null,
-      }).catch(() => { });
+      // Dismiss the ongoing notification and fire the alert
+      dismissOngoingNotification(ongoingNotifId.current);
+      ongoingNotifId.current = null;
+      fireImmediateNotification(
+        "⏰ Time's Up!",
+        `"${mission?.title}" timer has finished. Did you complete it?`,
+      );
     }
   }, [isTimerUp, mission?.title]);
 
   useEffect(() => {
-    if (!isTimerUp) hasVibrated.current = false;
+    if (!isTimerUp) hasTriggered.current = false;
   }, [isTimerUp]);
 
   useEffect(() => {
     if (!mission || mission.status !== "in_progress" || !mission.startedAt) return;
 
-    const scheduleNotification = async () => {
-      try {
-        if (notificationId.current) {
-          await Notifications.cancelScheduledNotificationAsync(notificationId.current);
-        }
-        const startMs = new Date(mission.startedAt!).getTime();
-        const endMs = startMs + totalMinutes * 60 * 1000;
-        const secondsUntilEnd = Math.max(1, Math.floor((endMs - Date.now()) / 1000));
+    const schedule = async () => {
+      await cancelNotification(notificationId.current);
+      await dismissOngoingNotification(ongoingNotifId.current);
 
-        if (secondsUntilEnd > 1) {
-          const nId = await Notifications.scheduleNotificationAsync({
-            content: {
-              title: "⏰ Time's Up!",
-              body: `Mini mission "${mission.title}" timer has finished!`,
-              sound: true,
-            },
-            trigger: {
-              type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
-              seconds: secondsUntilEnd,
-            },
-          });
-          notificationId.current = nId;
-        }
-      } catch {
-        // Notifications unavailable
+      const startMs = new Date(mission.startedAt!).getTime();
+      const endMs = startMs + totalMinutes * 60 * 1000;
+      const secondsUntilEnd = Math.floor((endMs - Date.now()) / 1000);
+
+      // Show persistent "in progress" notification
+      const oId = await showOngoingMissionNotification(mission.title, endMs);
+      ongoingNotifId.current = oId;
+
+      // Schedule the timer expiry notification
+      if (secondsUntilEnd > 1) {
+        const nId = await scheduleTimerNotification(
+          "⏰ Time's Up!",
+          `Mini mission "${mission.title}" timer has finished!`,
+          secondsUntilEnd,
+        );
+        notificationId.current = nId;
       }
     };
 
-    scheduleNotification();
+    schedule();
 
     return () => {
-      if (notificationId.current) {
-        Notifications.cancelScheduledNotificationAsync(notificationId.current).catch(() => { });
-      }
+      cancelNotification(notificationId.current);
+      dismissOngoingNotification(ongoingNotifId.current);
     };
   }, [mission?.status, mission?.startedAt, totalMinutes, mission?.title, mission]);
 
@@ -191,7 +199,6 @@ export default function MiniMissionDetail() {
   }
 
   const handleStart = async () => {
-    try { await Notifications.requestPermissionsAsync(); } catch { }
     startMiniMission(mission.id);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
   };
@@ -199,9 +206,9 @@ export default function MiniMissionDetail() {
   const handleComplete = () => {
     completeMiniMission(mission.id);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    if (notificationId.current) {
-      Notifications.cancelScheduledNotificationAsync(notificationId.current).catch(() => { });
-    }
+    cancelNotification(notificationId.current);
+    dismissOngoingNotification(ongoingNotifId.current);
+    ongoingNotifId.current = null;
   };
 
   const handleExtend = () => {
@@ -212,9 +219,9 @@ export default function MiniMissionDetail() {
   const handleCancel = () => {
     cancelMiniMission(mission.id);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-    if (notificationId.current) {
-      Notifications.cancelScheduledNotificationAsync(notificationId.current).catch(() => { });
-    }
+    cancelNotification(notificationId.current);
+    dismissOngoingNotification(ongoingNotifId.current);
+    ongoingNotifId.current = null;
   };
 
   const handleDelete = () => {
@@ -224,9 +231,9 @@ export default function MiniMissionDetail() {
         text: "Delete",
         style: "destructive",
         onPress: () => {
-          if (notificationId.current) {
-            Notifications.cancelScheduledNotificationAsync(notificationId.current).catch(() => { });
-          }
+          cancelNotification(notificationId.current);
+          dismissOngoingNotification(ongoingNotifId.current);
+          ongoingNotifId.current = null;
           deleteMiniMission(mission.id);
           router.replace("/mini");
         },
@@ -250,7 +257,7 @@ export default function MiniMissionDetail() {
         <Text style={[styles.title, { color: theme.colors.textPrimary, fontSize: theme.typography.h1 }]}>{mission.title}</Text>
         {!!mission.objective && <Text style={[styles.objective, { color: theme.colors.textSecondary, fontSize: theme.typography.body }]}>{mission.objective}</Text>}
 
-        <View style={[styles.timerCard, { borderRadius: theme.radius.lg, borderColor: theme.colors.border, backgroundColor: theme.colors.surface, ...theme.shadow.card }, isTimerUp && styles.timerCardExpired]}>
+        <View style={[styles.timerCard, { borderRadius: theme.radius.lg, borderColor: theme.colors.border, backgroundColor: theme.colors.surface, ...(isTimerUp ? {} : theme.shadow.card) }, isTimerUp && styles.timerCardExpired]}>
           <Text style={[styles.timerLabel, { color: theme.colors.textMuted }]}>
             {isTimerUp ? "TIME'S UP!" : "Estimated Sprint"}
           </Text>
@@ -312,7 +319,7 @@ export default function MiniMissionDetail() {
               {earlyFinishMs > 0 && (
                 <View style={[styles.rewardCard, { borderRadius: theme.radius.md }]}>
                   <View style={styles.rewardHeader}>
-                    <AnimatedFire size={18} />
+                    <Flame size={18} color="#f59e0b" fill="#fde68a" />
                     <Text style={[styles.rewardTitle, { color: theme.colors.yellow[400] }]}>Early Finish Reward</Text>
                   </View>
                   <View style={styles.rewardRow}>
@@ -333,6 +340,48 @@ export default function MiniMissionDetail() {
             </View>
           )}
         </View>
+
+        {/* Motivational quotes — glass card at the bottom, only while timer is running */}
+        {mission.status === "in_progress" && !isTimerUp && (
+          <TouchableOpacity
+            activeOpacity={0.8}
+            onPress={() => animateQuoteChange((quoteIdx + 1) % QUOTES.length)}
+            style={[
+              quoteStyles.glassCard,
+              {
+                backgroundColor: isDark ? "rgba(255,255,255,0.04)" : "rgba(255,255,255,0.5)",
+                borderColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)",
+                borderRadius: theme.radius.lg,
+              },
+            ]}
+          >
+            <Animated.View style={[quoteStyles.textWrap, { opacity: quoteFade }]}>
+              <Text style={[quoteStyles.quoteText, { color: isDark ? "rgba(255,255,255,0.7)" : "rgba(0,0,0,0.55)" }]}>
+                “{QUOTES[quoteIdx].text}”
+              </Text>
+              <Text style={[quoteStyles.quoteAuthor, { color: isDark ? "rgba(255,255,255,0.35)" : "rgba(0,0,0,0.35)" }]}>
+                — {QUOTES[quoteIdx].author}
+              </Text>
+            </Animated.View>
+            {/* Pagination dots */}
+            <View style={quoteStyles.dotsRow}>
+              {[0, 1, 2].map((dotIdx) => (
+                <View
+                  key={dotIdx}
+                  style={[
+                    quoteStyles.dot,
+                    {
+                      backgroundColor:
+                        quoteIdx % 3 === dotIdx
+                          ? isDark ? "rgba(255,255,255,0.5)" : "rgba(0,0,0,0.35)"
+                          : isDark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.1)",
+                    },
+                  ]}
+                />
+              ))}
+            </View>
+          </TouchableOpacity>
+        )}
       </View>
     </Screen>
   );
@@ -346,11 +395,11 @@ const styles = StyleSheet.create({
   content: { flex: 1 },
   title: { fontWeight: "800", marginBottom: 8 },
   objective: { marginBottom: 20, lineHeight: 23 },
-  timerCard: { borderWidth: 1, alignItems: "center", paddingVertical: 24, paddingHorizontal: 16 },
+  timerCard: { borderWidth: 1, alignItems: "center", paddingVertical: 20, paddingHorizontal: 16 },
   timerCardExpired: { borderColor: "rgba(239, 68, 68, 0.5)", backgroundColor: "rgba(239, 68, 68, 0.08)" },
   timerLabel: { textTransform: "uppercase", letterSpacing: 1, fontWeight: "700", fontSize: 11 },
-  timerValue: { fontSize: 52, fontWeight: "800", marginTop: 6, marginBottom: 6 },
-  timerHint: { textAlign: "center" },
+  timerValue: { fontSize: 52, fontWeight: "800", marginVertical: 2, includeFontPadding: false },
+  timerHint: { textAlign: "center", marginTop: 2 },
   metaRow: { marginTop: 16, marginBottom: 20 },
   metaPill: { alignSelf: "flex-start", flexDirection: "row", alignItems: "center", gap: 8, borderRadius: 9999, borderWidth: 1, paddingVertical: 7, paddingHorizontal: 12 },
   metaText: { fontWeight: "700" },
@@ -368,4 +417,40 @@ const styles = StyleSheet.create({
   rewardText: { fontWeight: "600" },
   cancelledRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 10 },
   cancelledText: { fontWeight: "700" },
+});
+
+const quoteStyles = StyleSheet.create({
+  glassCard: {
+    marginTop: 20,
+    padding: 20,
+    borderWidth: 1,
+    alignItems: "center",
+  },
+  textWrap: { alignItems: "center", paddingHorizontal: 8 },
+  quoteText: {
+    fontSize: 14,
+    fontStyle: "italic",
+    textAlign: "center",
+    lineHeight: 22,
+    letterSpacing: 0.3,
+  },
+  quoteAuthor: {
+    fontSize: 11,
+    fontWeight: "700",
+    marginTop: 8,
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
+  },
+  dotsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    marginTop: 12,
+  },
+  dot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+  },
 });
