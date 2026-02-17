@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, StatusBar, Animated } from 'react-native';
 import { useRouter } from 'expo-router';
 import { FlashList } from '@shopify/flash-list';
-import { Trophy, Bolt, Target, Plus, ChevronRight, Sun, Moon, Sunrise, Sunset, Settings } from 'lucide-react-native';
+import { Trophy, Bolt, Target, Plus, ChevronRight, Sun, Moon, Sunrise, Sunset, Settings, Zap } from 'lucide-react-native';
 import { useHabitStore } from '../src/store/habitStore';
 import { Button } from '../src/components/Button';
 import { HabitCard } from '../src/components/HabitCard';
@@ -37,7 +37,12 @@ export default function Home() {
     const [settingsOpen, setSettingsOpen] = useState(false);
     const habits = useHabitStore((state) => state.habits);
     const miniMissions = useHabitStore((state) => state.miniMissions);
+    const xp = useHabitStore((state) => state.xp);
     const [activeTab, setActiveTab] = useState<'active' | 'completed'>('active');
+
+    const level = Math.floor(xp / 100);
+    const xpInLevel = xp % 100;
+    const xpProgress = xpInLevel / 100;
 
     const filteredHabits = useMemo(() => {
         return habits.filter((habit) =>
@@ -97,9 +102,36 @@ export default function Home() {
                     <Text style={[styles.headerSubtitle, { color: theme.colors.textSecondary }]}>{motivation}</Text>
                 </View>
                 <View style={[styles.headerBadge, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
-                    <Trophy size={22} color={theme.colors.yellow[400]} />
+                    <Text style={[styles.levelNumber, { color: theme.colors.yellow[400] }]}>{level}</Text>
+                    <Text style={[styles.levelLabel, { color: theme.colors.textMuted }]}>LVL</Text>
                 </View>
             </Animated.View>
+
+            {/* XP Progress Bar */}
+            <View style={[styles.xpBar, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, borderRadius: theme.radius.md }]}>
+                <View style={styles.xpInfo}>
+                    <View style={styles.xpLeft}>
+                        <Zap size={12} color={theme.colors.yellow[400]} fill={theme.colors.yellow[400]} />
+                        <Text style={[styles.xpLabel, { color: theme.colors.textSecondary }]}>
+                            Level {level}
+                        </Text>
+                    </View>
+                    <Text style={[styles.xpValue, { color: theme.colors.textMuted }]}>
+                        {xpInLevel} / 100 XP
+                    </Text>
+                </View>
+                <View style={[styles.xpTrack, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)' }]}>
+                    <View
+                        style={[
+                            styles.xpFill,
+                            {
+                                width: `${Math.max(xpProgress * 100, 2)}%`,
+                                backgroundColor: theme.colors.yellow[400],
+                            },
+                        ]}
+                    />
+                </View>
+            </View>
 
             <View style={styles.commandRow}>
                 <TouchableOpacity
@@ -213,6 +245,8 @@ const styles = StyleSheet.create({
     headerTitle: { fontSize: 22, fontWeight: '800' },
     headerSubtitle: { marginTop: 4, fontSize: 13, fontStyle: 'italic' },
     headerBadge: { width: 46, height: 46, borderRadius: 9999, alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
+    levelNumber: { fontSize: 18, fontWeight: '800', lineHeight: 20 },
+    levelLabel: { fontSize: 8, fontWeight: '800', letterSpacing: 1 },
     eyebrowRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 },
     eyebrowDot: { fontSize: 8, opacity: 0.5 },
     gearButton: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 4, paddingHorizontal: 8, borderRadius: 9999, borderWidth: 1, borderColor: 'rgba(148, 163, 184, 0.25)', backgroundColor: 'rgba(148, 163, 184, 0.1)' },
@@ -240,4 +274,11 @@ const styles = StyleSheet.create({
     emptyTitle: { fontWeight: '700', marginBottom: 8 },
     emptyDescription: { textAlign: 'center', marginBottom: 20, paddingHorizontal: 24 },
     emptyButton: { width: '100%' },
+    xpBar: { paddingHorizontal: 14, paddingVertical: 10, marginBottom: 14, borderWidth: 1 },
+    xpInfo: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
+    xpLeft: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+    xpLabel: { fontSize: 12, fontWeight: '700' },
+    xpValue: { fontSize: 11, fontWeight: '600' },
+    xpTrack: { height: 6, borderRadius: 3, overflow: 'hidden' },
+    xpFill: { height: '100%', borderRadius: 3 },
 });

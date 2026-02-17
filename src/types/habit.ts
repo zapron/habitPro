@@ -44,6 +44,7 @@ export type AddHabitInput = {
 export type HabitStore = {
   habits: Habit[];
   miniMissions: MiniMission[];
+  xp: number;
   addHabit: (input: AddHabitInput) => void;
   toggleCompletion: (id: string, date: string) => boolean;
   deleteHabit: (id: string) => void;
@@ -61,4 +62,5 @@ export type HabitStore = {
   cancelMiniMission: (id: string) => void;
   deleteMiniMission: (id: string) => void;
   getMiniMission: (id: string) => MiniMission | undefined;
+  addXp: (amount: number) => void;
 };

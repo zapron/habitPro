@@ -4,7 +4,6 @@ import { useRouter } from 'expo-router';
 import { TreePine, Flame, Check, Plane, Gamepad2 } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
 import { Habit } from '../types/habit';
-import { AnimatedFire } from './AnimatedFire';
 import { ProgressRing } from './ProgressRing';
 
 interface HabitCardProps {
@@ -16,7 +15,6 @@ export const HabitCard = memo(({ item }: HabitCardProps) => {
     const { theme } = useTheme();
     const totalDays = item.totalDays ?? 21;
     const isFinished = item.completedDates.length >= totalDays;
-    const isActive = item.streak > 0 && !isFinished;
     const isManual = (item.mode ?? 'autopilot') === 'manual';
     const progress = Math.min(item.completedDates.length / totalDays, 1);
 
@@ -61,7 +59,7 @@ export const HabitCard = memo(({ item }: HabitCardProps) => {
                                 width: `${progress * 100}%`,
                                 backgroundColor: isManual
                                     ? theme.colors.amber[500]
-                                    : isActive
+                                    : item.streak > 0
                                         ? theme.colors.amber[500]
                                         : theme.colors.cyan[500],
                                 borderRadius: 2,
@@ -74,10 +72,19 @@ export const HabitCard = memo(({ item }: HabitCardProps) => {
                     <View style={styles.statIcon}>
                         {isFinished ? (
                             <TreePine size={20} color={theme.colors.green[500]} />
-                        ) : isActive ? (
-                            <AnimatedFire size={20} />
+                        ) : item.streak >= 14 ? (
+                            <View style={styles.flameStack}>
+                                <Flame size={18} color="#f59e0b" fill="#fde68a" />
+                                <Flame size={12} color="#ef4444" fill="#fca5a5" style={{ position: 'absolute', left: 8, top: -2 }} />
+                            </View>
+                        ) : item.streak >= 7 ? (
+                            <View style={styles.flameStack}>
+                                <Flame size={18} color="#f59e0b" fill="#fde68a" />
+                            </View>
+                        ) : item.streak > 0 ? (
+                            <Flame size={18} color="#f59e0b" fill="#fde68a" />
                         ) : (
-                            <Flame size={20} color={theme.colors.textMuted} />
+                            <Flame size={18} color={theme.colors.textMuted} />
                         )}
                     </View>
                     <Text
@@ -85,12 +92,16 @@ export const HabitCard = memo(({ item }: HabitCardProps) => {
                             styles.cardStreak,
                             isFinished
                                 ? { color: theme.colors.green[500] }
-                                : isActive
-                                    ? { color: theme.colors.amber[500] }
-                                    : { color: theme.colors.textMuted },
+                                : item.streak >= 14
+                                    ? { color: '#fbbf24' }
+                                    : item.streak >= 7
+                                        ? { color: '#f59e0b' }
+                                        : item.streak > 0
+                                            ? { color: theme.colors.amber[500] }
+                                            : { color: theme.colors.textMuted },
                         ]}
                     >
-                        {isFinished ? 'Completed!' : `${item.streak} day streak`}
+                        {isFinished ? 'Completed!' : item.streak > 0 ? `${item.streak} day streak` : 'Start a streak'}
                     </Text>
                     {!isFinished && (
                         <Text style={[styles.cardProgress, { color: theme.colors.textMuted }]}>
@@ -146,6 +157,7 @@ const styles = StyleSheet.create({
     cardStreak: { fontWeight: '700', marginRight: 16 },
     cardProgress: {},
     progressText: { fontWeight: '700', fontSize: 18 },
+    flameStack: { position: 'relative', width: 24, height: 20 },
     progressBarBg: {
         height: 4,
         backgroundColor: 'rgba(100, 116, 139, 0.3)',
