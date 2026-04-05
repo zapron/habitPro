@@ -7,8 +7,10 @@ import {
     StyleSheet,
     Pressable,
 } from 'react-native';
-import { X, Monitor, Sun, Moon, type LucideIcon } from 'lucide-react-native';
+import { X, Monitor, Sun, Moon, LogOut, type LucideIcon } from 'lucide-react-native';
 import { useTheme, type ThemePreference } from '../context/ThemeContext';
+import { useAuth } from '../context/AuthContext';
+import { isSupabaseConfigured } from '../lib/env';
 
 const OPTIONS: { key: ThemePreference; label: string; Icon: LucideIcon; desc: string }[] = [
     { key: 'system', label: 'System', Icon: Monitor, desc: 'Match phone settings' },
@@ -23,6 +25,8 @@ interface SettingsModalProps {
 
 export function SettingsModal({ visible, onClose }: SettingsModalProps) {
     const { theme, isDark, preference, setPreference } = useTheme();
+    const { session, signOut } = useAuth();
+    const showAccount = isSupabaseConfigured();
 
     return (
         <Modal
@@ -44,6 +48,26 @@ export function SettingsModal({ visible, onClose }: SettingsModalProps) {
                             <X size={18} color={theme.colors.textSecondary} />
                         </TouchableOpacity>
                     </View>
+
+                    {showAccount && session && (
+                        <>
+                            <Text style={[styles.sectionLabel, { color: theme.colors.textMuted }]}>ACCOUNT</Text>
+                            <Text style={[styles.accountEmail, { color: theme.colors.textSecondary }]} numberOfLines={1}>
+                                {session.user.email ?? 'Signed in'}
+                            </Text>
+                            <TouchableOpacity
+                                style={[styles.signOutRow, { borderColor: theme.colors.border, backgroundColor: theme.colors.surfaceElevated }]}
+                                onPress={() => {
+                                    void signOut();
+                                    onClose();
+                                }}
+                                activeOpacity={0.8}
+                            >
+                                <LogOut size={18} color={theme.colors.textSecondary} />
+                                <Text style={[styles.signOutLabel, { color: theme.colors.textPrimary }]}>Sign out</Text>
+                            </TouchableOpacity>
+                        </>
+                    )}
 
                     {/* Theme Section */}
                     <Text style={[styles.sectionLabel, { color: theme.colors.textMuted }]}>APPEARANCE</Text>
@@ -143,6 +167,24 @@ const styles = StyleSheet.create({
         fontWeight: '700',
         letterSpacing: 1.2,
         marginBottom: 12,
+    },
+    accountEmail: {
+        fontSize: 13,
+        marginBottom: 12,
+    },
+    signOutRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+        borderRadius: 14,
+        borderWidth: 1,
+        paddingVertical: 14,
+        paddingHorizontal: 14,
+        marginBottom: 20,
+    },
+    signOutLabel: {
+        fontWeight: '700',
+        fontSize: 15,
     },
     optionsList: {
         gap: 8,
