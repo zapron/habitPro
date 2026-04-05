@@ -37,6 +37,8 @@ import { Button } from "../../src/components/Button";
 import { MiniMissionFireProgressBar } from "../../src/components/MiniMissionFireProgressBar";
 import { useTheme } from "../../src/context/ThemeContext";
 import { useHabitStore } from "../../src/store/habitStore";
+import type { MissionVisibility } from "../../src/types/habit";
+import { subscribeSyncFailure, subscribeSyncSuccess } from "../../src/lib/syncQueue";
 
 // Notification handler is configured globally in _layout.tsx via setupNotifications()
 
@@ -77,6 +79,30 @@ export default function MiniMissionDetail() {
   const cancelMiniMission = useHabitStore((state) => state.cancelMiniMission);
   const deleteMiniMission = useHabitStore((state) => state.deleteMiniMission);
   const setMiniMissionVisibility = useHabitStore((state) => state.setMiniMissionVisibility);
+
+  const lastVisibilityRef = useRef<{ id: string; prev: MissionVisibility } | null>(null);
+
+  useEffect(() => {
+    const unsubFail = subscribeSyncFailure(() => {
+      const p = lastVisibilityRef.current;
+      if (!p || !missionId || p.id !== missionId) return;
+      setMiniMissionVisibility(p.id, p.prev);
+      lastVisibilityRef.current = null;
+    });
+    const unsubOk = subscribeSyncSuccess(() => {
+      lastVisibilityRef.current = null;
+    });
+    return () => {
+      unsubFail();
+      unsubOk();
+    };
+  }, [missionId, setMiniMissionVisibility]);
+
+  useEffect(() => {
+    return () => {
+      lastVisibilityRef.current = null;
+    };
+  }, []);
 
   const [now, setNow] = useState(Date.now());
   const hasTriggered = useRef(false);
@@ -258,10 +284,10 @@ export default function MiniMissionDetail() {
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={theme.colors.background} />
       <View style={styles.header}>
         <TouchableOpacity style={[styles.iconButton, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]} onPress={() => router.back()}>
-          <ArrowLeft size={20} color={theme.colors.textPrimary} />
+          <ArrowLeft size={theme.icon.lg} color={theme.colors.textPrimary} />
         </TouchableOpacity>
         <TouchableOpacity style={[styles.iconButton, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]} onPress={handleDelete}>
-          <Trash2 size={18} color={theme.colors.red[500]} />
+          <Trash2 size={theme.icon.md} color={theme.colors.red[500]} />
         </TouchableOpacity>
       </View>
 
@@ -311,9 +337,9 @@ export default function MiniMissionDetail() {
           ]}
         >
           {(mission.visibility ?? "solo") === "public" ? (
-            <Globe size={18} color={theme.colors.cyan[400]} />
+            <Globe size={theme.icon.md} color={theme.colors.cyan[400]} />
           ) : (
-            <User size={18} color={theme.colors.indigo[400]} />
+            <User size={theme.icon.md} color={theme.colors.indigo[400]} />
           )}
           <View style={styles.visibilityTextCol}>
             {(mission.visibility ?? "solo") === "public" ? (
@@ -334,7 +360,13 @@ export default function MiniMissionDetail() {
           </View>
           <Switch
             value={(mission.visibility ?? "solo") === "public"}
-            onValueChange={(v) => setMiniMissionVisibility(mission.id, v ? "public" : "solo")}
+            onValueChange={(v) => {
+              const next = v ? "public" : "solo";
+              const prev = mission.visibility ?? "solo";
+              if (prev === next) return;
+              lastVisibilityRef.current = { id: mission.id, prev };
+              setMiniMissionVisibility(mission.id, next);
+            }}
             trackColor={{ false: theme.colors.border, true: theme.colors.indigo[600] }}
             thumbColor={theme.colors.white}
             ios_backgroundColor={theme.colors.border}

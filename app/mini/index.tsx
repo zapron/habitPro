@@ -81,7 +81,7 @@ function MiniMissionCard({ item, now }: { item: MiniMission; now: number }) {
       <View style={styles.cardTopRow}>
         <View style={styles.cardTitleRow}>
           {(item.visibility ?? "solo") === "public" && (
-            <Globe size={16} color={theme.colors.cyan[400]} style={styles.publicTitleIcon} />
+            <Globe size={theme.icon.md} color={theme.colors.cyan[400]} style={styles.publicTitleIcon} />
           )}
           <Text style={[styles.cardTitle, { color: theme.colors.textPrimary, fontSize: theme.typography.h3 }]} numberOfLines={1}>
             {item.title}
