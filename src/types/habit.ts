@@ -1,10 +1,17 @@
 export type HabitMode = "autopilot" | "manual";
 
+/** Public = discoverable by others later; solo = private to you. */
+export type MissionVisibility = "public" | "solo";
+
 export interface Habit {
+  /** Supabase auth user id who owns this mission (set on create / hydrate). */
+  ownerUserId?: string | null;
   id: string;
   title: string;
   description?: string;
   mode: HabitMode;
+  /** Default solo; public missions can be made solo anytime. */
+  visibility: MissionVisibility;
   startDate: string; // ISO string
   endDate?: string; // ISO string — only set for manual mode
   completedDates: string[]; // Array of ISO date strings (YYYY-MM-DD)
@@ -22,9 +29,12 @@ export type MiniMissionStatus =
   | "cancelled";
 
 export interface MiniMission {
+  /** Supabase auth user id who owns this mini mission (set on create / hydrate). */
+  ownerUserId?: string | null;
   id: string;
   title: string;
   objective?: string;
+  visibility: MissionVisibility;
   estimatedMinutes: number;
   extendedMinutes: number; // extra time added via "5 More Minutes"
   status: MiniMissionStatus;
@@ -39,6 +49,7 @@ export type AddHabitInput = {
   description?: string;
   mode: HabitMode;
   totalDays?: number; // required for manual, defaults to 21 for autopilot
+  visibility?: MissionVisibility;
 };
 
 export type HabitStore = {
@@ -57,7 +68,10 @@ export type HabitStore = {
     objective?: string;
     estimatedMinutes: number;
     startMode: "now" | "later";
+    visibility?: MissionVisibility;
   }) => string;
+  setHabitVisibility: (id: string, visibility: MissionVisibility) => void;
+  setMiniMissionVisibility: (id: string, visibility: MissionVisibility) => void;
   startMiniMission: (id: string) => void;
   completeMiniMission: (id: string) => void;
   extendMiniMission: (id: string, extraMinutes: number) => void;
