@@ -7,75 +7,8 @@ import {
   requestRemoteSync,
 } from "../lib/syncQueue";
 import { Habit, HabitStore, MiniMission, type MissionVisibility } from "../types/habit";
-
-const isEditableDate = (dateString: string) => {
-  const target = new Date(dateString);
-  target.setHours(0, 0, 0, 0);
-
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  const yesterday = new Date(today);
-  yesterday.setDate(yesterday.getDate() - 1);
-
-  return (
-    target.getTime() === today.getTime() ||
-    target.getTime() === yesterday.getTime()
-  );
-};
-
-const normalizeCompletedDates = (dates: string[]) =>
-  [...new Set(dates)].sort((a, b) => a.localeCompare(b));
-
-/**
- * Calculate the current CONSECUTIVE streak ending today or yesterday.
- * If the user hasn't completed today AND hasn't completed yesterday, streak = 0.
- */
-const getConsecutiveStreak = (sortedDates: string[]): number => {
-  if (sortedDates.length === 0) return 0;
-
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  const yesterday = new Date(today);
-  yesterday.setDate(yesterday.getDate() - 1);
-
-  const fmt = (d: Date) =>
-    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-
-  const todayStr = fmt(today);
-  const yesterdayStr = fmt(yesterday);
-
-  const dateSet = new Set(sortedDates);
-
-  // Streak must be anchored to today or yesterday
-  if (!dateSet.has(todayStr) && !dateSet.has(yesterdayStr)) return 0;
-
-  // Count backwards from the most recent completed day
-  let cursor = dateSet.has(todayStr) ? new Date(today) : new Date(yesterday);
-  let streak = 0;
-
-  while (true) {
-    const key = fmt(cursor);
-    if (!dateSet.has(key)) break;
-    streak++;
-    cursor.setDate(cursor.getDate() - 1);
-  }
-
-  return streak;
-};
-
-const getDerivedState = (completedDates: string[], totalDays: number) => {
-  const normalized = normalizeCompletedDates(completedDates);
-  const streak = getConsecutiveStreak(normalized);
-  const isCompleted = normalized.length >= totalDays;
-  const status = (isCompleted ? "completed" : "active") as
-    | "active"
-    | "completed"
-    | "failed";
-
-  return { normalized, streak, isCompleted, status };
-};
+import { getDerivedState } from "../utils/habitDerived";
+import { isHabitCalendarDateToggleable } from "../utils/missionDaySlots";
 
 /** Calculate endDate by adding `totalDays` to a start ISO string. */
 const calculateEndDate = (startIso: string, totalDays: number): string => {
@@ -132,7 +65,8 @@ export const useHabitStore = create<HabitStore>()(
         requestRemoteSync({ immediate: true });
       },
       toggleCompletion: (id, date) => {
-        if (!isEditableDate(date)) {
+        const habitBefore = get().habits.find((h) => h.id === id);
+        if (!habitBefore || !isHabitCalendarDateToggleable(habitBefore, date, Date.now())) {
           return false;
         }
 
@@ -344,7 +278,18 @@ export const useHabitStore = create<HabitStore>()(
       // Migrate legacy habits on rehydration
       onRehydrateStorage: () => (state) => {
         if (state) {
-          state.habits = state.habits.map(migrateHabit);
+          state.habits = state.habits.map((h) => {
+            const migrated = migrateHabit(h);
+            const d = getDerivedState(migrated.completedDates ?? [], migrated.totalDays ?? 21);
+            return {
+              ...migrated,
+              completedDates: d.normalized,
+              totalDays: d.totalDays,
+              streak: d.streak,
+              isCompleted: d.isCompleted,
+              status: d.status,
+            };
+          });
           // Migrate legacy mini missions missing extendedMinutes
           state.miniMissions = state.miniMissions.map((m) => ({
             ...m,

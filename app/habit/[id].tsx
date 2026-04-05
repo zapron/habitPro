@@ -1,4 +1,5 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import { View, Text, ScrollView, TouchableOpacity, Alert, StyleSheet, StatusBar, Animated, Easing, LayoutChangeEvent, Switch } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
@@ -9,8 +10,12 @@ import { Timer } from '../../src/components/Timer';
 import { QuoteCard } from '../../src/components/QuoteCard';
 import { Screen } from '../../src/components/Screen';
 import { useTheme } from '../../src/context/ThemeContext';
+import { useReducedMotion } from '../../src/hooks/useReducedMotion';
+import { subscribeSyncFailure, subscribeSyncSuccess } from '../../src/lib/syncQueue';
+import type { MissionVisibility } from '../../src/types/habit';
 import { ConfettiBurst } from '../../src/components/ConfettiBurst';
 import { StreakBanner } from '../../src/components/StreakBanner';
+import { getActiveMissionDaySlot } from '../../src/utils/missionDaySlots';
 
 function getMilestones(totalDays: number, mode: string): number[] {
     if (mode === 'autopilot') return [7, 14, 21];
@@ -21,33 +26,43 @@ function getMilestones(totalDays: number, mode: string): number[] {
 }
 
 function AnimatedDayCell({
-    day, isCompleted, isMilestone, isToday, isYesterday, isFuture, onPress,
+    day, isCompleted, isMilestone, isCurrentMissionDay, locked, canInteract, onPress,
 }: {
-    day: number; isCompleted: boolean; isMilestone: boolean; isToday: boolean; isYesterday: boolean; isFuture: boolean; onPress: () => void;
+    day: number;
+    isCompleted: boolean;
+    isMilestone: boolean;
+    /** Current 24h mission slot — highlight + pulse when not yet completed */
+    isCurrentMissionDay: boolean;
+    /** Not yet unlocked, missed, or mission ended — show lock when incomplete */
+    locked: boolean;
+    canInteract: boolean;
+    onPress: () => void;
 }) {
-    const { theme, isDark } = useTheme();
+    const { theme } = useTheme();
+    const reduceMotion = useReducedMotion();
     const scale = useRef(new Animated.Value(1)).current;
     const shimmer = useRef(new Animated.Value(0)).current;
     const todayPulse = useRef(new Animated.Value(1)).current;
-    const isEditable = isToday || isYesterday;
 
     useMemo(() => {
-        if (isToday && !isCompleted) {
+        if (reduceMotion) return;
+        if (isCurrentMissionDay && !isCompleted) {
             Animated.loop(Animated.sequence([
                 Animated.timing(todayPulse, { toValue: 1.06, duration: 1400, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
                 Animated.timing(todayPulse, { toValue: 1, duration: 1400, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
             ])).start();
         }
-    }, [isToday, isCompleted, todayPulse]);
+    }, [reduceMotion, isCurrentMissionDay, isCompleted, todayPulse]);
 
     useMemo(() => {
+        if (reduceMotion) return;
         if (isMilestone && isCompleted) {
             Animated.loop(Animated.sequence([
                 Animated.timing(shimmer, { toValue: 1, duration: 2000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
                 Animated.timing(shimmer, { toValue: 0, duration: 2000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
             ])).start();
         }
-    }, [isMilestone, isCompleted, shimmer]);
+    }, [reduceMotion, isMilestone, isCompleted, shimmer]);
 
     const handlePress = useCallback(() => {
         Animated.sequence([
@@ -65,15 +80,15 @@ function AnimatedDayCell({
             ? [styles.dayButtonCompleted, { backgroundColor: theme.colors.indigo[600], ...theme.shadow.glow }]
             : [styles.dayButtonIncomplete, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }],
         isCompleted && isMilestone && styles.dayButtonMilestone,
-        isToday && !isCompleted && { borderColor: theme.colors.cyan[400], borderWidth: 2 },
-        (isFuture || !isEditable) && styles.dayButtonFuture,
+        isCurrentMissionDay && !isCompleted && { borderColor: theme.colors.cyan[400], borderWidth: 2 },
+        locked && styles.dayButtonFuture,
     ];
 
-    const animatedScale = isToday && !isCompleted ? Animated.multiply(scale, todayPulse) : scale;
+    const animatedScale = isCurrentMissionDay && !isCompleted ? Animated.multiply(scale, todayPulse) : scale;
 
     return (
         <Animated.View style={{ width: '13%', aspectRatio: 1, marginBottom: 14, transform: [{ scale: animatedScale as any }] }}>
-            <TouchableOpacity onPress={handlePress} style={dayButtonStyle} activeOpacity={0.8} disabled={isFuture}>
+            <TouchableOpacity onPress={handlePress} style={dayButtonStyle} activeOpacity={0.8} disabled={!canInteract}>
                 {isCompleted ? (
                     <Animated.View style={[styles.badgeWrap, isMilestone && { opacity: shimmerOpacity }]}>
                         {isMilestone ? <View style={styles.milestoneHalo} /> : null}
@@ -86,10 +101,10 @@ function AnimatedDayCell({
                             <Sparkles size={9} color={theme.colors.cyan[400]} style={styles.badgeAccent} />
                         )}
                     </Animated.View>
-                ) : isFuture ? (
+                ) : locked ? (
                     <Lock size={15} color={theme.colors.textMuted} />
                 ) : (
-                    <Text style={[styles.dayText, isToday ? { color: theme.colors.cyan[400] } : { color: theme.colors.textMuted }]}>{day}</Text>
+                    <Text style={[styles.dayText, isCurrentMissionDay ? { color: theme.colors.cyan[400] } : { color: theme.colors.textMuted }]}>{day}</Text>
                 )}
             </TouchableOpacity>
         </Animated.View>
@@ -108,6 +123,30 @@ export default function HabitDetail() {
     const deleteHabit = useHabitStore((state) => state.deleteHabit);
     const setHabitVisibility = useHabitStore((state) => state.setHabitVisibility);
 
+    const lastVisibilityRef = useRef<{ id: string; prev: MissionVisibility } | null>(null);
+
+    useEffect(() => {
+        const unsubFail = subscribeSyncFailure(() => {
+            const p = lastVisibilityRef.current;
+            if (!p || !habitId || p.id !== habitId) return;
+            setHabitVisibility(p.id, p.prev);
+            lastVisibilityRef.current = null;
+        });
+        const unsubOk = subscribeSyncSuccess(() => {
+            lastVisibilityRef.current = null;
+        });
+        return () => {
+            unsubFail();
+            unsubOk();
+        };
+    }, [habitId, setHabitVisibility]);
+
+    useEffect(() => {
+        return () => {
+            lastVisibilityRef.current = null;
+        };
+    }, []);
+
     const mode = habit?.mode ?? 'autopilot';
     const totalDays = habit?.totalDays ?? 21;
     const milestones = useMemo(() => getMilestones(totalDays, mode), [totalDays, mode]);
@@ -115,6 +154,18 @@ export default function HabitDetail() {
     const [confetti, setConfetti] = useState<{ active: boolean; milestone: boolean; x: number; y: number }>({ active: false, milestone: false, x: 0, y: 0 });
     const gridRef = useRef<View>(null);
     const [gridLayout, setGridLayout] = useState({ x: 0, y: 0 });
+    const [now, setNow] = useState(() => Date.now());
+
+    useEffect(() => {
+        const t = setInterval(() => setNow(Date.now()), 60_000);
+        return () => clearInterval(t);
+    }, []);
+
+    useFocusEffect(
+        useCallback(() => {
+            setNow(Date.now());
+        }, []),
+    );
 
     if (!habit) {
         return (
@@ -153,7 +204,13 @@ export default function HabitDetail() {
         const dateStr = getDayDate(dayIndex);
         const wasCompleted = habit.completedDates.includes(dateStr);
         const changed = toggleCompletion(habit.id, dateStr);
-        if (!changed) { Alert.alert('Locked day', 'You can only edit check-ins for today and yesterday.'); return; }
+        if (!changed) {
+            Alert.alert(
+                'Locked',
+                'You can only check in for the current mission day. Each day unlocks 24 hours after the mission started (day 2 after the first 24 hours, and so on).',
+            );
+            return;
+        }
 
         if (!wasCompleted) {
             const isMilestone = milestones.includes(day);
@@ -171,8 +228,7 @@ export default function HabitDetail() {
     };
 
     const isManual = mode === 'manual';
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const activeMissionDaySlot = getActiveMissionDaySlot(habit.startDate, now, totalDays);
 
     return (
         <Screen>
@@ -180,14 +236,14 @@ export default function HabitDetail() {
 
             <View style={styles.header}>
                 <TouchableOpacity style={[styles.iconButton, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]} onPress={() => router.back()}>
-                    <ArrowLeft size={22} color={theme.colors.textPrimary} />
+                    <ArrowLeft size={theme.icon.xl} color={theme.colors.textPrimary} />
                 </TouchableOpacity>
                 <View style={styles.headerActions}>
                     <TouchableOpacity style={styles.resetButton} onPress={handleReset}>
-                        <RotateCcw size={22} color={theme.colors.amber[500]} />
+                        <RotateCcw size={theme.icon.xl} color={theme.colors.amber[500]} />
                     </TouchableOpacity>
                     <TouchableOpacity style={styles.deleteButton} onPress={handleDelete}>
-                        <Trash2 size={22} color={theme.colors.red[500]} />
+                        <Trash2 size={theme.icon.xl} color={theme.colors.red[500]} />
                     </TouchableOpacity>
                 </View>
             </View>
@@ -205,9 +261,9 @@ export default function HabitDetail() {
 
                 <View style={[styles.visibilityRow, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, borderRadius: theme.radius.md }]}>
                     {(habit.visibility ?? 'solo') === 'public' ? (
-                        <Globe size={18} color={theme.colors.cyan[400]} />
+                        <Globe size={theme.icon.md} color={theme.colors.cyan[400]} />
                     ) : (
-                        <User size={18} color={theme.colors.indigo[400]} />
+                        <User size={theme.icon.md} color={theme.colors.indigo[400]} />
                     )}
                     <View style={styles.visibilityTextCol}>
                         {(habit.visibility ?? 'solo') === 'public' ? (
@@ -224,7 +280,13 @@ export default function HabitDetail() {
                     </View>
                     <Switch
                         value={(habit.visibility ?? 'solo') === 'public'}
-                        onValueChange={(v) => setHabitVisibility(habit.id, v ? 'public' : 'solo')}
+                        onValueChange={(v) => {
+                            const next = v ? 'public' : 'solo';
+                            const prev = habit.visibility ?? 'solo';
+                            if (prev === next) return;
+                            lastVisibilityRef.current = { id: habit.id, prev };
+                            setHabitVisibility(habit.id, next);
+                        }}
                         trackColor={{ false: theme.colors.border, true: theme.colors.indigo[600] }}
                         thumbColor={theme.colors.white}
                         ios_backgroundColor={theme.colors.border}
@@ -258,18 +320,19 @@ export default function HabitDetail() {
                         const dateStr = getDayDate(index);
                         const isCompleted = habit.completedDates.includes(dateStr);
                         const isMilestone = milestones.includes(day);
-                        const dayDate = new Date(dateStr);
-                        dayDate.setHours(0, 0, 0, 0);
-                        const isFuture = dayDate > today;
-                        const isTodayCell = dayDate.getTime() === today.getTime();
-                        const yesterday = new Date(today);
-                        yesterday.setDate(yesterday.getDate() - 1);
-                        const isYesterday = dayDate.getTime() === yesterday.getTime();
+                        const canInteract = activeMissionDaySlot !== null && day === activeMissionDaySlot;
+                        const locked = !isCompleted && !canInteract;
+                        const isCurrentMissionDay = canInteract && !isCompleted;
 
                         return (
                             <AnimatedDayCell
-                                key={day} day={day} isCompleted={isCompleted} isMilestone={isMilestone}
-                                isToday={isTodayCell} isYesterday={isYesterday} isFuture={isFuture}
+                                key={day}
+                                day={day}
+                                isCompleted={isCompleted}
+                                isMilestone={isMilestone}
+                                isCurrentMissionDay={isCurrentMissionDay}
+                                locked={locked}
+                                canInteract={canInteract}
                                 onPress={() => handleDayPress(index, day)}
                             />
                         );
