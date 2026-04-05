@@ -1,4 +1,5 @@
 import type { Habit, HabitStore, MiniMission, MissionVisibility } from "../types/habit";
+import { getDerivedState } from "../utils/habitDerived";
 import { getSupabase } from "./supabase";
 
 type RemoteSnapshot = Pick<HabitStore, "habits" | "miniMissions" | "xp">;
@@ -22,6 +23,7 @@ function habitFromRow(row: {
     row.visibility === "public" || row.visibility === "solo"
       ? row.visibility
       : "solo";
+  const d = getDerivedState(row.completed_dates ?? [], row.total_days ?? 21);
   return {
     ownerUserId: row.user_id,
     id: row.id,
@@ -31,11 +33,11 @@ function habitFromRow(row: {
     visibility: vis,
     startDate: row.start_date,
     endDate: row.end_date ?? undefined,
-    completedDates: row.completed_dates ?? [],
-    streak: row.streak,
-    totalDays: row.total_days,
-    isCompleted: row.is_completed,
-    status: row.status as Habit["status"],
+    completedDates: d.normalized,
+    streak: d.streak,
+    totalDays: d.totalDays,
+    isCompleted: d.isCompleted,
+    status: d.status,
   };
 }
 
