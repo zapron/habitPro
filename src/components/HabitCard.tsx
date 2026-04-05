@@ -13,10 +13,13 @@ interface HabitCardProps {
 export const HabitCard = memo(({ item }: HabitCardProps) => {
     const router = useRouter();
     const { theme } = useTheme();
-    const totalDays = item.totalDays ?? 21;
+    const totalDays = Math.max(1, item.totalDays ?? 21);
     const isFinished = item.completedDates.length >= totalDays;
     const isManual = (item.mode ?? 'autopilot') === 'manual';
-    const progress = Math.min(item.completedDates.length / totalDays, 1);
+    /** Mission completion: distinct days checked / campaign length */
+    const campaignProgress = Math.min(item.completedDates.length / totalDays, 1);
+    /** Current consecutive streak as a share of the mission (ring + center number) */
+    const streakProgress = Math.min(item.streak / totalDays, 1);
 
     return (
         <TouchableOpacity
@@ -64,7 +67,8 @@ export const HabitCard = memo(({ item }: HabitCardProps) => {
                         <View
                             style={{
                                 height: '100%',
-                                width: `${progress * 100}%`,
+                                width: `${campaignProgress * 100}%`,
+                                minWidth: campaignProgress > 0 ? 4 : 0,
                                 backgroundColor: isManual
                                     ? theme.colors.amber[500]
                                     : item.streak > 0
@@ -113,14 +117,14 @@ export const HabitCard = memo(({ item }: HabitCardProps) => {
                     </Text>
                     {!isFinished && (
                         <Text style={[styles.cardProgress, { color: theme.colors.textMuted }]}>
-                            {Math.round(progress * 100)}%
+                            {Math.round(campaignProgress * 100)}%
                         </Text>
                     )}
                 </View>
             </View>
 
             <ProgressRing
-                progress={progress}
+                progress={isFinished ? 1 : streakProgress}
                 size={52}
                 strokeWidth={3}
                 color={isManual ? theme.colors.amber[500] : isFinished ? theme.colors.green[500] : theme.colors.indigo[500]}
@@ -128,7 +132,7 @@ export const HabitCard = memo(({ item }: HabitCardProps) => {
                 {isFinished ? (
                     <Check size={20} color={theme.colors.green[500]} strokeWidth={3} />
                 ) : (
-                    <Text style={[styles.progressText, { color: theme.colors.textPrimary }]}>{item.completedDates.length}</Text>
+                    <Text style={[styles.progressText, { color: theme.colors.textPrimary }]}>{item.streak}</Text>
                 )}
             </ProgressRing>
         </TouchableOpacity>

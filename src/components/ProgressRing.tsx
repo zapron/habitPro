@@ -1,154 +1,138 @@
-import React, { useEffect, useRef } from 'react';
-import { Animated, View, StyleSheet, Easing } from 'react-native';
-import { useTheme } from '../context/ThemeContext';
+import React, { useEffect, useRef } from "react";
+import { Animated, View, StyleSheet, Easing } from "react-native";
+import Svg, { Circle, G } from "react-native-svg";
+import { useTheme } from "../context/ThemeContext";
 
 interface ProgressRingProps {
-    progress: number;
-    size?: number;
-    strokeWidth?: number;
-    color?: string;
-    glowOnNearComplete?: boolean;
-    children?: React.ReactNode;
+  progress: number;
+  size?: number;
+  strokeWidth?: number;
+  color?: string;
+  glowOnNearComplete?: boolean;
+  children?: React.ReactNode;
 }
 
+/**
+ * Circular progress using SVG strokeDashoffset (accurate on all platforms).
+ * The previous half-border + rotate approach relied on transformOrigin, which
+ * React Native does not apply reliably, so small progress values looked identical.
+ */
 export function ProgressRing({
-    progress,
-    size = 52,
-    strokeWidth = 3,
-    color,
-    glowOnNearComplete = true,
-    children,
+  progress,
+  size = 52,
+  strokeWidth = 3,
+  color,
+  glowOnNearComplete = true,
+  children,
 }: ProgressRingProps) {
-    const { theme } = useTheme();
-    const activeColor = color ?? theme.colors.indigo[500];
-    const animatedProgress = useRef(new Animated.Value(0)).current;
-    const glowPulse = useRef(new Animated.Value(0)).current;
-    const isNearComplete = progress >= 0.8;
-    const isComplete = progress >= 1;
-    const ringColor = isComplete ? theme.colors.green[500] : activeColor;
-    const bgColor = theme.colors.slate[700];
+  const { theme } = useTheme();
+  const activeColor = color ?? theme.colors.indigo[500];
+  const glowPulse = useRef(new Animated.Value(0)).current;
 
-    useEffect(() => {
-        Animated.spring(animatedProgress, {
-            toValue: progress,
-            tension: 40,
-            friction: 8,
-            useNativeDriver: false,
-        }).start();
-    }, [progress, animatedProgress]);
+  const clamped = Math.min(1, Math.max(0, progress));
+  const isNearComplete = clamped >= 0.8;
+  const isComplete = clamped >= 1;
+  const ringColor = isComplete ? theme.colors.green[500] : activeColor;
+  const bgColor = theme.colors.slate[700];
 
-    useEffect(() => {
-        if (isNearComplete && glowOnNearComplete && !isComplete) {
-            Animated.loop(
-                Animated.sequence([
-                    Animated.timing(glowPulse, {
-                        toValue: 1,
-                        duration: 1200,
-                        easing: Easing.inOut(Easing.ease),
-                        useNativeDriver: false,
-                    }),
-                    Animated.timing(glowPulse, {
-                        toValue: 0,
-                        duration: 1200,
-                        easing: Easing.inOut(Easing.ease),
-                        useNativeDriver: false,
-                    }),
-                ]),
-            ).start();
-        }
-    }, [isNearComplete, isComplete, glowOnNearComplete, glowPulse]);
+  const cx = size / 2;
+  const cy = size / 2;
+  const r = (size - strokeWidth) / 2;
+  const circumference = 2 * Math.PI * r;
+  const dashOffset = circumference * (1 - clamped);
 
-    const halfSize = size / 2;
+  useEffect(() => {
+    if (isNearComplete && glowOnNearComplete && !isComplete) {
+      const loop = Animated.loop(
+        Animated.sequence([
+          Animated.timing(glowPulse, {
+            toValue: 1,
+            duration: 1200,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+          Animated.timing(glowPulse, {
+            toValue: 0,
+            duration: 1200,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+        ]),
+      );
+      loop.start();
+      return () => loop.stop();
+    }
+    glowPulse.setValue(0);
+    return undefined;
+  }, [isNearComplete, isComplete, glowOnNearComplete, glowPulse]);
 
-    const rightRotation = animatedProgress.interpolate({
-        inputRange: [0, 0.5, 1],
-        outputRange: ['0deg', '180deg', '180deg'],
-        extrapolate: 'clamp',
-    });
+  const shadowOpacity = glowPulse.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.3, 0.8],
+  });
 
-    const leftRotation = animatedProgress.interpolate({
-        inputRange: [0, 0.5, 1],
-        outputRange: ['0deg', '0deg', '180deg'],
-        extrapolate: 'clamp',
-    });
+  return (
+    <View style={[styles.container, { width: size, height: size, borderRadius: size / 2 }]}>
+      <Svg width={size} height={size} style={StyleSheet.absoluteFill}>
+        <G transform={`rotate(-90 ${cx} ${cy})`}>
+          <Circle
+            cx={cx}
+            cy={cy}
+            r={r}
+            fill="none"
+            stroke={bgColor}
+            strokeWidth={strokeWidth}
+          />
+          <Circle
+            cx={cx}
+            cy={cy}
+            r={r}
+            fill="none"
+            stroke={ringColor}
+            strokeWidth={strokeWidth}
+            strokeLinecap="round"
+            strokeDasharray={circumference}
+            strokeDashoffset={dashOffset}
+          />
+        </G>
+      </Svg>
 
-    const leftOpacity = animatedProgress.interpolate({
-        inputRange: [0, 0.499, 0.5, 1],
-        outputRange: [0, 0, 1, 1],
-        extrapolate: 'clamp',
-    });
+      {isNearComplete && glowOnNearComplete && !isComplete && (
+        <Animated.View
+          style={[
+            styles.glow,
+            {
+              width: size + 8,
+              height: size + 8,
+              borderRadius: (size + 8) / 2,
+              borderWidth: 2,
+              borderColor: ringColor,
+              opacity: shadowOpacity,
+            },
+          ]}
+          pointerEvents="none"
+        />
+      )}
 
-    const shadowOpacity = glowPulse.interpolate({
-        inputRange: [0, 1],
-        outputRange: [0.3, 0.8],
-    });
-
-    return (
-        <View style={[styles.container, { width: size, height: size, borderRadius: halfSize }]}>
-            <View style={[styles.ring, { width: size, height: size, borderRadius: halfSize, borderWidth: strokeWidth, borderColor: bgColor }]} />
-
-            <View style={[styles.halfClip, { width: halfSize, height: size, left: halfSize, overflow: 'hidden' }]}>
-                <Animated.View
-                    style={{
-                        width: halfSize,
-                        height: size,
-                        borderTopRightRadius: halfSize,
-                        borderBottomRightRadius: halfSize,
-                        borderWidth: strokeWidth,
-                        borderLeftWidth: 0,
-                        borderColor: ringColor,
-                        position: 'absolute',
-                        left: 0,
-                        transform: [
-                            { translateX: -halfSize / 2 },
-                            { rotate: rightRotation },
-                            { translateX: halfSize / 2 },
-                        ],
-                        transformOrigin: 'left center' as any,
-                    }}
-                />
-            </View>
-
-            <Animated.View style={[styles.halfClip, { width: halfSize, height: size, left: 0, overflow: 'hidden', opacity: leftOpacity }]}>
-                <Animated.View
-                    style={{
-                        width: halfSize,
-                        height: size,
-                        borderTopLeftRadius: halfSize,
-                        borderBottomLeftRadius: halfSize,
-                        borderWidth: strokeWidth,
-                        borderRightWidth: 0,
-                        borderColor: ringColor,
-                        position: 'absolute',
-                        right: 0,
-                        transform: [
-                            { translateX: halfSize / 2 },
-                            { rotate: leftRotation },
-                            { translateX: -halfSize / 2 },
-                        ],
-                        transformOrigin: 'right center' as any,
-                    }}
-                />
-            </Animated.View>
-
-            {isNearComplete && glowOnNearComplete && !isComplete && (
-                <Animated.View
-                    style={[styles.glow, { width: size + 8, height: size + 8, borderRadius: (size + 8) / 2, borderWidth: 2, borderColor: ringColor, opacity: shadowOpacity }]}
-                    pointerEvents="none"
-                />
-            )}
-
-            <View style={[styles.center, { width: size - strokeWidth * 2 - 4, height: size - strokeWidth * 2 - 4, borderRadius: (size - strokeWidth * 2 - 4) / 2, backgroundColor: theme.colors.surfaceElevated }]}>
-                {children}
-            </View>
-        </View>
-    );
+      <View
+        style={[
+          styles.center,
+          {
+            width: size - strokeWidth * 2 - 4,
+            height: size - strokeWidth * 2 - 4,
+            borderRadius: (size - strokeWidth * 2 - 4) / 2,
+            backgroundColor: theme.colors.surfaceElevated,
+          },
+        ]}
+      >
+        {children}
+      </View>
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
-    container: { position: 'relative', alignItems: 'center', justifyContent: 'center' },
-    ring: { position: 'absolute' },
-    halfClip: { position: 'absolute', top: 0 },
-    glow: { position: 'absolute' },
-    center: { alignItems: 'center', justifyContent: 'center' },
+  container: { position: "relative", alignItems: "center", justifyContent: "center" },
+  glow: { position: "absolute" },
+  center: { alignItems: "center", justifyContent: "center" },
 });
