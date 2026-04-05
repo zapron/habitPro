@@ -1,15 +1,41 @@
-import * as Notifications from "expo-notifications";
+import Constants from "expo-constants";
 import { Platform } from "react-native";
 
 const CHANNEL_ID = "timer-alerts";
 const ONGOING_CHANNEL_ID = "mission-progress";
 
 /**
+ * Expo Go on Android (SDK 53+) removed remote push; loading expo-notifications
+ * still runs push registration and throws + can cause spurious "Network request failed".
+ * Skip importing the module entirely in that environment.
+ */
+function shouldSkipNotificationsModule(): boolean {
+  return Constants.appOwnership === "expo" && Platform.OS === "android";
+}
+
+type NotificationsModule = typeof import("expo-notifications");
+
+let cached: NotificationsModule | null | undefined;
+
+async function getNotifications(): Promise<NotificationsModule | null> {
+  if (shouldSkipNotificationsModule()) {
+    return null;
+  }
+  if (cached !== undefined) {
+    return cached;
+  }
+  cached = await import("expo-notifications");
+  return cached;
+}
+
+/**
  * Call once at app startup (from _layout.tsx).
  * Sets the foreground handler, creates Android channels, and requests permissions.
  */
 export async function setupNotifications() {
-  // 1. Foreground handler — show alert + play sound even when app is open
+  const Notifications = await getNotifications();
+  if (!Notifications) return;
+
   Notifications.setNotificationHandler({
     handleNotification: async () => ({
       shouldShowAlert: true,
@@ -20,9 +46,7 @@ export async function setupNotifications() {
     }),
   });
 
-  // 2. Android notification channels
   if (Platform.OS === "android") {
-    // High-priority channel for timer expiry alerts
     await Notifications.setNotificationChannelAsync(CHANNEL_ID, {
       name: "Timer Alerts",
       importance: Notifications.AndroidImportance.HIGH,
@@ -30,7 +54,6 @@ export async function setupNotifications() {
       vibrationPattern: [0, 250, 250, 250],
       lightColor: "#6366f1",
     });
-    // Low-priority channel for ongoing mission progress (no sound/vibration)
     await Notifications.setNotificationChannelAsync(ONGOING_CHANNEL_ID, {
       name: "Mission Progress",
       importance: Notifications.AndroidImportance.LOW,
@@ -40,22 +63,19 @@ export async function setupNotifications() {
     });
   }
 
-  // 3. Request permissions (Android 13+ needs explicit opt-in)
   const { status } = await Notifications.getPermissionsAsync();
   if (status !== "granted") {
     await Notifications.requestPermissionsAsync();
   }
 }
 
-/**
- * Schedule a local notification that fires after `seconds`.
- * Returns the notification ID so it can be cancelled later.
- */
 export async function scheduleTimerNotification(
   title: string,
   body: string,
   seconds: number,
 ): Promise<string | null> {
+  const Notifications = await getNotifications();
+  if (!Notifications) return null;
   try {
     if (seconds <= 0) return null;
     const id = await Notifications.scheduleNotificationAsync({
@@ -76,10 +96,9 @@ export async function scheduleTimerNotification(
   }
 }
 
-/**
- * Fire an immediate notification (e.g., when timer hits zero while app is open).
- */
 export async function fireImmediateNotification(title: string, body: string) {
+  const Notifications = await getNotifications();
+  if (!Notifications) return;
   try {
     await Notifications.scheduleNotificationAsync({
       content: {
@@ -91,18 +110,16 @@ export async function fireImmediateNotification(title: string, body: string) {
       trigger: null,
     });
   } catch {
-    // Silent fail — alarm sound + vibration are the primary fallback
+    // Silent fail
   }
 }
 
-/**
- * Show a persistent/ongoing notification while a mini mission is running.
- * Returns the notification ID so it can be dismissed later.
- */
 export async function showOngoingMissionNotification(
   missionTitle: string,
   endTimeMs: number,
 ): Promise<string | null> {
+  const Notifications = await getNotifications();
+  if (!Notifications) return null;
   try {
     const endDate = new Date(endTimeMs);
     const timeStr = endDate.toLocaleTimeString([], {
@@ -133,11 +150,10 @@ export async function showOngoingMissionNotification(
   }
 }
 
-/**
- * Dismiss an ongoing notification by ID.
- */
 export async function dismissOngoingNotification(id: string | null) {
   if (!id) return;
+  const Notifications = await getNotifications();
+  if (!Notifications) return;
   try {
     await Notifications.dismissNotificationAsync(id);
   } catch {
@@ -145,11 +161,10 @@ export async function dismissOngoingNotification(id: string | null) {
   }
 }
 
-/**
- * Cancel a previously scheduled notification by ID.
- */
 export async function cancelNotification(id: string | null) {
   if (!id) return;
+  const Notifications = await getNotifications();
+  if (!Notifications) return;
   try {
     await Notifications.cancelScheduledNotificationAsync(id);
   } catch {
