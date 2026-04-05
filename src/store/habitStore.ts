@@ -1,7 +1,12 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Habit, HabitStore, MiniMission } from "../types/habit";
+import {
+  getRemoteSyncUserId,
+  registerSyncSnapshotGetter,
+  requestRemoteSync,
+} from "../lib/syncQueue";
+import { Habit, HabitStore, MiniMission, type MissionVisibility } from "../types/habit";
 
 const isEditableDate = (dateString: string) => {
   const target = new Date(dateString);
@@ -87,6 +92,9 @@ const migrateHabit = (h: any): Habit => ({
   ...h,
   mode: h.mode ?? "autopilot",
   totalDays: h.totalDays ?? 21,
+  ownerUserId: h.ownerUserId ?? null,
+  visibility:
+    h.visibility === "public" || h.visibility === "solo" ? h.visibility : "solo",
   // endDate is intentionally left undefined for autopilot
 });
 
@@ -97,16 +105,20 @@ export const useHabitStore = create<HabitStore>()(
       miniMissions: [],
       xp: 0,
       resetStore: () => set({ habits: [], miniMissions: [], xp: 0 }),
-      addHabit: ({ title, description, mode, totalDays: customDays }) => {
+      addHabit: ({ title, description, mode, totalDays: customDays, visibility }) => {
         const now = new Date().toISOString();
         const totalDays =
           mode === "manual" ? Math.max(3, Math.min(365, customDays ?? 21)) : 21;
+        const vis: MissionVisibility =
+          visibility === "public" || visibility === "solo" ? visibility : "solo";
 
         const newHabit: Habit = {
+          ownerUserId: getRemoteSyncUserId() ?? undefined,
           id: Date.now().toString(36) + Math.random().toString(36).substring(2),
           title,
           description,
           mode,
+          visibility: vis,
           startDate: now,
           endDate:
             mode === "manual" ? calculateEndDate(now, totalDays) : undefined,
@@ -117,6 +129,7 @@ export const useHabitStore = create<HabitStore>()(
           status: "active",
         };
         set((state) => ({ habits: [...state.habits, newHabit] }));
+        requestRemoteSync({ immediate: true });
       },
       toggleCompletion: (id, date) => {
         if (!isEditableDate(date)) {
@@ -163,12 +176,16 @@ export const useHabitStore = create<HabitStore>()(
             get().addXp(xpGain);
           }
         }
+        if (changed) {
+          requestRemoteSync({ immediate: false });
+        }
         return changed;
       },
       deleteHabit: (id) => {
         set((state) => ({
           habits: state.habits.filter((h) => h.id !== id),
         }));
+        requestRemoteSync({ immediate: true });
       },
       resetHabit: (id) => {
         set((state) => ({
@@ -189,20 +206,41 @@ export const useHabitStore = create<HabitStore>()(
             };
           }),
         }));
+        requestRemoteSync({ immediate: false });
       },
       getHabit: (id) => {
         return get().habits.find((h) => h.id === id);
       },
-      addMiniMission: ({ title, objective, estimatedMinutes, startMode }) => {
+      setHabitVisibility: (id, visibility) => {
+        set((state) => ({
+          habits: state.habits.map((h) =>
+            h.id === id ? { ...h, visibility } : h,
+          ),
+        }));
+        requestRemoteSync({ immediate: false });
+      },
+      setMiniMissionVisibility: (id, visibility) => {
+        set((state) => ({
+          miniMissions: state.miniMissions.map((m) =>
+            m.id === id ? { ...m, visibility } : m,
+          ),
+        }));
+        requestRemoteSync({ immediate: false });
+      },
+      addMiniMission: ({ title, objective, estimatedMinutes, startMode, visibility }) => {
         const now = new Date().toISOString();
         const id =
           Date.now().toString(36) + Math.random().toString(36).substring(2);
         const normalizedMinutes = Math.max(1, Math.floor(estimatedMinutes));
+        const vis: MissionVisibility =
+          visibility === "public" || visibility === "solo" ? visibility : "solo";
 
         const newMiniMission: MiniMission = {
+          ownerUserId: getRemoteSyncUserId() ?? undefined,
           id,
           title,
           objective,
+          visibility: vis,
           estimatedMinutes: normalizedMinutes,
           extendedMinutes: 0,
           status: startMode === "now" ? "in_progress" : "pending",
@@ -214,6 +252,7 @@ export const useHabitStore = create<HabitStore>()(
         set((state) => ({
           miniMissions: [newMiniMission, ...state.miniMissions],
         }));
+        requestRemoteSync({ immediate: true });
 
         return id;
       },
@@ -230,6 +269,7 @@ export const useHabitStore = create<HabitStore>()(
             };
           }),
         }));
+        requestRemoteSync({ immediate: false });
       },
       completeMiniMission: (id) => {
         const now = new Date().toISOString();
@@ -255,6 +295,7 @@ export const useHabitStore = create<HabitStore>()(
           if (elapsed < allocated) xpGain += 10; // early finish bonus
         }
         get().addXp(xpGain);
+        requestRemoteSync({ immediate: false });
       },
       cancelMiniMission: (id) => {
         set((state) => ({
@@ -267,6 +308,7 @@ export const useHabitStore = create<HabitStore>()(
             };
           }),
         }));
+        requestRemoteSync({ immediate: false });
       },
       extendMiniMission: (id, extraMinutes) => {
         set((state) => ({
@@ -279,6 +321,7 @@ export const useHabitStore = create<HabitStore>()(
             };
           }),
         }));
+        requestRemoteSync({ immediate: false });
       },
       deleteMiniMission: (id) => {
         set((state) => ({
@@ -286,6 +329,7 @@ export const useHabitStore = create<HabitStore>()(
             (mission) => mission.id !== id,
           ),
         }));
+        requestRemoteSync({ immediate: true });
       },
       getMiniMission: (id) => {
         return get().miniMissions.find((mission) => mission.id === id);
@@ -305,6 +349,11 @@ export const useHabitStore = create<HabitStore>()(
           state.miniMissions = state.miniMissions.map((m) => ({
             ...m,
             extendedMinutes: m.extendedMinutes ?? 0,
+            ownerUserId: m.ownerUserId ?? null,
+            visibility:
+              m.visibility === "public" || m.visibility === "solo"
+                ? m.visibility
+                : "solo",
           }));
           // Migrate: ensure xp exists
           if (state.xp == null) state.xp = 0;
@@ -313,3 +362,8 @@ export const useHabitStore = create<HabitStore>()(
     },
   ),
 );
+
+registerSyncSnapshotGetter(() => {
+  const s = useHabitStore.getState();
+  return { habits: s.habits, miniMissions: s.miniMissions, xp: s.xp };
+});
