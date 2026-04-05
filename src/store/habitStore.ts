@@ -96,6 +96,7 @@ export const useHabitStore = create<HabitStore>()(
       habits: [],
       miniMissions: [],
       xp: 0,
+      resetStore: () => set({ habits: [], miniMissions: [], xp: 0 }),
       addHabit: ({ title, description, mode, totalDays: customDays }) => {
         const now = new Date().toISOString();
         const totalDays =

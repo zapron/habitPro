@@ -45,6 +45,8 @@ export type HabitStore = {
   habits: Habit[];
   miniMissions: MiniMission[];
   xp: number;
+  /** Clears mission data (e.g. on sign-out). */
+  resetStore: () => void;
   addHabit: (input: AddHabitInput) => void;
   toggleCompletion: (id: string, date: string) => boolean;
   deleteHabit: (id: string) => void;
