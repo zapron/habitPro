@@ -1,8 +1,8 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Alert, StyleSheet, StatusBar, Animated, Easing, LayoutChangeEvent } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Alert, StyleSheet, StatusBar, Animated, Easing, LayoutChangeEvent, Switch } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import { ArrowLeft, Trash2, Lock, RotateCcw, Sparkles, Star, Plane, Gamepad2 } from 'lucide-react-native';
+import { ArrowLeft, Trash2, Lock, RotateCcw, Sparkles, Star, Plane, Gamepad2, Globe, User } from 'lucide-react-native';
 import { useHabitStore } from '../../src/store/habitStore';
 import { Button } from '../../src/components/Button';
 import { Timer } from '../../src/components/Timer';
@@ -106,6 +106,7 @@ export default function HabitDetail() {
     const toggleCompletion = useHabitStore((state) => state.toggleCompletion);
     const resetHabit = useHabitStore((state) => state.resetHabit);
     const deleteHabit = useHabitStore((state) => state.deleteHabit);
+    const setHabitVisibility = useHabitStore((state) => state.setHabitVisibility);
 
     const mode = habit?.mode ?? 'autopilot';
     const totalDays = habit?.totalDays ?? 21;
@@ -202,6 +203,34 @@ export default function HabitDetail() {
                 <Text style={[styles.title, { color: theme.colors.textPrimary, fontSize: theme.typography.h1 }]}>{habit.title}</Text>
                 <Text style={[styles.description, { color: theme.colors.textSecondary, fontSize: theme.typography.body }]}>{habit.description || 'No brief added yet.'}</Text>
 
+                <View style={[styles.visibilityRow, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, borderRadius: theme.radius.md }]}>
+                    {(habit.visibility ?? 'solo') === 'public' ? (
+                        <Globe size={18} color={theme.colors.cyan[400]} />
+                    ) : (
+                        <User size={18} color={theme.colors.indigo[400]} />
+                    )}
+                    <View style={styles.visibilityTextCol}>
+                        {(habit.visibility ?? 'solo') === 'public' ? (
+                            <>
+                                <Text style={[styles.visibilityTitle, { color: theme.colors.textPrimary }]}>Public</Text>
+                                <Text style={[styles.visibilityHint, { color: theme.colors.textMuted }]}>Others can see this later. Turn off to keep it solo.</Text>
+                            </>
+                        ) : (
+                            <>
+                                <Text style={[styles.visibilityTitle, { color: theme.colors.textPrimary }]}>Solo</Text>
+                                <Text style={[styles.visibilityHint, { color: theme.colors.textMuted }]}>Only you can see this. Turn on to share with others later.</Text>
+                            </>
+                        )}
+                    </View>
+                    <Switch
+                        value={(habit.visibility ?? 'solo') === 'public'}
+                        onValueChange={(v) => setHabitVisibility(habit.id, v ? 'public' : 'solo')}
+                        trackColor={{ false: theme.colors.border, true: theme.colors.indigo[600] }}
+                        thumbColor={theme.colors.white}
+                        ios_backgroundColor={theme.colors.border}
+                    />
+                </View>
+
                 <StreakBanner streak={habit.streak} />
                 <Timer startDate={habit.startDate} mode={mode} endDate={habit.endDate} />
                 <QuoteCard />
@@ -270,7 +299,11 @@ const styles = StyleSheet.create({
     modeBadgeManual: { backgroundColor: 'rgba(245, 158, 11, 0.1)', borderColor: 'rgba(245, 158, 11, 0.3)' },
     modeBadgeText: { fontSize: 11, fontWeight: '800', letterSpacing: 1 },
     title: { fontWeight: '800', marginBottom: 8 },
-    description: { marginBottom: 20 },
+    description: { marginBottom: 12 },
+    visibilityRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingHorizontal: 14, borderWidth: 1, marginBottom: 20 },
+    visibilityTextCol: { flex: 1 },
+    visibilityTitle: { fontWeight: '700', fontSize: 14 },
+    visibilityHint: { fontSize: 11, marginTop: 3, lineHeight: 15 },
     progressCard: { padding: 20, marginBottom: 28, borderWidth: 1 },
     progressHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 14 },
     progressLabel: { fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1 },

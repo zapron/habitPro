@@ -2,12 +2,12 @@ import { useState } from 'react';
 import { View, Text, TextInput, Alert, ScrollView, StyleSheet, TouchableOpacity, StatusBar } from 'react-native';
 import { useRouter } from 'expo-router';
 
-import { ArrowLeft, Target, Gamepad2, Plane } from 'lucide-react-native';
+import { ArrowLeft, Target, Gamepad2, Plane, Globe, User } from 'lucide-react-native';
 import { Button } from '../src/components/Button';
 import { Screen } from '../src/components/Screen';
 import { useTheme } from '../src/context/ThemeContext';
 import { useHabitStore } from '../src/store/habitStore';
-import type { HabitMode } from '../src/types/habit';
+import type { HabitMode, MissionVisibility } from '../src/types/habit';
 
 export default function CreateHabit() {
     const router = useRouter();
@@ -18,6 +18,7 @@ export default function CreateHabit() {
     const [description, setDescription] = useState('');
     const [mode, setMode] = useState<HabitMode>('autopilot');
     const [totalDaysInput, setTotalDaysInput] = useState('30');
+    const [visibility, setVisibility] = useState<MissionVisibility>('solo');
     const [focused, setFocused] = useState<'title' | 'desc' | 'days' | null>(null);
 
     const handleCreate = () => {
@@ -36,12 +37,14 @@ export default function CreateHabit() {
                 description: description.trim(),
                 mode,
                 totalDays: days,
+                visibility,
             });
         } else {
             addHabit({
                 title: title.trim(),
                 description: description.trim(),
                 mode: 'autopilot',
+                visibility,
             });
         }
         router.replace('/');
@@ -128,6 +131,28 @@ export default function CreateHabit() {
                         />
                     </>
                 )}
+
+                <Text style={[styles.label, { color: theme.colors.textSecondary, fontSize: theme.typography.caption }]}>Who can see this</Text>
+                <View style={styles.modeRow}>
+                    <TouchableOpacity
+                        style={[styles.modeCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }, visibility === 'solo' && { borderColor: theme.colors.indigo[500], backgroundColor: theme.colors.surfaceElevated }]}
+                        onPress={() => setVisibility('solo')}
+                        activeOpacity={0.85}
+                    >
+                        <User size={20} color={visibility === 'solo' ? theme.colors.indigo[400] : theme.colors.textMuted} />
+                        <Text style={[styles.modeLabel, { color: visibility === 'solo' ? theme.colors.textPrimary : theme.colors.textSecondary }]}>Solo</Text>
+                        <Text style={[styles.modeHint, { color: theme.colors.textMuted }]}>Private to you</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        style={[styles.modeCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }, visibility === 'public' && { borderColor: theme.colors.cyan[400], backgroundColor: theme.colors.surfaceElevated }]}
+                        onPress={() => setVisibility('public')}
+                        activeOpacity={0.85}
+                    >
+                        <Globe size={20} color={visibility === 'public' ? theme.colors.cyan[400] : theme.colors.textMuted} />
+                        <Text style={[styles.modeLabel, { color: visibility === 'public' ? theme.colors.textPrimary : theme.colors.textSecondary }]}>Public</Text>
+                        <Text style={[styles.modeHint, { color: theme.colors.textMuted }]}>Visible to others later</Text>
+                    </TouchableOpacity>
+                </View>
 
                 <Button title='Launch Mission' onPress={handleCreate} style={styles.cta} />
             </ScrollView>

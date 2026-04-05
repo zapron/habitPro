@@ -1,7 +1,7 @@
 import React, { memo } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
-import { TreePine, Flame, Check, Plane, Gamepad2 } from 'lucide-react-native';
+import { TreePine, Flame, Check, Plane, Gamepad2, Globe } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
 import { Habit } from '../types/habit';
 import { ProgressRing } from './ProgressRing';
@@ -33,15 +33,23 @@ export const HabitCard = memo(({ item }: HabitCardProps) => {
             onPress={() => router.push(`/habit/${item.id}`)}
         >
             <View style={styles.cardContent}>
-                <View style={[styles.modePill, isManual && styles.modePillManual]}>
-                    {isManual ? (
-                        <Gamepad2 size={10} color={theme.colors.amber[500]} />
-                    ) : (
-                        <Plane size={10} color={theme.colors.cyan[400]} />
+                <View style={styles.pillRow}>
+                    <View style={[styles.modePill, isManual && styles.modePillManual]}>
+                        {isManual ? (
+                            <Gamepad2 size={10} color={theme.colors.amber[500]} />
+                        ) : (
+                            <Plane size={10} color={theme.colors.cyan[400]} />
+                        )}
+                        <Text style={[styles.modePillText, { color: theme.colors.cyan[400] }, isManual && { color: theme.colors.amber[500] }]}>
+                            {isManual ? `MANUAL · ${totalDays}D` : 'AUTOPILOT'}
+                        </Text>
+                    </View>
+                    {(item.visibility ?? 'solo') === 'public' && (
+                        <View style={[styles.publicPill, { borderColor: theme.colors.cyan[400] + '44', backgroundColor: theme.colors.cyan[400] + '14' }]}>
+                            <Globe size={10} color={theme.colors.cyan[400]} />
+                            <Text style={[styles.publicPillText, { color: theme.colors.cyan[400] }]}>PUBLIC</Text>
+                        </View>
                     )}
-                    <Text style={[styles.modePillText, { color: theme.colors.cyan[400] }, isManual && { color: theme.colors.amber[500] }]}>
-                        {isManual ? `MANUAL · ${totalDays}D` : 'AUTOPILOT'}
-                    </Text>
                 </View>
 
                 <Text style={[styles.cardTitle, { color: theme.colors.textPrimary, fontSize: theme.typography.h3 }]}>{item.title}</Text>
@@ -137,6 +145,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     cardContent: { flex: 1 },
+    pillRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6, marginBottom: 6 },
     modePill: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -146,9 +155,19 @@ const styles = StyleSheet.create({
         paddingHorizontal: 8,
         borderRadius: 9999,
         backgroundColor: 'rgba(34, 211, 238, 0.1)',
-        marginBottom: 6,
     },
     modePillManual: { backgroundColor: 'rgba(245, 158, 11, 0.1)' },
+    publicPill: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        alignSelf: 'flex-start',
+        gap: 4,
+        paddingVertical: 2,
+        paddingHorizontal: 8,
+        borderRadius: 9999,
+        borderWidth: 1,
+    },
+    publicPillText: { fontSize: 9, fontWeight: '800', letterSpacing: 0.8 },
     modePillText: { fontSize: 9, fontWeight: '800', letterSpacing: 0.8 },
     cardTitle: { fontWeight: '700', marginBottom: 4 },
     cardDescription: { fontSize: 14 },
