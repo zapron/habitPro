@@ -8,6 +8,7 @@ import { Button } from '../src/components/Button';
 import { HabitCard } from '../src/components/HabitCard';
 import { Screen } from '../src/components/Screen';
 import { useTheme } from '../src/context/ThemeContext';
+import { useReducedMotion } from '../src/hooks/useReducedMotion';
 import { AnimatedFire } from '../src/components/AnimatedFire';
 import { SettingsModal } from '../src/components/SettingsModal';
 
@@ -34,6 +35,7 @@ const MOTIVATIONAL_LINES = [
 export default function Home() {
     const router = useRouter();
     const { theme, isDark } = useTheme();
+    const reduceMotion = useReducedMotion();
     const [settingsOpen, setSettingsOpen] = useState(false);
     const habits = useHabitStore((state) => state.habits);
     const miniMissions = useHabitStore((state) => state.miniMissions);
@@ -74,11 +76,16 @@ export default function Home() {
     const headerSlide = useRef(new Animated.Value(-15)).current;
 
     useEffect(() => {
+        if (reduceMotion) {
+            headerOpacity.setValue(1);
+            headerSlide.setValue(0);
+            return;
+        }
         Animated.parallel([
             Animated.timing(headerOpacity, { toValue: 1, duration: 600, useNativeDriver: true }),
             Animated.spring(headerSlide, { toValue: 0, tension: 50, friction: 10, useNativeDriver: true }),
         ]).start();
-    }, [headerOpacity, headerSlide]);
+    }, [headerOpacity, headerSlide, reduceMotion]);
 
     return (
         <Screen>
@@ -135,16 +142,16 @@ export default function Home() {
 
             <View style={styles.commandRow}>
                 <TouchableOpacity
-                    style={[styles.commandCard, { backgroundColor: theme.colors.surface, borderColor: isDark ? 'rgba(34, 211, 238, 0.3)' : 'rgba(6, 182, 212, 0.25)' }]}
+                    style={[styles.commandCard, { backgroundColor: theme.colors.surface, borderColor: isDark ? 'rgba(34, 211, 238, 0.3)' : 'rgba(6, 182, 212, 0.25)', borderRadius: theme.radius.lg }]}
                     activeOpacity={0.85}
                     onPress={() => router.push('/create')}
                 >
                     <View style={styles.commandTopRow}>
                         <View style={styles.commandIconMain}>
                             {stats.activeCount > 0 ? (
-                                <AnimatedFire size={14} color={theme.colors.cyan[400]} />
+                                <AnimatedFire size={theme.icon.sm} color={theme.colors.cyan[400]} />
                             ) : (
-                                <Target size={18} color={theme.colors.cyan[400]} />
+                                <Target size={theme.icon.md} color={theme.colors.cyan[400]} />
                             )}
                         </View>
                         {stats.activeCount > 0 && (
@@ -154,21 +161,21 @@ export default function Home() {
                     <Text style={[styles.commandTitle, { color: theme.colors.textPrimary }]}>New Mission</Text>
                     <Text style={[styles.commandHint, { color: theme.colors.textMuted }]}>21-day or custom</Text>
                     <View style={[styles.commandCta, { backgroundColor: theme.colors.indigo[600], ...theme.shadow.glow }]}>
-                        <Plus size={14} color="#fff" strokeWidth={3} />
+                        <Plus size={theme.icon.sm} color="#fff" strokeWidth={3} />
                     </View>
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                    style={[styles.commandCard, { backgroundColor: theme.colors.surface, borderColor: isDark ? 'rgba(245, 158, 11, 0.3)' : 'rgba(217, 119, 6, 0.25)' }]}
+                    style={[styles.commandCard, { backgroundColor: theme.colors.surface, borderColor: isDark ? 'rgba(245, 158, 11, 0.3)' : 'rgba(217, 119, 6, 0.25)', borderRadius: theme.radius.lg }]}
                     activeOpacity={0.85}
                     onPress={() => router.push('/mini')}
                 >
                     <View style={styles.commandTopRow}>
                         <View style={styles.commandIconMini}>
                             {miniCount > 0 ? (
-                                <AnimatedFire size={14} color={theme.colors.amber[500]} />
+                                <AnimatedFire size={theme.icon.sm} color={theme.colors.amber[500]} />
                             ) : (
-                                <Bolt size={18} color={theme.colors.yellow[400]} />
+                                <Bolt size={theme.icon.md} color={theme.colors.yellow[400]} />
                             )}
                         </View>
                         {miniCount > 0 && (
@@ -180,7 +187,7 @@ export default function Home() {
                         {miniMissionStats.running > 0 ? 'live now' : 'waiting'}
                     </Text>
                     <View style={[styles.commandCtaMini, { borderColor: isDark ? 'rgba(245, 158, 11, 0.3)' : 'rgba(217, 119, 6, 0.25)' }]}>
-                        <ChevronRight size={14} color={theme.colors.amber[500]} strokeWidth={3} />
+                        <ChevronRight size={theme.icon.sm} color={theme.colors.amber[500]} strokeWidth={3} />
                     </View>
                 </TouchableOpacity>
             </View>
@@ -252,7 +259,7 @@ const styles = StyleSheet.create({
     gearButton: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 4, paddingHorizontal: 8, borderRadius: 9999, borderWidth: 1, borderColor: 'rgba(148, 163, 184, 0.25)', backgroundColor: 'rgba(148, 163, 184, 0.1)' },
     gearLabel: { fontSize: 10, fontWeight: '700' },
     commandRow: { flexDirection: 'row', gap: 10, marginBottom: 14 },
-    commandCard: { flex: 1, borderRadius: 20, paddingVertical: 14, paddingHorizontal: 14, position: 'relative', overflow: 'hidden', borderWidth: 1 },
+    commandCard: { flex: 1, paddingVertical: 14, paddingHorizontal: 14, position: 'relative', overflow: 'hidden', borderWidth: 1 },
     commandTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
     commandIconMain: { width: 36, height: 36, borderRadius: 9999, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(34, 211, 238, 0.12)' },
     commandIconMini: { width: 36, height: 36, borderRadius: 9999, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(251, 191, 36, 0.14)' },

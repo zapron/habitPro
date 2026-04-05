@@ -1,12 +1,15 @@
 import React, { useEffect, useRef } from "react";
 import { View, StyleSheet, Animated } from "react-native";
 import { Flame } from "lucide-react-native";
+import { useReducedMotion } from "../hooks/useReducedMotion";
 
 /** Fire-burn bar for mini missions (fuel burning toward the goal) — animated ember + flame at the leading edge. */
 export function MiniMissionFireProgressBar({ progress, isDark }: { progress: number; isDark: boolean }) {
+  const reduceMotion = useReducedMotion();
   const emberAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
+    if (reduceMotion) return;
     const loop = Animated.loop(
       Animated.sequence([
         Animated.timing(emberAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
@@ -15,7 +18,7 @@ export function MiniMissionFireProgressBar({ progress, isDark }: { progress: num
     );
     loop.start();
     return () => loop.stop();
-  }, [emberAnim]);
+  }, [reduceMotion, emberAnim]);
 
   const clampedProgress = Math.min(1, Math.max(0, progress));
   const isNearEnd = clampedProgress > 0.85;
@@ -31,32 +34,57 @@ export function MiniMissionFireProgressBar({ progress, isDark }: { progress: num
           },
         ]}
       />
-      {clampedProgress > 0.01 && clampedProgress < 1 && (
-        <Animated.View
-          style={[
-            barStyles.ember,
-            {
-              left: `${clampedProgress * 100}%`,
-              opacity: emberAnim.interpolate({ inputRange: [0, 1], outputRange: [0.5, 1] }),
-              backgroundColor: isNearEnd ? "#fca5a5" : "#fdba74",
-              shadowColor: isNearEnd ? "#ef4444" : "#f97316",
-            },
-          ]}
-        />
-      )}
-      {clampedProgress > 0.03 && clampedProgress < 1 && (
-        <Animated.View
-          style={[
-            barStyles.fireIcon,
-            {
-              left: `${clampedProgress * 100}%`,
-              opacity: emberAnim.interpolate({ inputRange: [0, 1], outputRange: [0.7, 1] }),
-              transform: [{ scale: emberAnim.interpolate({ inputRange: [0, 1], outputRange: [0.9, 1.15] }) }],
-            },
-          ]}
-        >
-          <Flame size={14} color={isNearEnd ? "#ef4444" : "#f97316"} fill={isNearEnd ? "#fca5a5" : "#fdba74"} />
-        </Animated.View>
+      {reduceMotion ? (
+        <>
+          {clampedProgress > 0.01 && clampedProgress < 1 && (
+            <View
+              style={[
+                barStyles.ember,
+                {
+                  left: `${clampedProgress * 100}%`,
+                  opacity: 0.85,
+                  backgroundColor: isNearEnd ? "#fca5a5" : "#fdba74",
+                  shadowColor: isNearEnd ? "#ef4444" : "#f97316",
+                },
+              ]}
+            />
+          )}
+          {clampedProgress > 0.03 && clampedProgress < 1 && (
+            <View style={[barStyles.fireIcon, { left: `${clampedProgress * 100}%` }]}>
+              <Flame size={14} color={isNearEnd ? "#ef4444" : "#f97316"} fill={isNearEnd ? "#fca5a5" : "#fdba74"} />
+            </View>
+          )}
+        </>
+      ) : (
+        <>
+          {clampedProgress > 0.01 && clampedProgress < 1 && (
+            <Animated.View
+              style={[
+                barStyles.ember,
+                {
+                  left: `${clampedProgress * 100}%`,
+                  opacity: emberAnim.interpolate({ inputRange: [0, 1], outputRange: [0.5, 1] }),
+                  backgroundColor: isNearEnd ? "#fca5a5" : "#fdba74",
+                  shadowColor: isNearEnd ? "#ef4444" : "#f97316",
+                },
+              ]}
+            />
+          )}
+          {clampedProgress > 0.03 && clampedProgress < 1 && (
+            <Animated.View
+              style={[
+                barStyles.fireIcon,
+                {
+                  left: `${clampedProgress * 100}%`,
+                  opacity: emberAnim.interpolate({ inputRange: [0, 1], outputRange: [0.7, 1] }),
+                  transform: [{ scale: emberAnim.interpolate({ inputRange: [0, 1], outputRange: [0.9, 1.15] }) }],
+                },
+              ]}
+            >
+              <Flame size={14} color={isNearEnd ? "#ef4444" : "#f97316"} fill={isNearEnd ? "#fca5a5" : "#fdba74"} />
+            </Animated.View>
+          )}
+        </>
       )}
     </View>
   );

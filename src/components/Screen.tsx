@@ -1,6 +1,7 @@
 import React, { ReactNode } from "react";
 import { KeyboardAvoidingView, Platform, StyleProp, StyleSheet, View, ViewStyle } from "react-native";
 import { useTheme } from "../context/ThemeContext";
+import { useReducedMotion } from "../hooks/useReducedMotion";
 
 type ScreenProps = {
   children: ReactNode;
@@ -11,10 +12,11 @@ type ScreenProps = {
 
 export function Screen({ children, style, plain }: ScreenProps) {
   const { theme, isDark } = useTheme();
+  const reduceMotion = useReducedMotion();
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }, style]}>
-      {!plain && (
+      {!plain && !reduceMotion && (
         <>
           <View
             pointerEvents="none"

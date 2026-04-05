@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { Animated, StyleSheet, View, Dimensions } from 'react-native';
+import { useReducedMotion } from '../hooks/useReducedMotion';
 
 const PARTICLE_COUNT = 24;
 const COLORS = [
@@ -27,6 +28,7 @@ interface Particle {
 }
 
 export function ConfettiBurst({ active, isMilestone = false, originX = 0, originY = 0 }: ConfettiBurstProps) {
+    const reduceMotion = useReducedMotion();
     const count = isMilestone ? PARTICLE_COUNT * 2 : PARTICLE_COUNT;
 
     const particles = useRef<Particle[]>(
@@ -43,7 +45,7 @@ export function ConfettiBurst({ active, isMilestone = false, originX = 0, origin
     ).current;
 
     useEffect(() => {
-        if (!active) return;
+        if (!active || reduceMotion) return;
 
         const animations = particles.map((p) => {
             // Reset
@@ -99,9 +101,10 @@ export function ConfettiBurst({ active, isMilestone = false, originX = 0, origin
         });
 
         Animated.parallel(animations).start();
-    }, [active, isMilestone, particles]);
+    }, [active, isMilestone, particles, reduceMotion]);
 
     if (!active) return null;
+    if (reduceMotion) return null;
 
     return (
         <View style={[styles.container, { left: originX, top: originY }]} pointerEvents="none">

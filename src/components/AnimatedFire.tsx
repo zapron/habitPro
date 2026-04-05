@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import { View, StyleSheet, Animated, Easing } from 'react-native';
 import { Flame } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
+import { useReducedMotion } from '../hooks/useReducedMotion';
 
 interface AnimatedFireProps {
     size?: number;
@@ -19,6 +20,7 @@ const EMBER_COUNT = 7;
 
 export function AnimatedFire({ size = 24, color }: AnimatedFireProps) {
     const { theme } = useTheme();
+    const reduceMotion = useReducedMotion();
     const fireColor = color ?? theme.colors.amber[500];
 
     const scale1 = useRef(new Animated.Value(1)).current;
@@ -39,6 +41,7 @@ export function AnimatedFire({ size = 24, color }: AnimatedFireProps) {
     ).current;
 
     useEffect(() => {
+        if (reduceMotion) return;
         const ease = Easing.inOut(Easing.quad);
         const runningAnimations: Animated.CompositeAnimation[] = [];
         const timers: ReturnType<typeof setTimeout>[] = [];
@@ -141,7 +144,17 @@ export function AnimatedFire({ size = 24, color }: AnimatedFireProps) {
             runningAnimations.forEach((anim) => anim.stop());
             timers.forEach((timer) => clearTimeout(timer));
         };
-    }, [fireColor, embers, opacity1, opacity2, opacity3, scale1, scale2, scale3, size, translateY2]);
+    }, [reduceMotion, fireColor, embers, opacity1, opacity2, opacity3, scale1, scale2, scale3, size, translateY2]);
+
+    if (reduceMotion) {
+        return (
+            <View style={[styles.container, { width: size * 1.8, height: size * 1.8 }]}>
+                <View style={[StyleSheet.absoluteFill, styles.center]}>
+                    <Flame size={size} color={theme.colors.yellow[400]} fill={theme.colors.yellow[400]} />
+                </View>
+            </View>
+        );
+    }
 
     return (
         <View style={[styles.container, { width: size * 1.8, height: size * 1.8 }]}>
