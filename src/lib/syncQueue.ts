@@ -10,6 +10,46 @@ let getSnapshot: (() => Snapshot) | null = null;
 let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 const DEFAULT_DEBOUNCE_MS = 450;
 
+type SyncFailureListener = (error: unknown) => void;
+type SyncSuccessListener = () => void;
+
+const syncFailureListeners = new Set<SyncFailureListener>();
+const syncSuccessListeners = new Set<SyncSuccessListener>();
+
+export function subscribeSyncFailure(listener: SyncFailureListener): () => void {
+  syncFailureListeners.add(listener);
+  return () => {
+    syncFailureListeners.delete(listener);
+  };
+}
+
+export function subscribeSyncSuccess(listener: SyncSuccessListener): () => void {
+  syncSuccessListeners.add(listener);
+  return () => {
+    syncSuccessListeners.delete(listener);
+  };
+}
+
+function notifySyncFailure(error: unknown) {
+  syncFailureListeners.forEach((l) => {
+    try {
+      l(error);
+    } catch {
+      /* ignore listener errors */
+    }
+  });
+}
+
+function notifySyncSuccess() {
+  syncSuccessListeners.forEach((l) => {
+    try {
+      l();
+    } catch {
+      /* ignore listener errors */
+    }
+  });
+}
+
 export function registerSyncSnapshotGetter(fn: () => Snapshot) {
   getSnapshot = fn;
 }
@@ -39,9 +79,14 @@ function canPush(): boolean {
 function flush() {
   if (!canPush()) return;
   const snap = getSnapshot!();
-  void pushFullState(userId!, snap).catch((e) =>
-    console.warn("[habitPro] remote sync failed", e),
-  );
+  void pushFullState(userId!, snap)
+    .then(() => {
+      notifySyncSuccess();
+    })
+    .catch((e) => {
+      console.warn("[habitPro] remote sync failed", e);
+      notifySyncFailure(e);
+    });
 }
 
 /**
