@@ -10,13 +10,21 @@ import {
   Alert,
 } from "react-native";
 import { useRouter } from "expo-router";
-import { ArrowLeft, Zap } from "lucide-react-native";
+import { ArrowLeft, Zap, Globe, User, Minus, Plus } from "lucide-react-native";
 import { Screen } from "../../src/components/Screen";
 import { Button } from "../../src/components/Button";
 import { useHabitStore } from "../../src/store/habitStore";
 import { useTheme } from "../../src/context/ThemeContext";
+import type { MissionVisibility } from "../../src/types/habit";
 
 type StartMode = "now" | "later";
+
+const MIN_FUEL_MINUTES = 1;
+const MAX_FUEL_MINUTES = 480; // 8 hours of “fuel” for the mission
+
+function clampTotal(minutes: number): number {
+  return Math.max(MIN_FUEL_MINUTES, Math.min(MAX_FUEL_MINUTES, Math.round(minutes)));
+}
 
 export default function CreateMiniMission() {
   const router = useRouter();
@@ -25,18 +33,24 @@ export default function CreateMiniMission() {
 
   const [title, setTitle] = useState("");
   const [objective, setObjective] = useState("");
-  const [estimatedMinutes, setEstimatedMinutes] = useState("15");
+  const [totalMinutes, setTotalMinutes] = useState(15);
+  const [visibility, setVisibility] = useState<MissionVisibility>("solo");
   const [startMode, setStartMode] = useState<StartMode>("now");
-  const [focused, setFocused] = useState<"title" | "objective" | "minutes" | null>(null);
+  const [focused, setFocused] = useState<"title" | "objective" | null>(null);
+
+  const displayHours = Math.floor(totalMinutes / 60);
+  const displayMins = totalMinutes % 60;
+
+  const setTotal = (next: number) => setTotalMinutes(clampTotal(next));
 
   const handleCreate = () => {
     if (!title.trim()) {
       Alert.alert("Error", "Please enter the mini mission.");
       return;
     }
-    const minutes = Number.parseInt(estimatedMinutes, 10);
-    if (Number.isNaN(minutes) || minutes <= 0) {
-      Alert.alert("Error", "Please enter a valid estimated time in minutes.");
+    const minutes = clampTotal(totalMinutes);
+    if (minutes < MIN_FUEL_MINUTES) {
+      Alert.alert("Error", "Carry at least one minute of fuel for this mission.");
       return;
     }
 
@@ -45,6 +59,7 @@ export default function CreateMiniMission() {
       objective: objective.trim(),
       estimatedMinutes: minutes,
       startMode,
+      visibility,
     });
 
     if (startMode === "now") {
@@ -73,9 +88,9 @@ export default function CreateMiniMission() {
           <View style={styles.heroIconWrap}>
             <Zap size={18} color={theme.colors.yellow[400]} />
           </View>
-          <Text style={[styles.heroTitle, { color: theme.colors.textPrimary, fontSize: theme.typography.h3 }]}>Take Action In Small Time Blocks</Text>
+          <Text style={[styles.heroTitle, { color: theme.colors.textPrimary, fontSize: theme.typography.h3 }]}>A mission needs fuel</Text>
           <Text style={[styles.heroText, { color: theme.colors.textSecondary }]}>
-            Define the mission, state the objective, and commit to a time estimate.
+            Time is the fuel you carry—set how much you bring, choose solo or public, then launch when you are ready.
           </Text>
         </View>
 
@@ -104,17 +119,78 @@ export default function CreateMiniMission() {
           textAlignVertical="top"
         />
 
-        <Text style={[styles.label, { color: theme.colors.textSecondary, fontSize: theme.typography.caption }]}>Estimated Time (Minutes)</Text>
-        <TextInput
-          style={[styles.input, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, color: theme.colors.textPrimary, borderRadius: theme.radius.md }, focused === "minutes" && { borderColor: theme.colors.indigo[500] }]}
-          placeholder="15"
-          placeholderTextColor={theme.colors.textMuted}
-          value={estimatedMinutes}
-          onChangeText={setEstimatedMinutes}
-          onFocus={() => setFocused("minutes")}
-          onBlur={() => setFocused(null)}
-          keyboardType="number-pad"
-        />
+        <Text style={[styles.label, { color: theme.colors.textSecondary, fontSize: theme.typography.caption }]}>How much fuel to carry</Text>
+        <View style={[styles.durationCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, borderRadius: theme.radius.md }]}>
+          <View style={styles.durationRow}>
+            <Text style={[styles.durationBlockLabel, { color: theme.colors.textMuted }]}>Hours</Text>
+            <View style={styles.stepper}>
+              <TouchableOpacity
+                style={[styles.stepBtn, { borderColor: theme.colors.border, backgroundColor: theme.colors.surfaceElevated }]}
+                onPress={() => setTotal(totalMinutes - 60)}
+                disabled={totalMinutes <= MIN_FUEL_MINUTES}
+                activeOpacity={0.75}
+              >
+                <Minus size={18} color={theme.colors.textPrimary} />
+              </TouchableOpacity>
+              <Text style={[styles.stepValue, { color: theme.colors.textPrimary }]}>{displayHours}</Text>
+              <TouchableOpacity
+                style={[styles.stepBtn, { borderColor: theme.colors.border, backgroundColor: theme.colors.surfaceElevated }]}
+                onPress={() => setTotal(totalMinutes + 60)}
+                disabled={totalMinutes > MAX_FUEL_MINUTES - 60}
+                activeOpacity={0.75}
+              >
+                <Plus size={18} color={theme.colors.textPrimary} />
+              </TouchableOpacity>
+            </View>
+          </View>
+          <View style={styles.durationRow}>
+            <Text style={[styles.durationBlockLabel, { color: theme.colors.textMuted }]}>Minutes</Text>
+            <View style={styles.stepper}>
+              <TouchableOpacity
+                style={[styles.stepBtn, { borderColor: theme.colors.border, backgroundColor: theme.colors.surfaceElevated }]}
+                onPress={() => setTotal(totalMinutes - 1)}
+                disabled={totalMinutes <= MIN_FUEL_MINUTES}
+                activeOpacity={0.75}
+              >
+                <Minus size={18} color={theme.colors.textPrimary} />
+              </TouchableOpacity>
+              <Text style={[styles.stepValue, { color: theme.colors.textPrimary }]}>{displayMins}</Text>
+              <TouchableOpacity
+                style={[styles.stepBtn, { borderColor: theme.colors.border, backgroundColor: theme.colors.surfaceElevated }]}
+                onPress={() => setTotal(totalMinutes + 1)}
+                disabled={totalMinutes >= MAX_FUEL_MINUTES}
+                activeOpacity={0.75}
+              >
+                <Plus size={18} color={theme.colors.textPrimary} />
+              </TouchableOpacity>
+            </View>
+          </View>
+          <Text style={[styles.totalLine, { color: theme.colors.textSecondary }]}>
+            Fuel packed: <Text style={{ fontWeight: "800", color: theme.colors.textPrimary }}>{totalMinutes}</Text> min
+            {displayHours > 0 ? ` (${displayHours}h ${displayMins}m)` : ""}
+          </Text>
+          <Text style={[styles.durationCap, { color: theme.colors.textMuted }]}>You can carry 1 min to 8 hours of fuel</Text>
+        </View>
+
+        <Text style={[styles.label, { color: theme.colors.textSecondary, fontSize: theme.typography.caption }]}>Who can see this</Text>
+        <View style={styles.startModeRow}>
+          <TouchableOpacity
+            style={[styles.modeButton, { borderColor: theme.colors.border, backgroundColor: theme.colors.surface, borderRadius: theme.radius.md }, visibility === "solo" && { borderColor: theme.colors.indigo[500], backgroundColor: theme.colors.surfaceElevated }]}
+            onPress={() => setVisibility("solo")}
+            activeOpacity={0.85}
+          >
+            <User size={18} color={visibility === "solo" ? theme.colors.indigo[400] : theme.colors.textMuted} />
+            <Text style={[styles.modeText, { color: theme.colors.textSecondary }, visibility === "solo" && { color: theme.colors.textPrimary }]}>Solo</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.modeButton, { borderColor: theme.colors.border, backgroundColor: theme.colors.surface, borderRadius: theme.radius.md }, visibility === "public" && { borderColor: theme.colors.cyan[400], backgroundColor: theme.colors.surfaceElevated }]}
+            onPress={() => setVisibility("public")}
+            activeOpacity={0.85}
+          >
+            <Globe size={18} color={visibility === "public" ? theme.colors.cyan[400] : theme.colors.textMuted} />
+            <Text style={[styles.modeText, { color: theme.colors.textSecondary }, visibility === "public" && { color: theme.colors.textPrimary }]}>Public</Text>
+          </TouchableOpacity>
+        </View>
 
         <Text style={[styles.label, { color: theme.colors.textSecondary, fontSize: theme.typography.caption }]}>Start</Text>
         <View style={styles.startModeRow}>
@@ -156,8 +232,16 @@ const styles = StyleSheet.create({
   label: { marginBottom: 8, fontWeight: "600" },
   input: { borderWidth: 1, padding: 14, fontSize: 16, marginBottom: 16 },
   textArea: { height: 110 },
+  durationCard: { borderWidth: 1, padding: 14, marginBottom: 16, gap: 12 },
+  durationRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  durationBlockLabel: { fontSize: 12, fontWeight: "700", width: 56 },
+  stepper: { flexDirection: "row", alignItems: "center", gap: 14 },
+  stepBtn: { width: 44, height: 44, borderRadius: 12, borderWidth: 1, alignItems: "center", justifyContent: "center" },
+  stepValue: { fontSize: 22, fontWeight: "800", minWidth: 36, textAlign: "center", fontVariant: ["tabular-nums"] },
+  totalLine: { fontSize: 14, textAlign: "center" },
+  durationCap: { fontSize: 11, textAlign: "center" },
   startModeRow: { flexDirection: "row", gap: 10, marginBottom: 20 },
-  modeButton: { flex: 1, height: 46, alignItems: "center", justifyContent: "center", borderWidth: 1 },
+  modeButton: { flex: 1, minHeight: 48, alignItems: "center", justifyContent: "center", borderWidth: 1, flexDirection: "row", gap: 8 },
   modeText: { fontWeight: "700" },
   cta: { marginBottom: 20 },
 });

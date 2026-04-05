@@ -8,6 +8,7 @@ import {
   Alert,
   Vibration,
   Animated,
+  Switch,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import {
@@ -20,6 +21,8 @@ import {
   TimerReset,
   CheckCircle2,
   Flame,
+  Globe,
+  User,
 } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import {
@@ -31,6 +34,7 @@ import {
 } from "../../src/utils/notifications";
 import { Screen } from "../../src/components/Screen";
 import { Button } from "../../src/components/Button";
+import { MiniMissionFireProgressBar } from "../../src/components/MiniMissionFireProgressBar";
 import { useTheme } from "../../src/context/ThemeContext";
 import { useHabitStore } from "../../src/store/habitStore";
 
@@ -72,6 +76,7 @@ export default function MiniMissionDetail() {
   const extendMiniMission = useHabitStore((state) => state.extendMiniMission);
   const cancelMiniMission = useHabitStore((state) => state.cancelMiniMission);
   const deleteMiniMission = useHabitStore((state) => state.deleteMiniMission);
+  const setMiniMissionVisibility = useHabitStore((state) => state.setMiniMissionVisibility);
 
   const [now, setNow] = useState(Date.now());
   const hasTriggered = useRef(false);
@@ -123,6 +128,13 @@ export default function MiniMissionDetail() {
   }, [mission, now, totalMinutes]);
 
   const isTimerUp = mission?.status === "in_progress" && countdown === 0;
+
+  const missionFuelProgress = useMemo(() => {
+    if (!mission || mission.status !== "in_progress" || !mission.startedAt) return 0;
+    const totalMs = totalMinutes * 60 * 1000;
+    const elapsedMs = now - new Date(mission.startedAt).getTime();
+    return Math.min(1, Math.max(0, elapsedMs / totalMs));
+  }, [mission, now, totalMinutes]);
 
   // Timer expiry: vibrate + notify
   useEffect(() => {
@@ -259,7 +271,7 @@ export default function MiniMissionDetail() {
 
         <View style={[styles.timerCard, { borderRadius: theme.radius.lg, borderColor: theme.colors.border, backgroundColor: theme.colors.surface, ...(isTimerUp ? {} : theme.shadow.card) }, isTimerUp && styles.timerCardExpired]}>
           <Text style={[styles.timerLabel, { color: theme.colors.textMuted }]}>
-            {isTimerUp ? "TIME'S UP!" : "Estimated Sprint"}
+            {isTimerUp ? "TIME'S UP!" : "Fuel on board"}
           </Text>
           <Text style={[styles.timerValue, { color: theme.colors.textPrimary }, isTimerUp && { color: theme.colors.red[500] }]}>
             {formatDuration(countdown)}
@@ -270,10 +282,14 @@ export default function MiniMissionDetail() {
               : isTimerUp
                 ? "Did you finish? Or need a bit more time?"
                 : mission.status === "in_progress"
-                  ? "Stay focused and finish this sprint."
+                  ? "Stay with it until the mission is done."
                   : "Ready when you are."}
           </Text>
         </View>
+
+        {mission.status === "in_progress" && (
+          <MiniMissionFireProgressBar progress={missionFuelProgress} isDark={isDark} />
+        )}
 
         <View style={styles.metaRow}>
           <View style={[styles.metaPill, { borderColor: theme.colors.border, backgroundColor: theme.colors.surfaceElevated }]}>
@@ -282,6 +298,47 @@ export default function MiniMissionDetail() {
               {totalMinutes} minutes {mission.extendedMinutes > 0 ? `(+${mission.extendedMinutes})` : "planned"}
             </Text>
           </View>
+        </View>
+
+        <View
+          style={[
+            styles.visibilityRow,
+            {
+              backgroundColor: theme.colors.surface,
+              borderColor: theme.colors.border,
+              borderRadius: theme.radius.md,
+            },
+          ]}
+        >
+          {(mission.visibility ?? "solo") === "public" ? (
+            <Globe size={18} color={theme.colors.cyan[400]} />
+          ) : (
+            <User size={18} color={theme.colors.indigo[400]} />
+          )}
+          <View style={styles.visibilityTextCol}>
+            {(mission.visibility ?? "solo") === "public" ? (
+              <>
+                <Text style={[styles.visibilityTitle, { color: theme.colors.textPrimary }]}>Public</Text>
+                <Text style={[styles.visibilityHint, { color: theme.colors.textMuted }]}>
+                  Others can see this later. Turn off to keep it solo.
+                </Text>
+              </>
+            ) : (
+              <>
+                <Text style={[styles.visibilityTitle, { color: theme.colors.textPrimary }]}>Solo</Text>
+                <Text style={[styles.visibilityHint, { color: theme.colors.textMuted }]}>
+                  Only you can see this. Turn on to share with others later.
+                </Text>
+              </>
+            )}
+          </View>
+          <Switch
+            value={(mission.visibility ?? "solo") === "public"}
+            onValueChange={(v) => setMiniMissionVisibility(mission.id, v ? "public" : "solo")}
+            trackColor={{ false: theme.colors.border, true: theme.colors.indigo[600] }}
+            thumbColor={theme.colors.white}
+            ios_backgroundColor={theme.colors.border}
+          />
         </View>
 
         <View style={styles.actions}>
@@ -400,7 +457,19 @@ const styles = StyleSheet.create({
   timerLabel: { textTransform: "uppercase", letterSpacing: 1, fontWeight: "700", fontSize: 11 },
   timerValue: { fontSize: 52, fontWeight: "800", marginVertical: 2, includeFontPadding: false },
   timerHint: { textAlign: "center", marginTop: 2 },
-  metaRow: { marginTop: 16, marginBottom: 20 },
+  metaRow: { marginTop: 16, marginBottom: 12 },
+  visibilityRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    marginBottom: 16,
+  },
+  visibilityTextCol: { flex: 1 },
+  visibilityTitle: { fontWeight: "700", fontSize: 14 },
+  visibilityHint: { fontSize: 11, marginTop: 3, lineHeight: 15 },
   metaPill: { alignSelf: "flex-start", flexDirection: "row", alignItems: "center", gap: 8, borderRadius: 9999, borderWidth: 1, paddingVertical: 7, paddingHorizontal: 12 },
   metaText: { fontWeight: "700" },
   actions: { gap: 10 },

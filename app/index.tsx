@@ -177,7 +177,7 @@ export default function Home() {
                     </View>
                     <Text style={[styles.commandTitle, { color: theme.colors.textPrimary }]}>Mini Missions</Text>
                     <Text style={[styles.commandHint, { color: theme.colors.textMuted }]}>
-                        {miniMissionStats.running > 0 ? 'running now' : 'queued'}
+                        {miniMissionStats.running > 0 ? 'live now' : 'waiting'}
                     </Text>
                     <View style={[styles.commandCtaMini, { borderColor: isDark ? 'rgba(245, 158, 11, 0.3)' : 'rgba(217, 119, 6, 0.25)' }]}>
                         <ChevronRight size={14} color={theme.colors.amber[500]} strokeWidth={3} />
