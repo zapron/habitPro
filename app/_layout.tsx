@@ -1,8 +1,10 @@
 import { useEffect } from "react";
+import { View } from "react-native";
 import { Stack, useRouter, useSegments } from "expo-router";
 import { ThemeProvider } from "../src/context/ThemeContext";
 import { AuthProvider, useAuth } from "../src/context/AuthContext";
 import { SyncManager } from "../src/components/SyncManager";
+import { SyncToast } from "../src/components/SyncToast";
 import { setupNotifications } from "../src/utils/notifications";
 import { isSupabaseConfigured } from "../src/lib/env";
 
@@ -32,10 +34,11 @@ function RootLayoutNav() {
   }
 
   return (
-    <>
+    <View style={{ flex: 1 }}>
       <SyncManager />
       <Stack screenOptions={{ headerShown: false }} />
-    </>
+      <SyncToast />
+    </View>
   );
 }
 
