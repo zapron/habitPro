@@ -5,6 +5,7 @@ import { useRouter } from "expo-router";
 import { FlashList } from "@shopify/flash-list";
 import { Trophy, Bolt, Target, Plus, ChevronRight, Sun, Moon, Sunrise, Sunset, Zap } from "lucide-react-native";
 import { useHabitStore } from "../../src/store/habitStore";
+import type { AppTheme } from "../../src/styles/theme";
 import { Button } from "../../src/components/Button";
 import { HabitCard } from "../../src/components/HabitCard";
 import { Screen } from "../../src/components/Screen";
@@ -32,6 +33,21 @@ const MOTIVATIONAL_LINES = [
   "The streak doesn't build itself.",
 ];
 
+const SECTION_GAP = 16;
+
+function ListSkeleton({ theme }: { theme: AppTheme }) {
+  return (
+    <View style={skeletonStyles.wrap}>
+      {[0, 1, 2].map((i) => (
+        <View
+          key={i}
+          style={[skeletonStyles.bar, { borderColor: theme.colors.border, backgroundColor: theme.colors.surface }]}
+        />
+      ))}
+    </View>
+  );
+}
+
 export default function Home() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -41,6 +57,7 @@ export default function Home() {
   const miniMissions = useHabitStore((state) => state.miniMissions);
   const xp = useHabitStore((state) => state.xp);
   const [activeTab, setActiveTab] = useState<"active" | "completed">("active");
+  const [storeHydrated, setStoreHydrated] = useState(() => useHabitStore.persist.hasHydrated());
 
   const listBottomPad = Math.max(insets.bottom, 12) + 56;
 
@@ -89,10 +106,17 @@ export default function Home() {
     ]).start();
   }, [headerOpacity, headerSlide, reduceMotion]);
 
+  useEffect(() => {
+    const unsub = useHabitStore.persist.onFinishHydration(() => setStoreHydrated(true));
+    if (useHabitStore.persist.hasHydrated()) setStoreHydrated(true);
+    return unsub;
+  }, []);
+
   return (
     <Screen>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={theme.colors.background} />
 
+      <View style={styles.rootCol}>
       <Animated.View
         style={[styles.header, { opacity: headerOpacity, transform: [{ translateY: headerSlide }] }]}
       >
@@ -184,9 +208,14 @@ export default function Home() {
         </TouchableOpacity>
       </View>
 
+      <Text style={[styles.missionsLabel, { color: theme.colors.textMuted }]}>YOUR MISSIONS</Text>
+
       <View style={[styles.tabContainer, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
         <TouchableOpacity
-          style={[styles.tab, activeTab === "active" && [styles.activeTab, { backgroundColor: theme.colors.indigo[600], ...theme.shadow.glow }]]}
+          style={[
+            styles.tab,
+            activeTab === "active" && [styles.tabSelected, { backgroundColor: theme.colors.indigo[600], ...theme.shadow.glow }],
+          ]}
           onPress={() => setActiveTab("active")}
           activeOpacity={0.8}
         >
@@ -195,7 +224,10 @@ export default function Home() {
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.tab, activeTab === "completed" && [styles.activeTab, { backgroundColor: theme.colors.indigo[600], ...theme.shadow.glow }]]}
+          style={[
+            styles.tab,
+            activeTab === "completed" && [styles.tabSelected, { backgroundColor: theme.colors.indigo[600], ...theme.shadow.glow }],
+          ]}
           onPress={() => setActiveTab("completed")}
           activeOpacity={0.8}
         >
@@ -206,7 +238,9 @@ export default function Home() {
       </View>
 
       <View style={styles.listWrap}>
-        {filteredHabits.length === 0 ? (
+        {!storeHydrated ? (
+          <ListSkeleton theme={theme} />
+        ) : filteredHabits.length === 0 ? (
           <View style={styles.emptyState}>
             <View style={[styles.emptyIconContainer, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
               <Trophy size={50} color={theme.colors.slate[500]} />
@@ -220,7 +254,12 @@ export default function Home() {
                 : "Complete your first mission to unlock this section."}
             </Text>
             {activeTab === "active" && (
-              <Button title="Start a Mission" onPress={() => router.push("/create")} style={styles.emptyButton} />
+              <View style={styles.emptyActions}>
+                <Button title="Start a Mission" onPress={() => router.push("/create")} style={styles.emptyButton} />
+                <TouchableOpacity onPress={() => router.push("/mini")} style={styles.emptySecondary} activeOpacity={0.85}>
+                  <Text style={[styles.emptySecondaryText, { color: theme.colors.amber[500] }]}>Browse mini missions</Text>
+                </TouchableOpacity>
+              </View>
             )}
           </View>
         ) : (
@@ -233,19 +272,21 @@ export default function Home() {
           />
         )}
       </View>
+      </View>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 18 },
+  rootCol: { flex: 1, minHeight: 0 },
+  header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: SECTION_GAP },
   headerEyebrow: { fontSize: 11, fontWeight: "700", letterSpacing: 1.3 },
   headerTitle: { fontSize: 22, fontWeight: "800" },
   headerSubtitle: { marginTop: 4, fontSize: 13, fontStyle: "italic" },
   headerBadge: { width: 46, height: 46, borderRadius: 9999, alignItems: "center", justifyContent: "center", borderWidth: 1 },
   levelNumber: { fontSize: 18, fontWeight: "800", lineHeight: 20 },
   levelLabel: { fontSize: 8, fontWeight: "800", letterSpacing: 1 },
-  commandRow: { flexDirection: "row", gap: 10, marginBottom: 14 },
+  commandRow: { flexDirection: "row", gap: 10, marginBottom: SECTION_GAP },
   commandCard: { flex: 1, paddingVertical: 14, paddingHorizontal: 14, position: "relative", overflow: "hidden", borderWidth: 1 },
   commandTopRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 },
   commandIconMain: { width: 36, height: 36, borderRadius: 9999, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(34, 211, 238, 0.12)" },
@@ -256,23 +297,32 @@ const styles = StyleSheet.create({
   commandHint: { fontSize: 11 },
   commandCta: { position: "absolute", bottom: 12, right: 12, width: 28, height: 28, borderRadius: 9999, alignItems: "center", justifyContent: "center" },
   commandCtaMini: { position: "absolute", bottom: 12, right: 12, width: 28, height: 28, borderRadius: 9999, backgroundColor: "rgba(245, 158, 11, 0.15)", borderWidth: 1, alignItems: "center", justifyContent: "center" },
-  tabContainer: { flexDirection: "row", borderRadius: 14, padding: 4, marginBottom: 14, borderWidth: 1 },
-  tab: { flex: 1, paddingVertical: 10, alignItems: "center", borderRadius: 10 },
-  activeTab: {},
+  missionsLabel: { fontSize: 11, fontWeight: "800", letterSpacing: 1.2, marginBottom: 8 },
+  tabContainer: { flexDirection: "row", borderRadius: 14, padding: 4, marginBottom: 12, borderWidth: 1 },
+  tab: { flex: 1, paddingVertical: 10, alignItems: "center", borderRadius: 10, minHeight: 42, justifyContent: "center" },
+  tabSelected: { paddingVertical: 11 },
   tabText: { fontWeight: "700" },
   activeTabText: { color: "#ffffff" },
-  listWrap: { flex: 1 },
+  listWrap: { flex: 1, minHeight: 0 },
   listContent: { paddingBottom: 40 },
   emptyState: { flex: 1, justifyContent: "center", alignItems: "center" },
   emptyIconContainer: { width: 94, height: 94, borderRadius: 9999, alignItems: "center", justifyContent: "center", borderWidth: 1, marginBottom: 16 },
   emptyTitle: { fontWeight: "700", marginBottom: 8 },
   emptyDescription: { textAlign: "center", marginBottom: 20, paddingHorizontal: 24 },
+  emptyActions: { width: "100%", maxWidth: 320, alignItems: "center" },
   emptyButton: { width: "100%" },
-  xpBar: { paddingHorizontal: 14, paddingVertical: 10, marginBottom: 14, borderWidth: 1 },
+  emptySecondary: { marginTop: 4, paddingVertical: 10, paddingHorizontal: 12 },
+  emptySecondaryText: { fontSize: 14, fontWeight: "700" },
+  xpBar: { paddingHorizontal: 14, paddingVertical: 10, marginBottom: SECTION_GAP, borderWidth: 1 },
   xpInfo: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 6 },
   xpLeft: { flexDirection: "row", alignItems: "center", gap: 4 },
   xpLabel: { fontSize: 12, fontWeight: "700" },
   xpValue: { fontSize: 11, fontWeight: "600" },
   xpTrack: { height: 6, borderRadius: 3, overflow: "hidden" },
   xpFill: { height: "100%", borderRadius: 3 },
+});
+
+const skeletonStyles = StyleSheet.create({
+  wrap: { flex: 1, gap: 12, paddingVertical: 8, minHeight: 200 },
+  bar: { height: 88, borderRadius: 14, borderWidth: 1, opacity: 0.92 },
 });
