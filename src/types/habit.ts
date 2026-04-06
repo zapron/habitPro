@@ -28,6 +28,10 @@ export interface Habit {
   status: "active" | "completed" | "failed";
   /** YYYY-MM-DD → memory for that check-in */
   streakMemories?: Record<string, StreakMemory>;
+  /** When set, this habit is part of a Supabase-backed group challenge. */
+  challengeGroupId?: string | null;
+  /** IANA timezone of the challenge creator; used for which calendar day counts. */
+  challengeCreatorTimezone?: string | null;
 }
 
 export type MiniMissionStatus =
@@ -61,6 +65,11 @@ export type AddHabitInput = {
   mode: HabitMode;
   totalDays?: number; // required for manual, defaults to 21 for autopilot
   visibility?: MissionVisibility;
+  /** When joining a group challenge from a template (new habit id on accept). */
+  challengeGroupId?: string | null;
+  challengeCreatorTimezone?: string | null;
+  /** Override start date (ISO) e.g. to align with challenge start. */
+  startDate?: string;
 };
 
 export type HabitStore = {
@@ -69,7 +78,7 @@ export type HabitStore = {
   xp: number;
   /** Clears mission data (e.g. on sign-out). */
   resetStore: () => void;
-  addHabit: (input: AddHabitInput) => void;
+  addHabit: (input: AddHabitInput) => string;
   toggleCompletion: (id: string, date: string) => boolean;
   setStreakMemory: (id: string, date: string, memory: StreakMemory | null) => void;
   deleteHabit: (id: string) => void;
@@ -91,4 +100,11 @@ export type HabitStore = {
   deleteMiniMission: (id: string) => void;
   getMiniMission: (id: string) => MiniMission | undefined;
   addXp: (amount: number) => void;
+  /** Habits owned by other users in shared group challenges (read-only for UI). */
+  cohortPeerHabits: Habit[];
+  setCohortPeerHabits: (habits: Habit[]) => void;
+  setHabitChallengeMeta: (
+    id: string,
+    meta: { challengeGroupId: string | null; challengeCreatorTimezone: string | null },
+  ) => void;
 };

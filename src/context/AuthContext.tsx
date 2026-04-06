@@ -4,16 +4,19 @@ import React, {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { Session } from "@supabase/supabase-js";
 import { useHabitStore } from "../store/habitStore";
+import { useChallengeStore } from "../store/challengeStore";
 import { isSupabaseConfigured, logSupabaseEnvHint } from "../lib/env";
 import { getSupabase } from "../lib/supabase";
 import { hydrateStoreAfterAuth } from "../lib/sync";
 
 const PERSIST_KEY = "habit-storage";
+const CHALLENGE_STORAGE_KEY = "challenge-storage";
 
 type AuthContextValue = {
   session: Session | null;
@@ -33,6 +36,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [initializing, setInitializing] = useState(true);
   const [syncReady, setSyncReady] = useState(false);
+  const prevAuthUserIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     logSupabaseEnvHint();
@@ -71,6 +75,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       sub?.unsubscribe();
     };
   }, []);
+
+  useEffect(() => {
+    if (!supabaseConfigured) return;
+    const uid = session?.user?.id ?? null;
+    if (!uid) {
+      prevAuthUserIdRef.current = null;
+      return;
+    }
+    if (prevAuthUserIdRef.current !== null && prevAuthUserIdRef.current !== uid) {
+      useHabitStore.getState().resetStore();
+      useChallengeStore.getState().reset();
+      void AsyncStorage.removeItem(PERSIST_KEY);
+      void AsyncStorage.removeItem(CHALLENGE_STORAGE_KEY);
+    }
+    prevAuthUserIdRef.current = uid;
+  }, [session?.user?.id, supabaseConfigured]);
 
   useEffect(() => {
     if (!supabaseConfigured || !session?.user) {
@@ -132,9 +152,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signOut = useCallback(async () => {
     const supabase = getSupabase();
     useHabitStore.getState().resetStore();
+    useChallengeStore.getState().reset();
     setSyncReady(false);
     try {
       await AsyncStorage.removeItem(PERSIST_KEY);
+      await AsyncStorage.removeItem(CHALLENGE_STORAGE_KEY);
     } catch {
       /* ignore */
     }

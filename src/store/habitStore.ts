@@ -39,6 +39,8 @@ const migrateHabit = (h: any): Habit => ({
     h.streakMemories && typeof h.streakMemories === "object"
       ? h.streakMemories
       : undefined,
+  challengeGroupId: h.challengeGroupId ?? null,
+  challengeCreatorTimezone: h.challengeCreatorTimezone ?? null,
   // endDate is intentionally left undefined for autopilot
 });
 
@@ -48,9 +50,34 @@ export const useHabitStore = create<HabitStore>()(
       habits: [],
       miniMissions: [],
       xp: 0,
-      resetStore: () => set({ habits: [], miniMissions: [], xp: 0 }),
-      addHabit: ({ title, description, mode, totalDays: customDays, visibility }) => {
-        const now = new Date().toISOString();
+      cohortPeerHabits: [],
+      setCohortPeerHabits: (cohortPeerHabits) => set({ cohortPeerHabits }),
+      setHabitChallengeMeta: (id, meta) => {
+        set((state) => ({
+          habits: state.habits.map((h) =>
+            h.id === id
+              ? {
+                  ...h,
+                  challengeGroupId: meta.challengeGroupId,
+                  challengeCreatorTimezone: meta.challengeCreatorTimezone,
+                }
+              : h,
+          ),
+        }));
+        requestRemoteSync({ immediate: true });
+      },
+      resetStore: () => set({ habits: [], miniMissions: [], xp: 0, cohortPeerHabits: [] }),
+      addHabit: ({
+        title,
+        description,
+        mode,
+        totalDays: customDays,
+        visibility,
+        challengeGroupId,
+        challengeCreatorTimezone,
+        startDate: startDateOverride,
+      }) => {
+        const now = startDateOverride ?? new Date().toISOString();
         const totalDays =
           mode === "manual" ? Math.max(3, Math.min(365, customDays ?? 21)) : 21;
         const vis: MissionVisibility =
@@ -71,9 +98,16 @@ export const useHabitStore = create<HabitStore>()(
           totalDays,
           isCompleted: false,
           status: "active",
+          ...(challengeGroupId
+            ? {
+                challengeGroupId,
+                challengeCreatorTimezone: challengeCreatorTimezone ?? null,
+              }
+            : {}),
         };
         set((state) => ({ habits: [...state.habits, newHabit] }));
         requestRemoteSync({ immediate: true });
+        return newHabit.id;
       },
       toggleCompletion: (id, date) => {
         const habitBefore = get().habits.find((h) => h.id === id);

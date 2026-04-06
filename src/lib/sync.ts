@@ -8,7 +8,9 @@ import type {
 import { getDerivedState } from "../utils/habitDerived";
 import { getSupabase } from "./supabase";
 
-type RemoteSnapshot = Pick<HabitStore, "habits" | "miniMissions" | "xp">;
+type RemoteSnapshot = Pick<HabitStore, "habits" | "miniMissions" | "xp"> & {
+  cohortPeerHabits: Habit[];
+};
 
 function habitFromRow(row: {
   user_id: string;
@@ -25,6 +27,8 @@ function habitFromRow(row: {
   is_completed: boolean;
   status: string;
   streak_memories?: unknown;
+  challenge_group_id?: string | null;
+  challenge_creator_timezone?: string | null;
 }): Habit {
   const vis: MissionVisibility =
     row.visibility === "public" || row.visibility === "solo"
@@ -51,6 +55,8 @@ function habitFromRow(row: {
     isCompleted: d.isCompleted,
     status: d.status,
     streakMemories,
+    challengeGroupId: row.challenge_group_id ?? null,
+    challengeCreatorTimezone: row.challenge_creator_timezone ?? null,
   };
 }
 
@@ -70,6 +76,8 @@ function habitToRow(sessionUserId: string, h: Habit) {
     is_completed: h.isCompleted,
     status: h.status,
     streak_memories: h.streakMemories ?? {},
+    challenge_group_id: h.challengeGroupId ?? null,
+    challenge_creator_timezone: h.challengeCreatorTimezone ?? null,
   };
 }
 
@@ -155,7 +163,7 @@ function miniToRow(sessionUserId: string, m: MiniMission) {
 export async function pullFromSupabase(userId: string): Promise<RemoteSnapshot> {
   const supabase = getSupabase();
   if (!supabase) {
-    return { habits: [], miniMissions: [], xp: 0 };
+    return { habits: [], miniMissions: [], xp: 0, cohortPeerHabits: [] };
   }
 
   const [habitsRes, miniRes, profileRes] = await Promise.all([
@@ -172,7 +180,24 @@ export async function pullFromSupabase(userId: string): Promise<RemoteSnapshot> 
   const miniMissions = (miniRes.data ?? []).map((r) => miniFromRow(r));
   const xp = profileRes.data?.xp ?? 0;
 
-  return { habits, miniMissions, xp };
+  const { data: memberRows } = await supabase
+    .from("challenge_members")
+    .select("challenge_id")
+    .eq("user_id", userId);
+
+  const groupIds = [...new Set((memberRows ?? []).map((m) => m.challenge_id))];
+  let cohortPeerHabits: Habit[] = [];
+  if (groupIds.length > 0) {
+    const { data: peerRows, error: peerErr } = await supabase
+      .from("habits")
+      .select("*")
+      .in("challenge_group_id", groupIds)
+      .neq("user_id", userId);
+    if (peerErr) throw peerErr;
+    cohortPeerHabits = (peerRows ?? []).map((r) => habitFromRow(r));
+  }
+
+  return { habits, miniMissions, xp, cohortPeerHabits };
 }
 
 export async function pushFullState(
@@ -265,6 +290,28 @@ function localHasData(state: Pick<HabitStore, "habits" | "miniMissions" | "xp">)
 }
 
 /**
+ * Whether local offline data is safe to stamp onto this Supabase user.
+ * Blocks cross-account leaks: another user's synced rows, or orphan XP after a bad sign-out.
+ */
+function localCanUploadAsFirstUser(
+  local: Pick<HabitStore, "habits" | "miniMissions" | "xp">,
+  userId: string,
+): boolean {
+  if (!localHasData(local)) return false;
+  const habitWrongOwner = local.habits.some(
+    (h) => h.ownerUserId != null && h.ownerUserId !== userId,
+  );
+  const miniWrongOwner = local.miniMissions.some(
+    (m) => m.ownerUserId != null && m.ownerUserId !== userId,
+  );
+  if (habitWrongOwner || miniWrongOwner) return false;
+  if (local.habits.length === 0 && local.miniMissions.length === 0 && local.xp > 0) {
+    return false;
+  }
+  return true;
+}
+
+/**
  * After sign-in: if the server has no rows but this device had offline data, upload it.
  * Otherwise apply the remote snapshot (remote wins when any server data exists).
  */
@@ -276,7 +323,7 @@ export async function hydrateStoreAfterAuth(
   const local = getLocal();
   const remote = await pullFromSupabase(userId);
 
-  if (isRemoteEmpty(remote) && localHasData(local)) {
+  if (isRemoteEmpty(remote) && localCanUploadAsFirstUser(local, userId)) {
     const stamped: RemoteSnapshot = {
       habits: local.habits.map((h) => ({
         ...h,
@@ -287,6 +334,7 @@ export async function hydrateStoreAfterAuth(
         ownerUserId: m.ownerUserId ?? userId,
       })),
       xp: local.xp,
+      cohortPeerHabits: [],
     };
     apply(stamped);
     await pushFullState(userId, stamped);
