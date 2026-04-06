@@ -5,7 +5,7 @@ import { useIsFocused } from "@react-navigation/native";
 import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { FlashList } from "@shopify/flash-list";
-import { Clock3, CircleCheck, ArrowLeft, Check, Timer, Globe } from "lucide-react-native";
+import { Clock3, CircleCheck, ArrowLeft, Check, Timer, Globe, Sparkles } from "lucide-react-native";
 import { Screen } from "../../src/components/Screen";
 import { Button } from "../../src/components/Button";
 import { MiniMissionFireProgressBar } from "../../src/components/MiniMissionFireProgressBar";
@@ -53,7 +53,7 @@ function MiniMissionCard({ item, now }: { item: MiniMission; now: number }) {
 
   // Status styling
   const statusConfig = isTimerUp
-    ? { label: "⏰ Time's Up!", color: "#ef4444" }
+    ? { label: "Failed", color: "#ef4444" }
     : isInProgress
       ? { label: "🔥 On mission", color: "#f97316" }
       : isCompleted
@@ -142,6 +142,12 @@ function MiniMissionCard({ item, now }: { item: MiniMission; now: number }) {
               Done in {Math.ceil((new Date(item.completedAt).getTime() - new Date(item.startedAt).getTime()) / 60000)} min
             </Text>
           </View>
+          {(item.completionMemory?.note || item.completionMemory?.imageUri) && (
+            <View style={styles.momentBadge}>
+              <Sparkles size={12} color={theme.colors.amber[500]} />
+              <Text style={[styles.momentBadgeText, { color: theme.colors.amber[500] }]}>Moment</Text>
+            </View>
+          )}
           <Text style={[styles.totalTime, { color: theme.colors.textMuted }]}>of {totalMinutes} min</Text>
         </View>
       )}
@@ -354,9 +360,21 @@ const styles = StyleSheet.create({
   remainLabel: { fontSize: 11, fontWeight: "600" },
   totalTime: { fontSize: 11, fontWeight: "600" },
   // Footer (queued / completed)
-  cardFooter: { marginTop: 10, flexDirection: "row", alignItems: "center", gap: 8 },
+  cardFooter: { marginTop: 10, flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" },
   metaPill: { flexDirection: "row", alignItems: "center", gap: 6, borderRadius: 9999, borderWidth: 1, paddingVertical: 4, paddingHorizontal: 10 },
   metaText: { fontSize: 12, fontWeight: "700" },
+  momentBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 9999,
+    borderWidth: 1,
+    borderColor: "rgba(245, 158, 11, 0.35)",
+    backgroundColor: "rgba(245, 158, 11, 0.12)",
+  },
+  momentBadgeText: { fontSize: 11, fontWeight: "800" },
   // Empty state
   empty: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 24 },
   emptyTitle: { marginTop: 12, marginBottom: 8, fontWeight: "700", textAlign: "center" },
