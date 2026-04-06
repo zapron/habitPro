@@ -5,6 +5,8 @@ import { useTheme } from "../context/ThemeContext";
 import { subscribeSyncFailure } from "../lib/syncQueue";
 
 const DISPLAY_MS = 4200;
+/** Avoid spamming the user when debounced sync retries fail repeatedly. */
+const TOAST_COOLDOWN_MS = 45_000;
 
 /** Bottom banner when remote sync fails (local data is still on device). */
 export function SyncToast() {
@@ -12,9 +14,13 @@ export function SyncToast() {
   const insets = useSafeAreaInsets();
   const [visible, setVisible] = useState(false);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastToastAt = useRef(0);
 
   useEffect(() => {
     return subscribeSyncFailure(() => {
+      const now = Date.now();
+      if (now - lastToastAt.current < TOAST_COOLDOWN_MS) return;
+      lastToastAt.current = now;
       if (hideTimer.current) clearTimeout(hideTimer.current);
       setVisible(true);
       hideTimer.current = setTimeout(() => {

@@ -1,4 +1,10 @@
-import type { Habit, HabitStore, MiniMission, MissionVisibility } from "../types/habit";
+import type {
+  Habit,
+  HabitStore,
+  MiniMission,
+  MissionVisibility,
+  StreakMemory,
+} from "../types/habit";
 import { getDerivedState } from "../utils/habitDerived";
 import { getSupabase } from "./supabase";
 
@@ -18,12 +24,18 @@ function habitFromRow(row: {
   total_days: number;
   is_completed: boolean;
   status: string;
+  streak_memories?: unknown;
 }): Habit {
   const vis: MissionVisibility =
     row.visibility === "public" || row.visibility === "solo"
       ? row.visibility
       : "solo";
   const d = getDerivedState(row.completed_dates ?? [], row.total_days ?? 21);
+  const rawMem = row.streak_memories;
+  const streakMemories =
+    rawMem && typeof rawMem === "object" && !Array.isArray(rawMem)
+      ? (rawMem as Habit["streakMemories"])
+      : undefined;
   return {
     ownerUserId: row.user_id,
     id: row.id,
@@ -38,6 +50,7 @@ function habitFromRow(row: {
     totalDays: d.totalDays,
     isCompleted: d.isCompleted,
     status: d.status,
+    streakMemories,
   };
 }
 
@@ -56,7 +69,33 @@ function habitToRow(sessionUserId: string, h: Habit) {
     total_days: h.totalDays,
     is_completed: h.isCompleted,
     status: h.status,
+    streak_memories: h.streakMemories ?? {},
   };
+}
+
+function miniCompletionMemoryFromRow(
+  raw: unknown,
+): StreakMemory | undefined {
+  if (raw == null || raw === "") return undefined;
+  try {
+    const o = typeof raw === "string" ? JSON.parse(raw) : raw;
+    if (!o || typeof o !== "object") return undefined;
+    const rec = o as Record<string, unknown>;
+    const note = typeof rec.note === "string" ? rec.note : undefined;
+    const imageUri = typeof rec.imageUri === "string" ? rec.imageUri : undefined;
+    const createdAt =
+      typeof rec.createdAt === "string"
+        ? rec.createdAt
+        : new Date().toISOString();
+    if (!note && !imageUri) return undefined;
+    return {
+      createdAt,
+      ...(note ? { note } : {}),
+      ...(imageUri ? { imageUri } : {}),
+    };
+  } catch {
+    return undefined;
+  }
 }
 
 function miniFromRow(row: {
@@ -72,6 +111,7 @@ function miniFromRow(row: {
   scheduled_start_at: string | null;
   started_at: string | null;
   completed_at: string | null;
+  completion_memory?: unknown | null;
 }): MiniMission {
   const vis: MissionVisibility =
     row.visibility === "public" || row.visibility === "solo"
@@ -90,6 +130,7 @@ function miniFromRow(row: {
     scheduledStartAt: row.scheduled_start_at ?? undefined,
     startedAt: row.started_at ?? undefined,
     completedAt: row.completed_at ?? undefined,
+    completionMemory: miniCompletionMemoryFromRow(row.completion_memory),
   };
 }
 
@@ -107,6 +148,7 @@ function miniToRow(sessionUserId: string, m: MiniMission) {
     scheduled_start_at: m.scheduledStartAt ?? null,
     started_at: m.startedAt ?? null,
     completed_at: m.completedAt ?? null,
+    completion_memory: m.completionMemory ?? null,
   };
 }
 
