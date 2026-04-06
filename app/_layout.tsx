@@ -6,6 +6,8 @@ import { AuthProvider, useAuth } from "../src/context/AuthContext";
 import { SyncManager } from "../src/components/SyncManager";
 import { SyncToast } from "../src/components/SyncToast";
 import { setupNotifications } from "../src/utils/notifications";
+import { syncMiniMissionNotifications } from "../src/utils/miniMissionNotifications";
+import { useHabitStore } from "../src/store/habitStore";
 import { isSupabaseConfigured } from "../src/lib/env";
 
 function RootLayoutNav() {
@@ -16,6 +18,31 @@ function RootLayoutNav() {
 
   useEffect(() => {
     void setupNotifications();
+  }, []);
+
+  useEffect(() => {
+    const runSync = () => {
+      void syncMiniMissionNotifications(useHabitStore.getState().miniMissions);
+    };
+
+    const unsubHydration = useHabitStore.persist.onFinishHydration(() => {
+      runSync();
+    });
+    if (useHabitStore.persist.hasHydrated()) {
+      runSync();
+    }
+
+    let prevMiniMissions = useHabitStore.getState().miniMissions;
+    const unsub = useHabitStore.subscribe((state) => {
+      if (state.miniMissions === prevMiniMissions) return;
+      prevMiniMissions = state.miniMissions;
+      runSync();
+    });
+
+    return () => {
+      unsubHydration();
+      unsub();
+    };
   }, []);
 
   useEffect(() => {

@@ -34,7 +34,14 @@
     "plugins": [
       "expo-router",
       "expo-notifications",
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow habitPro to attach photos to your streak memories.",
+          "cameraPermission": "Allow habitPro to capture photos for streak memories."
+        }
+      ]
     ],
     "extra": {
       "router": {},
