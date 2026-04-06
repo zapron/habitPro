@@ -6,7 +6,14 @@ import {
   registerSyncSnapshotGetter,
   requestRemoteSync,
 } from "../lib/syncQueue";
-import { Habit, HabitStore, MiniMission, type MissionVisibility } from "../types/habit";
+import {
+  Habit,
+  HabitStore,
+  MiniMission,
+  type MissionVisibility,
+  type StreakMemory,
+} from "../types/habit";
+import { MAX_RESERVE_FUEL_MINUTES } from "../constants/miniMission";
 import { getDerivedState } from "../utils/habitDerived";
 import { isHabitCalendarDateToggleable } from "../utils/missionDaySlots";
 
@@ -28,6 +35,10 @@ const migrateHabit = (h: any): Habit => ({
   ownerUserId: h.ownerUserId ?? null,
   visibility:
     h.visibility === "public" || h.visibility === "solo" ? h.visibility : "solo",
+  streakMemories:
+    h.streakMemories && typeof h.streakMemories === "object"
+      ? h.streakMemories
+      : undefined,
   // endDate is intentionally left undefined for autopilot
 });
 
@@ -86,12 +97,19 @@ export const useHabitStore = create<HabitStore>()(
               habit.totalDays,
             );
 
+            let nextMemories = habit.streakMemories ?? {};
+            if (isAlreadyCompleted) {
+              nextMemories = { ...nextMemories };
+              delete nextMemories[date];
+            }
+
             return {
               ...habit,
               completedDates: normalized,
               streak,
               isCompleted,
               status,
+              streakMemories: nextMemories,
             };
           });
           return { habits: updatedHabits };
@@ -115,6 +133,22 @@ export const useHabitStore = create<HabitStore>()(
         }
         return changed;
       },
+      setStreakMemory: (id, date, memory) => {
+        set((state) => ({
+          habits: state.habits.map((habit) => {
+            if (habit.id !== id) return habit;
+            const next = { ...(habit.streakMemories ?? {}) };
+            if (memory === null) {
+              delete next[date];
+            } else {
+              if (next[date]) return habit;
+              next[date] = memory;
+            }
+            return { ...habit, streakMemories: next };
+          }),
+        }));
+        requestRemoteSync({ immediate: false });
+      },
       deleteHabit: (id) => {
         set((state) => ({
           habits: state.habits.filter((h) => h.id !== id),
@@ -133,6 +167,7 @@ export const useHabitStore = create<HabitStore>()(
               isCompleted: false,
               status: "active",
               startDate: now,
+              streakMemories: {},
               endDate:
                 h.mode === "manual"
                   ? calculateEndDate(now, h.totalDays)
@@ -205,9 +240,17 @@ export const useHabitStore = create<HabitStore>()(
         }));
         requestRemoteSync({ immediate: false });
       },
-      completeMiniMission: (id) => {
+      completeMiniMission: (id, memory) => {
         const now = new Date().toISOString();
         const mission = get().miniMissions.find((m) => m.id === id);
+        let completionMemory: StreakMemory | undefined;
+        if (memory && (memory.note || memory.imageUri)) {
+          completionMemory = {
+            createdAt: memory.createdAt ?? now,
+            ...(memory.note ? { note: memory.note } : {}),
+            ...(memory.imageUri ? { imageUri: memory.imageUri } : {}),
+          };
+        }
         set((state) => ({
           miniMissions: state.miniMissions.map((m) => {
             if (m.id !== id) return m;
@@ -216,6 +259,7 @@ export const useHabitStore = create<HabitStore>()(
               status: "completed",
               completedAt: now,
               startedAt: m.startedAt ?? now,
+              ...(completionMemory ? { completionMemory } : {}),
             };
           }),
         }));
@@ -225,7 +269,7 @@ export const useHabitStore = create<HabitStore>()(
         if (mission?.startedAt) {
           const elapsed = Date.now() - new Date(mission.startedAt).getTime();
           const allocated =
-            (mission.estimatedMinutes + mission.extendedMinutes) * 60_000;
+            (mission.estimatedMinutes + (mission.extendedMinutes ?? 0)) * 60_000;
           if (elapsed < allocated) xpGain += 10; // early finish bonus
         }
         get().addXp(xpGain);
@@ -249,9 +293,15 @@ export const useHabitStore = create<HabitStore>()(
           miniMissions: state.miniMissions.map((mission) => {
             if (mission.id !== id) return mission;
             if (mission.status !== "in_progress") return mission;
+            const prev = mission.extendedMinutes ?? 0;
+            const next = Math.min(
+              MAX_RESERVE_FUEL_MINUTES,
+              prev + extraMinutes,
+            );
+            if (next === prev) return mission;
             return {
               ...mission,
-              extendedMinutes: mission.extendedMinutes + extraMinutes,
+              extendedMinutes: next,
             };
           }),
         }));
