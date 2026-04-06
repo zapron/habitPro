@@ -15,7 +15,10 @@ import { subscribeSyncFailure, subscribeSyncSuccess } from '../../src/lib/syncQu
 import type { MissionVisibility } from '../../src/types/habit';
 import { ConfettiBurst } from '../../src/components/ConfettiBurst';
 import { StreakBanner } from '../../src/components/StreakBanner';
-import { getActiveMissionDaySlot } from '../../src/utils/missionDaySlots';
+import { getActiveMissionDaySlot, isHabitCalendarDateToggleable } from '../../src/utils/missionDaySlots';
+import { StreakMemorySheet } from '../../src/components/StreakMemorySheet';
+import { StreakMemoryGallery } from '../../src/components/StreakMemoryGallery';
+import type { StreakMemory } from '../../src/types/habit';
 
 function getMilestones(totalDays: number, mode: string): number[] {
     if (mode === 'autopilot') return [7, 14, 21];
@@ -26,7 +29,7 @@ function getMilestones(totalDays: number, mode: string): number[] {
 }
 
 function AnimatedDayCell({
-    day, isCompleted, isMilestone, isCurrentMissionDay, locked, canInteract, onPress,
+    day, isCompleted, isMilestone, isCurrentMissionDay, locked, canInteract, hasMemory, onPress, onLongPress,
 }: {
     day: number;
     isCompleted: boolean;
@@ -36,7 +39,11 @@ function AnimatedDayCell({
     /** Not yet unlocked, missed, or mission ended — show lock when incomplete */
     locked: boolean;
     canInteract: boolean;
+    /** Saved photo/note for this check-in */
+    hasMemory: boolean;
     onPress: () => void;
+    /** e.g. remove check-in when a saved moment exists */
+    onLongPress?: () => void;
 }) {
     const { theme } = useTheme();
     const reduceMotion = useReducedMotion();
@@ -88,7 +95,14 @@ function AnimatedDayCell({
 
     return (
         <Animated.View style={{ width: '13%', aspectRatio: 1, marginBottom: 14, transform: [{ scale: animatedScale as any }] }}>
-            <TouchableOpacity onPress={handlePress} style={dayButtonStyle} activeOpacity={0.8} disabled={!canInteract}>
+            <TouchableOpacity
+                onPress={handlePress}
+                onLongPress={onLongPress}
+                delayLongPress={380}
+                style={dayButtonStyle}
+                activeOpacity={0.8}
+                disabled={!canInteract}
+            >
                 {isCompleted ? (
                     <Animated.View style={[styles.badgeWrap, isMilestone && { opacity: shimmerOpacity }]}>
                         {isMilestone ? <View style={styles.milestoneHalo} /> : null}
@@ -100,6 +114,9 @@ function AnimatedDayCell({
                         ) : (
                             <Sparkles size={9} color={theme.colors.cyan[400]} style={styles.badgeAccent} />
                         )}
+                        {hasMemory ? (
+                            <View style={[styles.memoryDot, { backgroundColor: theme.colors.amber[500], borderColor: theme.colors.surface }]} />
+                        ) : null}
                     </Animated.View>
                 ) : locked ? (
                     <Lock size={15} color={theme.colors.textMuted} />
@@ -119,6 +136,7 @@ export default function HabitDetail() {
 
     const habit = useHabitStore((state) => (habitId ? state.getHabit(habitId) : undefined));
     const toggleCompletion = useHabitStore((state) => state.toggleCompletion);
+    const setStreakMemory = useHabitStore((state) => state.setStreakMemory);
     const resetHabit = useHabitStore((state) => state.resetHabit);
     const deleteHabit = useHabitStore((state) => state.deleteHabit);
     const setHabitVisibility = useHabitStore((state) => state.setHabitVisibility);
@@ -155,6 +173,12 @@ export default function HabitDetail() {
     const gridRef = useRef<View>(null);
     const [gridLayout, setGridLayout] = useState({ x: 0, y: 0 });
     const [now, setNow] = useState(() => Date.now());
+    type MemoryUiState =
+        | { kind: 'create'; dateStr: string; day: number; dayIndex: number }
+        | { kind: 'view'; memory: StreakMemory; dateStr: string; day: number }
+        | null;
+    const [memoryUi, setMemoryUi] = useState<MemoryUiState>(null);
+    const pendingMemoryRef = useRef<{ dateStr: string; day: number; dayIndex: number } | null>(null);
 
     useEffect(() => {
         const t = setInterval(() => setNow(Date.now()), 60_000);
@@ -165,6 +189,53 @@ export default function HabitDetail() {
         useCallback(() => {
             setNow(Date.now());
         }, []),
+    );
+
+    const memoryGalleryEntries = useMemo(() => {
+        const raw = habit?.streakMemories ?? {};
+        return Object.entries(raw)
+            .map(([dateStr, memory]) => ({ dateStr, memory }))
+            .sort((a, b) => (a.dateStr < b.dateStr ? 1 : -1));
+    }, [habit?.streakMemories]);
+
+    const fireCompletionCelebration = useCallback(
+        (dayIndex: number, day: number, isMilestone: boolean) => {
+            const col = dayIndex % 7;
+            const row = Math.floor(dayIndex / 7);
+            const cellSize = 50;
+            const x = col * cellSize + cellSize / 2;
+            const y = row * cellSize + cellSize / 2;
+            setConfetti({ active: false, milestone: false, x: 0, y: 0 });
+            setTimeout(() => {
+                setConfetti({ active: true, milestone: isMilestone, x, y });
+            }, 50);
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        },
+        [],
+    );
+
+    const handleMemoryCommit = useCallback(
+        (memory: StreakMemory | null) => {
+            const ctx = pendingMemoryRef.current;
+            pendingMemoryRef.current = null;
+            setMemoryUi(null);
+            if (!ctx || !habit) return;
+
+            const changed = toggleCompletion(habit.id, ctx.dateStr);
+            if (!changed) {
+                Alert.alert(
+                    'Locked',
+                    'You can only check in for the current mission day. Each day unlocks 24 hours after the mission started (day 2 after the first 24 hours, and so on).',
+                );
+                return;
+            }
+            if (memory) {
+                setStreakMemory(habit.id, ctx.dateStr, memory);
+            }
+            const isMilestone = milestones.includes(ctx.day);
+            fireCompletionCelebration(ctx.dayIndex, ctx.day, isMilestone);
+        },
+        [habit, toggleCompletion, setStreakMemory, milestones, fireCompletionCelebration],
     );
 
     if (!habit) {
@@ -200,9 +271,49 @@ export default function HabitDetail() {
         return start.toISOString().split('T')[0];
     };
 
+    const isManual = mode === 'manual';
+    const activeMissionDaySlot = getActiveMissionDaySlot(habit.startDate, now, totalDays);
+
+    const handleDayLongPress = (dayIndex: number, day: number) => {
+        const dateStr = getDayDate(dayIndex);
+        const mem = habit.streakMemories?.[dateStr];
+        const canInteract = activeMissionDaySlot !== null && day === activeMissionDaySlot;
+        if (!mem || !canInteract) return;
+        Alert.alert('Remove check-in?', 'This deletes your saved moment for this day.', [
+            { text: 'Cancel', style: 'cancel' },
+            {
+                text: 'Remove',
+                style: 'destructive',
+                onPress: () => {
+                    toggleCompletion(habit.id, dateStr);
+                },
+            },
+        ]);
+    };
+
     const handleDayPress = (dayIndex: number, day: number) => {
         const dateStr = getDayDate(dayIndex);
         const wasCompleted = habit.completedDates.includes(dateStr);
+        const canInteract = activeMissionDaySlot !== null && day === activeMissionDaySlot;
+
+        if (!wasCompleted) {
+            if (!isHabitCalendarDateToggleable(habit, dateStr, Date.now())) {
+                Alert.alert(
+                    'Locked',
+                    'You can only check in for the current mission day. Each day unlocks 24 hours after the mission started (day 2 after the first 24 hours, and so on).',
+                );
+                return;
+            }
+            pendingMemoryRef.current = { dateStr, day, dayIndex };
+            setMemoryUi({ kind: 'create', dateStr, day, dayIndex });
+            return;
+        }
+
+        if (canInteract && habit.streakMemories?.[dateStr]) {
+            setMemoryUi({ kind: 'view', memory: habit.streakMemories[dateStr], dateStr, day });
+            return;
+        }
+
         const changed = toggleCompletion(habit.id, dateStr);
         if (!changed) {
             Alert.alert(
@@ -211,24 +322,8 @@ export default function HabitDetail() {
             );
             return;
         }
-
-        if (!wasCompleted) {
-            const isMilestone = milestones.includes(day);
-            const col = dayIndex % 7;
-            const row = Math.floor(dayIndex / 7);
-            const cellSize = 50;
-            const x = col * cellSize + cellSize / 2;
-            const y = row * cellSize + cellSize / 2;
-            setConfetti({ active: false, milestone: false, x: 0, y: 0 });
-            setTimeout(() => { setConfetti({ active: true, milestone: isMilestone, x, y }); }, 50);
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        } else {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        }
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     };
-
-    const isManual = mode === 'manual';
-    const activeMissionDaySlot = getActiveMissionDaySlot(habit.startDate, now, totalDays);
 
     return (
         <Screen>
@@ -247,6 +342,19 @@ export default function HabitDetail() {
                     </TouchableOpacity>
                 </View>
             </View>
+
+            <StreakMemorySheet
+                visible={memoryUi !== null}
+                mode={memoryUi?.kind === 'view' ? 'view' : 'create'}
+                viewMemory={memoryUi?.kind === 'view' ? memoryUi.memory : undefined}
+                missionTitle={habit.title}
+                dayLabel={memoryUi ? String(memoryUi.day) : '1'}
+                onClose={() => {
+                    pendingMemoryRef.current = null;
+                    setMemoryUi(null);
+                }}
+                onCommit={memoryUi?.kind !== 'view' ? handleMemoryCommit : undefined}
+            />
 
             <ScrollView showsVerticalScrollIndicator={false}>
                 <View style={[styles.modeBadge, isManual && styles.modeBadgeManual]}>
@@ -323,6 +431,7 @@ export default function HabitDetail() {
                         const canInteract = activeMissionDaySlot !== null && day === activeMissionDaySlot;
                         const locked = !isCompleted && !canInteract;
                         const isCurrentMissionDay = canInteract && !isCompleted;
+                        const hasMemory = Boolean(habit.streakMemories?.[dateStr]);
 
                         return (
                             <AnimatedDayCell
@@ -333,7 +442,13 @@ export default function HabitDetail() {
                                 isCurrentMissionDay={isCurrentMissionDay}
                                 locked={locked}
                                 canInteract={canInteract}
+                                hasMemory={hasMemory}
                                 onPress={() => handleDayPress(index, day)}
+                                onLongPress={
+                                    isCompleted && hasMemory && canInteract
+                                        ? () => handleDayLongPress(index, day)
+                                        : undefined
+                                }
                             />
                         );
                     })}
@@ -344,6 +459,8 @@ export default function HabitDetail() {
                         return Array.from({ length: 7 - remainder }, (_, i) => <View key={`ph-${i}`} style={styles.dayButtonPlaceholder} />);
                     })()}
                 </View>
+
+                <StreakMemoryGallery entries={memoryGalleryEntries} />
             </ScrollView>
         </Screen>
     );
@@ -389,5 +506,6 @@ const styles = StyleSheet.create({
     completedDayText: { color: '#ffffff', fontSize: 14, fontWeight: '800' },
     completedDayTextMilestone: { color: '#fff7dc' },
     badgeAccent: { position: 'absolute', top: 6, right: 6 },
+    memoryDot: { position: 'absolute', bottom: 5, width: 7, height: 7, borderRadius: 4, borderWidth: 1.5 },
     dayButtonPlaceholder: { width: '13%', aspectRatio: 1, marginBottom: 14 },
 });
