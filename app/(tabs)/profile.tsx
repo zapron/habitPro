@@ -2,14 +2,24 @@ import { useMemo, useState } from "react";
 import type { ComponentType } from "react";
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, StatusBar } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Settings, Zap, Globe, User, Target, Flame } from "lucide-react-native";
+import { useRouter } from "expo-router";
+import { Settings, Zap, Globe, User, Target, Flame, Bell } from "lucide-react-native";
 import { Screen } from "../../src/components/Screen";
 import { useTheme } from "../../src/context/ThemeContext";
 import { useAuth } from "../../src/context/AuthContext";
 import { useHabitStore } from "../../src/store/habitStore";
 import { isSupabaseConfigured } from "../../src/lib/env";
 import { SettingsModal } from "../../src/components/SettingsModal";
+import { HubListModal } from "../../src/components/HubListModal";
 import type { AppTheme } from "../../src/styles/theme";
+import type { MissionVisibility, MiniMission } from "../../src/types/habit";
+
+type HubSheetState =
+  | null
+  | { mode: "habits-all" }
+  | { mode: "minis-all" }
+  | { mode: "habits-filter"; visibility: MissionVisibility; status?: "active" | "done" }
+  | { mode: "minis-filter"; visibility: MissionVisibility; status?: "live" | "done" };
 
 type LucideIcon = ComponentType<{ size?: number; color?: string }>;
 
@@ -36,6 +46,9 @@ function VisibilityHabitColumn({
   accent,
   active,
   done,
+  onPressColumn,
+  onPressActive,
+  onPressDone,
 }: {
   theme: AppTheme;
   isDark: boolean;
@@ -44,43 +57,61 @@ function VisibilityHabitColumn({
   accent: string;
   active: number;
   done: number;
+  onPressColumn?: () => void;
+  onPressActive?: () => void;
+  onPressDone?: () => void;
 }) {
-  return (
-    <View
-      style={[
-        hubVisStyles.visCol,
-        {
-          borderColor: accent + "55",
-          backgroundColor: isDark ? accent + "14" : accent + "10",
-        },
-      ]}
-    >
+  const colStyle = [
+    hubVisStyles.visCol,
+    {
+      borderColor: accent + "55",
+      backgroundColor: isDark ? accent + "14" : accent + "10",
+    },
+  ];
+
+  const inner = (
+    <>
       <View style={hubVisStyles.visColHead}>
         <Icon size={14} color={accent} />
         <Text style={[hubVisStyles.visColTitle, { color: accent }]}>{title}</Text>
       </View>
       <View style={hubVisStyles.figureRow}>
-        <View
+        <TouchableOpacity
           style={[
             hubVisStyles.figureTile,
             { borderColor: theme.colors.border, backgroundColor: theme.colors.surfaceElevated },
           ]}
+          onPress={onPressActive}
+          activeOpacity={0.85}
+          disabled={!onPressActive}
         >
           <FigureLabel color={theme.colors.textMuted}>ACTIVE</FigureLabel>
           <Text style={[hubVisStyles.figureNum, { color: theme.colors.textPrimary }]}>{active}</Text>
-        </View>
-        <View
+        </TouchableOpacity>
+        <TouchableOpacity
           style={[
             hubVisStyles.figureTile,
             { borderColor: theme.colors.border, backgroundColor: theme.colors.surfaceElevated },
           ]}
+          onPress={onPressDone}
+          activeOpacity={0.85}
+          disabled={!onPressDone}
         >
           <FigureLabel color={theme.colors.textMuted}>DONE</FigureLabel>
           <Text style={[hubVisStyles.figureNum, { color: theme.colors.textPrimary }]}>{done}</Text>
-        </View>
+        </TouchableOpacity>
       </View>
-    </View>
+    </>
   );
+
+  if (onPressColumn) {
+    return (
+      <TouchableOpacity activeOpacity={0.92} onPress={onPressColumn} style={colStyle}>
+        {inner}
+      </TouchableOpacity>
+    );
+  }
+  return <View style={colStyle}>{inner}</View>;
 }
 
 function VisibilityMiniColumn({
@@ -91,6 +122,9 @@ function VisibilityMiniColumn({
   accent,
   live,
   completed,
+  onPressColumn,
+  onPressActive,
+  onPressDone,
 }: {
   theme: AppTheme;
   isDark: boolean;
@@ -99,43 +133,61 @@ function VisibilityMiniColumn({
   accent: string;
   live: number;
   completed: number;
+  onPressColumn?: () => void;
+  onPressActive?: () => void;
+  onPressDone?: () => void;
 }) {
-  return (
-    <View
-      style={[
-        hubVisStyles.visCol,
-        {
-          borderColor: accent + "55",
-          backgroundColor: isDark ? accent + "14" : accent + "10",
-        },
-      ]}
-    >
+  const colStyle = [
+    hubVisStyles.visCol,
+    {
+      borderColor: accent + "55",
+      backgroundColor: isDark ? accent + "14" : accent + "10",
+    },
+  ];
+
+  const inner = (
+    <>
       <View style={hubVisStyles.visColHead}>
         <Icon size={14} color={accent} />
         <Text style={[hubVisStyles.visColTitle, { color: accent }]}>{title}</Text>
       </View>
       <View style={hubVisStyles.figureRow}>
-        <View
+        <TouchableOpacity
           style={[
             hubVisStyles.figureTile,
             { borderColor: theme.colors.border, backgroundColor: theme.colors.surfaceElevated },
           ]}
+          onPress={onPressActive}
+          activeOpacity={0.85}
+          disabled={!onPressActive}
         >
           <FigureLabel color={theme.colors.textMuted}>ACTIVE</FigureLabel>
           <Text style={[hubVisStyles.figureNum, { color: theme.colors.amber[500] }]}>{live}</Text>
-        </View>
-        <View
+        </TouchableOpacity>
+        <TouchableOpacity
           style={[
             hubVisStyles.figureTile,
             { borderColor: theme.colors.border, backgroundColor: theme.colors.surfaceElevated },
           ]}
+          onPress={onPressDone}
+          activeOpacity={0.85}
+          disabled={!onPressDone}
         >
           <FigureLabel color={theme.colors.textMuted}>DONE</FigureLabel>
           <Text style={[hubVisStyles.figureNum, { color: theme.colors.textPrimary }]}>{completed}</Text>
-        </View>
+        </TouchableOpacity>
       </View>
-    </View>
+    </>
   );
+
+  if (onPressColumn) {
+    return (
+      <TouchableOpacity activeOpacity={0.92} onPress={onPressColumn} style={colStyle}>
+        {inner}
+      </TouchableOpacity>
+    );
+  }
+  return <View style={colStyle}>{inner}</View>;
 }
 
 const hubVisStyles = StyleSheet.create({
@@ -173,8 +225,10 @@ const hubVisStyles = StyleSheet.create({
 export default function ProfileScreen() {
   const { theme, isDark } = useTheme();
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const { session } = useAuth();
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [hubSheet, setHubSheet] = useState<HubSheetState>(null);
 
   const xp = useHabitStore((s) => s.xp);
   const habits = useHabitStore((s) => s.habits);
@@ -241,6 +295,71 @@ export default function ProfileScreen() {
     };
   }, [habits, miniMissions]);
 
+  const hubModalContent = useMemo(() => {
+    if (!hubSheet) return null;
+    const visOf = (v: string | undefined): MissionVisibility => (v === "public" ? "public" : "solo");
+    const miniLiveFn = (m: MiniMission) =>
+      m.status === "in_progress" || m.status === "pending" || m.status === "scheduled";
+
+    if (hubSheet.mode === "habits-all") {
+      return {
+        title: "All habits",
+        variant: "habits" as const,
+        items: habits,
+        emptyHint: "No habits yet. Start one from the home tab.",
+      };
+    }
+    if (hubSheet.mode === "minis-all") {
+      return {
+        title: "All mini missions",
+        variant: "minis" as const,
+        items: miniMissions,
+        emptyHint: "No mini missions yet. Open Mini Missions from home.",
+      };
+    }
+    if (hubSheet.mode === "habits-filter") {
+      const { visibility, status } = hubSheet;
+      const filtered = habits.filter((h) => {
+        if (visOf(h.visibility) !== visibility) return false;
+        if (status === "active") return !h.isCompleted;
+        if (status === "done") return h.isCompleted;
+        return true;
+      });
+      const visLabel = visibility === "public" ? "Public" : "Solo";
+      let title = `Habits · ${visLabel}`;
+      if (status === "active") title += " · Active";
+      if (status === "done") title += " · Done";
+      const emptyHint =
+        status === "active"
+          ? `No active habits in ${visLabel.toLowerCase()}.`
+          : status === "done"
+            ? `No completed habits in ${visLabel.toLowerCase()}.`
+            : `No habits in ${visLabel.toLowerCase()}.`;
+      return { title, variant: "habits" as const, items: filtered, emptyHint };
+    }
+    if (hubSheet.mode === "minis-filter") {
+      const { visibility, status } = hubSheet;
+      const filtered = miniMissions.filter((m) => {
+        if (visOf(m.visibility) !== visibility) return false;
+        if (status === "live") return miniLiveFn(m);
+        if (status === "done") return m.status === "completed";
+        return true;
+      });
+      const visLabel = visibility === "public" ? "Public" : "Solo";
+      let title = `Mini missions · ${visLabel}`;
+      if (status === "live") title += " · Active";
+      if (status === "done") title += " · Done";
+      const emptyHint =
+        status === "live"
+          ? `No active mini missions in ${visLabel.toLowerCase()}.`
+          : status === "done"
+            ? `No completed mini missions in ${visLabel.toLowerCase()}.`
+            : `No mini missions in ${visLabel.toLowerCase()}.`;
+      return { title, variant: "minis" as const, items: filtered, emptyHint };
+    }
+    return null;
+  }, [hubSheet, habits, miniMissions]);
+
   const bottomPad = Math.max(insets.bottom, 16) + 8;
   const showAccount = isSupabaseConfigured();
   const email = session?.user?.email;
@@ -256,13 +375,25 @@ export default function ProfileScreen() {
             Your progress at a glance
           </Text>
         </View>
-        <TouchableOpacity
-          onPress={() => setSettingsOpen(true)}
-          style={[styles.gearBtn, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}
-          activeOpacity={0.85}
-        >
-          <Settings size={20} color={theme.colors.textPrimary} />
-        </TouchableOpacity>
+        <View style={{ flexDirection: "row", gap: 8 }}>
+          {showAccount && session?.user ? (
+            <TouchableOpacity
+              onPress={() => router.push("/notifications")}
+              style={[styles.gearBtn, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}
+              activeOpacity={0.85}
+              accessibilityLabel="Notifications"
+            >
+              <Bell size={20} color={theme.colors.textPrimary} />
+            </TouchableOpacity>
+          ) : null}
+          <TouchableOpacity
+            onPress={() => setSettingsOpen(true)}
+            style={[styles.gearBtn, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}
+            activeOpacity={0.85}
+          >
+            <Settings size={20} color={theme.colors.textPrimary} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: bottomPad }}>
@@ -302,15 +433,27 @@ export default function ProfileScreen() {
           <Text style={[styles.hubMegaTitle, { color: theme.colors.textPrimary }]}>At a glance</Text>
 
           <View style={styles.hubHeroRow}>
-            <View style={styles.hubHeroCol}>
+            <TouchableOpacity
+              style={styles.hubHeroCol}
+              onPress={() => setHubSheet({ mode: "habits-all" })}
+              activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityLabel="View all habits"
+            >
               <Text style={[styles.hubHeroLabel, { color: theme.colors.textMuted }]}>HABITS</Text>
               <Text style={[styles.hubHeroNum, { color: theme.colors.textPrimary }]}>{missionStats.habitsTotal}</Text>
-            </View>
+            </TouchableOpacity>
             <View style={[styles.hubHeroDivider, { backgroundColor: theme.colors.border }]} />
-            <View style={styles.hubHeroCol}>
+            <TouchableOpacity
+              style={styles.hubHeroCol}
+              onPress={() => setHubSheet({ mode: "minis-all" })}
+              activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityLabel="View all mini missions"
+            >
               <Text style={[styles.hubHeroLabel, { color: theme.colors.textMuted }]}>MINI</Text>
               <Text style={[styles.hubHeroNum, { color: theme.colors.textPrimary }]}>{missionStats.minisTotal}</Text>
-            </View>
+            </TouchableOpacity>
           </View>
 
           <View
@@ -336,6 +479,9 @@ export default function ProfileScreen() {
                 accent={theme.colors.cyan[400]}
                 active={missionStats.pub.habitsActive}
                 done={missionStats.pub.habitsDone}
+                onPressColumn={() => setHubSheet({ mode: "habits-filter", visibility: "public" })}
+                onPressActive={() => setHubSheet({ mode: "habits-filter", visibility: "public", status: "active" })}
+                onPressDone={() => setHubSheet({ mode: "habits-filter", visibility: "public", status: "done" })}
               />
               <VisibilityHabitColumn
                 theme={theme}
@@ -345,6 +491,9 @@ export default function ProfileScreen() {
                 accent={theme.colors.indigo[400]}
                 active={missionStats.solo.habitsActive}
                 done={missionStats.solo.habitsDone}
+                onPressColumn={() => setHubSheet({ mode: "habits-filter", visibility: "solo" })}
+                onPressActive={() => setHubSheet({ mode: "habits-filter", visibility: "solo", status: "active" })}
+                onPressDone={() => setHubSheet({ mode: "habits-filter", visibility: "solo", status: "done" })}
               />
             </View>
 
@@ -364,6 +513,9 @@ export default function ProfileScreen() {
                 accent={theme.colors.cyan[400]}
                 live={missionStats.pub.miniLive}
                 completed={missionStats.pub.miniDone}
+                onPressColumn={() => setHubSheet({ mode: "minis-filter", visibility: "public" })}
+                onPressActive={() => setHubSheet({ mode: "minis-filter", visibility: "public", status: "live" })}
+                onPressDone={() => setHubSheet({ mode: "minis-filter", visibility: "public", status: "done" })}
               />
               <VisibilityMiniColumn
                 theme={theme}
@@ -373,6 +525,9 @@ export default function ProfileScreen() {
                 accent={theme.colors.indigo[400]}
                 live={missionStats.solo.miniLive}
                 completed={missionStats.solo.miniDone}
+                onPressColumn={() => setHubSheet({ mode: "minis-filter", visibility: "solo" })}
+                onPressActive={() => setHubSheet({ mode: "minis-filter", visibility: "solo", status: "live" })}
+                onPressDone={() => setHubSheet({ mode: "minis-filter", visibility: "solo", status: "done" })}
               />
             </View>
           </View>
@@ -382,6 +537,26 @@ export default function ProfileScreen() {
           Charts, streak heatmaps, and richer public profile cards can build on this hub later.
         </Text>
       </ScrollView>
+
+      {hubModalContent && hubModalContent.variant === "habits" ? (
+        <HubListModal
+          visible={hubSheet !== null}
+          onClose={() => setHubSheet(null)}
+          title={hubModalContent.title}
+          emptyHint={hubModalContent.emptyHint}
+          variant="habits"
+          items={hubModalContent.items}
+        />
+      ) : hubModalContent && hubModalContent.variant === "minis" ? (
+        <HubListModal
+          visible={hubSheet !== null}
+          onClose={() => setHubSheet(null)}
+          title={hubModalContent.title}
+          emptyHint={hubModalContent.emptyHint}
+          variant="minis"
+          items={hubModalContent.items}
+        />
+      ) : null}
 
       <SettingsModal visible={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </Screen>

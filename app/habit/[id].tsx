@@ -3,7 +3,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { View, Text, ScrollView, TouchableOpacity, Alert, StyleSheet, StatusBar, Animated, Easing, LayoutChangeEvent, Switch } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import { ArrowLeft, Trash2, Lock, RotateCcw, Sparkles, Star, Plane, Gamepad2, Globe, User } from 'lucide-react-native';
+import { ArrowLeft, Trash2, Lock, RotateCcw, Sparkles, Star, Plane, Gamepad2, Globe, User, Users } from 'lucide-react-native';
 import { useHabitStore } from '../../src/store/habitStore';
 import { Button } from '../../src/components/Button';
 import { Timer } from '../../src/components/Timer';
@@ -18,6 +18,7 @@ import { StreakBanner } from '../../src/components/StreakBanner';
 import { getActiveMissionDaySlot, isHabitCalendarDateToggleable } from '../../src/utils/missionDaySlots';
 import { StreakMemorySheet } from '../../src/components/StreakMemorySheet';
 import { StreakMemoryGallery } from '../../src/components/StreakMemoryGallery';
+import { GroupChallengeSheet } from '../../src/components/GroupChallengeSheet';
 import type { StreakMemory } from '../../src/types/habit';
 
 function getMilestones(totalDays: number, mode: string): number[] {
@@ -178,6 +179,7 @@ export default function HabitDetail() {
         | { kind: 'view'; memory: StreakMemory; dateStr: string; day: number }
         | null;
     const [memoryUi, setMemoryUi] = useState<MemoryUiState>(null);
+    const [groupSheetOpen, setGroupSheetOpen] = useState(false);
     const pendingMemoryRef = useRef<{ dateStr: string; day: number; dayIndex: number } | null>(null);
 
     useEffect(() => {
@@ -334,6 +336,13 @@ export default function HabitDetail() {
                     <ArrowLeft size={theme.icon.xl} color={theme.colors.textPrimary} />
                 </TouchableOpacity>
                 <View style={styles.headerActions}>
+                    <TouchableOpacity
+                        style={[styles.iconButton, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}
+                        onPress={() => setGroupSheetOpen(true)}
+                        accessibilityLabel="Group challenge"
+                    >
+                        <Users size={theme.icon.xl} color={theme.colors.cyan[400]} />
+                    </TouchableOpacity>
                     <TouchableOpacity style={styles.resetButton} onPress={handleReset}>
                         <RotateCcw size={theme.icon.xl} color={theme.colors.amber[500]} />
                     </TouchableOpacity>
@@ -342,6 +351,8 @@ export default function HabitDetail() {
                     </TouchableOpacity>
                 </View>
             </View>
+
+            <GroupChallengeSheet visible={groupSheetOpen} onClose={() => setGroupSheetOpen(false)} habit={habit} />
 
             <StreakMemorySheet
                 visible={memoryUi !== null}
