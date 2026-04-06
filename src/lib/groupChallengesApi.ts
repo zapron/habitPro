@@ -1,0 +1,252 @@
+import type { Habit } from "../types/habit";
+import type {
+  ChallengeGroupRow,
+  ChallengeInviteRow,
+  ChallengeMemberRow,
+  NotificationRow,
+  ProfileSearchRow,
+} from "../types/groupChallenge";
+import { useHabitStore } from "../store/habitStore";
+import { pullFromSupabase } from "./sync";
+import { getRemoteSyncUserId } from "./syncQueue";
+import { getSupabase } from "./supabase";
+
+function getTz(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone ?? "UTC";
+  } catch {
+    return "UTC";
+  }
+}
+
+/** YYYY-MM-DD in local calendar for `d`. */
+function localDateStr(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+/** Prefix-match on sign-up email (auth.users); requires migration `search_users_by_email_prefix`. */
+export async function searchProfilesByEmailPrefix(prefix: string): Promise<ProfileSearchRow[]> {
+  const supabase = getSupabase();
+  if (!supabase || prefix.trim().length < 3) return [];
+  const { data, error } = await supabase.rpc("search_users_by_email_prefix", {
+    p_prefix: prefix.trim(),
+    p_limit: 20,
+  });
+  if (error) throw error;
+  return (data ?? []).map((r: { id: string; email: string; display_name: string | null }) => ({
+    id: r.id,
+    email: String(r.email),
+    display_name: r.display_name,
+  }));
+}
+
+export async function createGroupChallengeFromHabit(
+  habit: Habit,
+  titleOverride?: string,
+): Promise<{ group: ChallengeGroupRow; error: Error | null }> {
+  const supabase = getSupabase();
+  if (!supabase) return { group: null as unknown as ChallengeGroupRow, error: new Error("Supabase not configured") };
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { group: null as unknown as ChallengeGroupRow, error: new Error("Not signed in") };
+
+  const creatorTz = getTz();
+  const startDate = localDateStr(new Date(habit.startDate));
+
+  const habitTemplate = {
+    title: habit.title,
+    mode: habit.mode,
+    totalDays: habit.totalDays,
+    description: habit.description ?? null,
+  };
+
+  const { data: group, error: gErr } = await supabase
+    .from("challenge_groups")
+    .insert({
+      creator_id: user.id,
+      title: titleOverride ?? `${habit.title} — group`,
+      habit_template: habitTemplate,
+      creator_timezone: creatorTz,
+      start_date: startDate,
+      status: "active",
+    })
+    .select()
+    .single();
+
+  if (gErr || !group) return { group: null as unknown as ChallengeGroupRow, error: new Error(gErr?.message ?? "create group failed") };
+
+  const { error: hErr } = await supabase
+    .from("habits")
+    .update({
+      challenge_group_id: group.id,
+      challenge_creator_timezone: creatorTz,
+    })
+    .eq("user_id", user.id)
+    .eq("id", habit.id);
+
+  if (hErr) return { group: null as unknown as ChallengeGroupRow, error: new Error(hErr.message) };
+
+  const { error: mErr } = await supabase.from("challenge_members").insert({
+    challenge_id: group.id,
+    user_id: user.id,
+    habit_id: habit.id,
+    role: "creator",
+  });
+
+  if (mErr) return { group: null as unknown as ChallengeGroupRow, error: new Error(mErr.message) };
+
+  return { group: group as ChallengeGroupRow, error: null };
+}
+
+export async function sendChallengeInvite(
+  challengeId: string,
+  inviteeUserId: string,
+): Promise<{ error: Error | null }> {
+  const supabase = getSupabase();
+  if (!supabase) return { error: new Error("Supabase not configured") };
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: new Error("Not signed in") };
+
+  const { error: invErr } = await supabase.from("challenge_invites").insert({
+    challenge_id: challengeId,
+    inviter_id: user.id,
+    invitee_id: inviteeUserId,
+    status: "pending",
+  });
+  if (invErr) return { error: new Error(invErr.message) };
+
+  const { error: nErr } = await supabase.rpc("rpc_insert_notification", {
+    p_user_id: inviteeUserId,
+    p_type: "challenge_invite",
+    p_payload: { challenge_id: challengeId, inviter_id: user.id },
+  });
+  if (nErr) return { error: new Error(nErr.message) };
+
+  return { error: null };
+}
+
+export async function listPendingInvitesForMe(): Promise<ChallengeInviteRow[]> {
+  const supabase = getSupabase();
+  if (!supabase) return [];
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return [];
+  const { data, error } = await supabase
+    .from("challenge_invites")
+    .select("*")
+    .eq("invitee_id", user.id)
+    .eq("status", "pending")
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return (data ?? []) as ChallengeInviteRow[];
+}
+
+export async function listMyChallengeGroups(): Promise<ChallengeGroupRow[]> {
+  const supabase = getSupabase();
+  if (!supabase) return [];
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return [];
+  const { data: mids } = await supabase.from("challenge_members").select("challenge_id").eq("user_id", user.id);
+  const ids = [...new Set((mids ?? []).map((m) => m.challenge_id))];
+  if (ids.length === 0) return [];
+  const { data, error } = await supabase.from("challenge_groups").select("*").in("id", ids);
+  if (error) throw error;
+  return (data ?? []) as ChallengeGroupRow[];
+}
+
+export async function getChallengeGroup(id: string): Promise<ChallengeGroupRow | null> {
+  const supabase = getSupabase();
+  if (!supabase) return null;
+  const { data, error } = await supabase.from("challenge_groups").select("*").eq("id", id).maybeSingle();
+  if (error) throw error;
+  return (data as ChallengeGroupRow) ?? null;
+}
+
+export async function listChallengeMembers(challengeId: string): Promise<ChallengeMemberRow[]> {
+  const supabase = getSupabase();
+  if (!supabase) return [];
+  const { data, error } = await supabase.from("challenge_members").select("*").eq("challenge_id", challengeId);
+  if (error) throw error;
+  return (data ?? []) as ChallengeMemberRow[];
+}
+
+export async function declineInvite(inviteId: string): Promise<{ error: Error | null }> {
+  const supabase = getSupabase();
+  if (!supabase) return { error: new Error("Supabase not configured") };
+  const { error } = await supabase.from("challenge_invites").update({ status: "declined" }).eq("id", inviteId);
+  if (error) return { error: new Error(error.message) };
+  return { error: null };
+}
+
+/**
+ * After invitee creates a local habit with `challengeGroupId` / `challengeCreatorTimezone`
+ * set and has synced to Supabase, call this to record membership and close the invite.
+ */
+export async function acceptInviteAndJoin(
+  invite: ChallengeInviteRow,
+  newHabitId: string,
+): Promise<{ error: Error | null }> {
+  const supabase = getSupabase();
+  if (!supabase) return { error: new Error("Supabase not configured") };
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: new Error("Not signed in") };
+
+  const { error: mErr } = await supabase.from("challenge_members").insert({
+    challenge_id: invite.challenge_id,
+    user_id: user.id,
+    habit_id: newHabitId,
+    role: "member",
+  });
+  if (mErr) return { error: new Error(mErr.message) };
+
+  const { error: iErr } = await supabase
+    .from("challenge_invites")
+    .update({ status: "accepted" })
+    .eq("id", invite.id);
+  if (iErr) return { error: new Error(iErr.message) };
+
+  return { error: null };
+}
+
+export async function listNotifications(limit = 40): Promise<NotificationRow[]> {
+  const supabase = getSupabase();
+  if (!supabase) return [];
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return [];
+  const { data, error } = await supabase
+    .from("notifications")
+    .select("*")
+    .eq("user_id", user.id)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return (data ?? []) as NotificationRow[];
+}
+
+export async function markNotificationRead(id: string): Promise<void> {
+  const supabase = getSupabase();
+  if (!supabase) return;
+  await supabase.from("notifications").update({ read_at: new Date().toISOString() }).eq("id", id);
+}
+
+/** Re-fetch cohort peer habits from Supabase (e.g. after challenge screen focus). */
+export async function refreshCohortPeerHabits(): Promise<void> {
+  const uid = getRemoteSyncUserId();
+  if (!uid) return;
+  const snap = await pullFromSupabase(uid);
+  useHabitStore.getState().setCohortPeerHabits(snap.cohortPeerHabits);
+}
+
