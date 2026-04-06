@@ -8,7 +8,7 @@ import type {
 import { getDerivedState } from "../utils/habitDerived";
 import { getSupabase } from "./supabase";
 
-type RemoteSnapshot = Pick<HabitStore, "habits" | "miniMissions" | "xp"> & {
+type RemoteSnapshot = Pick<HabitStore, "habits" | "miniMissions" | "xp" | "username"> & {
   cohortPeerHabits: Habit[];
 };
 
@@ -91,15 +91,17 @@ function miniCompletionMemoryFromRow(
     const rec = o as Record<string, unknown>;
     const note = typeof rec.note === "string" ? rec.note : undefined;
     const imageUri = typeof rec.imageUri === "string" ? rec.imageUri : undefined;
+    const imageUrl = typeof rec.imageUrl === "string" ? rec.imageUrl : undefined;
     const createdAt =
       typeof rec.createdAt === "string"
         ? rec.createdAt
         : new Date().toISOString();
-    if (!note && !imageUri) return undefined;
+    if (!note && !imageUri && !imageUrl) return undefined;
     return {
       createdAt,
       ...(note ? { note } : {}),
       ...(imageUri ? { imageUri } : {}),
+      ...(imageUrl ? { imageUrl } : {}),
     };
   } catch {
     return undefined;
@@ -163,13 +165,13 @@ function miniToRow(sessionUserId: string, m: MiniMission) {
 export async function pullFromSupabase(userId: string): Promise<RemoteSnapshot> {
   const supabase = getSupabase();
   if (!supabase) {
-    return { habits: [], miniMissions: [], xp: 0, cohortPeerHabits: [] };
+    return { habits: [], miniMissions: [], xp: 0, username: null, cohortPeerHabits: [] };
   }
 
   const [habitsRes, miniRes, profileRes] = await Promise.all([
     supabase.from("habits").select("*").eq("user_id", userId),
     supabase.from("mini_missions").select("*").eq("user_id", userId),
-    supabase.from("profiles").select("xp").eq("id", userId).maybeSingle(),
+    supabase.from("profiles").select("xp, username").eq("id", userId).maybeSingle(),
   ]);
 
   if (habitsRes.error) throw habitsRes.error;
@@ -179,6 +181,11 @@ export async function pullFromSupabase(userId: string): Promise<RemoteSnapshot> 
   const habits = (habitsRes.data ?? []).map((r) => habitFromRow(r));
   const miniMissions = (miniRes.data ?? []).map((r) => miniFromRow(r));
   const xp = profileRes.data?.xp ?? 0;
+  const rawUser = profileRes.data as { username?: string | null } | null;
+  const username =
+    typeof rawUser?.username === "string" && rawUser.username.trim().length > 0
+      ? rawUser.username.trim().toLowerCase()
+      : null;
 
   const { data: memberRows } = await supabase
     .from("challenge_members")
@@ -197,12 +204,12 @@ export async function pullFromSupabase(userId: string): Promise<RemoteSnapshot> 
     cohortPeerHabits = (peerRows ?? []).map((r) => habitFromRow(r));
   }
 
-  return { habits, miniMissions, xp, cohortPeerHabits };
+  return { habits, miniMissions, xp, username, cohortPeerHabits };
 }
 
 export async function pushFullState(
   sessionUserId: string,
-  state: Pick<HabitStore, "habits" | "miniMissions" | "xp">,
+  state: Pick<HabitStore, "habits" | "miniMissions" | "xp" | "username">,
 ): Promise<void> {
   const supabase = getSupabase();
   if (!supabase) return;
@@ -267,7 +274,7 @@ export async function pushFullState(
   }
 
   const { error: profileErr } = await supabase.from("profiles").upsert(
-    { id: sessionUserId, xp: state.xp },
+    { id: sessionUserId, xp: state.xp, username: state.username },
     { onConflict: "id" },
   );
   if (profileErr) throw profileErr;
@@ -317,7 +324,7 @@ function localCanUploadAsFirstUser(
  */
 export async function hydrateStoreAfterAuth(
   userId: string,
-  getLocal: () => Pick<HabitStore, "habits" | "miniMissions" | "xp">,
+  getLocal: () => Pick<HabitStore, "habits" | "miniMissions" | "xp" | "username">,
   apply: (next: RemoteSnapshot) => void,
 ): Promise<void> {
   const local = getLocal();
@@ -334,6 +341,7 @@ export async function hydrateStoreAfterAuth(
         ownerUserId: m.ownerUserId ?? userId,
       })),
       xp: local.xp,
+      username: local.username ?? null,
       cohortPeerHabits: [],
     };
     apply(stamped);

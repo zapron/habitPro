@@ -17,7 +17,7 @@ import { useTheme } from "../context/ThemeContext";
 import { isSupabaseConfigured } from "../lib/env";
 import {
   createGroupChallengeFromHabit,
-  searchProfilesByEmailPrefix,
+  searchProfilesByUsernamePrefix,
   sendChallengeInvite,
 } from "../lib/groupChallengesApi";
 import { useHabitStore } from "../store/habitStore";
@@ -61,7 +61,7 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
     }
     setSearching(true);
     const t = setTimeout(() => {
-      void searchProfilesByEmailPrefix(q)
+      void searchProfilesByUsernamePrefix(q)
         .then((rows) => {
           if (!cancelled) {
             const uid = session?.user?.id;
@@ -195,7 +195,9 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
                       disabled={invitingId === item.id}
                     >
                       <View style={{ flex: 1 }}>
-                        <Text style={{ color: theme.colors.textPrimary, fontWeight: "700" }}>{item.email}</Text>
+                        <Text style={{ color: theme.colors.textPrimary, fontWeight: "700" }}>
+                          @{item.username}
+                        </Text>
                         {item.display_name ? (
                           <Text style={{ color: theme.colors.textMuted, fontSize: 12 }}>{item.display_name}</Text>
                         ) : null}

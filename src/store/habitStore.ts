@@ -50,6 +50,8 @@ export const useHabitStore = create<HabitStore>()(
       habits: [],
       miniMissions: [],
       xp: 0,
+      username: null,
+      setUsername: (username) => set({ username }),
       cohortPeerHabits: [],
       setCohortPeerHabits: (cohortPeerHabits) => set({ cohortPeerHabits }),
       setHabitChallengeMeta: (id, meta) => {
@@ -66,7 +68,8 @@ export const useHabitStore = create<HabitStore>()(
         }));
         requestRemoteSync({ immediate: true });
       },
-      resetStore: () => set({ habits: [], miniMissions: [], xp: 0, cohortPeerHabits: [] }),
+      resetStore: () =>
+        set({ habits: [], miniMissions: [], xp: 0, username: null, cohortPeerHabits: [] }),
       addHabit: ({
         title,
         description,
@@ -278,11 +281,12 @@ export const useHabitStore = create<HabitStore>()(
         const now = new Date().toISOString();
         const mission = get().miniMissions.find((m) => m.id === id);
         let completionMemory: StreakMemory | undefined;
-        if (memory && (memory.note || memory.imageUri)) {
+        if (memory && (memory.note || memory.imageUri || memory.imageUrl)) {
           completionMemory = {
             createdAt: memory.createdAt ?? now,
             ...(memory.note ? { note: memory.note } : {}),
             ...(memory.imageUri ? { imageUri: memory.imageUri } : {}),
+            ...(memory.imageUrl ? { imageUrl: memory.imageUrl } : {}),
           };
         }
         set((state) => ({
@@ -386,6 +390,7 @@ export const useHabitStore = create<HabitStore>()(
           }));
           // Migrate: ensure xp exists
           if (state.xp == null) state.xp = 0;
+          if (state.username === undefined) state.username = null;
         }
       },
     },
@@ -394,5 +399,5 @@ export const useHabitStore = create<HabitStore>()(
 
 registerSyncSnapshotGetter(() => {
   const s = useHabitStore.getState();
-  return { habits: s.habits, miniMissions: s.miniMissions, xp: s.xp };
+  return { habits: s.habits, miniMissions: s.miniMissions, xp: s.xp, username: s.username };
 });

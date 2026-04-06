@@ -12,6 +12,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
 import { ArrowLeft } from "lucide-react-native";
 import { Screen } from "../../src/components/Screen";
+import { StreakMemoryGallery } from "../../src/components/StreakMemoryGallery";
 import { useTheme } from "../../src/context/ThemeContext";
 import { useHabitStore } from "../../src/store/habitStore";
 import {
@@ -123,17 +124,35 @@ export default function ChallengeDetailScreen() {
           {peers.length === 0 ? (
             <Text style={{ color: theme.colors.textSecondary }}>When others join, their progress appears here.</Text>
           ) : (
-            peers.map((h) => (
-              <View
-                key={h.id}
-                style={[styles.peerRow, { borderColor: theme.colors.border, backgroundColor: theme.colors.surface }]}
-              >
-                <Text style={{ color: theme.colors.textPrimary, fontWeight: "700" }}>{h.title}</Text>
-                <Text style={{ color: theme.colors.textMuted, fontSize: 13, marginTop: 4 }}>
-                  Streak {h.streak} · {h.completedDates.length} / {h.totalDays} days
-                </Text>
-              </View>
-            ))
+            peers.map((h) => {
+              const memoryEntries = Object.entries(h.streakMemories ?? {})
+                .map(([dateStr, memory]) => ({ dateStr, memory }))
+                .sort((a, b) => (a.dateStr < b.dateStr ? 1 : -1));
+              const showMoments = (h.visibility ?? "solo") === "public" && memoryEntries.length > 0;
+              return (
+                <View key={h.id} style={styles.peerBlock}>
+                  <View
+                    style={[styles.peerRow, { borderColor: theme.colors.border, backgroundColor: theme.colors.surface }]}
+                  >
+                    <Text style={{ color: theme.colors.textPrimary, fontWeight: "700" }}>{h.title}</Text>
+                    <Text style={{ color: theme.colors.textMuted, fontSize: 13, marginTop: 4 }}>
+                      Streak {h.streak} · {h.completedDates.length} / {h.totalDays} days
+                      {(h.visibility ?? "solo") === "public" ? (
+                        <Text style={{ color: theme.colors.cyan[500] }}> · Public</Text>
+                      ) : null}
+                    </Text>
+                  </View>
+                  {showMoments ? (
+                    <StreakMemoryGallery
+                      entries={memoryEntries}
+                      sectionTitle="Shared moments"
+                      sectionHint="They set this mission to public. Photos only appear here after cloud sync."
+                      remotePeer
+                    />
+                  ) : null}
+                </View>
+              );
+            })
           )}
         </ScrollView>
       )}
@@ -150,4 +169,5 @@ const styles = StyleSheet.create({
   card: { borderRadius: 16, borderWidth: 1, padding: 16 },
   cardTitle: { fontSize: 12, fontWeight: "800", letterSpacing: 0.8 },
   peerRow: { borderRadius: 12, borderWidth: 1, padding: 14, marginBottom: 10 },
+  peerBlock: { marginBottom: 8 },
 });

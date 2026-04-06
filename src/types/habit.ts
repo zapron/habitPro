@@ -3,10 +3,13 @@ export type HabitMode = "autopilot" | "manual";
 /** Public = discoverable by others later; solo = private to you. */
 export type MissionVisibility = "public" | "solo";
 
-/** Optional capture when marking a day complete — local URIs until cloud sync exists. */
+/** Optional capture when marking a day complete. */
 export interface StreakMemory {
   note?: string;
+  /** Device-local URI before upload (offline-only if never uploaded). */
   imageUri?: string;
+  /** Supabase Storage public URL after upload (synced for cohort / other devices). */
+  imageUrl?: string;
   createdAt: string;
 }
 
@@ -76,6 +79,9 @@ export type HabitStore = {
   habits: Habit[];
   miniMissions: MiniMission[];
   xp: number;
+  /** Lowercase public handle for challenges; synced to `profiles.username`. */
+  username: string | null;
+  setUsername: (username: string | null) => void;
   /** Clears mission data (e.g. on sign-out). */
   resetStore: () => void;
   addHabit: (input: AddHabitInput) => string;

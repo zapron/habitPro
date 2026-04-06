@@ -32,7 +32,7 @@ type StreakMemorySheetProps = {
   dayLabel: string;
   onClose: () => void;
   /** create only: called only from explicit actions — null = check in without a memory; not called when user dismisses */
-  onCommit?: (memory: StreakMemory | null) => void;
+  onCommit?: (memory: StreakMemory | null) => void | Promise<void>;
   /** view only */
   viewMemory?: StreakMemory | null;
 };
@@ -107,7 +107,7 @@ export function StreakMemorySheet({
     onClose();
   }, [isView, onCommit, onClose]);
 
-  const handleSave = useCallback(() => {
+  const handleSave = useCallback(async () => {
     if (isView) return;
     const memory: StreakMemory = {
       createdAt: new Date().toISOString(),
@@ -124,9 +124,12 @@ export function StreakMemorySheet({
       );
       return;
     }
-    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    onCommit?.(memory);
-    onClose();
+    try {
+      await Promise.resolve(onCommit?.(memory));
+      onClose();
+    } catch {
+      // onCommit may alert; keep sheet open for retry
+    }
   }, [isView, isMini, note, imageUri, onCommit, onClose]);
 
   const maxSheetView = Math.min(windowH * 0.88, 560);
@@ -193,9 +196,13 @@ export function StreakMemorySheet({
                     {missionTitle}
                   </Text>
                   <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollInner}>
-                    {vm?.imageUri ? (
+                    {vm?.imageUrl || vm?.imageUri ? (
                       <View style={[styles.photoSlotView, { borderColor: theme.colors.border }]}>
-                        <Image source={{ uri: vm.imageUri }} style={styles.photo} resizeMode="cover" />
+                        <Image
+                          source={{ uri: vm.imageUrl ?? vm.imageUri! }}
+                          style={styles.photo}
+                          resizeMode="cover"
+                        />
                       </View>
                     ) : null}
                     {vm?.note ? (
@@ -203,7 +210,7 @@ export function StreakMemorySheet({
                         <Text style={[styles.viewNoteText, { color: theme.colors.textPrimary }]}>{vm.note}</Text>
                       </View>
                     ) : null}
-                    {!vm?.imageUri && !vm?.note ? (
+                    {!vm?.imageUrl && !vm?.imageUri && !vm?.note ? (
                       <Text style={[styles.emptyView, { color: theme.colors.textMuted }]}>
                         {isMini ? "No photo or note saved for this mission." : "No details saved for this day."}
                       </Text>

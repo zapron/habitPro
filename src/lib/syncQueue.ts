@@ -1,7 +1,7 @@
 import type { HabitStore } from "../types/habit";
 import { pushFullState } from "./sync";
 
-type Snapshot = Pick<HabitStore, "habits" | "miniMissions" | "xp">;
+type Snapshot = Pick<HabitStore, "habits" | "miniMissions" | "xp" | "username">;
 
 let userId: string | null = null;
 let syncEnabled = false;

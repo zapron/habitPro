@@ -20,6 +20,11 @@ import { StreakMemorySheet } from '../../src/components/StreakMemorySheet';
 import { StreakMemoryGallery } from '../../src/components/StreakMemoryGallery';
 import { GroupChallengeSheet } from '../../src/components/GroupChallengeSheet';
 import type { StreakMemory } from '../../src/types/habit';
+import {
+    canUseStreakMemoryUpload,
+    shouldUploadLocalStreakImage,
+    uploadHabitStreakMemoryImage,
+} from '../../src/lib/streakMemoryStorage';
 
 function getMilestones(totalDays: number, mode: string): number[] {
     if (mode === 'autopilot') return [7, 14, 21];
@@ -217,11 +222,29 @@ export default function HabitDetail() {
     );
 
     const handleMemoryCommit = useCallback(
-        (memory: StreakMemory | null) => {
+        async (memory: StreakMemory | null) => {
             const ctx = pendingMemoryRef.current;
-            pendingMemoryRef.current = null;
-            setMemoryUi(null);
             if (!ctx || !habit) return;
+
+            let memoryToSave = memory;
+            if (
+                memory &&
+                canUseStreakMemoryUpload() &&
+                shouldUploadLocalStreakImage(memory.imageUri)
+            ) {
+                try {
+                    const imageUrl = await uploadHabitStreakMemoryImage({
+                        habitId: habit.id,
+                        dateStr: ctx.dateStr,
+                        localUri: memory.imageUri!,
+                    });
+                    memoryToSave = { ...memory, imageUrl, imageUri: undefined };
+                } catch (e) {
+                    const msg = e instanceof Error ? e.message : String(e);
+                    Alert.alert('Photo upload failed', msg);
+                    throw e;
+                }
+            }
 
             const changed = toggleCompletion(habit.id, ctx.dateStr);
             if (!changed) {
@@ -231,8 +254,8 @@ export default function HabitDetail() {
                 );
                 return;
             }
-            if (memory) {
-                setStreakMemory(habit.id, ctx.dateStr, memory);
+            if (memoryToSave) {
+                setStreakMemory(habit.id, ctx.dateStr, memoryToSave);
             }
             const isMilestone = milestones.includes(ctx.day);
             fireCompletionCelebration(ctx.dayIndex, ctx.day, isMilestone);

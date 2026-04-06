@@ -40,6 +40,11 @@ import {
   subscribeSyncSuccess,
 } from "../../src/lib/syncQueue";
 import { MAX_RESERVE_FUEL_MINUTES } from "../../src/constants/miniMission";
+import {
+  canUseStreakMemoryUpload,
+  shouldUploadLocalStreakImage,
+  uploadMiniStreakMemoryImage,
+} from "../../src/lib/streakMemoryStorage";
 
 // Notification handler is configured globally in _layout.tsx via setupNotifications()
 
@@ -267,9 +272,26 @@ export default function MiniMissionDetail() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
   };
 
-  const handleCompleteCommit = (memory: StreakMemory | null) => {
-    completeMiniMission(mission.id, memory);
-    setCompleteSheetOpen(false);
+  const handleCompleteCommit = async (memory: StreakMemory | null) => {
+    let memoryToSave = memory;
+    if (
+      memory &&
+      canUseStreakMemoryUpload() &&
+      shouldUploadLocalStreakImage(memory.imageUri)
+    ) {
+      try {
+        const imageUrl = await uploadMiniStreakMemoryImage({
+          miniMissionId: mission.id,
+          localUri: memory.imageUri!,
+        });
+        memoryToSave = { ...memory, imageUrl, imageUri: undefined };
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        Alert.alert("Photo upload failed", msg);
+        throw e;
+      }
+    }
+    completeMiniMission(mission.id, memoryToSave);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   };
 
@@ -616,7 +638,9 @@ export default function MiniMissionDetail() {
                   Mini mission completed
                 </Text>
               </View>
-              {(mission.completionMemory?.imageUri || mission.completionMemory?.note) && (
+              {(mission.completionMemory?.imageUrl ||
+                mission.completionMemory?.imageUri ||
+                mission.completionMemory?.note) && (
                 <View style={styles.completionMomentSection}>
                   <View style={styles.completionMomentHead}>
                     <Sparkles size={16} color={theme.colors.amber[500]} />
@@ -629,7 +653,7 @@ export default function MiniMissionDetail() {
                       Your moment
                     </Text>
                   </View>
-                  {mission.completionMemory?.imageUri ? (
+                  {mission.completionMemory?.imageUrl || mission.completionMemory?.imageUri ? (
                     <View
                       style={[
                         styles.completionImageWrap,
@@ -637,7 +661,11 @@ export default function MiniMissionDetail() {
                       ]}
                     >
                       <Image
-                        source={{ uri: mission.completionMemory.imageUri }}
+                        source={{
+                          uri:
+                            mission.completionMemory.imageUrl ??
+                            mission.completionMemory.imageUri!,
+                        }}
                         style={styles.completionImage}
                         resizeMode="cover"
                       />

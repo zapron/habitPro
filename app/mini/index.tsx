@@ -142,7 +142,9 @@ function MiniMissionCard({ item, now }: { item: MiniMission; now: number }) {
               Done in {Math.ceil((new Date(item.completedAt).getTime() - new Date(item.startedAt).getTime()) / 60000)} min
             </Text>
           </View>
-          {(item.completionMemory?.note || item.completionMemory?.imageUri) && (
+          {(item.completionMemory?.note ||
+            item.completionMemory?.imageUri ||
+            item.completionMemory?.imageUrl) && (
             <View style={styles.momentBadge}>
               <Sparkles size={12} color={theme.colors.amber[500]} />
               <Text style={[styles.momentBadgeText, { color: theme.colors.amber[500] }]}>Moment</Text>

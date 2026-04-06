@@ -39,6 +39,6 @@ export type NotificationRow = {
 
 export type ProfileSearchRow = {
   id: string;
-  email: string;
+  username: string;
   display_name: string | null;
 };

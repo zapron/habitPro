@@ -27,20 +27,24 @@ function localDateStr(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
-/** Prefix-match on sign-up email (auth.users); requires migration `search_users_by_email_prefix`. */
-export async function searchProfilesByEmailPrefix(prefix: string): Promise<ProfileSearchRow[]> {
+/** Prefix-match on `profiles.username`; requires migration `search_profiles_by_username`. */
+export async function searchProfilesByUsernamePrefix(
+  prefix: string,
+): Promise<ProfileSearchRow[]> {
   const supabase = getSupabase();
   if (!supabase || prefix.trim().length < 3) return [];
-  const { data, error } = await supabase.rpc("search_users_by_email_prefix", {
-    p_prefix: prefix.trim(),
+  const { data, error } = await supabase.rpc("search_profiles_by_username", {
+    p_prefix: prefix.trim().toLowerCase(),
     p_limit: 20,
   });
   if (error) throw error;
-  return (data ?? []).map((r: { id: string; email: string; display_name: string | null }) => ({
-    id: r.id,
-    email: String(r.email),
-    display_name: r.display_name,
-  }));
+  return (data ?? []).map(
+    (r: { id: string; username: string; display_name: string | null }) => ({
+      id: r.id,
+      username: String(r.username),
+      display_name: r.display_name,
+    }),
+  );
 }
 
 export async function createGroupChallengeFromHabit(
