@@ -9,13 +9,13 @@
       "android"
     ],
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/habit-pro-icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/habit-pro-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#070b14"
     },
     "ios": {
       "supportsTablet": true
@@ -23,13 +23,13 @@
     "android": {
       "package": "com.rakti.habitpro",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "foregroundImage": "./assets/habit-pro-icon.png",
+        "backgroundColor": "#070b14"
       },
       "edgeToEdgeEnabled": true
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/habit-pro-icon.png"
     },
     "plugins": [
       "expo-router",
