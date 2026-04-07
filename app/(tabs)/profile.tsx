@@ -20,6 +20,7 @@ import { useHabitStore } from "../../src/store/habitStore";
 import { isSupabaseConfigured } from "../../src/lib/env";
 import { useAppVersion } from "../../src/context/AppVersionContext";
 import { SettingsModal } from "../../src/components/SettingsModal";
+import { UsernameSetupFields } from "../../src/components/UsernameSetupFields";
 import { HubListModal } from "../../src/components/HubListModal";
 import type { AppTheme } from "../../src/styles/theme";
 import type { MissionVisibility, MiniMission } from "../../src/types/habit";
@@ -434,10 +435,8 @@ export default function ProfileScreen() {
               <Text style={[styles.handle, { color: theme.colors.cyan[400] }]} numberOfLines={1}>
                 @{username}
               </Text>
-            ) : showAccount ? (
-              <Text style={[styles.email, { color: theme.colors.textMuted }]} numberOfLines={2}>
-                Add a public username in Settings for group missions and invites.
-              </Text>
+            ) : showAccount && session?.user ? (
+              <UsernameSetupFields compact />
             ) : null}
           </View>
         </View>
@@ -665,7 +664,6 @@ const styles = StyleSheet.create({
   xpLine: { flexDirection: "row", alignItems: "center", gap: 8 },
   xpBig: { fontSize: 17, fontWeight: "800" },
   totalXp: { fontSize: 13 },
-  email: { fontSize: 12, marginTop: 4 },
   handle: { fontSize: 15, fontWeight: "800", marginTop: 4 },
   sectionLabel: {
     fontSize: 11,
