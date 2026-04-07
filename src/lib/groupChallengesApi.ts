@@ -72,7 +72,7 @@ export async function createGroupChallengeFromHabit(
     .from("challenge_groups")
     .insert({
       creator_id: user.id,
-      title: titleOverride ?? `${habit.title} — group`,
+      title: titleOverride ?? `${habit.title} — group mission`,
       habit_template: habitTemplate,
       creator_timezone: creatorTz,
       start_date: startDate,
@@ -106,6 +106,43 @@ export async function createGroupChallengeFromHabit(
   return { group: group as ChallengeGroupRow, error: null };
 }
 
+/** Pending invites you sent for this challenge (for de-duping UI). */
+export async function listPendingInviteeIdsForChallenge(challengeId: string): Promise<string[]> {
+  const supabase = getSupabase();
+  if (!supabase) return [];
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return [];
+  const { data, error } = await supabase
+    .from("challenge_invites")
+    .select("invitee_id")
+    .eq("challenge_id", challengeId)
+    .eq("inviter_id", user.id)
+    .eq("status", "pending");
+  if (error) throw error;
+  return (data ?? []).map((r: { invitee_id: string }) => r.invitee_id);
+}
+
+/** Public usernames for cohort display (RLS: shared challenge members only). */
+export async function getProfileUsernamesForIds(userIds: string[]): Promise<Record<string, string>> {
+  const uniq = [...new Set(userIds)].filter(Boolean);
+  if (uniq.length === 0) return {};
+  const supabase = getSupabase();
+  if (!supabase) return {};
+  const { data, error } = await supabase.from("profiles").select("id, username").in("id", uniq);
+  if (error) throw error;
+  const out: Record<string, string> = {};
+  for (const r of data ?? []) {
+    const row = r as { id: string; username: string | null };
+    const u = row.username;
+    if (typeof u === "string" && u.trim().length > 0) {
+      out[row.id] = u.trim().toLowerCase();
+    }
+  }
+  return out;
+}
+
 export async function sendChallengeInvite(
   challengeId: string,
   inviteeUserId: string,
@@ -117,18 +154,44 @@ export async function sendChallengeInvite(
   } = await supabase.auth.getUser();
   if (!user) return { error: new Error("Not signed in") };
 
+  const { data: existing } = await supabase
+    .from("challenge_invites")
+    .select("id")
+    .eq("challenge_id", challengeId)
+    .eq("invitee_id", inviteeUserId)
+    .eq("status", "pending")
+    .maybeSingle();
+  if (existing) {
+    return { error: new Error("You already sent an invite to this person for this group mission.") };
+  }
+
+  const { data: inviterProfile } = await supabase.from("profiles").select("username").eq("id", user.id).maybeSingle();
+  const inviterUsername =
+    typeof inviterProfile?.username === "string" && inviterProfile.username.trim().length > 0
+      ? inviterProfile.username.trim().toLowerCase()
+      : null;
+
   const { error: invErr } = await supabase.from("challenge_invites").insert({
     challenge_id: challengeId,
     inviter_id: user.id,
     invitee_id: inviteeUserId,
     status: "pending",
   });
-  if (invErr) return { error: new Error(invErr.message) };
+  if (invErr) {
+    const msg = invErr.message.toLowerCase().includes("unique") || invErr.code === "23505"
+      ? "You already sent an invite to this person for this group mission."
+      : invErr.message;
+    return { error: new Error(msg) };
+  }
 
   const { error: nErr } = await supabase.rpc("rpc_insert_notification", {
     p_user_id: inviteeUserId,
     p_type: "challenge_invite",
-    p_payload: { challenge_id: challengeId, inviter_id: user.id },
+    p_payload: {
+      challenge_id: challengeId,
+      inviter_id: user.id,
+      inviter_username: inviterUsername,
+    },
   });
   if (nErr) return { error: new Error(nErr.message) };
 
@@ -238,6 +301,22 @@ export async function listNotifications(limit = 40): Promise<NotificationRow[]> 
     .limit(limit);
   if (error) throw error;
   return (data ?? []) as NotificationRow[];
+}
+
+export async function countUnreadNotifications(): Promise<number> {
+  const supabase = getSupabase();
+  if (!supabase) return 0;
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return 0;
+  const { count, error } = await supabase
+    .from("notifications")
+    .select("*", { count: "exact", head: true })
+    .eq("user_id", user.id)
+    .is("read_at", null);
+  if (error) throw error;
+  return count ?? 0;
 }
 
 export async function markNotificationRead(id: string): Promise<void> {
