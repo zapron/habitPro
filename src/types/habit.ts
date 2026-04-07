@@ -31,7 +31,7 @@ export interface Habit {
   status: "active" | "completed" | "failed";
   /** YYYY-MM-DD → memory for that check-in */
   streakMemories?: Record<string, StreakMemory>;
-  /** When set, this habit is part of a Supabase-backed group challenge. */
+  /** When set, this habit is part of a Supabase-backed group mission. */
   challengeGroupId?: string | null;
   /** IANA timezone of the challenge creator; used for which calendar day counts. */
   challengeCreatorTimezone?: string | null;
@@ -106,7 +106,7 @@ export type HabitStore = {
   deleteMiniMission: (id: string) => void;
   getMiniMission: (id: string) => MiniMission | undefined;
   addXp: (amount: number) => void;
-  /** Habits owned by other users in shared group challenges (read-only for UI). */
+  /** Habits owned by other users in shared group missions (read-only for UI). */
   cohortPeerHabits: Habit[];
   setCohortPeerHabits: (habits: Habit[]) => void;
   setHabitChallengeMeta: (

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import type { ComponentType } from "react";
 import {
   View,
@@ -7,20 +7,18 @@ import {
   TouchableOpacity,
   StyleSheet,
   StatusBar,
-  TextInput,
   Alert,
-  ActivityIndicator,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { Settings, Zap, Globe, User, Target, Flame, Bell } from "lucide-react-native";
+import { useFocusEffect } from "@react-navigation/native";
+import { Settings, Zap, Globe, User, Target, Flame, Bell, LogOut } from "lucide-react-native";
 import { Screen } from "../../src/components/Screen";
 import { useTheme } from "../../src/context/ThemeContext";
 import { useAuth } from "../../src/context/AuthContext";
 import { useHabitStore } from "../../src/store/habitStore";
 import { isSupabaseConfigured } from "../../src/lib/env";
-import { getSupabase } from "../../src/lib/supabase";
-import { validateUsername } from "../../src/lib/profileUsername";
+import { countUnreadNotifications } from "../../src/lib/groupChallengesApi";
 import { SettingsModal } from "../../src/components/SettingsModal";
 import { HubListModal } from "../../src/components/HubListModal";
 import type { AppTheme } from "../../src/styles/theme";
@@ -238,15 +236,13 @@ export default function ProfileScreen() {
   const { theme, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { session } = useAuth();
+  const { session, signOut } = useAuth();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [hubSheet, setHubSheet] = useState<HubSheetState>(null);
-  const [usernameDraft, setUsernameDraft] = useState("");
-  const [usernameSaving, setUsernameSaving] = useState(false);
+  const [unreadNotifCount, setUnreadNotifCount] = useState(0);
 
   const xp = useHabitStore((s) => s.xp);
   const username = useHabitStore((s) => s.username);
-  const setUsername = useHabitStore((s) => s.setUsername);
   const habits = useHabitStore((s) => s.habits);
   const miniMissions = useHabitStore((s) => s.miniMissions);
 
@@ -311,63 +307,25 @@ export default function ProfileScreen() {
     };
   }, [habits, miniMissions]);
 
-  useEffect(() => {
-    setUsernameDraft(username ?? "");
-  }, [username]);
-
-  const handleSaveUsername = useCallback(async () => {
-    if (!session?.user?.id) return;
-    const supabase = getSupabase();
-    if (!supabase) return;
-
-    const raw = usernameDraft.trim();
-    if (raw.length === 0) {
-      setUsernameSaving(true);
-      try {
-        const { error } = await supabase
-          .from("profiles")
-          .update({ username: null })
-          .eq("id", session.user.id);
-        if (error) {
-          Alert.alert("Could not clear username", error.message);
-          return;
-        }
-        setUsername(null);
-      } finally {
-        setUsernameSaving(false);
-      }
-      return;
-    }
-
-    const v = validateUsername(usernameDraft);
-    if (v.ok === false) {
-      Alert.alert("Invalid username", v.message);
-      return;
-    }
-
-    setUsernameSaving(true);
-    try {
-      const { error } = await supabase.from("profiles").upsert(
-        { id: session.user.id, xp, username: v.value },
-        { onConflict: "id" },
-      );
-      if (error) {
-        const code = (error as { code?: string }).code;
-        const taken =
-          code === "23505" ||
-          error.message.toLowerCase().includes("duplicate") ||
-          error.message.toLowerCase().includes("unique");
-        Alert.alert(
-          "Could not save username",
-          taken ? "That username is already taken." : error.message,
-        );
+  useFocusEffect(
+    useCallback(() => {
+      if (!session?.user || !isSupabaseConfigured()) {
+        setUnreadNotifCount(0);
         return;
       }
-      setUsername(v.value);
-    } finally {
-      setUsernameSaving(false);
-    }
-  }, [session?.user, usernameDraft, xp, setUsername]);
+      let cancelled = false;
+      void countUnreadNotifications()
+        .then((n) => {
+          if (!cancelled) setUnreadNotifCount(n);
+        })
+        .catch(() => {
+          if (!cancelled) setUnreadNotifCount(0);
+        });
+      return () => {
+        cancelled = true;
+      };
+    }, [session?.user]),
+  );
 
   const hubModalContent = useMemo(() => {
     if (!hubSheet) return null;
@@ -450,14 +408,36 @@ export default function ProfileScreen() {
         </View>
         <View style={{ flexDirection: "row", gap: 8 }}>
           {showAccount && session?.user ? (
-            <TouchableOpacity
-              onPress={() => router.push("/notifications")}
-              style={[styles.gearBtn, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}
-              activeOpacity={0.85}
-              accessibilityLabel="Notifications"
-            >
-              <Bell size={20} color={theme.colors.textPrimary} />
-            </TouchableOpacity>
+            <>
+              <View style={styles.bellWrap}>
+                <TouchableOpacity
+                  onPress={() => router.push("/notifications")}
+                  style={[styles.gearBtn, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}
+                  activeOpacity={0.85}
+                  accessibilityLabel={
+                    unreadNotifCount > 0 ? `Notifications, ${unreadNotifCount} unread` : "Notifications"
+                  }
+                >
+                  <Bell size={20} color={theme.colors.textPrimary} />
+                </TouchableOpacity>
+                {unreadNotifCount > 0 ? (
+                  <View style={[styles.notifBadge, { borderColor: theme.colors.background, backgroundColor: theme.colors.red[500] }]} />
+                ) : null}
+              </View>
+              <TouchableOpacity
+                onPress={() => {
+                  Alert.alert("Sign out", "You will need to sign in again to continue.", [
+                    { text: "Cancel", style: "cancel" },
+                    { text: "Sign out", style: "destructive", onPress: () => void signOut() },
+                  ]);
+                }}
+                style={[styles.gearBtn, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}
+                activeOpacity={0.85}
+                accessibilityLabel="Sign out"
+              >
+                <LogOut size={20} color={theme.colors.red[500]} />
+              </TouchableOpacity>
+            </>
           ) : null}
           <TouchableOpacity
             onPress={() => setSettingsOpen(true)}
@@ -489,63 +469,11 @@ export default function ProfileScreen() {
               </Text>
             ) : showAccount ? (
               <Text style={[styles.email, { color: theme.colors.textMuted }]} numberOfLines={2}>
-                Add a public username below for challenges and invites.
+                Add a public username in Settings for group missions and invites.
               </Text>
             ) : null}
           </View>
         </View>
-
-        {showAccount && session?.user ? (
-          <View
-            style={[
-              styles.usernameCard,
-              {
-                backgroundColor: theme.colors.surface,
-                borderColor: theme.colors.border,
-                ...theme.shadow.card,
-              },
-            ]}
-          >
-            <Text style={[styles.sectionLabel, { color: theme.colors.textMuted, marginBottom: 6 }]}>
-              PUBLIC USERNAME
-            </Text>
-            <Text style={[styles.usernameHint, { color: theme.colors.textSecondary }]}>
-              Shown to cohorts and friends. Different from your sign-in email.
-            </Text>
-            <TextInput
-              value={usernameDraft}
-              onChangeText={setUsernameDraft}
-              placeholder="your_handle"
-              placeholderTextColor={theme.colors.textMuted}
-              autoCapitalize="none"
-              autoCorrect={false}
-              maxLength={20}
-              style={[
-                styles.usernameInput,
-                {
-                  color: theme.colors.textPrimary,
-                  borderColor: theme.colors.border,
-                  backgroundColor: theme.colors.background,
-                },
-              ]}
-            />
-            <TouchableOpacity
-              style={[
-                styles.usernameSaveBtn,
-                { backgroundColor: theme.colors.indigo[600], opacity: usernameSaving ? 0.7 : 1 },
-              ]}
-              onPress={() => void handleSaveUsername()}
-              disabled={usernameSaving}
-              activeOpacity={0.88}
-            >
-              {usernameSaving ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={styles.usernameSaveText}>Save username</Text>
-              )}
-            </TouchableOpacity>
-          </View>
-        ) : null}
 
         <Text style={[styles.sectionLabel, { color: theme.colors.textMuted }]}>HABITS & MISSIONS</Text>
 
@@ -559,8 +487,6 @@ export default function ProfileScreen() {
             },
           ]}
         >
-          <Text style={[styles.hubMegaTitle, { color: theme.colors.textPrimary }]}>At a glance</Text>
-
           <View style={styles.hubHeroRow}>
             <TouchableOpacity
               style={styles.hubHeroCol}
@@ -701,6 +627,16 @@ const styles = StyleSheet.create({
   },
   title: { fontWeight: "800", marginBottom: 4 },
   subtitle: {},
+  bellWrap: { position: "relative" },
+  notifBadge: {
+    position: "absolute",
+    top: 2,
+    right: 2,
+    width: 10,
+    height: 10,
+    borderRadius: 9999,
+    borderWidth: 2,
+  },
   gearBtn: {
     width: 44,
     height: 44,
@@ -734,29 +670,6 @@ const styles = StyleSheet.create({
   totalXp: { fontSize: 13 },
   email: { fontSize: 12, marginTop: 4 },
   handle: { fontSize: 15, fontWeight: "800", marginTop: 4 },
-  usernameCard: {
-    borderRadius: 18,
-    borderWidth: 1,
-    padding: 16,
-    marginBottom: 22,
-    gap: 10,
-  },
-  usernameHint: { fontSize: 13, lineHeight: 18 },
-  usernameInput: {
-    borderRadius: 12,
-    borderWidth: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  usernameSaveBtn: {
-    borderRadius: 12,
-    paddingVertical: 12,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  usernameSaveText: { color: "#fff", fontWeight: "800", fontSize: 15 },
   sectionLabel: {
     fontSize: 11,
     fontWeight: "800",
@@ -768,13 +681,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     padding: 16,
     marginBottom: 4,
-  },
-  hubMegaTitle: {
-    fontWeight: "800",
-    fontSize: 13,
-    fontStyle: "italic",
-    marginBottom: 14,
-    opacity: 0.9,
   },
   hubHeroRow: {
     flexDirection: "row",

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
     View,
     Text,
@@ -6,16 +6,22 @@ import {
     Modal,
     StyleSheet,
     Pressable,
+    TextInput,
+    ActivityIndicator,
+    Alert,
 } from 'react-native';
-import { X, Monitor, Sun, Moon, LogOut, type LucideIcon } from 'lucide-react-native';
+import { X, Monitor, Sun, Moon, type LucideIcon } from 'lucide-react-native';
 import { useTheme, type ThemePreference } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { isSupabaseConfigured } from '../lib/env';
+import { getSupabase } from '../lib/supabase';
+import { validateUsername } from '../lib/profileUsername';
+import { useHabitStore } from '../store/habitStore';
 
-const OPTIONS: { key: ThemePreference; label: string; Icon: LucideIcon; desc: string }[] = [
-    { key: 'system', label: 'System', Icon: Monitor, desc: 'Match phone settings' },
-    { key: 'light', label: 'Light', Icon: Sun, desc: 'Always light mode' },
-    { key: 'dark', label: 'Dark', Icon: Moon, desc: 'Always dark mode' },
+const THEME_OPTIONS: { key: ThemePreference; label: string; Icon: LucideIcon }[] = [
+    { key: 'system', label: 'System', Icon: Monitor },
+    { key: 'light', label: 'Light', Icon: Sun },
+    { key: 'dark', label: 'Dark', Icon: Moon },
 ];
 
 interface SettingsModalProps {
@@ -25,8 +31,53 @@ interface SettingsModalProps {
 
 export function SettingsModal({ visible, onClose }: SettingsModalProps) {
     const { theme, isDark, preference, setPreference } = useTheme();
-    const { session, signOut } = useAuth();
+    const { session } = useAuth();
     const showAccount = isSupabaseConfigured();
+    const username = useHabitStore((s) => s.username);
+    const setUsername = useHabitStore((s) => s.setUsername);
+    const xp = useHabitStore((s) => s.xp);
+    const [usernameDraft, setUsernameDraft] = useState('');
+    const [usernameSaving, setUsernameSaving] = useState(false);
+
+    useEffect(() => {
+        setUsernameDraft(username ?? '');
+    }, [username, visible]);
+
+    const handleSaveUsername = useCallback(async () => {
+        if (!session?.user?.id) return;
+        if (username) return;
+        const supabase = getSupabase();
+        if (!supabase) return;
+
+        const v = validateUsername(usernameDraft);
+        if (v.ok === false) {
+            Alert.alert('Invalid username', v.message);
+            return;
+        }
+
+        setUsernameSaving(true);
+        try {
+            const { error } = await supabase.from('profiles').upsert(
+                { id: session.user.id, xp, username: v.value },
+                { onConflict: 'id' },
+            );
+            if (error) {
+                const code = (error as { code?: string }).code;
+                const taken =
+                    code === '23505' ||
+                    error.message.toLowerCase().includes('duplicate') ||
+                    error.message.toLowerCase().includes('unique');
+                Alert.alert(
+                    'Could not save username',
+                    taken ? 'That username is already taken.' : error.message,
+                );
+                return;
+            }
+            setUsername(v.value);
+        } finally {
+            setUsernameSaving(false);
+        }
+    }, [session?.user, username, usernameDraft, xp, setUsername]);
 
     return (
         <Modal
@@ -55,66 +106,88 @@ export function SettingsModal({ visible, onClose }: SettingsModalProps) {
                             <Text style={[styles.accountEmail, { color: theme.colors.textSecondary }]} numberOfLines={1}>
                                 {session.user.email ?? 'Signed in'}
                             </Text>
-                            <TouchableOpacity
-                                style={[styles.signOutRow, { borderColor: theme.colors.border, backgroundColor: theme.colors.surfaceElevated }]}
-                                onPress={() => {
-                                    void signOut();
-                                    onClose();
-                                }}
-                                activeOpacity={0.8}
-                            >
-                                <LogOut size={18} color={theme.colors.textSecondary} />
-                                <Text style={[styles.signOutLabel, { color: theme.colors.textPrimary }]}>Sign out</Text>
-                            </TouchableOpacity>
+                            {!username ? (
+                                <View style={styles.usernameBlock}>
+                                    <Text style={[styles.usernameInlineHint, { color: theme.colors.textMuted }]}>
+                                        Set a public username (once) for group missions
+                                    </Text>
+                                    <TextInput
+                                        value={usernameDraft}
+                                        onChangeText={setUsernameDraft}
+                                        placeholder="your_handle"
+                                        placeholderTextColor={theme.colors.textMuted}
+                                        autoCapitalize="none"
+                                        autoCorrect={false}
+                                        maxLength={20}
+                                        style={[
+                                            styles.usernameInput,
+                                            {
+                                                color: theme.colors.textPrimary,
+                                                borderColor: theme.colors.border,
+                                                backgroundColor: theme.colors.background,
+                                            },
+                                        ]}
+                                    />
+                                    <TouchableOpacity
+                                        style={[
+                                            styles.usernameSaveBtn,
+                                            { backgroundColor: theme.colors.indigo[600], opacity: usernameSaving ? 0.7 : 1 },
+                                        ]}
+                                        onPress={() => void handleSaveUsername()}
+                                        disabled={usernameSaving}
+                                        activeOpacity={0.88}
+                                    >
+                                        {usernameSaving ? (
+                                            <ActivityIndicator color="#fff" />
+                                        ) : (
+                                            <Text style={styles.usernameSaveText}>Save</Text>
+                                        )}
+                                    </TouchableOpacity>
+                                </View>
+                            ) : null}
                         </>
                     )}
 
-                    {/* Theme Section */}
-                    <Text style={[styles.sectionLabel, { color: theme.colors.textMuted }]}>APPEARANCE</Text>
+                    <Text style={[styles.sectionLabel, { color: theme.colors.textMuted, marginTop: 14 }]}>THEME</Text>
 
-                    <View style={styles.optionsList}>
-                        {OPTIONS.map(({ key, label, Icon, desc }) => {
+                    <View style={styles.themeRow}>
+                        {THEME_OPTIONS.map(({ key, label, Icon }) => {
                             const isActive = preference === key;
                             return (
                                 <TouchableOpacity
                                     key={key}
                                     style={[
-                                        styles.optionRow,
-                                        { borderColor: theme.colors.border, backgroundColor: theme.colors.surfaceElevated },
-                                        isActive && { borderColor: theme.colors.indigo[500], backgroundColor: isDark ? 'rgba(99, 102, 241, 0.12)' : 'rgba(79, 70, 229, 0.08)' },
+                                        styles.themeChip,
+                                        {
+                                            borderColor: theme.colors.border,
+                                            backgroundColor: theme.colors.surfaceElevated,
+                                        },
+                                        isActive && {
+                                            borderColor: theme.colors.indigo[500],
+                                            backgroundColor: isDark ? 'rgba(99, 102, 241, 0.14)' : 'rgba(79, 70, 229, 0.08)',
+                                        },
                                     ]}
                                     onPress={() => setPreference(key)}
-                                    activeOpacity={0.8}
+                                    activeOpacity={0.85}
+                                    accessibilityRole="button"
+                                    accessibilityState={{ selected: isActive }}
+                                    accessibilityLabel={`Theme ${label}`}
                                 >
-                                    <View style={[styles.optionIcon, { backgroundColor: isActive ? (isDark ? 'rgba(99, 102, 241, 0.2)' : 'rgba(79, 70, 229, 0.12)') : theme.colors.surface }]}>
-                                        <Icon
-                                            size={18}
-                                            color={isActive ? theme.colors.indigo[400] : theme.colors.textMuted}
-                                        />
-                                    </View>
-                                    <View style={styles.optionTextWrap}>
-                                        <Text style={[styles.optionLabel, { color: theme.colors.textPrimary }, isActive && { color: theme.colors.indigo[400] }]}>
-                                            {label}
-                                        </Text>
-                                        <Text style={[styles.optionDesc, { color: theme.colors.textMuted }]}>{desc}</Text>
-                                    </View>
-                                    {isActive && (
-                                        <View style={[styles.radioOuter, { borderColor: theme.colors.indigo[500] }]}>
-                                            <View style={[styles.radioInner, { backgroundColor: theme.colors.indigo[500] }]} />
-                                        </View>
-                                    )}
-                                    {!isActive && (
-                                        <View style={[styles.radioOuter, { borderColor: theme.colors.border }]} />
-                                    )}
+                                    <Icon size={16} color={isActive ? theme.colors.indigo[400] : theme.colors.textMuted} />
+                                    <Text
+                                        style={[
+                                            styles.themeChipLabel,
+                                            { color: theme.colors.textSecondary },
+                                            isActive && { color: theme.colors.indigo[400], fontWeight: '800' },
+                                        ]}
+                                        numberOfLines={1}
+                                    >
+                                        {label}
+                                    </Text>
                                 </TouchableOpacity>
                             );
                         })}
                     </View>
-
-                    {/* Future spot: more settings sections here */}
-                    <Text style={[styles.footerHint, { color: theme.colors.textMuted }]}>
-                        More settings coming soon
-                    </Text>
                 </Pressable>
             </Pressable>
         </Modal>
@@ -133,8 +206,8 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderBottomWidth: 0,
         paddingHorizontal: 20,
-        paddingBottom: 40,
-        paddingTop: 12,
+        paddingBottom: 28,
+        paddingTop: 10,
     },
     handle: {
         width: 40,
@@ -148,10 +221,10 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 20,
+        marginBottom: 14,
     },
     sheetTitle: {
-        fontSize: 22,
+        fontSize: 20,
         fontWeight: '800',
     },
     closeButton: {
@@ -166,73 +239,53 @@ const styles = StyleSheet.create({
         fontSize: 11,
         fontWeight: '700',
         letterSpacing: 1.2,
-        marginBottom: 12,
+        marginBottom: 8,
     },
     accountEmail: {
         fontSize: 13,
-        marginBottom: 12,
+        marginBottom: 10,
     },
-    signOutRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 10,
-        borderRadius: 14,
-        borderWidth: 1,
-        paddingVertical: 14,
-        paddingHorizontal: 14,
-        marginBottom: 20,
-    },
-    signOutLabel: {
-        fontWeight: '700',
-        fontSize: 15,
-    },
-    optionsList: {
+    usernameBlock: {
+        marginBottom: 4,
         gap: 8,
     },
-    optionRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        borderRadius: 14,
-        borderWidth: 1,
-        paddingVertical: 14,
-        paddingHorizontal: 14,
-        gap: 12,
+    usernameInlineHint: {
+        fontSize: 12,
+        lineHeight: 16,
     },
-    optionIcon: {
-        width: 38,
-        height: 38,
+    usernameInput: {
         borderRadius: 10,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    optionTextWrap: {
-        flex: 1,
-    },
-    optionLabel: {
-        fontWeight: '700',
+        borderWidth: 1,
+        paddingHorizontal: 12,
+        paddingVertical: 10,
         fontSize: 15,
+        fontWeight: '600',
     },
-    optionDesc: {
-        fontSize: 12,
-        marginTop: 2,
-    },
-    radioOuter: {
-        width: 22,
-        height: 22,
-        borderRadius: 11,
-        borderWidth: 2,
+    usernameSaveBtn: {
+        borderRadius: 10,
+        paddingVertical: 10,
         alignItems: 'center',
         justifyContent: 'center',
     },
-    radioInner: {
-        width: 10,
-        height: 10,
-        borderRadius: 5,
+    usernameSaveText: { color: '#fff', fontWeight: '800', fontSize: 14 },
+    themeRow: {
+        flexDirection: 'row',
+        gap: 8,
+        marginBottom: 8,
     },
-    footerHint: {
-        fontSize: 12,
-        textAlign: 'center',
-        marginTop: 20,
-        fontStyle: 'italic',
+    themeChip: {
+        flex: 1,
+        minWidth: 0,
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 4,
+        paddingVertical: 10,
+        paddingHorizontal: 4,
+        borderRadius: 12,
+        borderWidth: 1,
+    },
+    themeChipLabel: {
+        fontSize: 11,
+        fontWeight: '700',
     },
 });
