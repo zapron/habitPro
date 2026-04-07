@@ -1,10 +1,14 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { View, Text, TouchableOpacity, StyleSheet, StatusBar, Animated } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
+import { useFocusEffect } from "@react-navigation/native";
 import { FlashList } from "@shopify/flash-list";
-import { Trophy, Bolt, Target, Plus, ChevronRight, Sun, Moon, Sunrise, Sunset, Zap } from "lucide-react-native";
+import { Trophy, Bolt, Target, Plus, ChevronRight, Sun, Moon, Sunrise, Sunset, Zap, Bell } from "lucide-react-native";
 import { useHabitStore } from "../../src/store/habitStore";
+import { useAuth } from "../../src/context/AuthContext";
+import { isSupabaseConfigured } from "../../src/lib/env";
+import { countUnreadNotifications } from "../../src/lib/groupChallengesApi";
 import type { AppTheme } from "../../src/styles/theme";
 import { Button } from "../../src/components/Button";
 import { HabitCard } from "../../src/components/HabitCard";
@@ -52,12 +56,15 @@ export default function Home() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { theme, isDark } = useTheme();
+  const { session } = useAuth();
   const reduceMotion = useReducedMotion();
   const habits = useHabitStore((state) => state.habits);
   const miniMissions = useHabitStore((state) => state.miniMissions);
   const xp = useHabitStore((state) => state.xp);
   const [activeTab, setActiveTab] = useState<"active" | "completed">("active");
   const [storeHydrated, setStoreHydrated] = useState(() => useHabitStore.persist.hasHydrated());
+  const [unreadNotifCount, setUnreadNotifCount] = useState(0);
+  const showAccount = isSupabaseConfigured();
 
   const listBottomPad = Math.max(insets.bottom, 12) + 56;
 
@@ -112,6 +119,26 @@ export default function Home() {
     return unsub;
   }, []);
 
+  useFocusEffect(
+    useCallback(() => {
+      if (!session?.user || !showAccount) {
+        setUnreadNotifCount(0);
+        return;
+      }
+      let cancelled = false;
+      void countUnreadNotifications()
+        .then((n) => {
+          if (!cancelled) setUnreadNotifCount(n);
+        })
+        .catch(() => {
+          if (!cancelled) setUnreadNotifCount(0);
+        });
+      return () => {
+        cancelled = true;
+      };
+    }, [session?.user, showAccount]),
+  );
+
   return (
     <Screen>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={theme.colors.background} />
@@ -120,17 +147,36 @@ export default function Home() {
       <Animated.View
         style={[styles.header, { opacity: headerOpacity, transform: [{ translateY: headerSlide }] }]}
       >
-        <View>
-          <Text style={[styles.headerEyebrow, { color: theme.colors.cyan[400], marginBottom: 6 }]}>MISSION CONTROL</Text>
-          <Text style={[styles.headerTitle, { color: theme.colors.textPrimary }]}>
+        <View style={styles.headerLeftInline}>
+          <Text style={[styles.headerEyebrow, { color: theme.colors.cyan[400] }]}>MISSION CONTROL</Text>
+          {showAccount && session?.user ? (
+            <View style={styles.bellWrap}>
+              <TouchableOpacity
+                onPress={() => router.push("/notifications")}
+                style={[styles.headerIconBtn, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}
+                activeOpacity={0.85}
+                accessibilityLabel={
+                  unreadNotifCount > 0 ? `Notifications, ${unreadNotifCount} unread` : "Notifications"
+                }
+              >
+                <Bell size={20} color={theme.colors.textPrimary} />
+              </TouchableOpacity>
+              {unreadNotifCount > 0 ? (
+                <View style={[styles.notifBadge, { borderColor: theme.colors.background, backgroundColor: theme.colors.red[500] }]} />
+              ) : null}
+            </View>
+          ) : null}
+        </View>
+        <View style={styles.greetingRow}>
+          <Text style={[styles.headerTitle, { color: theme.colors.textPrimary, flex: 1, minWidth: 0 }]}>
             {greeting.text} {greeting.emoji}
           </Text>
-          <Text style={[styles.headerSubtitle, { color: theme.colors.textSecondary }]}>{motivation}</Text>
+          <View style={[styles.headerBadge, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
+            <Text style={[styles.levelNumber, { color: theme.colors.yellow[400] }]}>{level}</Text>
+            <Text style={[styles.levelLabel, { color: theme.colors.textMuted }]}>LVL</Text>
+          </View>
         </View>
-        <View style={[styles.headerBadge, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
-          <Text style={[styles.levelNumber, { color: theme.colors.yellow[400] }]}>{level}</Text>
-          <Text style={[styles.levelLabel, { color: theme.colors.textMuted }]}>LVL</Text>
-        </View>
+        <Text style={[styles.headerSubtitle, { color: theme.colors.textSecondary }]}>{motivation}</Text>
       </Animated.View>
 
       <View style={[styles.xpBar, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, borderRadius: theme.radius.md }]}>
@@ -279,13 +325,51 @@ export default function Home() {
 
 const styles = StyleSheet.create({
   rootCol: { flex: 1, minHeight: 0 },
-  header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: SECTION_GAP },
+  header: { marginBottom: SECTION_GAP },
+  headerLeftInline: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 6,
+  },
+  greetingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 16,
+    marginBottom: 4,
+  },
   headerEyebrow: { fontSize: 11, fontWeight: "700", letterSpacing: 1.3 },
   headerTitle: { fontSize: 22, fontWeight: "800" },
   headerSubtitle: { marginTop: 4, fontSize: 13, fontStyle: "italic" },
-  headerBadge: { width: 46, height: 46, borderRadius: 9999, alignItems: "center", justifyContent: "center", borderWidth: 1 },
-  levelNumber: { fontSize: 18, fontWeight: "800", lineHeight: 20 },
-  levelLabel: { fontSize: 8, fontWeight: "800", letterSpacing: 1 },
+  bellWrap: { position: "relative" },
+  notifBadge: {
+    position: "absolute",
+    top: 2,
+    right: 2,
+    width: 10,
+    height: 10,
+    borderRadius: 9999,
+    borderWidth: 2,
+  },
+  headerIconBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 9999,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+  },
+  headerBadge: {
+    width: 58,
+    height: 58,
+    borderRadius: 9999,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    flexShrink: 0,
+  },
+  levelNumber: { fontSize: 22, fontWeight: "800", lineHeight: 24 },
+  levelLabel: { fontSize: 9, fontWeight: "800", letterSpacing: 1 },
   commandRow: { flexDirection: "row", gap: 10, marginBottom: SECTION_GAP },
   commandCard: { flex: 1, paddingVertical: 14, paddingHorizontal: 14, position: "relative", overflow: "hidden", borderWidth: 1 },
   commandTopRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 },
