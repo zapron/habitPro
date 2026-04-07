@@ -24,6 +24,7 @@ import {
   countDistinctHabitDaysThisWeek,
   countMiniCompletionsThisWeek,
 } from "../../src/utils/weekStats";
+import { inviteeHabitStartIsoFromGroupStartDate } from "../../src/utils/challengeInviteeStart";
 import type { ChallengeEnrollment } from "../../src/types/challenge";
 import type { Habit, MiniMission } from "../../src/types/habit";
 import type { ChallengeInviteRow } from "../../src/types/groupChallenge";
@@ -122,7 +123,7 @@ export default function CompeteScreen() {
   const { theme, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const { session } = useAuth();
-  const [segment, setSegment] = useState<CompeteSegment>("leaderboard");
+  const [segment, setSegment] = useState<CompeteSegment>("challenges");
   const [pendingInvites, setPendingInvites] = useState<ChallengeInviteRow[]>([]);
   const [inviteTitles, setInviteTitles] = useState<Record<string, string>>({});
   const [inviteBusy, setInviteBusy] = useState<string | null>(null);
@@ -175,15 +176,15 @@ export default function CompeteScreen() {
     try {
       const group = await getChallengeGroup(invite.challenge_id);
       if (!group) {
-        Alert.alert("Error", "Challenge not found.");
+        Alert.alert("Error", "Group mission not found.");
         return;
       }
       const tpl = group.habit_template as Record<string, unknown>;
-      const title = typeof tpl.title === "string" ? tpl.title : "Challenge";
+      const title = typeof tpl.title === "string" ? tpl.title : "Group mission";
       const mode = tpl.mode === "manual" ? "manual" : "autopilot";
       const totalDays = typeof tpl.totalDays === "number" ? tpl.totalDays : 21;
       const description = typeof tpl.description === "string" ? tpl.description : undefined;
-      const startIso = group.start_date ? `${group.start_date}T12:00:00.000Z` : new Date().toISOString();
+      const startIso = inviteeHabitStartIsoFromGroupStartDate(group.start_date);
 
       let newHabitId = "";
       const unsub = subscribeSyncSuccess(() => {
@@ -272,27 +273,6 @@ export default function CompeteScreen() {
         <TouchableOpacity
           style={[
             styles.segment,
-            segment === "leaderboard" && [
-              styles.segmentActive,
-              { backgroundColor: theme.colors.indigo[600], ...theme.shadow.glow },
-            ],
-          ]}
-          onPress={() => setSegment("leaderboard")}
-          activeOpacity={0.85}
-        >
-          <Medal size={16} color={segment === "leaderboard" ? theme.colors.white : theme.colors.textMuted} />
-          <Text
-            style={[
-              styles.segmentLabel,
-              { color: segment === "leaderboard" ? theme.colors.white : theme.colors.textSecondary },
-            ]}
-          >
-            Leaderboard
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[
-            styles.segment,
             segment === "challenges" && [
               styles.segmentActive,
               { backgroundColor: theme.colors.indigo[600], ...theme.shadow.glow },
@@ -311,6 +291,27 @@ export default function CompeteScreen() {
             Challenges
           </Text>
         </TouchableOpacity>
+        <TouchableOpacity
+          style={[
+            styles.segment,
+            segment === "leaderboard" && [
+              styles.segmentActive,
+              { backgroundColor: theme.colors.indigo[600], ...theme.shadow.glow },
+            ],
+          ]}
+          onPress={() => setSegment("leaderboard")}
+          activeOpacity={0.85}
+        >
+          <Medal size={16} color={segment === "leaderboard" ? theme.colors.white : theme.colors.textMuted} />
+          <Text
+            style={[
+              styles.segmentLabel,
+              { color: segment === "leaderboard" ? theme.colors.white : theme.colors.textSecondary },
+            ]}
+          >
+            Leaderboard
+          </Text>
+        </TouchableOpacity>
       </View>
 
       <ScrollView
@@ -320,14 +321,14 @@ export default function CompeteScreen() {
       >
         {pendingInvites.length > 0 ? (
           <>
-            <Text style={[styles.sectionLabel, { color: theme.colors.textMuted }]}>GROUP INVITES</Text>
+            <Text style={[styles.sectionLabel, { color: theme.colors.textMuted }]}>GROUP MISSION INVITES</Text>
             {pendingInvites.map((inv) => (
               <View
                 key={inv.id}
                 style={[styles.card, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, ...theme.shadow.card }]}
               >
                 <Text style={[styles.cardTitle, { color: theme.colors.textPrimary }]}>
-                  {inviteTitles[inv.id] ?? "Group challenge"}
+                  {inviteTitles[inv.id] ?? "Group mission"}
                 </Text>
                 <Text style={[styles.inviteHint, { color: theme.colors.textSecondary }]}>
                   Accept to add a matching mission and join the cohort.
@@ -405,7 +406,7 @@ export default function CompeteScreen() {
             </View>
 
             <Text style={[styles.roadmap, { color: theme.colors.textMuted }]}>
-              Next: global leaderboards (Supabase), friend duels, and shared challenge invites.
+              Next: global leaderboards (Supabase), friend duels, and shared group mission invites.
             </Text>
           </>
         ) : (
