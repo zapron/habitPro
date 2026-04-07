@@ -16,6 +16,15 @@ import { useTheme } from "../src/context/ThemeContext";
 import { listNotifications, markNotificationRead } from "../src/lib/groupChallengesApi";
 import type { NotificationRow } from "../src/types/groupChallenge";
 
+function groupMissionInviteSubtitle(n: NotificationRow): string {
+  const p = n.payload ?? {};
+  const u = p.inviter_username;
+  if (typeof u === "string" && u.trim().length > 0) {
+    return `From @${u.trim().toLowerCase()}`;
+  }
+  return "Open Compete to accept or decline.";
+}
+
 export default function NotificationsScreen() {
   const router = useRouter();
   const { theme, isDark } = useTheme();
@@ -87,12 +96,26 @@ export default function NotificationsScreen() {
               ]}
               onPress={() => void onPressRow(item)}
             >
-              <Text style={{ color: theme.colors.textPrimary, fontWeight: "700" }}>
-                {item.type === "challenge_invite" ? "Challenge invite" : item.type}
-              </Text>
-              <Text style={{ color: theme.colors.textSecondary, fontSize: 13, marginTop: 4 }}>
-                {new Date(item.created_at).toLocaleString()}
-              </Text>
+              <View style={styles.rowInner}>
+                {!item.read_at ? (
+                  <View style={[styles.unreadDot, { backgroundColor: theme.colors.indigo[500] }]} />
+                ) : (
+                  <View style={styles.unreadSpacer} />
+                )}
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: theme.colors.textPrimary, fontWeight: "700" }}>
+                    {item.type === "challenge_invite" ? "Group mission invite" : item.type}
+                  </Text>
+                  {item.type === "challenge_invite" ? (
+                    <Text style={{ color: theme.colors.cyan[400], fontSize: 13, marginTop: 4, fontWeight: "600" }}>
+                      {groupMissionInviteSubtitle(item)}
+                    </Text>
+                  ) : null}
+                  <Text style={{ color: theme.colors.textSecondary, fontSize: 13, marginTop: 4 }}>
+                    {new Date(item.created_at).toLocaleString()}
+                  </Text>
+                </View>
+              </View>
             </TouchableOpacity>
           )}
         />
@@ -106,4 +129,7 @@ const styles = StyleSheet.create({
   iconButton: { padding: 8, borderRadius: 9999, borderWidth: 1 },
   title: { fontWeight: "800", flex: 1 },
   row: { borderRadius: 12, borderWidth: 1, padding: 14, marginBottom: 10 },
+  rowInner: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
+  unreadDot: { width: 10, height: 10, borderRadius: 9999, marginTop: 5 },
+  unreadSpacer: { width: 10, marginTop: 5 },
 });
