@@ -1,7 +1,7 @@
 import React, { memo } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
-import { TreePine, Flame, Check, Plane, Gamepad2, Globe } from 'lucide-react-native';
+import { TreePine, Flame, Check, Plane, Gamepad2, Globe, Swords } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
 import { Habit } from '../types/habit';
 import { ProgressRing } from './ProgressRing';
@@ -51,6 +51,20 @@ export const HabitCard = memo(({ item }: HabitCardProps) => {
                         <View style={[styles.publicPill, { borderColor: theme.colors.cyan[400] + '44', backgroundColor: theme.colors.cyan[400] + '14' }]}>
                             <Globe size={10} color={theme.colors.cyan[400]} />
                             <Text style={[styles.publicPillText, { color: theme.colors.cyan[400] }]}>PUBLIC</Text>
+                        </View>
+                    )}
+                    {Boolean(item.challengeGroupId) && (
+                        <View
+                            style={[
+                                styles.challengePill,
+                                {
+                                    borderColor: theme.colors.indigo[400] + '55',
+                                    backgroundColor: theme.colors.indigo[500] + '18',
+                                },
+                            ]}
+                        >
+                            <Swords size={10} color={theme.colors.indigo[400]} />
+                            <Text style={[styles.challengePillText, { color: theme.colors.indigo[400] }]}>GROUP MISSION</Text>
                         </View>
                     )}
                 </View>
@@ -172,6 +186,17 @@ const styles = StyleSheet.create({
         borderWidth: 1,
     },
     publicPillText: { fontSize: 9, fontWeight: '800', letterSpacing: 0.8 },
+    challengePill: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        alignSelf: 'flex-start',
+        gap: 4,
+        paddingVertical: 2,
+        paddingHorizontal: 8,
+        borderRadius: 9999,
+        borderWidth: 1,
+    },
+    challengePillText: { fontSize: 9, fontWeight: '800', letterSpacing: 0.8 },
     modePillText: { fontSize: 9, fontWeight: '800', letterSpacing: 0.8 },
     cardTitle: { fontWeight: '700', marginBottom: 4 },
     cardDescription: { fontSize: 14 },

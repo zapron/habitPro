@@ -362,7 +362,7 @@ export default function HabitDetail() {
                     <TouchableOpacity
                         style={[styles.iconButton, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}
                         onPress={() => setGroupSheetOpen(true)}
-                        accessibilityLabel="Group challenge"
+                        accessibilityLabel="Group mission"
                     >
                         <Users size={theme.icon.xl} color={theme.colors.cyan[400]} />
                     </TouchableOpacity>

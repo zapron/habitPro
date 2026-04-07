@@ -17,6 +17,7 @@ import { useTheme } from "../context/ThemeContext";
 import { isSupabaseConfigured } from "../lib/env";
 import {
   createGroupChallengeFromHabit,
+  listPendingInviteeIdsForChallenge,
   searchProfilesByUsernamePrefix,
   sendChallengeInvite,
 } from "../lib/groupChallengesApi";
@@ -42,10 +43,29 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
   const [results, setResults] = useState<ProfileSearchRow[]>([]);
   const [searching, setSearching] = useState(false);
   const [invitingId, setInvitingId] = useState<string | null>(null);
+  const [pendingInviteeIds, setPendingInviteeIds] = useState<Set<string>>(new Set());
 
   const signedIn = Boolean(session?.user);
   const configured = isSupabaseConfigured();
   const inGroup = Boolean(habit.challengeGroupId);
+
+  useEffect(() => {
+    if (!visible || !habit.challengeGroupId || !configured || !signedIn) {
+      setPendingInviteeIds(new Set());
+      return;
+    }
+    let cancelled = false;
+    void listPendingInviteeIdsForChallenge(habit.challengeGroupId)
+      .then((ids) => {
+        if (!cancelled) setPendingInviteeIds(new Set(ids));
+      })
+      .catch(() => {
+        if (!cancelled) setPendingInviteeIds(new Set());
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [visible, habit.challengeGroupId, configured, signedIn]);
 
   useEffect(() => {
     if (!visible) {
@@ -91,7 +111,7 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
     try {
       const { group, error } = await createGroupChallengeFromHabit(habit);
       if (error || !group) {
-        Alert.alert("Could not create group", error?.message ?? "Unknown error");
+        Alert.alert("Could not create group mission", error?.message ?? "Unknown error");
         return;
       }
       setHabitChallengeMeta(habit.id, {
@@ -107,7 +127,7 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
     async (userId: string) => {
       const gid = habit.challengeGroupId;
       if (!gid) {
-        Alert.alert("Create a group first", "Start a group challenge, then invite friends.");
+        Alert.alert("Create a group mission first", "Start a group mission from this habit, then invite friends.");
         return;
       }
       setInvitingId(userId);
@@ -117,6 +137,7 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
           Alert.alert("Invite failed", error.message);
           return;
         }
+        setPendingInviteeIds((prev) => new Set(prev).add(userId));
         Alert.alert("Invite sent", "They will see it under Compete and in notifications.");
       } finally {
         setInvitingId(null);
@@ -137,7 +158,7 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
       <View style={styles.backdrop}>
         <View style={[styles.sheet, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
           <View style={styles.sheetHead}>
-            <Text style={[styles.sheetTitle, { color: theme.colors.textPrimary }]}>Group challenge</Text>
+            <Text style={[styles.sheetTitle, { color: theme.colors.textPrimary }]}>Group mission</Text>
             <TouchableOpacity
               onPress={onClose}
               style={[styles.closeBtn, { borderColor: theme.colors.border, backgroundColor: theme.colors.surfaceElevated }]}
@@ -149,14 +170,14 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
 
           {!configured || !signedIn ? (
             <Text style={{ color: theme.colors.textSecondary, fontSize: 14, lineHeight: 20 }}>
-              Sign in with Supabase configured to start or join group challenges.
+              Sign in with Supabase configured to start or join group missions.
             </Text>
           ) : inGroup ? (
             <>
               <Text style={{ color: theme.colors.textSecondary, fontSize: 14, marginBottom: 12, lineHeight: 20 }}>
-                This mission is linked to a group. Open the challenge to see the cohort.
+                This mission is linked to a group. Open the group mission to see the cohort.
               </Text>
-              <Button title="Open challenge" onPress={openChallenge} />
+              <Button title="Open group mission" onPress={openChallenge} />
               <Text style={[styles.sectionLabel, { color: theme.colors.textMuted }]}>Invite someone</Text>
               <TextInput
                 value={query}
@@ -188,37 +209,42 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
                       <Text style={{ color: theme.colors.textMuted, fontSize: 13, marginTop: 8 }}>No matches</Text>
                     ) : null
                   }
-                  renderItem={({ item }) => (
-                    <TouchableOpacity
-                      style={[styles.row, { borderColor: theme.colors.border }]}
-                      onPress={() => void handleInvite(item.id)}
-                      disabled={invitingId === item.id}
-                    >
-                      <View style={{ flex: 1 }}>
-                        <Text style={{ color: theme.colors.textPrimary, fontWeight: "700" }}>
-                          @{item.username}
-                        </Text>
-                        {item.display_name ? (
-                          <Text style={{ color: theme.colors.textMuted, fontSize: 12 }}>{item.display_name}</Text>
-                        ) : null}
-                      </View>
-                      {invitingId === item.id ? (
-                        <ActivityIndicator size="small" color={theme.colors.indigo[400]} />
-                      ) : (
-                        <Text style={{ color: theme.colors.cyan[400], fontWeight: "700" }}>Invite</Text>
-                      )}
-                    </TouchableOpacity>
-                  )}
+                  renderItem={({ item }) => {
+                    const isPending = pendingInviteeIds.has(item.id);
+                    return (
+                      <TouchableOpacity
+                        style={[styles.row, { borderColor: theme.colors.border, opacity: isPending ? 0.75 : 1 }]}
+                        onPress={() => void handleInvite(item.id)}
+                        disabled={invitingId === item.id || isPending}
+                      >
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ color: theme.colors.textPrimary, fontWeight: "700" }}>
+                            @{item.username}
+                          </Text>
+                          {item.display_name ? (
+                            <Text style={{ color: theme.colors.textMuted, fontSize: 12 }}>{item.display_name}</Text>
+                          ) : null}
+                        </View>
+                        {isPending ? (
+                          <Text style={{ color: theme.colors.textMuted, fontWeight: "700" }}>Pending</Text>
+                        ) : invitingId === item.id ? (
+                          <ActivityIndicator size="small" color={theme.colors.indigo[400]} />
+                        ) : (
+                          <Text style={{ color: theme.colors.cyan[400], fontWeight: "700" }}>Invite</Text>
+                        )}
+                      </TouchableOpacity>
+                    );
+                  }}
                 />
               )}
             </>
           ) : (
             <>
               <Text style={{ color: theme.colors.textSecondary, fontSize: 14, marginBottom: 14, lineHeight: 20 }}>
-                Create a shared challenge from this mission. You stay on this habit; invitees get a matching habit when
+                Create a shared group mission from this habit. You stay on this mission; invitees get a matching one when
                 they accept.
               </Text>
-              <Button title={creating ? "Creating…" : "Start group challenge"} onPress={() => void handleCreateGroup()} disabled={creating} />
+              <Button title={creating ? "Creating…" : "Start group mission"} onPress={() => void handleCreateGroup()} disabled={creating} />
             </>
           )}
         </View>
