@@ -14,6 +14,7 @@ import {
   Animated,
   Easing,
   Alert,
+  ActivityIndicator,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as ImagePicker from "expo-image-picker";
@@ -55,10 +56,12 @@ export function StreakMemorySheet({
   const slideY = useRef(new Animated.Value(420)).current;
   const [note, setNote] = useState("");
   const [imageUri, setImageUri] = useState<string | undefined>();
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     if (visible) {
       slideY.setValue(420);
+      setSubmitting(false);
       if (!isView) {
         setNote("");
         setImageUri(undefined);
@@ -79,20 +82,49 @@ export function StreakMemorySheet({
     }
   }, [visible, slideY, isView]);
 
-  const pickImage = useCallback(async () => {
-    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) return;
-    const res = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [4, 5],
-      quality: 0.88,
-    });
-    if (!res.canceled && res.assets[0]) {
-      setImageUri(res.assets[0].uri);
+  const pickerOptions = {
+    mediaTypes: ImagePicker.MediaTypeOptions.Images,
+    allowsEditing: true,
+    aspect: [4, 5] as [number, number],
+    quality: 0.88,
+  };
+
+  const applyPickedUri = useCallback((uri: string | undefined) => {
+    if (uri) {
+      setImageUri(uri);
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
   }, []);
+
+  const pickFromLibrary = useCallback(async () => {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) return;
+    const res = await ImagePicker.launchImageLibraryAsync(pickerOptions);
+    if (!res.canceled && res.assets[0]) {
+      applyPickedUri(res.assets[0].uri);
+    }
+  }, [applyPickedUri]);
+
+  const pickFromCamera = useCallback(async () => {
+    const perm = await ImagePicker.requestCameraPermissionsAsync();
+    if (!perm.granted) return;
+    const res = await ImagePicker.launchCameraAsync(pickerOptions);
+    if (!res.canceled && res.assets[0]) {
+      applyPickedUri(res.assets[0].uri);
+    }
+  }, [applyPickedUri]);
+
+  const choosePhotoSource = useCallback(() => {
+    Alert.alert(
+      "Add a photo",
+      "Take a new picture or choose one from your gallery.",
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Take photo", onPress: () => void pickFromCamera() },
+        { text: "Photo library", onPress: () => void pickFromLibrary() },
+      ],
+    );
+  }, [pickFromCamera, pickFromLibrary]);
 
   /** Backdrop, X, Android back — does not check in (create) or only closes (view). */
   const handleDismiss = useCallback(() => {
@@ -101,14 +133,14 @@ export function StreakMemorySheet({
 
   /** Explicit: check in for this day without saving a photo/note. */
   const handleJustMarkDone = useCallback(() => {
-    if (isView) return;
+    if (isView || submitting) return;
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     onCommit?.(null);
     onClose();
-  }, [isView, onCommit, onClose]);
+  }, [isView, submitting, onCommit, onClose]);
 
   const handleSave = useCallback(async () => {
-    if (isView) return;
+    if (isView || submitting) return;
     const memory: StreakMemory = {
       createdAt: new Date().toISOString(),
       ...(note.trim() ? { note: note.trim() } : {}),
@@ -124,11 +156,14 @@ export function StreakMemorySheet({
       );
       return;
     }
+    setSubmitting(true);
     try {
       await Promise.resolve(onCommit?.(memory));
       onClose();
     } catch {
       // onCommit may alert; keep sheet open for retry
+    } finally {
+      setSubmitting(false);
     }
   }, [isView, isMini, note, imageUri, onCommit, onClose]);
 
@@ -275,7 +310,7 @@ export function StreakMemorySheet({
 
                     <View style={styles.photoSlotWrap}>
                       <Pressable
-                        onPress={pickImage}
+                        onPress={choosePhotoSource}
                         style={[
                           styles.photoSlot,
                           {
@@ -321,11 +356,13 @@ export function StreakMemorySheet({
                   <View style={styles.actions}>
                     <Pressable
                       onPress={handleJustMarkDone}
+                      disabled={submitting}
                       style={[
                         styles.btnSecondary,
                         {
                           borderColor: theme.colors.border,
                           backgroundColor: isDark ? "rgba(148, 163, 184, 0.12)" : theme.colors.slate[750],
+                          opacity: submitting ? 0.5 : 1,
                         },
                       ]}
                     >
@@ -334,12 +371,20 @@ export function StreakMemorySheet({
                       </Text>
                     </Pressable>
                     <Pressable
-                      onPress={handleSave}
-                      style={[styles.btnPrimary, { backgroundColor: theme.colors.indigo[600], ...theme.shadow.glow }]}
+                      onPress={() => void handleSave()}
+                      disabled={submitting}
+                      style={[
+                        styles.btnPrimary,
+                        { backgroundColor: theme.colors.indigo[600], ...theme.shadow.glow, opacity: submitting ? 0.92 : 1 },
+                      ]}
                     >
-                      <Text style={[styles.btnPrimaryText, { color: theme.colors.white }]}>
-                        {isMini ? "Save & complete" : "Save moment"}
-                      </Text>
+                      {submitting ? (
+                        <ActivityIndicator color={theme.colors.white} />
+                      ) : (
+                        <Text style={[styles.btnPrimaryText, { color: theme.colors.white }]}>
+                          {isMini ? "Save & complete" : "Save moment"}
+                        </Text>
+                      )}
                     </Pressable>
                   </View>
                 </View>
