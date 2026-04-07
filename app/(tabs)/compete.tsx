@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { Medal, Swords, Trophy, Clock, X } from "lucide-react-native";
 import { Screen } from "../../src/components/Screen";
 import { useTheme } from "../../src/context/ThemeContext";
@@ -34,7 +35,7 @@ import {
   acceptInviteAndJoin,
   declineInvite,
   getChallengeGroup,
-  listPendingInvitesForMe,
+  listInvitesForMe,
   refreshCohortPeerHabits,
 } from "../../src/lib/groupChallengesApi";
 import { subscribeSyncSuccess } from "../../src/lib/syncQueue";
@@ -122,11 +123,16 @@ function ActiveChallengeCard({
 export default function CompeteScreen() {
   const { theme, isDark } = useTheme();
   const insets = useSafeAreaInsets();
+  const router = useRouter();
+  const params = useLocalSearchParams<{ inviteId?: string; challengeId?: string; focusInvites?: string }>();
   const { session } = useAuth();
   const [segment, setSegment] = useState<CompeteSegment>("challenges");
-  const [pendingInvites, setPendingInvites] = useState<ChallengeInviteRow[]>([]);
+  const [groupInvites, setGroupInvites] = useState<ChallengeInviteRow[]>([]);
   const [inviteTitles, setInviteTitles] = useState<Record<string, string>>({});
   const [inviteBusy, setInviteBusy] = useState<string | null>(null);
+  const [highlightInviteId, setHighlightInviteId] = useState<string | null>(null);
+  const [highlightChallengeId, setHighlightChallengeId] = useState<string | null>(null);
+  const deepLinkHandledRef = useRef(false);
 
   const xp = useHabitStore((s) => s.xp);
   const habits = useHabitStore((s) => s.habits);
@@ -145,13 +151,13 @@ export default function CompeteScreen() {
 
   const loadInvites = useCallback(async () => {
     if (!isSupabaseConfigured() || !session?.user) {
-      setPendingInvites([]);
+      setGroupInvites([]);
       setInviteTitles({});
       return;
     }
     try {
-      const rows = await listPendingInvitesForMe();
-      setPendingInvites(rows);
+      const rows = await listInvitesForMe();
+      setGroupInvites(rows);
       const titles: Record<string, string> = {};
       await Promise.all(
         rows.map(async (inv) => {
@@ -170,6 +176,40 @@ export default function CompeteScreen() {
       void loadInvites();
     }, [loadInvites]),
   );
+
+  useEffect(() => {
+    const inviteId = typeof params.inviteId === "string" ? params.inviteId.trim() : "";
+    const challengeId = typeof params.challengeId === "string" ? params.challengeId.trim() : "";
+    const focus = params.focusInvites === "1" || params.focusInvites === "true";
+    if (!inviteId && !challengeId && !focus) {
+      deepLinkHandledRef.current = false;
+      return;
+    }
+    if (deepLinkHandledRef.current) return;
+    deepLinkHandledRef.current = true;
+
+    if (focus || inviteId || challengeId) {
+      setSegment("challenges");
+    }
+    if (inviteId) {
+      setHighlightInviteId(inviteId);
+      setHighlightChallengeId(null);
+    } else if (challengeId) {
+      setHighlightInviteId(null);
+      setHighlightChallengeId(challengeId);
+    }
+
+    router.setParams({ inviteId: undefined, challengeId: undefined, focusInvites: undefined });
+  }, [params.inviteId, params.challengeId, params.focusInvites, router]);
+
+  useEffect(() => {
+    if (!highlightInviteId && !highlightChallengeId) return;
+    const t = setTimeout(() => {
+      setHighlightInviteId(null);
+      setHighlightChallengeId(null);
+    }, 6000);
+    return () => clearTimeout(t);
+  }, [highlightInviteId, highlightChallengeId]);
 
   const handleAcceptGroupInvite = async (invite: ChallengeInviteRow) => {
     setInviteBusy(invite.id);
@@ -319,42 +359,71 @@ export default function CompeteScreen() {
         contentContainerStyle={{ paddingBottom: bottomPad }}
         keyboardShouldPersistTaps="handled"
       >
-        {pendingInvites.length > 0 ? (
+        {groupInvites.length > 0 ? (
           <>
             <Text style={[styles.sectionLabel, { color: theme.colors.textMuted }]}>GROUP MISSION INVITES</Text>
-            {pendingInvites.map((inv) => (
-              <View
-                key={inv.id}
-                style={[styles.card, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, ...theme.shadow.card }]}
-              >
-                <Text style={[styles.cardTitle, { color: theme.colors.textPrimary }]}>
-                  {inviteTitles[inv.id] ?? "Group mission"}
-                </Text>
-                <Text style={[styles.inviteHint, { color: theme.colors.textSecondary }]}>
-                  Accept to add a matching mission and join the cohort.
-                </Text>
-                <View style={styles.inviteActions}>
-                  <TouchableOpacity
-                    style={[styles.declineBtn, { borderColor: theme.colors.border }]}
-                    onPress={() => void handleDeclineGroupInvite(inv)}
-                    disabled={inviteBusy === inv.id}
-                  >
-                    <Text style={{ color: theme.colors.textMuted, fontWeight: "700" }}>Decline</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.acceptBtn, { backgroundColor: theme.colors.indigo[600], ...theme.shadow.glow }]}
-                    onPress={() => void handleAcceptGroupInvite(inv)}
-                    disabled={inviteBusy === inv.id}
-                  >
-                    {inviteBusy === inv.id ? (
-                      <ActivityIndicator color={theme.colors.white} />
-                    ) : (
-                      <Text style={styles.acceptBtnText}>Accept</Text>
-                    )}
-                  </TouchableOpacity>
+            {groupInvites.map((inv) => {
+              const pending = inv.status === "pending";
+              const highlighted =
+                (highlightInviteId !== null && highlightInviteId === inv.id) ||
+                (highlightChallengeId !== null && highlightChallengeId === inv.challenge_id);
+              return (
+                <View
+                  key={inv.id}
+                  style={[
+                    styles.card,
+                    {
+                      backgroundColor: theme.colors.surface,
+                      borderColor: highlighted ? theme.colors.indigo[400] : theme.colors.border,
+                      borderWidth: highlighted ? 2 : 1,
+                      ...theme.shadow.card,
+                    },
+                  ]}
+                >
+                  <Text style={[styles.cardTitle, { color: theme.colors.textPrimary }]}>
+                    {inviteTitles[inv.id] ?? "Group mission"}
+                  </Text>
+                  {pending ? (
+                    <>
+                      <Text style={[styles.inviteHint, { color: theme.colors.textSecondary }]}>
+                        Accept to add a matching mission and join the cohort.
+                      </Text>
+                      <View style={styles.inviteActions}>
+                        <TouchableOpacity
+                          style={[styles.declineBtn, { borderColor: theme.colors.border }]}
+                          onPress={() => void handleDeclineGroupInvite(inv)}
+                          disabled={inviteBusy === inv.id}
+                        >
+                          <Text style={{ color: theme.colors.textMuted, fontWeight: "700" }}>Decline</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[styles.acceptBtn, { backgroundColor: theme.colors.indigo[600], ...theme.shadow.glow }]}
+                          onPress={() => void handleAcceptGroupInvite(inv)}
+                          disabled={inviteBusy === inv.id}
+                        >
+                          {inviteBusy === inv.id ? (
+                            <ActivityIndicator color={theme.colors.white} />
+                          ) : (
+                            <Text style={styles.acceptBtnText}>Accept</Text>
+                          )}
+                        </TouchableOpacity>
+                      </View>
+                    </>
+                  ) : (
+                    <Text
+                      style={[
+                        styles.inviteResolvedHint,
+                        { color: inv.status === "accepted" ? theme.colors.cyan[400] : theme.colors.textMuted },
+                      ]}
+                    >
+                      {inv.status === "accepted"
+                        ? "Accepted — you’re in this cohort."
+                        : "Declined — this invite stays here for your records."}
+                    </Text>
+                  )}
                 </View>
-              </View>
-            ))}
+              );
+            })}
           </>
         ) : null}
 
@@ -595,6 +664,7 @@ const styles = StyleSheet.create({
   winTitle: { flex: 1, fontWeight: "700", fontSize: 15 },
   winDate: { fontSize: 12, fontWeight: "600" },
   inviteHint: { fontSize: 13, lineHeight: 18, marginBottom: 14 },
+  inviteResolvedHint: { fontSize: 13, lineHeight: 18, fontWeight: "600" },
   inviteActions: { flexDirection: "row", gap: 10, alignItems: "center" },
   declineBtn: {
     flex: 1,

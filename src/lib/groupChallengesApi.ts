@@ -171,12 +171,16 @@ export async function sendChallengeInvite(
       ? inviterProfile.username.trim().toLowerCase()
       : null;
 
-  const { error: invErr } = await supabase.from("challenge_invites").insert({
-    challenge_id: challengeId,
-    inviter_id: user.id,
-    invitee_id: inviteeUserId,
-    status: "pending",
-  });
+  const { data: inserted, error: invErr } = await supabase
+    .from("challenge_invites")
+    .insert({
+      challenge_id: challengeId,
+      inviter_id: user.id,
+      invitee_id: inviteeUserId,
+      status: "pending",
+    })
+    .select("id")
+    .single();
   if (invErr) {
     const msg = invErr.message.toLowerCase().includes("unique") || invErr.code === "23505"
       ? "You already sent an invite to this person for this group mission."
@@ -189,6 +193,7 @@ export async function sendChallengeInvite(
     p_type: "challenge_invite",
     p_payload: {
       challenge_id: challengeId,
+      invite_id: typeof inserted?.id === "string" ? inserted.id : null,
       inviter_id: user.id,
       inviter_username: inviterUsername,
     },
@@ -213,6 +218,30 @@ export async function listPendingInvitesForMe(): Promise<ChallengeInviteRow[]> {
     .order("created_at", { ascending: false });
   if (error) throw error;
   return (data ?? []) as ChallengeInviteRow[];
+}
+
+/** All invites for the current user (pending, accepted, declined) — newest first within each group. */
+export async function listInvitesForMe(limit = 40): Promise<ChallengeInviteRow[]> {
+  const supabase = getSupabase();
+  if (!supabase) return [];
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return [];
+  const { data, error } = await supabase
+    .from("challenge_invites")
+    .select("*")
+    .eq("invitee_id", user.id)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  const rows = (data ?? []) as ChallengeInviteRow[];
+  return rows.sort((a, b) => {
+    const pa = a.status === "pending" ? 0 : 1;
+    const pb = b.status === "pending" ? 0 : 1;
+    if (pa !== pb) return pa - pb;
+    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+  });
 }
 
 export async function listMyChallengeGroups(): Promise<ChallengeGroupRow[]> {
