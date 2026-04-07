@@ -3,6 +3,8 @@ import { View } from "react-native";
 import { Stack, useRouter, useSegments } from "expo-router";
 import { ThemeProvider } from "../src/context/ThemeContext";
 import { AuthProvider, useAuth } from "../src/context/AuthContext";
+import { AppVersionProvider, useAppVersion } from "../src/context/AppVersionContext";
+import { ForceUpdateModal } from "../src/components/ForceUpdateModal";
 import { SyncManager } from "../src/components/SyncManager";
 import { SyncToast } from "../src/components/SyncToast";
 import { setupNotifications } from "../src/utils/notifications";
@@ -15,6 +17,7 @@ function RootLayoutNav() {
   const segments = useSegments();
   const router = useRouter();
   const requireAuth = isSupabaseConfigured();
+  const { needsForceUpdate, downloadUrl, forceMessage } = useAppVersion();
 
   useEffect(() => {
     void setupNotifications();
@@ -116,6 +119,7 @@ function RootLayoutNav() {
       <SyncManager />
       <Stack screenOptions={{ headerShown: false }} />
       <SyncToast />
+      <ForceUpdateModal visible={needsForceUpdate} downloadUrl={downloadUrl} message={forceMessage} />
     </View>
   );
 }
@@ -124,7 +128,9 @@ export default function Layout() {
   return (
     <ThemeProvider>
       <AuthProvider>
-        <RootLayoutNav />
+        <AppVersionProvider>
+          <RootLayoutNav />
+        </AppVersionProvider>
       </AuthProvider>
     </ThemeProvider>
   );
