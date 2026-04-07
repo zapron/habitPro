@@ -19,10 +19,9 @@ import type { NotificationRow } from "../src/types/groupChallenge";
 function groupMissionInviteSubtitle(n: NotificationRow): string {
   const p = n.payload ?? {};
   const u = p.inviter_username;
-  if (typeof u === "string" && u.trim().length > 0) {
-    return `From @${u.trim().toLowerCase()}`;
-  }
-  return "Open Compete to accept or decline.";
+  const from =
+    typeof u === "string" && u.trim().length > 0 ? `From @${u.trim().toLowerCase()}` : "Group mission";
+  return `${from} · Tap to view in Compete`;
 }
 
 export default function NotificationsScreen() {
@@ -53,9 +52,20 @@ export default function NotificationsScreen() {
       setItems((prev) => prev.map((x) => (x.id === n.id ? { ...x, read_at: new Date().toISOString() } : x)));
     }
     if (n.type === "challenge_invite") {
-      const cid = n.payload?.challenge_id;
-      if (typeof cid === "string") {
-        router.push("/(tabs)/compete");
+      const p = n.payload ?? {};
+      const cid = typeof p.challenge_id === "string" ? p.challenge_id : "";
+      const iid = typeof p.invite_id === "string" ? p.invite_id : "";
+      if (cid || iid) {
+        router.push({
+          pathname: "/(tabs)/compete",
+          params: {
+            ...(iid ? { inviteId: iid } : {}),
+            ...(cid ? { challengeId: cid } : {}),
+            focusInvites: "1",
+          },
+        });
+      } else {
+        router.push({ pathname: "/(tabs)/compete", params: { focusInvites: "1" } });
       }
     }
   };
