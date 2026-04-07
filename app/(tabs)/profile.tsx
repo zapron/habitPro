@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import type { ComponentType } from "react";
 import {
   View,
@@ -11,14 +11,12 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { useFocusEffect } from "@react-navigation/native";
-import { Settings, Zap, Globe, User, Target, Flame, Bell, LogOut } from "lucide-react-native";
+import { Settings, Zap, Globe, User, Target, Flame, LogOut } from "lucide-react-native";
 import { Screen } from "../../src/components/Screen";
 import { useTheme } from "../../src/context/ThemeContext";
 import { useAuth } from "../../src/context/AuthContext";
 import { useHabitStore } from "../../src/store/habitStore";
 import { isSupabaseConfigured } from "../../src/lib/env";
-import { countUnreadNotifications } from "../../src/lib/groupChallengesApi";
 import { SettingsModal } from "../../src/components/SettingsModal";
 import { HubListModal } from "../../src/components/HubListModal";
 import type { AppTheme } from "../../src/styles/theme";
@@ -239,8 +237,6 @@ export default function ProfileScreen() {
   const { session, signOut } = useAuth();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [hubSheet, setHubSheet] = useState<HubSheetState>(null);
-  const [unreadNotifCount, setUnreadNotifCount] = useState(0);
-
   const xp = useHabitStore((s) => s.xp);
   const username = useHabitStore((s) => s.username);
   const habits = useHabitStore((s) => s.habits);
@@ -306,26 +302,6 @@ export default function ProfileScreen() {
       },
     };
   }, [habits, miniMissions]);
-
-  useFocusEffect(
-    useCallback(() => {
-      if (!session?.user || !isSupabaseConfigured()) {
-        setUnreadNotifCount(0);
-        return;
-      }
-      let cancelled = false;
-      void countUnreadNotifications()
-        .then((n) => {
-          if (!cancelled) setUnreadNotifCount(n);
-        })
-        .catch(() => {
-          if (!cancelled) setUnreadNotifCount(0);
-        });
-      return () => {
-        cancelled = true;
-      };
-    }, [session?.user]),
-  );
 
   const hubModalContent = useMemo(() => {
     if (!hubSheet) return null;
@@ -408,36 +384,19 @@ export default function ProfileScreen() {
         </View>
         <View style={{ flexDirection: "row", gap: 8 }}>
           {showAccount && session?.user ? (
-            <>
-              <View style={styles.bellWrap}>
-                <TouchableOpacity
-                  onPress={() => router.push("/notifications")}
-                  style={[styles.gearBtn, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}
-                  activeOpacity={0.85}
-                  accessibilityLabel={
-                    unreadNotifCount > 0 ? `Notifications, ${unreadNotifCount} unread` : "Notifications"
-                  }
-                >
-                  <Bell size={20} color={theme.colors.textPrimary} />
-                </TouchableOpacity>
-                {unreadNotifCount > 0 ? (
-                  <View style={[styles.notifBadge, { borderColor: theme.colors.background, backgroundColor: theme.colors.red[500] }]} />
-                ) : null}
-              </View>
-              <TouchableOpacity
-                onPress={() => {
-                  Alert.alert("Sign out", "You will need to sign in again to continue.", [
-                    { text: "Cancel", style: "cancel" },
-                    { text: "Sign out", style: "destructive", onPress: () => void signOut() },
-                  ]);
-                }}
-                style={[styles.gearBtn, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}
-                activeOpacity={0.85}
-                accessibilityLabel="Sign out"
-              >
-                <LogOut size={20} color={theme.colors.red[500]} />
-              </TouchableOpacity>
-            </>
+            <TouchableOpacity
+              onPress={() => {
+                Alert.alert("Sign out", "You will need to sign in again to continue.", [
+                  { text: "Cancel", style: "cancel" },
+                  { text: "Sign out", style: "destructive", onPress: () => void signOut() },
+                ]);
+              }}
+              style={[styles.gearBtn, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}
+              activeOpacity={0.85}
+              accessibilityLabel="Sign out"
+            >
+              <LogOut size={20} color={theme.colors.red[500]} />
+            </TouchableOpacity>
           ) : null}
           <TouchableOpacity
             onPress={() => setSettingsOpen(true)}
@@ -627,16 +586,6 @@ const styles = StyleSheet.create({
   },
   title: { fontWeight: "800", marginBottom: 4 },
   subtitle: {},
-  bellWrap: { position: "relative" },
-  notifBadge: {
-    position: "absolute",
-    top: 2,
-    right: 2,
-    width: 10,
-    height: 10,
-    borderRadius: 9999,
-    borderWidth: 2,
-  },
   gearBtn: {
     width: 44,
     height: 44,
