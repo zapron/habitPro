@@ -436,7 +436,7 @@ export default function HabitDetail() {
                 </View>
 
                 <StreakBanner streak={habit.streak} />
-                <Timer startDate={habit.startDate} mode={mode} endDate={habit.endDate} />
+
                 <QuoteCard />
 
                 <View style={[styles.progressCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, borderRadius: theme.radius.lg, ...theme.shadow.card }]}>
@@ -450,6 +450,8 @@ export default function HabitDetail() {
                         <View style={[styles.progressBarFill, isManual && { backgroundColor: theme.colors.amber[500] }, { backgroundColor: theme.colors.indigo[500], width: `${(habit.completedDates.length / totalDays) * 100}%` }]} />
                     </View>
                 </View>
+
+                <Timer startDate={habit.startDate} mode={mode} endDate={habit.endDate} />
 
                 <Text style={[styles.gridTitle, { color: theme.colors.textPrimary, fontSize: theme.typography.h3 }]}>
                     {isManual ? `${totalDays}-Day Grid` : '21-Day Grid'}
