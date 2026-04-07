@@ -7,6 +7,7 @@ import {
   StyleSheet,
   StatusBar,
   ActivityIndicator,
+  Platform,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
@@ -14,29 +15,60 @@ import { ArrowLeft } from "lucide-react-native";
 import { Screen } from "../../src/components/Screen";
 import { CohortPeerStreakDots } from "../../src/components/CohortPeerStreakDots";
 import { useTheme } from "../../src/context/ThemeContext";
+import { useAuth } from "../../src/context/AuthContext";
 import { useHabitStore } from "../../src/store/habitStore";
 import {
   getChallengeGroup,
-  getProfileUsernamesForIds,
+  getProfileLabelsForIds,
   listChallengeMembers,
   refreshCohortPeerHabits,
+  type ProfileLabel,
 } from "../../src/lib/groupChallengesApi";
 import type { ChallengeGroupRow } from "../../src/types/groupChallenge";
+import type { Habit } from "../../src/types/habit";
+
+function parseGroupMissionDisplay(g: ChallengeGroupRow | null): { title: string; description?: string } {
+  if (!g) return { title: "Group mission" };
+  const tpl = g.habit_template as Record<string, unknown>;
+  const habitTitle = typeof tpl.title === "string" ? tpl.title.trim() : "";
+  const description =
+    typeof tpl.description === "string" && tpl.description.trim().length > 0 ? tpl.description.trim() : undefined;
+
+  let title = habitTitle;
+  if (!title) {
+    const raw = g.title.trim();
+    const parts = raw.split(/\s*[—–]\s/).map((p) => p.trim()).filter(Boolean);
+    title = parts.length >= 1 ? parts[0] : raw;
+  }
+  if (!title) title = "Group mission";
+
+  return { title, description };
+}
+
+function participantDisplayName(label: ProfileLabel | undefined): string {
+  if (label?.displayName) return label.displayName;
+  if (label?.username) {
+    const u = label.username;
+    return u.charAt(0).toUpperCase() + u.slice(1);
+  }
+  return "Member";
+}
 
 export default function ChallengeDetailScreen() {
   const { id } = useLocalSearchParams<{ id?: string | string[] }>();
   const challengeId = Array.isArray(id) ? id[0] : id;
   const router = useRouter();
   const { theme, isDark } = useTheme();
+  const { session } = useAuth();
+  const myUserId = session?.user?.id ?? null;
 
   const habits = useHabitStore((s) => s.habits);
   const cohortPeerHabits = useHabitStore((s) => s.cohortPeerHabits);
 
   const [group, setGroup] = useState<ChallengeGroupRow | null>(null);
   const [loading, setLoading] = useState(true);
-  const [memberCount, setMemberCount] = useState(0);
-  const [memberUsernames, setMemberUsernames] = useState<Record<string, string>>({});
   const [memberIdsOrdered, setMemberIdsOrdered] = useState<string[]>([]);
+  const [profileLabels, setProfileLabels] = useState<Record<string, ProfileLabel>>({});
 
   const load = useCallback(async () => {
     if (!challengeId) return;
@@ -47,11 +79,10 @@ export default function ChallengeDetailScreen() {
         listChallengeMembers(challengeId),
       ]);
       setGroup(g);
-      setMemberCount(members.length);
       const ids = members.map((m) => m.user_id);
       setMemberIdsOrdered(ids);
-      const names = await getProfileUsernamesForIds(ids);
-      setMemberUsernames(names);
+      const labels = await getProfileLabelsForIds(ids);
+      setProfileLabels(labels);
     } finally {
       setLoading(false);
     }
@@ -77,16 +108,22 @@ export default function ChallengeDetailScreen() {
     [cohortPeerHabits, challengeId],
   );
 
-  const bottomPad = 32;
+  const { title: missionTitle, description: missionDescription } = useMemo(
+    () => parseGroupMissionDisplay(group),
+    [group],
+  );
 
-  const memberLine = useMemo(() => {
-    const handles = memberIdsOrdered
-      .map((id) => memberUsernames[id])
-      .filter((u): u is string => Boolean(u))
-      .map((u) => `@${u}`);
-    if (handles.length === 0) return null;
-    return handles.join(" · ");
-  }, [memberIdsOrdered, memberUsernames]);
+  const habitForMember = useCallback(
+    (memberId: string): Habit | undefined => {
+      const fromPeers = peers.find((h) => (h.ownerUserId ?? "") === memberId);
+      if (fromPeers) return fromPeers;
+      if (myUserId && memberId === myUserId && myHabit) return myHabit;
+      return undefined;
+    },
+    [peers, myUserId, myHabit],
+  );
+
+  const bottomPad = 40;
 
   if (!challengeId) {
     return (
@@ -113,47 +150,81 @@ export default function ChallengeDetailScreen() {
         <ActivityIndicator color={theme.colors.indigo[400]} style={{ marginTop: 24 }} />
       ) : (
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: bottomPad }}>
-          <Text style={[styles.title, { color: theme.colors.textPrimary, fontSize: theme.typography.h1 }]}>
-            {group?.title ?? "Group mission"}
+          <Text style={[styles.heroTitle, { color: theme.colors.textPrimary }]}>{missionTitle}</Text>
+
+          <Text style={[styles.metaLine, { color: theme.colors.textMuted }]}>
+            {memberIdsOrdered.length} participant{memberIdsOrdered.length === 1 ? "" : "s"} ·{" "}
+            {group?.creator_timezone ?? "—"}
           </Text>
-          <Text style={[styles.meta, { color: theme.colors.textMuted }]}>
-            {memberCount} member{memberCount === 1 ? "" : "s"} · Creator timezone: {group?.creator_timezone ?? "—"}
-          </Text>
-          {memberLine ? (
-            <Text style={[styles.memberLine, { color: theme.colors.textSecondary }]}>
-              Active: {memberLine}
+
+          {missionDescription ? (
+            <Text
+              style={[
+                styles.missionDescription,
+                {
+                  color: theme.colors.textSecondary,
+                  fontFamily: Platform.select({ ios: "Georgia", android: "serif", default: undefined }),
+                },
+              ]}
+              numberOfLines={6}
+            >
+              {missionDescription}
             </Text>
           ) : null}
 
-          {myHabit ? (
-            <View
-              style={[styles.card, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, ...theme.shadow.card }]}
-            >
-              <Text style={[styles.cardTitle, { color: theme.colors.textPrimary }]}>Your mission</Text>
-              <Text style={{ color: theme.colors.textSecondary, marginTop: 6 }}>{myHabit.title}</Text>
-              <Text style={{ color: theme.colors.cyan[400], marginTop: 10, fontWeight: "700" }}>
-                Streak {myHabit.streak} · {myHabit.completedDates.length} / {myHabit.totalDays} days
-              </Text>
-            </View>
-          ) : (
-            <Text style={{ color: theme.colors.textSecondary, marginTop: 8 }}>
-              No linked habit on this device for this group mission yet.
-            </Text>
-          )}
+          <Text style={[styles.sectionLabel, { color: theme.colors.textMuted }]}>PARTICIPANTS</Text>
 
-          <Text style={[styles.section, { color: theme.colors.textMuted }]}>COHORT</Text>
-          <Text style={[styles.cohortHint, { color: theme.colors.textMuted }]}>
-            Each row is a member. Numbers are mission days; tap a day with a marker when a shared moment exists.
-          </Text>
-          {peers.length === 0 ? (
-            <Text style={{ color: theme.colors.textSecondary }}>When others join, their progress appears here.</Text>
+          {memberIdsOrdered.length === 0 ? (
+            <Text style={{ color: theme.colors.textSecondary }}>No members loaded yet.</Text>
           ) : (
-            peers.map((h) => {
-              const ownerId = h.ownerUserId ?? "";
-              const peerHandle = ownerId ? memberUsernames[ownerId] ?? null : null;
+            memberIdsOrdered.map((memberId) => {
+              const label = profileLabels[memberId];
+              const habit = habitForMember(memberId);
+              const nameOnCard = participantDisplayName(label);
+              const ownerHandle = label?.username ? `@${label.username}` : "—";
+
               return (
-                <View key={h.id} style={styles.peerBlock}>
-                  <CohortPeerStreakDots habit={h} peerUsername={peerHandle} />
+                <View
+                  key={memberId}
+                  style={[
+                    styles.participantCard,
+                    {
+                      backgroundColor: theme.colors.surface,
+                      borderColor: theme.colors.border,
+                      ...theme.shadow.card,
+                    },
+                  ]}
+                >
+                  <Text style={[styles.participantName, { color: theme.colors.textPrimary }]} numberOfLines={2}>
+                    {nameOnCard}
+                  </Text>
+
+                  <View style={styles.ownerStreakRow}>
+                    <Text style={[styles.ownerLabel, { color: theme.colors.textSecondary }]}>
+                      Owner <Text style={{ color: theme.colors.textMuted }}>{ownerHandle}</Text>
+                    </Text>
+                    {habit ? (
+                      <View style={[styles.streakBadge, { backgroundColor: isDark ? "rgba(34, 211, 238, 0.12)" : "rgba(6, 182, 212, 0.1)" }]}>
+                        <Text style={[styles.streakBadgeText, { color: theme.colors.cyan[400] }]}>
+                          {habit.streak} day streak
+                        </Text>
+                      </View>
+                    ) : (
+                      <Text style={[styles.streakPlaceholder, { color: theme.colors.textMuted }]}>—</Text>
+                    )}
+                  </View>
+
+                  {habit ? (
+                    <CohortPeerStreakDots
+                      habit={habit}
+                      peerUsername={label?.username ?? null}
+                      showIdentityRow={false}
+                    />
+                  ) : (
+                    <Text style={[styles.noSyncHint, { color: theme.colors.textMuted }]}>
+                      Mission progress will show here once it syncs.
+                    </Text>
+                  )}
                 </View>
               );
             })
@@ -165,14 +236,55 @@ export default function ChallengeDetailScreen() {
 }
 
 const styles = StyleSheet.create({
-  header: { flexDirection: "row", marginBottom: 16 },
+  header: { flexDirection: "row", marginBottom: 12 },
   iconButton: { padding: 8, borderRadius: 9999, borderWidth: 1 },
-  title: { fontWeight: "800", marginBottom: 6 },
-  meta: { fontSize: 13, marginBottom: 18 },
-  section: { fontSize: 11, fontWeight: "800", letterSpacing: 1, marginTop: 24, marginBottom: 10 },
-  cohortHint: { fontSize: 12, lineHeight: 17, marginBottom: 12 },
-  memberLine: { fontSize: 13, marginTop: 8, lineHeight: 18 },
-  card: { borderRadius: 16, borderWidth: 1, padding: 16 },
-  cardTitle: { fontSize: 12, fontWeight: "800", letterSpacing: 0.8 },
-  peerBlock: { marginBottom: 8 },
+  heroTitle: {
+    fontSize: 28,
+    fontWeight: "900",
+    letterSpacing: -0.5,
+    lineHeight: 34,
+    marginBottom: 8,
+  },
+  metaLine: { fontSize: 13, fontWeight: "600", marginBottom: 12 },
+  missionDescription: {
+    fontSize: 15,
+    lineHeight: 24,
+    fontStyle: "italic",
+    letterSpacing: 0.2,
+    marginBottom: 22,
+  },
+  sectionLabel: {
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 1.2,
+    marginBottom: 12,
+  },
+  participantCard: {
+    borderRadius: 18,
+    borderWidth: 1,
+    padding: 16,
+    marginBottom: 14,
+  },
+  participantName: {
+    fontSize: 18,
+    fontWeight: "800",
+    letterSpacing: -0.2,
+    marginBottom: 10,
+  },
+  ownerStreakRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    marginBottom: 6,
+  },
+  ownerLabel: { fontSize: 13, fontWeight: "600", flex: 1 },
+  streakBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 9999,
+  },
+  streakBadgeText: { fontSize: 12, fontWeight: "800" },
+  streakPlaceholder: { fontSize: 13, fontWeight: "700" },
+  noSyncHint: { fontSize: 12, lineHeight: 17, fontStyle: "italic", marginTop: 4 },
 });

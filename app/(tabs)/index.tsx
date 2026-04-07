@@ -26,18 +26,8 @@ function getGreeting(): { text: string; emoji: string; Icon: typeof Sun } {
   return { text: "Night owl mode", emoji: "🌙", Icon: Moon };
 }
 
-const MOTIVATIONAL_LINES = [
-  "Small steps, big results.",
-  "Consistency beats intensity.",
-  "Show up. That's the whole game.",
-  "Your future self will thank you.",
-  "Discipline is freedom.",
-  "One day or day one — you decide.",
-  "Progress, not perfection.",
-  "The streak doesn't build itself.",
-];
-
 const SECTION_GAP = 16;
+const HEADER_BOTTOM_GAP = 10;
 
 function ListSkeleton({ theme }: { theme: AppTheme }) {
   return (
@@ -93,10 +83,6 @@ export default function Home() {
   const miniCount = miniMissionStats.running > 0 ? miniMissionStats.running : miniMissionStats.queued;
 
   const greeting = useMemo(() => getGreeting(), []);
-  const motivation = useMemo(() => {
-    const dayIndex = new Date().getDate() % MOTIVATIONAL_LINES.length;
-    return MOTIVATIONAL_LINES[dayIndex];
-  }, []);
 
   const headerOpacity = useRef(new Animated.Value(0)).current;
   const headerSlide = useRef(new Animated.Value(-15)).current;
@@ -147,36 +133,35 @@ export default function Home() {
       <Animated.View
         style={[styles.header, { opacity: headerOpacity, transform: [{ translateY: headerSlide }] }]}
       >
-        <View style={styles.headerLeftInline}>
+        <View style={styles.headerTopRow}>
           <Text style={[styles.headerEyebrow, { color: theme.colors.cyan[400] }]}>MISSION CONTROL</Text>
-          {showAccount && session?.user ? (
-            <View style={styles.bellWrap}>
-              <TouchableOpacity
-                onPress={() => router.push("/notifications")}
-                style={[styles.headerIconBtn, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}
-                activeOpacity={0.85}
-                accessibilityLabel={
-                  unreadNotifCount > 0 ? `Notifications, ${unreadNotifCount} unread` : "Notifications"
-                }
-              >
-                <Bell size={20} color={theme.colors.textPrimary} />
-              </TouchableOpacity>
-              {unreadNotifCount > 0 ? (
-                <View style={[styles.notifBadge, { borderColor: theme.colors.background, backgroundColor: theme.colors.red[500] }]} />
-              ) : null}
+          <View style={styles.headerRightCluster}>
+            {showAccount && session?.user ? (
+              <View style={styles.bellWrap}>
+                <TouchableOpacity
+                  onPress={() => router.push("/notifications")}
+                  style={[styles.headerIconBtn, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}
+                  activeOpacity={0.85}
+                  accessibilityLabel={
+                    unreadNotifCount > 0 ? `Notifications, ${unreadNotifCount} unread` : "Notifications"
+                  }
+                >
+                  <Bell size={20} color={theme.colors.textPrimary} />
+                </TouchableOpacity>
+                {unreadNotifCount > 0 ? (
+                  <View style={[styles.notifBadge, { borderColor: theme.colors.background, backgroundColor: theme.colors.red[500] }]} />
+                ) : null}
+              </View>
+            ) : null}
+            <View style={[styles.headerBadge, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
+              <Text style={[styles.levelNumber, { color: theme.colors.yellow[400] }]}>{level}</Text>
+              <Text style={[styles.levelLabel, { color: theme.colors.textMuted }]}>LVL</Text>
             </View>
-          ) : null}
-        </View>
-        <View style={styles.greetingRow}>
-          <Text style={[styles.headerTitle, { color: theme.colors.textPrimary, flex: 1, minWidth: 0 }]}>
-            {greeting.text} {greeting.emoji}
-          </Text>
-          <View style={[styles.headerBadge, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
-            <Text style={[styles.levelNumber, { color: theme.colors.yellow[400] }]}>{level}</Text>
-            <Text style={[styles.levelLabel, { color: theme.colors.textMuted }]}>LVL</Text>
           </View>
         </View>
-        <Text style={[styles.headerSubtitle, { color: theme.colors.textSecondary }]}>{motivation}</Text>
+        <Text style={[styles.headerTitle, { color: theme.colors.textPrimary }]}>
+          {greeting.text} {greeting.emoji}
+        </Text>
       </Animated.View>
 
       <View style={[styles.xpBar, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, borderRadius: theme.radius.md }]}>
@@ -325,22 +310,17 @@ export default function Home() {
 
 const styles = StyleSheet.create({
   rootCol: { flex: 1, minHeight: 0 },
-  header: { marginBottom: SECTION_GAP },
-  headerLeftInline: {
+  header: { marginBottom: HEADER_BOTTOM_GAP },
+  headerTopRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    marginBottom: 6,
-  },
-  greetingRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 16,
+    justifyContent: "space-between",
+    gap: 12,
     marginBottom: 4,
   },
-  headerEyebrow: { fontSize: 11, fontWeight: "700", letterSpacing: 1.3 },
-  headerTitle: { fontSize: 22, fontWeight: "800" },
-  headerSubtitle: { marginTop: 4, fontSize: 13, fontStyle: "italic" },
+  headerRightCluster: { flexDirection: "row", alignItems: "center", gap: 12, flexShrink: 0 },
+  headerEyebrow: { fontSize: 11, fontWeight: "700", letterSpacing: 1.3, flex: 1, minWidth: 0 },
+  headerTitle: { fontSize: 22, fontWeight: "800", lineHeight: 28 },
   bellWrap: { position: "relative" },
   notifBadge: {
     position: "absolute",
@@ -360,15 +340,15 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   headerBadge: {
-    width: 58,
-    height: 58,
+    width: 52,
+    height: 52,
     borderRadius: 9999,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
     flexShrink: 0,
   },
-  levelNumber: { fontSize: 22, fontWeight: "800", lineHeight: 24 },
+  levelNumber: { fontSize: 20, fontWeight: "800", lineHeight: 22 },
   levelLabel: { fontSize: 9, fontWeight: "800", letterSpacing: 1 },
   commandRow: { flexDirection: "row", gap: 10, marginBottom: SECTION_GAP },
   commandCard: { flex: 1, paddingVertical: 14, paddingHorizontal: 14, position: "relative", overflow: "hidden", borderWidth: 1 },
@@ -397,7 +377,7 @@ const styles = StyleSheet.create({
   emptyButton: { width: "100%" },
   emptySecondary: { marginTop: 4, paddingVertical: 10, paddingHorizontal: 12 },
   emptySecondaryText: { fontSize: 14, fontWeight: "700" },
-  xpBar: { paddingHorizontal: 14, paddingVertical: 10, marginBottom: SECTION_GAP, borderWidth: 1 },
+  xpBar: { paddingHorizontal: 14, paddingVertical: 8, marginBottom: 12, borderWidth: 1 },
   xpInfo: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 6 },
   xpLeft: { flexDirection: "row", alignItems: "center", gap: 4 },
   xpLabel: { fontSize: 12, fontWeight: "700" },

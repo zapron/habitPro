@@ -19,6 +19,8 @@ type Props = {
   peerUsername: string | null;
   /** Cohort viewer: only http(s) images load */
   remotePeer?: boolean;
+  /** When false, only mission-day dots + memory modal (header lives in parent card). */
+  showIdentityRow?: boolean;
 };
 
 function uriLoadsForRemoteViewer(uri: string | undefined): boolean {
@@ -26,7 +28,12 @@ function uriLoadsForRemoteViewer(uri: string | undefined): boolean {
   return uri.startsWith("http://") || uri.startsWith("https://");
 }
 
-export function CohortPeerStreakDots({ habit, peerUsername, remotePeer = true }: Props) {
+export function CohortPeerStreakDots({
+  habit,
+  peerUsername,
+  remotePeer = true,
+  showIdentityRow = true,
+}: Props) {
   const { theme } = useTheme();
   const total = Math.max(1, habit.totalDays ?? 21);
   const nowMs = Date.now();
@@ -53,20 +60,8 @@ export function CohortPeerStreakDots({ habit, peerUsername, remotePeer = true }:
 
   const handle = peerUsername ? `@${peerUsername}` : "Member";
 
-  return (
-    <View style={styles.wrap}>
-      <View style={styles.headRow}>
-        <Text style={[styles.handle, { color: theme.colors.cyan[400] }]} numberOfLines={1}>
-          {handle}
-        </Text>
-        <Text style={[styles.meta, { color: theme.colors.textMuted }]}>
-          Streak {habit.streak} · {habit.completedDates.length}/{total}
-          {(habit.visibility ?? "solo") === "public" ? (
-            <Text style={{ color: theme.colors.cyan[500] }}> · Public</Text>
-          ) : null}
-        </Text>
-      </View>
-
+  const dots = (
+    <>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.dotsRow}>
         {days.map(({ dayNum, dateStr, completed, memory }) => {
           const isCurrentSlot = activeSlot === dayNum;
@@ -130,12 +125,35 @@ export function CohortPeerStreakDots({ habit, peerUsername, remotePeer = true }:
           </Pressable>
         </Pressable>
       </Modal>
+    </>
+  );
+
+  if (!showIdentityRow) {
+    return <View style={styles.wrapEmbedded}>{dots}</View>;
+  }
+
+  return (
+    <View style={styles.wrap}>
+      <View style={styles.headRow}>
+        <Text style={[styles.handle, { color: theme.colors.cyan[400] }]} numberOfLines={1}>
+          {handle}
+        </Text>
+        <Text style={[styles.meta, { color: theme.colors.textMuted }]}>
+          Streak {habit.streak} · {habit.completedDates.length}/{total}
+          {(habit.visibility ?? "solo") === "public" ? (
+            <Text style={{ color: theme.colors.cyan[500] }}> · Public</Text>
+          ) : null}
+        </Text>
+      </View>
+
+      {dots}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   wrap: { marginBottom: 16 },
+  wrapEmbedded: { marginTop: 4 },
   headRow: { marginBottom: 10 },
   handle: { fontWeight: "800", fontSize: 15 },
   meta: { fontSize: 13, marginTop: 4 },

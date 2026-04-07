@@ -8,11 +8,12 @@ import {
   StatusBar,
   Alert,
   ActivityIndicator,
+  Platform,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { Medal, Swords, Trophy, Clock, X } from "lucide-react-native";
+import { ChevronRight, Eye, Medal, Swords, Trophy, Clock, X } from "lucide-react-native";
 import { Screen } from "../../src/components/Screen";
 import { useTheme } from "../../src/context/ThemeContext";
 import { useHabitStore } from "../../src/store/habitStore";
@@ -28,7 +29,7 @@ import {
 import { inviteeHabitStartIsoFromGroupStartDate } from "../../src/utils/challengeInviteeStart";
 import type { ChallengeEnrollment } from "../../src/types/challenge";
 import type { Habit, MiniMission } from "../../src/types/habit";
-import type { ChallengeInviteRow } from "../../src/types/groupChallenge";
+import type { ChallengeGroupRow, ChallengeInviteRow } from "../../src/types/groupChallenge";
 import { useAuth } from "../../src/context/AuthContext";
 import { isSupabaseConfigured } from "../../src/lib/env";
 import {
@@ -41,6 +42,115 @@ import {
 import { subscribeSyncSuccess } from "../../src/lib/syncQueue";
 
 type CompeteSegment = "leaderboard" | "challenges";
+
+/** Sub-tabs when main segment is Challenges */
+type ChallengesSubTab = "missions" | "invites";
+
+type InviteCardMeta = {
+  challengeName: string;
+  pillLabel: string;
+  description?: string;
+};
+
+function parseInviteCardMeta(g: ChallengeGroupRow): InviteCardMeta {
+  const tpl = g.habit_template as Record<string, unknown>;
+  const habitTitle = typeof tpl.title === "string" ? tpl.title.trim() : "";
+  const description =
+    typeof tpl.description === "string" && tpl.description.trim().length > 0
+      ? tpl.description.trim()
+      : undefined;
+
+  let challengeName = habitTitle;
+  if (!challengeName) {
+    const raw = g.title.trim();
+    const parts = raw.split(/\s*[—–]\s/).map((p) => p.trim()).filter(Boolean);
+    challengeName = parts.length >= 1 ? parts[0] : raw;
+  }
+  if (!challengeName) challengeName = "Group mission";
+
+  return { challengeName, pillLabel: "Group", description };
+}
+
+function InviteMissionHeader({
+  meta,
+  theme,
+  isDark,
+}: {
+  meta: InviteCardMeta | undefined;
+  theme: ReturnType<typeof useTheme>["theme"];
+  isDark: boolean;
+}) {
+  const name = meta?.challengeName ?? "Group mission";
+  const pill = meta?.pillLabel ?? "Group";
+  return (
+    <>
+      <View style={styles.inviteTitleRow}>
+        <Text style={[styles.inviteChallengeName, { color: theme.colors.textPrimary }]} numberOfLines={2}>
+          {name}
+        </Text>
+        <View
+          style={[
+            styles.inviteKindPill,
+            {
+              backgroundColor: isDark ? "rgba(99, 102, 241, 0.18)" : "rgba(79, 70, 229, 0.1)",
+              borderColor: isDark ? "rgba(129, 140, 248, 0.45)" : "rgba(79, 70, 229, 0.28)",
+            },
+          ]}
+        >
+          <Text style={[styles.inviteKindPillText, { color: theme.colors.indigo[400] }]}>{pill}</Text>
+        </View>
+      </View>
+      {meta?.description ? (
+        <Text
+          style={[
+            styles.inviteMissionDesc,
+            {
+              color: theme.colors.textSecondary,
+              fontFamily: Platform.select({ ios: "Georgia", android: "serif", default: undefined }),
+            },
+          ]}
+          numberOfLines={2}
+        >
+          {meta.description}
+        </Text>
+      ) : null}
+    </>
+  );
+}
+
+function InviteStatusPill({
+  variant,
+  label,
+  theme,
+}: {
+  variant: "pending" | "accepted" | "declined";
+  label: string;
+  theme: ReturnType<typeof useTheme>["theme"];
+}) {
+  const cfg =
+    variant === "accepted"
+      ? {
+          bg: "rgba(34, 197, 94, 0.14)",
+          border: "rgba(34, 197, 94, 0.45)",
+          text: theme.colors.green[500],
+        }
+      : variant === "declined"
+        ? {
+            bg: "rgba(239, 68, 68, 0.12)",
+            border: "rgba(239, 68, 68, 0.45)",
+            text: theme.colors.red[500],
+          }
+        : {
+            bg: "rgba(245, 158, 11, 0.14)",
+            border: "rgba(245, 158, 11, 0.45)",
+            text: theme.colors.amber[500],
+          };
+  return (
+    <View style={[styles.inviteStatusPill, { backgroundColor: cfg.bg, borderColor: cfg.border }]}>
+      <Text style={[styles.inviteStatusPillText, { color: cfg.text }]}>{label}</Text>
+    </View>
+  );
+}
 
 function formatEndsIn(endsAtMs: number): string {
   const ms = endsAtMs - Date.now();
@@ -127,8 +237,9 @@ export default function CompeteScreen() {
   const params = useLocalSearchParams<{ inviteId?: string; challengeId?: string; focusInvites?: string }>();
   const { session } = useAuth();
   const [segment, setSegment] = useState<CompeteSegment>("challenges");
+  const [challengesSubTab, setChallengesSubTab] = useState<ChallengesSubTab>("missions");
   const [groupInvites, setGroupInvites] = useState<ChallengeInviteRow[]>([]);
-  const [inviteTitles, setInviteTitles] = useState<Record<string, string>>({});
+  const [inviteCardMeta, setInviteCardMeta] = useState<Record<string, InviteCardMeta>>({});
   const [inviteBusy, setInviteBusy] = useState<string | null>(null);
   const [highlightInviteId, setHighlightInviteId] = useState<string | null>(null);
   const [highlightChallengeId, setHighlightChallengeId] = useState<string | null>(null);
@@ -152,20 +263,20 @@ export default function CompeteScreen() {
   const loadInvites = useCallback(async () => {
     if (!isSupabaseConfigured() || !session?.user) {
       setGroupInvites([]);
-      setInviteTitles({});
+      setInviteCardMeta({});
       return;
     }
     try {
       const rows = await listInvitesForMe();
       setGroupInvites(rows);
-      const titles: Record<string, string> = {};
+      const meta: Record<string, InviteCardMeta> = {};
       await Promise.all(
         rows.map(async (inv) => {
           const g = await getChallengeGroup(inv.challenge_id);
-          if (g) titles[inv.id] = g.title;
+          if (g) meta[inv.id] = parseInviteCardMeta(g);
         }),
       );
-      setInviteTitles(titles);
+      setInviteCardMeta(meta);
     } catch (e: unknown) {
       console.warn("[habitPro] loadInvites", e);
     }
@@ -190,6 +301,7 @@ export default function CompeteScreen() {
 
     if (focus || inviteId || challengeId) {
       setSegment("challenges");
+      setChallengesSubTab("invites");
     }
     if (inviteId) {
       setHighlightInviteId(inviteId);
@@ -278,6 +390,22 @@ export default function CompeteScreen() {
     () => weeklyCompeteScore(habits, miniMissions, level),
     [habits, miniMissions, level],
   );
+
+  /** Map group challenge id → local habit id (accepted group missions). */
+  const habitIdByChallengeId = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const h of habits) {
+      if (h.challengeGroupId) {
+        m.set(h.challengeGroupId, h.id);
+      }
+    }
+    return m;
+  }, [habits]);
+
+  const pendingInviteCount = useMemo(
+    () => groupInvites.filter((i) => i.status === "pending").length,
+    [groupInvites],
+  );
   const tier = useMemo(() => weeklyTierLabel(weeklyScore), [weeklyScore]);
   const habitDaysWeek = useMemo(() => countDistinctHabitDaysThisWeek(habits), [habits]);
   const minisWeek = useMemo(() => countMiniCompletionsThisWeek(miniMissions), [miniMissions]);
@@ -308,6 +436,7 @@ export default function CompeteScreen() {
         style={[
           styles.segmentWrap,
           { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
+          { marginBottom: segment === "challenges" ? 8 : 18 },
         ]}
       >
         <TouchableOpacity
@@ -354,79 +483,64 @@ export default function CompeteScreen() {
         </TouchableOpacity>
       </View>
 
+      {segment === "challenges" ? (
+        <View style={styles.challengesSubOuter}>
+          <TouchableOpacity
+            style={[
+              styles.challengesSubPill,
+              challengesSubTab === "missions" && {
+                backgroundColor: isDark ? "rgba(99, 102, 241, 0.2)" : "rgba(79, 70, 229, 0.12)",
+              },
+            ]}
+            onPress={() => setChallengesSubTab("missions")}
+            activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityLabel="Weeklies"
+          >
+            <Text
+              style={[
+                styles.challengesSubText,
+                {
+                  color:
+                    challengesSubTab === "missions" ? theme.colors.indigo[400] : theme.colors.textSecondary,
+                },
+              ]}
+            >
+              Weeklies
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.challengesSubPill,
+              challengesSubTab === "invites" && {
+                backgroundColor: isDark ? "rgba(99, 102, 241, 0.2)" : "rgba(79, 70, 229, 0.12)",
+              },
+            ]}
+            onPress={() => setChallengesSubTab("invites")}
+            activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityLabel={`Group invites, ${pendingInviteCount} pending`}
+          >
+            <Text
+              style={[
+                styles.challengesSubText,
+                {
+                  color:
+                    challengesSubTab === "invites" ? theme.colors.indigo[400] : theme.colors.textSecondary,
+                },
+              ]}
+            >
+              Invites ({pendingInviteCount})
+            </Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
+
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: bottomPad }}
         keyboardShouldPersistTaps="handled"
       >
-        {groupInvites.length > 0 ? (
-          <>
-            <Text style={[styles.sectionLabel, { color: theme.colors.textMuted }]}>GROUP MISSION INVITES</Text>
-            {groupInvites.map((inv) => {
-              const pending = inv.status === "pending";
-              const highlighted =
-                (highlightInviteId !== null && highlightInviteId === inv.id) ||
-                (highlightChallengeId !== null && highlightChallengeId === inv.challenge_id);
-              return (
-                <View
-                  key={inv.id}
-                  style={[
-                    styles.card,
-                    {
-                      backgroundColor: theme.colors.surface,
-                      borderColor: highlighted ? theme.colors.indigo[400] : theme.colors.border,
-                      borderWidth: highlighted ? 2 : 1,
-                      ...theme.shadow.card,
-                    },
-                  ]}
-                >
-                  <Text style={[styles.cardTitle, { color: theme.colors.textPrimary }]}>
-                    {inviteTitles[inv.id] ?? "Group mission"}
-                  </Text>
-                  {pending ? (
-                    <>
-                      <Text style={[styles.inviteHint, { color: theme.colors.textSecondary }]}>
-                        Accept to add a matching mission and join the cohort.
-                      </Text>
-                      <View style={styles.inviteActions}>
-                        <TouchableOpacity
-                          style={[styles.declineBtn, { borderColor: theme.colors.border }]}
-                          onPress={() => void handleDeclineGroupInvite(inv)}
-                          disabled={inviteBusy === inv.id}
-                        >
-                          <Text style={{ color: theme.colors.textMuted, fontWeight: "700" }}>Decline</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={[styles.acceptBtn, { backgroundColor: theme.colors.indigo[600], ...theme.shadow.glow }]}
-                          onPress={() => void handleAcceptGroupInvite(inv)}
-                          disabled={inviteBusy === inv.id}
-                        >
-                          {inviteBusy === inv.id ? (
-                            <ActivityIndicator color={theme.colors.white} />
-                          ) : (
-                            <Text style={styles.acceptBtnText}>Accept</Text>
-                          )}
-                        </TouchableOpacity>
-                      </View>
-                    </>
-                  ) : (
-                    <Text
-                      style={[
-                        styles.inviteResolvedHint,
-                        { color: inv.status === "accepted" ? theme.colors.cyan[400] : theme.colors.textMuted },
-                      ]}
-                    >
-                      {inv.status === "accepted"
-                        ? "Accepted — you’re in this cohort."
-                        : "Declined — this invite stays here for your records."}
-                    </Text>
-                  )}
-                </View>
-              );
-            })}
-          </>
-        ) : null}
-
         {segment === "leaderboard" ? (
           <>
             <View>
@@ -477,6 +591,156 @@ export default function CompeteScreen() {
             <Text style={[styles.roadmap, { color: theme.colors.textMuted }]}>
               Next: global leaderboards (Supabase), friend duels, and shared group mission invites.
             </Text>
+          </>
+        ) : challengesSubTab === "invites" ? (
+          <>
+            <Text style={[styles.sectionLabel, { color: theme.colors.textMuted }]}>GROUP MISSION INVITES</Text>
+            {groupInvites.length === 0 ? (
+              <View
+                style={[styles.card, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, ...theme.shadow.card }]}
+              >
+                <Text style={[styles.emptyTitle, { color: theme.colors.textPrimary }]}>No invites yet</Text>
+                <Text style={[styles.emptyBody, { color: theme.colors.textSecondary }]}>
+                  When someone invites you to a group mission, it will show up here. You can still use Weeklies for solo
+                  time-boxed challenges.
+                </Text>
+              </View>
+            ) : (
+              groupInvites.map((inv) => {
+                const pending = inv.status === "pending";
+                const meta = inviteCardMeta[inv.id];
+                const missionTitle = meta?.challengeName ?? "Group mission";
+                const linkedHabitId =
+                  inv.status === "accepted" ? habitIdByChallengeId.get(inv.challenge_id) : undefined;
+                const canOpenMission = Boolean(linkedHabitId);
+                const highlighted =
+                  (highlightInviteId !== null && highlightInviteId === inv.id) ||
+                  (highlightChallengeId !== null && highlightChallengeId === inv.challenge_id);
+
+                const cardStyle = [
+                  styles.card,
+                  {
+                    backgroundColor: theme.colors.surface,
+                    borderColor: highlighted ? theme.colors.indigo[400] : theme.colors.border,
+                    borderWidth: highlighted ? 2 : 1,
+                    ...theme.shadow.card,
+                  },
+                ];
+
+                const groupStreaksButton = (
+                  <TouchableOpacity
+                    style={[
+                      styles.inviteGroupStreaksBtn,
+                      {
+                        backgroundColor: isDark ? "rgba(99, 102, 241, 0.16)" : "rgba(79, 70, 229, 0.1)",
+                        borderColor: isDark ? "rgba(129, 140, 248, 0.35)" : "rgba(79, 70, 229, 0.28)",
+                      },
+                    ]}
+                    onPress={() => router.push(`/challenge/${inv.challenge_id}`)}
+                    activeOpacity={0.88}
+                    accessibilityRole="button"
+                    accessibilityLabel={`View group streaks: ${missionTitle}`}
+                  >
+                    <Eye size={18} color={theme.colors.indigo[400]} />
+                    <Text style={[styles.inviteGroupStreaksBtnText, { color: theme.colors.indigo[400] }]}>
+                      View Group Streaks
+                    </Text>
+                  </TouchableOpacity>
+                );
+
+                const resolvedBlock = (
+                  <>
+                    <View style={styles.inviteStatusRow}>
+                      <InviteStatusPill
+                        variant={inv.status === "accepted" ? "accepted" : "declined"}
+                        label={inv.status === "accepted" ? "Accepted" : "Declined"}
+                        theme={theme}
+                      />
+                    </View>
+                    {inv.status === "accepted" ? (
+                      <Text style={[styles.inviteStatusSubtext, { color: theme.colors.textSecondary }]}>
+                        You're part of this group mission.
+                      </Text>
+                    ) : (
+                      <Text style={[styles.inviteStatusSubtext, { color: theme.colors.textMuted }]}>
+                        Kept on your list for your records.
+                      </Text>
+                    )}
+                    {inv.status === "accepted" ? groupStreaksButton : null}
+                    {inv.status === "accepted" && !canOpenMission ? (
+                      <Text style={[styles.inviteSyncHint, { color: theme.colors.textMuted }]}>
+                        Open this mission from Home once your device has finished syncing.
+                      </Text>
+                    ) : null}
+                    {inv.status === "accepted" && canOpenMission ? (
+                      <TouchableOpacity
+                        style={styles.inviteOpenRow}
+                        onPress={() => router.push(`/habit/${linkedHabitId}`)}
+                        activeOpacity={0.88}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Open mission: ${missionTitle}`}
+                      >
+                        <Text style={[styles.inviteOpenCue, { color: theme.colors.indigo[400] }]}>
+                          Open mission details
+                        </Text>
+                        <ChevronRight size={18} color={theme.colors.indigo[400]} />
+                      </TouchableOpacity>
+                    ) : null}
+                  </>
+                );
+
+                if (pending) {
+                  return (
+                    <View key={inv.id} style={cardStyle}>
+                      <InviteMissionHeader meta={meta} theme={theme} isDark={isDark} />
+                      <View style={styles.inviteStatusRow}>
+                        <InviteStatusPill variant="pending" label="Pending" theme={theme} />
+                      </View>
+                      {groupStreaksButton}
+                      <Text style={[styles.inviteHint, { color: theme.colors.textSecondary }]}>
+                        Accept to add a matching mission and join everyone on this mission.
+                      </Text>
+                      <View style={styles.inviteActions}>
+                        <TouchableOpacity
+                          style={[styles.declineBtn, { borderColor: theme.colors.border }]}
+                          onPress={() => void handleDeclineGroupInvite(inv)}
+                          disabled={inviteBusy === inv.id}
+                        >
+                          <Text style={{ color: theme.colors.textMuted, fontWeight: "700" }}>Decline</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[styles.acceptBtn, { backgroundColor: theme.colors.indigo[600], ...theme.shadow.glow }]}
+                          onPress={() => void handleAcceptGroupInvite(inv)}
+                          disabled={inviteBusy === inv.id}
+                        >
+                          {inviteBusy === inv.id ? (
+                            <ActivityIndicator color={theme.colors.white} />
+                          ) : (
+                            <Text style={styles.acceptBtnText}>Accept</Text>
+                          )}
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  );
+                }
+
+                if (inv.status === "accepted" && canOpenMission) {
+                  return (
+                    <View key={inv.id} style={cardStyle}>
+                      <InviteMissionHeader meta={meta} theme={theme} isDark={isDark} />
+                      {resolvedBlock}
+                    </View>
+                  );
+                }
+
+                return (
+                  <View key={inv.id} style={cardStyle}>
+                    <InviteMissionHeader meta={meta} theme={theme} isDark={isDark} />
+                    {resolvedBlock}
+                  </View>
+                );
+              })
+            )}
           </>
         ) : (
           <>
@@ -569,7 +833,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     borderRadius: 14,
     padding: 4,
-    marginBottom: 18,
     borderWidth: 1,
     gap: 4,
   },
@@ -584,6 +847,25 @@ const styles = StyleSheet.create({
   },
   segmentActive: {},
   segmentLabel: { fontWeight: "700", fontSize: 13 },
+  /** Secondary row — mirrors tryitfirst-mobile-v2 dashboard selling/buying sub-tabs (rounded pills + brand tint). */
+  challengesSubOuter: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 4,
+    marginBottom: 10,
+  },
+  challengesSubPill: {
+    flex: 1,
+    borderRadius: 12,
+    paddingVertical: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  challengesSubText: {
+    textAlign: "center",
+    fontSize: 12,
+    fontWeight: "600",
+  },
   card: {
     borderRadius: 16,
     borderWidth: 1,
@@ -591,6 +873,45 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   cardTitle: { fontWeight: "800", fontSize: 17, marginBottom: 10 },
+  inviteTitleRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: 4,
+  },
+  inviteChallengeName: {
+    flex: 1,
+    minWidth: 140,
+    fontSize: 21,
+    fontWeight: "800",
+    letterSpacing: -0.3,
+    lineHeight: 26,
+  },
+  inviteKindPill: {
+    borderRadius: 9999,
+    paddingVertical: 5,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+  },
+  inviteKindPillText: { fontSize: 11, fontWeight: "800", letterSpacing: 0.4 },
+  inviteMissionDesc: {
+    marginTop: 8,
+    fontSize: 13,
+    lineHeight: 20,
+    fontStyle: "italic",
+    letterSpacing: 0.15,
+  },
+  inviteStatusRow: { marginTop: 12, flexDirection: "row", alignItems: "center" },
+  inviteStatusPill: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 9999,
+    borderWidth: 1,
+    alignSelf: "flex-start",
+  },
+  inviteStatusPillText: { fontSize: 12, fontWeight: "800", letterSpacing: 0.25 },
+  inviteStatusSubtext: { fontSize: 12, lineHeight: 17, marginTop: 8, fontWeight: "500" },
   statRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -663,8 +984,27 @@ const styles = StyleSheet.create({
   winRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 8 },
   winTitle: { flex: 1, fontWeight: "700", fontSize: 15 },
   winDate: { fontSize: 12, fontWeight: "600" },
-  inviteHint: { fontSize: 13, lineHeight: 18, marginBottom: 14 },
-  inviteResolvedHint: { fontSize: 13, lineHeight: 18, fontWeight: "600" },
+  inviteHint: { fontSize: 12, lineHeight: 17, fontWeight: "500", marginTop: 8, marginBottom: 12 },
+  inviteSyncHint: { fontSize: 11, lineHeight: 16, marginTop: 8, fontStyle: "italic" },
+  inviteGroupStreaksBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    marginTop: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  inviteGroupStreaksBtnText: { fontSize: 14, fontWeight: "700" },
+  inviteOpenRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginTop: 10,
+  },
+  inviteOpenCue: { fontSize: 12, fontWeight: "700" },
   inviteActions: { flexDirection: "row", gap: 10, alignItems: "center" },
   declineBtn: {
     flex: 1,
