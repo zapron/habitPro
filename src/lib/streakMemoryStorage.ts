@@ -1,7 +1,46 @@
+import * as FileSystem from "expo-file-system/legacy";
 import { getSupabase } from "./supabase";
 import { isSupabaseConfigured } from "./env";
 
 const BUCKET = "streak-memories";
+
+/** RN `fetch(fileUri)` often throws "Network request failed" for local URIs; use base64 read instead. */
+function base64ToUint8Array(base64: string): Uint8Array {
+  const binaryString = globalThis.atob(base64);
+  const len = binaryString.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+  return bytes;
+}
+
+/**
+ * Load image bytes for upload. Avoids `fetch(localUri)` which breaks on Android/iOS for file/content URIs.
+ */
+async function readImageBytesForUpload(
+  localUri: string,
+  defaultContentType: string,
+): Promise<{ body: Uint8Array; contentType: string }> {
+  if (localUri.startsWith("http://") || localUri.startsWith("https://")) {
+    const res = await fetch(localUri);
+    if (!res.ok) throw new Error(`Could not load image (${res.status})`);
+    const blob = await res.blob();
+    const ab = await new Response(blob).arrayBuffer();
+    return {
+      body: new Uint8Array(ab),
+      contentType: blob.type || defaultContentType,
+    };
+  }
+
+  const base64 = await FileSystem.readAsStringAsync(localUri, {
+    encoding: "base64",
+  });
+  return {
+    body: base64ToUint8Array(base64),
+    contentType: defaultContentType,
+  };
+}
 
 function extFromUri(uri: string): string {
   const m = /\.(jpe?g|png|webp)$/i.exec(uri);
@@ -47,16 +86,16 @@ export async function uploadHabitStreakMemoryImage(
   } = await supabase.auth.getUser();
   if (!user) throw new Error("Not signed in");
 
+  const uid = user.id.toLowerCase();
   const ext = extFromUri(params.localUri);
   const safeDate = params.dateStr.replace(/[^0-9-]/g, "");
-  const path = `${user.id}/habits/${params.habitId}/${safeDate}.${ext}`;
+  const path = `${uid}/habits/${params.habitId}/${safeDate}.${ext}`;
+  const ct = contentTypeForExt(ext);
+  const { body, contentType } = await readImageBytesForUpload(params.localUri, ct);
 
-  const res = await fetch(params.localUri);
-  const blob = await res.blob();
-
-  const { error: upErr } = await supabase.storage.from(BUCKET).upload(path, blob, {
+  const { error: upErr } = await supabase.storage.from(BUCKET).upload(path, body, {
     upsert: true,
-    contentType: blob.type || contentTypeForExt(ext),
+    contentType,
   });
   if (upErr) throw new Error(upErr.message);
 
@@ -83,15 +122,15 @@ export async function uploadMiniStreakMemoryImage(
   } = await supabase.auth.getUser();
   if (!user) throw new Error("Not signed in");
 
+  const uid = user.id.toLowerCase();
   const ext = extFromUri(params.localUri);
-  const path = `${user.id}/mini-missions/${params.miniMissionId}/memory.${ext}`;
+  const path = `${uid}/mini-missions/${params.miniMissionId}/memory.${ext}`;
+  const ct = contentTypeForExt(ext);
+  const { body, contentType } = await readImageBytesForUpload(params.localUri, ct);
 
-  const res = await fetch(params.localUri);
-  const blob = await res.blob();
-
-  const { error: upErr } = await supabase.storage.from(BUCKET).upload(path, blob, {
+  const { error: upErr } = await supabase.storage.from(BUCKET).upload(path, body, {
     upsert: true,
-    contentType: blob.type || contentTypeForExt(ext),
+    contentType,
   });
   if (upErr) throw new Error(upErr.message);
 
