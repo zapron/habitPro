@@ -12,11 +12,12 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
 import { ArrowLeft } from "lucide-react-native";
 import { Screen } from "../../src/components/Screen";
-import { StreakMemoryGallery } from "../../src/components/StreakMemoryGallery";
+import { CohortPeerStreakDots } from "../../src/components/CohortPeerStreakDots";
 import { useTheme } from "../../src/context/ThemeContext";
 import { useHabitStore } from "../../src/store/habitStore";
 import {
   getChallengeGroup,
+  getProfileUsernamesForIds,
   listChallengeMembers,
   refreshCohortPeerHabits,
 } from "../../src/lib/groupChallengesApi";
@@ -34,6 +35,8 @@ export default function ChallengeDetailScreen() {
   const [group, setGroup] = useState<ChallengeGroupRow | null>(null);
   const [loading, setLoading] = useState(true);
   const [memberCount, setMemberCount] = useState(0);
+  const [memberUsernames, setMemberUsernames] = useState<Record<string, string>>({});
+  const [memberIdsOrdered, setMemberIdsOrdered] = useState<string[]>([]);
 
   const load = useCallback(async () => {
     if (!challengeId) return;
@@ -45,6 +48,10 @@ export default function ChallengeDetailScreen() {
       ]);
       setGroup(g);
       setMemberCount(members.length);
+      const ids = members.map((m) => m.user_id);
+      setMemberIdsOrdered(ids);
+      const names = await getProfileUsernamesForIds(ids);
+      setMemberUsernames(names);
     } finally {
       setLoading(false);
     }
@@ -72,10 +79,19 @@ export default function ChallengeDetailScreen() {
 
   const bottomPad = 32;
 
+  const memberLine = useMemo(() => {
+    const handles = memberIdsOrdered
+      .map((id) => memberUsernames[id])
+      .filter((u): u is string => Boolean(u))
+      .map((u) => `@${u}`);
+    if (handles.length === 0) return null;
+    return handles.join(" · ");
+  }, [memberIdsOrdered, memberUsernames]);
+
   if (!challengeId) {
     return (
       <Screen>
-        <Text style={{ color: theme.colors.textPrimary }}>Invalid challenge</Text>
+        <Text style={{ color: theme.colors.textPrimary }}>Invalid group mission</Text>
       </Screen>
     );
   }
@@ -98,11 +114,16 @@ export default function ChallengeDetailScreen() {
       ) : (
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: bottomPad }}>
           <Text style={[styles.title, { color: theme.colors.textPrimary, fontSize: theme.typography.h1 }]}>
-            {group?.title ?? "Challenge"}
+            {group?.title ?? "Group mission"}
           </Text>
           <Text style={[styles.meta, { color: theme.colors.textMuted }]}>
             {memberCount} member{memberCount === 1 ? "" : "s"} · Creator timezone: {group?.creator_timezone ?? "—"}
           </Text>
+          {memberLine ? (
+            <Text style={[styles.memberLine, { color: theme.colors.textSecondary }]}>
+              Active: {memberLine}
+            </Text>
+          ) : null}
 
           {myHabit ? (
             <View
@@ -116,40 +137,23 @@ export default function ChallengeDetailScreen() {
             </View>
           ) : (
             <Text style={{ color: theme.colors.textSecondary, marginTop: 8 }}>
-              No linked habit on this device for this challenge yet.
+              No linked habit on this device for this group mission yet.
             </Text>
           )}
 
           <Text style={[styles.section, { color: theme.colors.textMuted }]}>COHORT</Text>
+          <Text style={[styles.cohortHint, { color: theme.colors.textMuted }]}>
+            Each row is a member. Numbers are mission days; tap a day with a marker when a shared moment exists.
+          </Text>
           {peers.length === 0 ? (
             <Text style={{ color: theme.colors.textSecondary }}>When others join, their progress appears here.</Text>
           ) : (
             peers.map((h) => {
-              const memoryEntries = Object.entries(h.streakMemories ?? {})
-                .map(([dateStr, memory]) => ({ dateStr, memory }))
-                .sort((a, b) => (a.dateStr < b.dateStr ? 1 : -1));
-              const showMoments = (h.visibility ?? "solo") === "public" && memoryEntries.length > 0;
+              const ownerId = h.ownerUserId ?? "";
+              const peerHandle = ownerId ? memberUsernames[ownerId] ?? null : null;
               return (
                 <View key={h.id} style={styles.peerBlock}>
-                  <View
-                    style={[styles.peerRow, { borderColor: theme.colors.border, backgroundColor: theme.colors.surface }]}
-                  >
-                    <Text style={{ color: theme.colors.textPrimary, fontWeight: "700" }}>{h.title}</Text>
-                    <Text style={{ color: theme.colors.textMuted, fontSize: 13, marginTop: 4 }}>
-                      Streak {h.streak} · {h.completedDates.length} / {h.totalDays} days
-                      {(h.visibility ?? "solo") === "public" ? (
-                        <Text style={{ color: theme.colors.cyan[500] }}> · Public</Text>
-                      ) : null}
-                    </Text>
-                  </View>
-                  {showMoments ? (
-                    <StreakMemoryGallery
-                      entries={memoryEntries}
-                      sectionTitle="Shared moments"
-                      sectionHint="They set this mission to public. Photos only appear here after cloud sync."
-                      remotePeer
-                    />
-                  ) : null}
+                  <CohortPeerStreakDots habit={h} peerUsername={peerHandle} />
                 </View>
               );
             })
@@ -166,8 +170,9 @@ const styles = StyleSheet.create({
   title: { fontWeight: "800", marginBottom: 6 },
   meta: { fontSize: 13, marginBottom: 18 },
   section: { fontSize: 11, fontWeight: "800", letterSpacing: 1, marginTop: 24, marginBottom: 10 },
+  cohortHint: { fontSize: 12, lineHeight: 17, marginBottom: 12 },
+  memberLine: { fontSize: 13, marginTop: 8, lineHeight: 18 },
   card: { borderRadius: 16, borderWidth: 1, padding: 16 },
   cardTitle: { fontSize: 12, fontWeight: "800", letterSpacing: 0.8 },
-  peerRow: { borderRadius: 12, borderWidth: 1, padding: 14, marginBottom: 10 },
   peerBlock: { marginBottom: 8 },
 });
