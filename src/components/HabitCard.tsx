@@ -1,7 +1,7 @@
 import React, { memo } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
-import { TreePine, Flame, Check, Plane, Gamepad2, Globe, Swords } from 'lucide-react-native';
+import { TreePine, Flame, Check, Plane, Gamepad2, Globe, Swords, Users } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
 import { Habit } from '../types/habit';
 import { ProgressRing } from './ProgressRing';
@@ -130,9 +130,31 @@ export const HabitCard = memo(({ item }: HabitCardProps) => {
                         {isFinished ? 'Completed!' : item.streak > 0 ? `${item.streak} day streak` : 'Start a streak'}
                     </Text>
                     {!isFinished && (
-                        <Text style={[styles.cardProgress, { color: theme.colors.textMuted }]}>
-                            {Math.round(campaignProgress * 100)}%
-                        </Text>
+                        <>
+                            <Text style={[styles.cardProgress, { color: theme.colors.textMuted }]}>
+                                {Math.round(campaignProgress * 100)}%
+                            </Text>
+                            {item.challengeGroupId ? (
+                                <TouchableOpacity
+                                    onPress={() => router.push(`/challenge/${item.challengeGroupId}`)}
+                                    activeOpacity={0.85}
+                                    style={[
+                                        styles.groupStreakPill,
+                                        {
+                                            borderColor: 'rgba(245, 158, 11, 0.45)',
+                                            backgroundColor: 'rgba(245, 158, 11, 0.14)',
+                                        },
+                                    ]}
+                                    accessibilityRole="button"
+                                    accessibilityLabel="View group streaks"
+                                >
+                                    <Users size={10} color={theme.colors.amber[500]} />
+                                    <Text style={[styles.groupStreakPillText, { color: theme.colors.amber[500] }]}>
+                                        View group streaks
+                                    </Text>
+                                </TouchableOpacity>
+                            ) : null}
+                        </>
                     )}
                 </View>
             </View>
@@ -202,8 +224,21 @@ const styles = StyleSheet.create({
     cardDescription: { fontSize: 14 },
     cardStats: { flexDirection: 'row', alignItems: 'center', marginTop: 12 },
     statIcon: { marginRight: 8 },
-    cardStreak: { fontWeight: '700', marginRight: 16 },
-    cardProgress: {},
+    cardStreak: { fontWeight: '700', marginRight: 16, flexShrink: 1 },
+    cardProgress: { flexShrink: 0 },
+    groupStreakPill: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        alignSelf: 'center',
+        gap: 4,
+        paddingVertical: 4,
+        paddingHorizontal: 8,
+        borderRadius: 9999,
+        borderWidth: 1,
+        marginLeft: 8,
+        flexShrink: 0,
+    },
+    groupStreakPillText: { fontSize: 8, fontWeight: '800', letterSpacing: 0.25 },
     progressText: { fontWeight: '700', fontSize: 18 },
     flameStack: { position: 'relative', width: 24, height: 20 },
     progressBarBg: {
