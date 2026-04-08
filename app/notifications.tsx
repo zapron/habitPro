@@ -14,7 +14,7 @@ import { ArrowLeft } from "lucide-react-native";
 import { Screen } from "../src/components/Screen";
 import { useTheme } from "../src/context/ThemeContext";
 import { listNotifications, markNotificationRead } from "../src/lib/groupChallengesApi";
-import type { NotificationRow } from "../src/types/groupChallenge";
+import type { ChallengeNudgeKind, NotificationRow } from "../src/types/groupChallenge";
 
 function groupMissionInviteSubtitle(n: NotificationRow): string {
   const p = n.payload ?? {};
@@ -22,6 +22,59 @@ function groupMissionInviteSubtitle(n: NotificationRow): string {
   const from =
     typeof u === "string" && u.trim().length > 0 ? `From @${u.trim().toLowerCase()}` : "Group mission";
   return `${from} · Tap to view in Compete`;
+}
+
+function inviteeLabel(p: Record<string, unknown>): string {
+  const u = p.invitee_username;
+  if (typeof u === "string" && u.trim().length > 0) return `@${u.trim().toLowerCase()}`;
+  return "Someone";
+}
+
+function nudgeKindLabel(kind: unknown): string {
+  const k = typeof kind === "string" ? kind : "";
+  const map: Record<ChallengeNudgeKind, string> = {
+    cheer: "Cheer",
+    same: "Same",
+    fire: "Fire",
+    congrats: "Congrats",
+  };
+  if (k in map) return map[k as ChallengeNudgeKind];
+  return k.length > 0 ? k : "Nudge";
+}
+
+function notificationTitle(type: string): string {
+  switch (type) {
+    case "challenge_invite":
+      return "Group mission invite";
+    case "challenge_invite_accepted":
+      return "Invite accepted";
+    case "challenge_invite_declined":
+      return "Invite declined";
+    case "challenge_nudge":
+      return "Squad nudge";
+    default:
+      return type;
+  }
+}
+
+function notificationSubtitle(n: NotificationRow): string | null {
+  const p = n.payload ?? {};
+  switch (n.type) {
+    case "challenge_invite":
+      return groupMissionInviteSubtitle(n);
+    case "challenge_invite_accepted":
+      return `${inviteeLabel(p)} joined your group mission · Tap to open`;
+    case "challenge_invite_declined":
+      return `${inviteeLabel(p)} declined · Tap to open`;
+    case "challenge_nudge": {
+      const from = p.from_username;
+      const who =
+        typeof from === "string" && from.trim().length > 0 ? `@${from.trim().toLowerCase()}` : "Someone";
+      return `${who} sent you ${nudgeKindLabel(p.kind)} · Tap to open squad`;
+    }
+    default:
+      return null;
+  }
 }
 
 export default function NotificationsScreen() {
@@ -51,22 +104,37 @@ export default function NotificationsScreen() {
       await markNotificationRead(n.id);
       setItems((prev) => prev.map((x) => (x.id === n.id ? { ...x, read_at: new Date().toISOString() } : x)));
     }
+    const p = n.payload ?? {};
+    const challengeId = typeof p.challenge_id === "string" ? p.challenge_id : "";
+
     if (n.type === "challenge_invite") {
-      const p = n.payload ?? {};
-      const cid = typeof p.challenge_id === "string" ? p.challenge_id : "";
       const iid = typeof p.invite_id === "string" ? p.invite_id : "";
-      if (cid || iid) {
+      if (challengeId || iid) {
         router.push({
           pathname: "/(tabs)/compete",
           params: {
             ...(iid ? { inviteId: iid } : {}),
-            ...(cid ? { challengeId: cid } : {}),
+            ...(challengeId ? { challengeId } : {}),
             focusInvites: "1",
           },
         });
       } else {
         router.push({ pathname: "/(tabs)/compete", params: { focusInvites: "1" } });
       }
+      return;
+    }
+
+    if (n.type === "challenge_invite_accepted" || n.type === "challenge_invite_declined") {
+      if (challengeId) {
+        router.push(`/challenge/${challengeId}`);
+      } else {
+        router.push("/(tabs)/compete");
+      }
+      return;
+    }
+
+    if (n.type === "challenge_nudge" && challengeId) {
+      router.push(`/challenge/${challengeId}`);
     }
   };
 
@@ -114,11 +182,11 @@ export default function NotificationsScreen() {
                 )}
                 <View style={{ flex: 1 }}>
                   <Text style={{ color: theme.colors.textPrimary, fontWeight: "700" }}>
-                    {item.type === "challenge_invite" ? "Group mission invite" : item.type}
+                    {notificationTitle(item.type)}
                   </Text>
-                  {item.type === "challenge_invite" ? (
+                  {notificationSubtitle(item) ? (
                     <Text style={{ color: theme.colors.cyan[400], fontSize: 13, marginTop: 4, fontWeight: "600" }}>
-                      {groupMissionInviteSubtitle(item)}
+                      {notificationSubtitle(item)}
                     </Text>
                   ) : null}
                   <Text style={{ color: theme.colors.textSecondary, fontSize: 13, marginTop: 4 }}>
