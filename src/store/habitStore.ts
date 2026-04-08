@@ -14,6 +14,7 @@ import {
   type StreakMemory,
 } from "../types/habit";
 import { MAX_RESERVE_FUEL_MINUTES } from "../constants/miniMission";
+import { tryRecordChallengeMilestones } from "../lib/challengeCohort";
 import { getDerivedState } from "../utils/habitDerived";
 import { isHabitCalendarDateToggleable } from "../utils/missionDaySlots";
 
@@ -163,6 +164,9 @@ export const useHabitStore = create<HabitStore>()(
             else if (habit.streak === 21) xpGain += 150;
             else if (habit.streak >= 3 && habit.streak % 7 === 0) xpGain += 30;
             get().addXp(xpGain);
+            if (habit.challengeGroupId) {
+              void tryRecordChallengeMilestones(habitBefore, habit);
+            }
           }
         }
         if (changed) {
