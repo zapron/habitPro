@@ -17,7 +17,7 @@ import { useTheme } from "../context/ThemeContext";
 import { isSupabaseConfigured } from "../lib/env";
 import {
   createGroupChallengeFromHabit,
-  listPendingInviteeIdsForChallenge,
+  listChallengeInviteeStatusesForChallenge,
   searchProfilesByUsernamePrefix,
   sendChallengeInvite,
 } from "../lib/groupChallengesApi";
@@ -43,7 +43,9 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
   const [results, setResults] = useState<ProfileSearchRow[]>([]);
   const [searching, setSearching] = useState(false);
   const [invitingId, setInvitingId] = useState<string | null>(null);
-  const [pendingInviteeIds, setPendingInviteeIds] = useState<Set<string>>(new Set());
+  const [inviteeStatusById, setInviteeStatusById] = useState<
+    Partial<Record<string, "pending" | "declined" | "accepted">>
+  >({});
 
   const signedIn = Boolean(session?.user);
   const configured = isSupabaseConfigured();
@@ -51,16 +53,16 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
 
   useEffect(() => {
     if (!visible || !habit.challengeGroupId || !configured || !signedIn) {
-      setPendingInviteeIds(new Set());
+      setInviteeStatusById({});
       return;
     }
     let cancelled = false;
-    void listPendingInviteeIdsForChallenge(habit.challengeGroupId)
-      .then((ids) => {
-        if (!cancelled) setPendingInviteeIds(new Set(ids));
+    void listChallengeInviteeStatusesForChallenge(habit.challengeGroupId)
+      .then((m) => {
+        if (!cancelled) setInviteeStatusById(m);
       })
       .catch(() => {
-        if (!cancelled) setPendingInviteeIds(new Set());
+        if (!cancelled) setInviteeStatusById({});
       });
     return () => {
       cancelled = true;
@@ -130,6 +132,7 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
         Alert.alert("Create a group mission first", "Start a group mission from this habit, then invite friends.");
         return;
       }
+      if (inviteeStatusById[userId]) return;
       setInvitingId(userId);
       try {
         const { error } = await sendChallengeInvite(gid, userId);
@@ -137,13 +140,14 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
           Alert.alert("Invite failed", error.message);
           return;
         }
-        setPendingInviteeIds((prev) => new Set(prev).add(userId));
+        const m = await listChallengeInviteeStatusesForChallenge(gid);
+        setInviteeStatusById(m);
         Alert.alert("Invite sent", "They will see it under Compete and in notifications.");
       } finally {
         setInvitingId(null);
       }
     },
-    [habit.challengeGroupId],
+    [habit.challengeGroupId, inviteeStatusById],
   );
 
   const openChallenge = () => {
@@ -210,12 +214,21 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
                     ) : null
                   }
                   renderItem={({ item }) => {
-                    const isPending = pendingInviteeIds.has(item.id);
+                    const st = inviteeStatusById[item.id];
+                    const blocked = Boolean(st);
+                    const statusLabel =
+                      st === "pending"
+                        ? "Pending"
+                        : st === "declined"
+                          ? "Declined"
+                          : st === "accepted"
+                            ? "Joined"
+                            : null;
                     return (
                       <TouchableOpacity
-                        style={[styles.row, { borderColor: theme.colors.border, opacity: isPending ? 0.75 : 1 }]}
+                        style={[styles.row, { borderColor: theme.colors.border, opacity: blocked ? 0.75 : 1 }]}
                         onPress={() => void handleInvite(item.id)}
-                        disabled={invitingId === item.id || isPending}
+                        disabled={invitingId === item.id || blocked}
                       >
                         <View style={{ flex: 1 }}>
                           <Text style={{ color: theme.colors.textPrimary, fontWeight: "700" }}>
@@ -225,8 +238,8 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
                             <Text style={{ color: theme.colors.textMuted, fontSize: 12 }}>{item.display_name}</Text>
                           ) : null}
                         </View>
-                        {isPending ? (
-                          <Text style={{ color: theme.colors.textMuted, fontWeight: "700" }}>Pending</Text>
+                        {statusLabel ? (
+                          <Text style={{ color: theme.colors.textMuted, fontWeight: "700" }}>{statusLabel}</Text>
                         ) : invitingId === item.id ? (
                           <ActivityIndicator size="small" color={theme.colors.indigo[400]} />
                         ) : (
