@@ -83,12 +83,16 @@ export async function sendChallengeNudge(
   if (!user) return { error: new Error("Not signed in") };
   if (user.id === toUserId) return { error: new Error("Cannot nudge yourself") };
 
-  const { error } = await supabase.from("challenge_nudges").insert({
-    challenge_id: challengeId,
-    from_user_id: user.id,
-    to_user_id: toUserId,
-    kind,
-  });
+  const { data: inserted, error } = await supabase
+    .from("challenge_nudges")
+    .insert({
+      challenge_id: challengeId,
+      from_user_id: user.id,
+      to_user_id: toUserId,
+      kind,
+    })
+    .select("id")
+    .single();
 
   if (error) {
     const msg =
@@ -97,6 +101,26 @@ export async function sendChallengeNudge(
         : error.message;
     return { error: new Error(msg) };
   }
+
+  const { data: fromProfile } = await supabase.from("profiles").select("username").eq("id", user.id).maybeSingle();
+  const fromUsername =
+    typeof fromProfile?.username === "string" && fromProfile.username.trim().length > 0
+      ? fromProfile.username.trim().toLowerCase()
+      : null;
+
+  const { error: nErr } = await supabase.rpc("rpc_insert_notification", {
+    p_user_id: toUserId,
+    p_type: "challenge_nudge",
+    p_payload: {
+      challenge_id: challengeId,
+      nudge_id: inserted.id,
+      from_user_id: user.id,
+      from_username: fromUsername,
+      kind,
+    },
+  });
+  if (nErr && __DEV__) console.warn("[notifications] challenge_nudge", nErr.message);
+
   return { error: null };
 }
 

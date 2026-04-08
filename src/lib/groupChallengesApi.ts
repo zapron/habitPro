@@ -106,22 +106,37 @@ export async function createGroupChallengeFromHabit(
   return { group: group as ChallengeGroupRow, error: null };
 }
 
-/** Pending invites you sent for this challenge (for de-duping UI). */
-export async function listPendingInviteeIdsForChallenge(challengeId: string): Promise<string[]> {
+export type ChallengeInviteRowStatus = ChallengeInviteRow["status"];
+
+/**
+ * Latest invite status per invitee for this challenge (newest `created_at` wins).
+ * Used to block duplicate invites and show Pending / Declined / Joined in the UI.
+ */
+export async function listChallengeInviteeStatusesForChallenge(
+  challengeId: string,
+): Promise<Partial<Record<string, ChallengeInviteRowStatus>>> {
   const supabase = getSupabase();
-  if (!supabase) return [];
+  if (!supabase) return {};
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return [];
+  if (!user) return {};
   const { data, error } = await supabase
     .from("challenge_invites")
-    .select("invitee_id")
+    .select("invitee_id, status, created_at")
     .eq("challenge_id", challengeId)
-    .eq("inviter_id", user.id)
-    .eq("status", "pending");
+    .in("status", ["pending", "declined", "accepted"])
+    .order("created_at", { ascending: false });
   if (error) throw error;
-  return (data ?? []).map((r: { invitee_id: string }) => r.invitee_id);
+  const out: Partial<Record<string, ChallengeInviteRowStatus>> = {};
+  for (const r of data ?? []) {
+    const row = r as { invitee_id: string; status: string };
+    if (out[row.invitee_id]) continue;
+    if (row.status === "pending" || row.status === "declined" || row.status === "accepted") {
+      out[row.invitee_id] = row.status;
+    }
+  }
+  return out;
 }
 
 /** Public usernames for cohort display (RLS: shared challenge members only). */
@@ -175,15 +190,32 @@ export async function sendChallengeInvite(
   } = await supabase.auth.getUser();
   if (!user) return { error: new Error("Not signed in") };
 
-  const { data: existing } = await supabase
+  const { data: latest } = await supabase
     .from("challenge_invites")
-    .select("id")
+    .select("status")
     .eq("challenge_id", challengeId)
     .eq("invitee_id", inviteeUserId)
-    .eq("status", "pending")
+    .order("created_at", { ascending: false })
+    .limit(1)
     .maybeSingle();
-  if (existing) {
-    return { error: new Error("You already sent an invite to this person for this group mission.") };
+
+  const st = latest?.status;
+  if (st === "pending") {
+    return {
+      error: new Error(
+        "There is already a pending invite to this person for this group mission.",
+      ),
+    };
+  }
+  if (st === "declined") {
+    return {
+      error: new Error("This person already declined this group mission."),
+    };
+  }
+  if (st === "accepted") {
+    return {
+      error: new Error("This person already joined this group mission."),
+    };
   }
 
   const { data: inviterProfile } = await supabase.from("profiles").select("username").eq("id", user.id).maybeSingle();
@@ -203,9 +235,10 @@ export async function sendChallengeInvite(
     .select("id")
     .single();
   if (invErr) {
-    const msg = invErr.message.toLowerCase().includes("unique") || invErr.code === "23505"
-      ? "You already sent an invite to this person for this group mission."
-      : invErr.message;
+    const msg =
+      invErr.message.toLowerCase().includes("unique") || invErr.code === "23505"
+        ? "There is already a pending invite to this person for this group mission."
+        : invErr.message;
     return { error: new Error(msg) };
   }
 
@@ -299,8 +332,43 @@ export async function listChallengeMembers(challengeId: string): Promise<Challen
 export async function declineInvite(inviteId: string): Promise<{ error: Error | null }> {
   const supabase = getSupabase();
   if (!supabase) return { error: new Error("Supabase not configured") };
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: new Error("Not signed in") };
+
+  const { data: invite, error: fetchErr } = await supabase
+    .from("challenge_invites")
+    .select("id, challenge_id, inviter_id, invitee_id, status")
+    .eq("id", inviteId)
+    .eq("invitee_id", user.id)
+    .maybeSingle();
+  if (fetchErr) return { error: new Error(fetchErr.message) };
+  if (!invite || invite.status !== "pending") {
+    return { error: new Error("Invite not found or already resolved.") };
+  }
+
   const { error } = await supabase.from("challenge_invites").update({ status: "declined" }).eq("id", inviteId);
   if (error) return { error: new Error(error.message) };
+
+  const { data: inviteeProfile } = await supabase.from("profiles").select("username").eq("id", user.id).maybeSingle();
+  const inviteeUsername =
+    typeof inviteeProfile?.username === "string" && inviteeProfile.username.trim().length > 0
+      ? inviteeProfile.username.trim().toLowerCase()
+      : null;
+
+  const { error: nErr } = await supabase.rpc("rpc_insert_notification", {
+    p_user_id: invite.inviter_id,
+    p_type: "challenge_invite_declined",
+    p_payload: {
+      challenge_id: invite.challenge_id,
+      invite_id: invite.id,
+      invitee_id: user.id,
+      invitee_username: inviteeUsername,
+    },
+  });
+  if (nErr && __DEV__) console.warn("[notifications] challenge_invite_declined", nErr.message);
+
   return { error: null };
 }
 
@@ -332,6 +400,25 @@ export async function acceptInviteAndJoin(
     .update({ status: "accepted" })
     .eq("id", invite.id);
   if (iErr) return { error: new Error(iErr.message) };
+
+  const { data: inviteeProfile } = await supabase.from("profiles").select("username").eq("id", user.id).maybeSingle();
+  const inviteeUsername =
+    typeof inviteeProfile?.username === "string" && inviteeProfile.username.trim().length > 0
+      ? inviteeProfile.username.trim().toLowerCase()
+      : null;
+
+  const { error: nErr } = await supabase.rpc("rpc_insert_notification", {
+    p_user_id: invite.inviter_id,
+    p_type: "challenge_invite_accepted",
+    p_payload: {
+      challenge_id: invite.challenge_id,
+      invite_id: invite.id,
+      invitee_id: user.id,
+      invitee_username: inviteeUsername,
+      habit_id: newHabitId,
+    },
+  });
+  if (nErr && __DEV__) console.warn("[notifications] challenge_invite_accepted", nErr.message);
 
   return { error: null };
 }
