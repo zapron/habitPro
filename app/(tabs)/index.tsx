@@ -1,5 +1,14 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { View, Text, TouchableOpacity, StyleSheet, StatusBar, Animated } from "react-native";
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  StatusBar,
+  Animated,
+  RefreshControl,
+  ScrollView,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
@@ -54,6 +63,7 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState<"active" | "completed">("active");
   const [storeHydrated, setStoreHydrated] = useState(() => useHabitStore.persist.hasHydrated());
   const [unreadNotifCount, setUnreadNotifCount] = useState(0);
+  const [notifRefreshBusy, setNotifRefreshBusy] = useState(false);
   const showAccount = isSupabaseConfigured();
 
   const listBottomPad = Math.max(insets.bottom, 12) + 56;
@@ -105,6 +115,22 @@ export default function Home() {
     return unsub;
   }, []);
 
+  const refreshNotificationCount = useCallback(async () => {
+    if (!session?.user || !showAccount) {
+      setUnreadNotifCount(0);
+      return;
+    }
+    setNotifRefreshBusy(true);
+    try {
+      const n = await countUnreadNotifications();
+      setUnreadNotifCount(n);
+    } catch {
+      setUnreadNotifCount(0);
+    } finally {
+      setNotifRefreshBusy(false);
+    }
+  }, [session?.user, showAccount]);
+
   useFocusEffect(
     useCallback(() => {
       if (!session?.user || !showAccount) {
@@ -123,6 +149,15 @@ export default function Home() {
         cancelled = true;
       };
     }, [session?.user, showAccount]),
+  );
+
+  const notifRefreshControl = (
+    <RefreshControl
+      refreshing={notifRefreshBusy}
+      onRefresh={() => void refreshNotificationCount()}
+      tintColor={theme.colors.indigo[400]}
+      colors={[theme.colors.indigo[400]]}
+    />
   );
 
   return (
@@ -272,27 +307,34 @@ export default function Home() {
         {!storeHydrated ? (
           <ListSkeleton theme={theme} />
         ) : filteredHabits.length === 0 ? (
-          <View style={styles.emptyState}>
-            <View style={[styles.emptyIconContainer, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
-              <Trophy size={50} color={theme.colors.slate[500]} />
-            </View>
-            <Text style={[styles.emptyTitle, { color: theme.colors.textPrimary, fontSize: theme.typography.h3 }]}>
-              {activeTab === "active" ? "No active missions" : "No completed missions yet"}
-            </Text>
-            <Text style={[styles.emptyDescription, { color: theme.colors.textSecondary }]}>
-              {activeTab === "active"
-                ? "Start your first mission and keep momentum daily."
-                : "Complete your first mission to unlock this section."}
-            </Text>
-            {activeTab === "active" && (
-              <View style={styles.emptyActions}>
-                <Button title="Start a Mission" onPress={() => router.push("/create")} style={styles.emptyButton} />
-                <TouchableOpacity onPress={() => router.push("/mini")} style={styles.emptySecondary} activeOpacity={0.85}>
-                  <Text style={[styles.emptySecondaryText, { color: theme.colors.amber[500] }]}>Browse mini missions</Text>
-                </TouchableOpacity>
+          <ScrollView
+            style={styles.emptyScroll}
+            contentContainerStyle={styles.emptyScrollContent}
+            refreshControl={showAccount && session?.user ? notifRefreshControl : undefined}
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={styles.emptyStateInner}>
+              <View style={[styles.emptyIconContainer, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
+                <Trophy size={50} color={theme.colors.slate[500]} />
               </View>
-            )}
-          </View>
+              <Text style={[styles.emptyTitle, { color: theme.colors.textPrimary, fontSize: theme.typography.h3 }]}>
+                {activeTab === "active" ? "No active missions" : "No completed missions yet"}
+              </Text>
+              <Text style={[styles.emptyDescription, { color: theme.colors.textSecondary }]}>
+                {activeTab === "active"
+                  ? "Start your first mission and keep momentum daily."
+                  : "Complete your first mission to unlock this section."}
+              </Text>
+              {activeTab === "active" && (
+                <View style={styles.emptyActions}>
+                  <Button title="Start a Mission" onPress={() => router.push("/create")} style={styles.emptyButton} />
+                  <TouchableOpacity onPress={() => router.push("/mini")} style={styles.emptySecondary} activeOpacity={0.85}>
+                    <Text style={[styles.emptySecondaryText, { color: theme.colors.amber[500] }]}>Browse mini missions</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+          </ScrollView>
         ) : (
           <FlashList
             data={filteredHabits}
@@ -300,6 +342,7 @@ export default function Home() {
             contentContainerStyle={[styles.listContent, { paddingBottom: listBottomPad }]}
             showsVerticalScrollIndicator={false}
             keyExtractor={(item) => item.id}
+            refreshControl={showAccount && session?.user ? notifRefreshControl : undefined}
           />
         )}
       </View>
@@ -369,7 +412,9 @@ const styles = StyleSheet.create({
   activeTabText: { color: "#ffffff" },
   listWrap: { flex: 1, minHeight: 0 },
   listContent: { paddingBottom: 40 },
-  emptyState: { flex: 1, justifyContent: "center", alignItems: "center" },
+  emptyScroll: { flex: 1 },
+  emptyScrollContent: { flexGrow: 1, justifyContent: "center", alignItems: "center", paddingVertical: 24 },
+  emptyStateInner: { alignItems: "center", width: "100%" },
   emptyIconContainer: { width: 94, height: 94, borderRadius: 9999, alignItems: "center", justifyContent: "center", borderWidth: 1, marginBottom: 16 },
   emptyTitle: { fontWeight: "700", marginBottom: 8 },
   emptyDescription: { textAlign: "center", marginBottom: 20, paddingHorizontal: 24 },
