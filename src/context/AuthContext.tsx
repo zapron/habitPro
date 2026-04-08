@@ -8,10 +8,17 @@ import React, {
   useState,
 } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as WebBrowser from "expo-web-browser";
 import type { Session } from "@supabase/supabase-js";
 import { useHabitStore } from "../store/habitStore";
 import { useChallengeStore } from "../store/challengeStore";
 import { isSupabaseConfigured, logSupabaseEnvHint } from "../lib/env";
+import {
+  buildSupabaseOAuthBrowserUrl,
+  getOAuthRedirectUri,
+  getOAuthReturnUrl,
+} from "../lib/oauthRedirect";
+import { extractOAuthCodeFromUrl } from "../lib/oauthExchange";
 import { getSupabase } from "../lib/supabase";
 import { hydrateStoreAfterAuth } from "../lib/sync";
 
@@ -26,6 +33,8 @@ type AuthContextValue = {
   supabaseConfigured: boolean;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signUp: (email: string, password: string) => Promise<{ error: Error | null }>;
+  /** Google OAuth (PKCE + system browser). Configure provider + redirect URLs in Supabase. */
+  signInWithGoogle: () => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
 };
 
@@ -149,6 +158,65 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return { error: error ?? null };
   }, []);
 
+  const signInWithGoogle = useCallback(async () => {
+    const supabase = getSupabase();
+    if (!supabase) {
+      return { error: new Error("Supabase is not configured.") };
+    }
+    const redirectTo = getOAuthRedirectUri();
+    const returnUrl = getOAuthReturnUrl();
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo,
+        skipBrowserRedirect: true,
+      },
+    });
+    if (error) return { error };
+    if (!data?.url) {
+      return { error: new Error("Could not start Google sign-in.") };
+    }
+
+    const browserUrl = buildSupabaseOAuthBrowserUrl(data.url);
+    if (__DEV__) {
+      console.log("[OAuth] Supabase redirectTo:", redirectTo);
+      console.log("[OAuth] WebBrowser returnUrl:", returnUrl);
+      console.log(
+        "[OAuth] browser opens:",
+        browserUrl === data.url ? "raw Supabase authorize" : "auth.expo.io/start proxy",
+      );
+    }
+
+    const result = await WebBrowser.openAuthSessionAsync(browserUrl, returnUrl);
+    if (result.type !== "success" || !result.url) {
+      if (result.type === "cancel" || result.type === "dismiss") {
+        return { error: null };
+      }
+      return { error: new Error("Google sign-in was cancelled.") };
+    }
+
+    let parsed: URL;
+    try {
+      parsed = new URL(result.url);
+    } catch {
+      return { error: new Error("Invalid OAuth response URL.") };
+    }
+
+    const oauthErr =
+      parsed.searchParams.get("error_description") ?? parsed.searchParams.get("error");
+    if (oauthErr) {
+      return { error: new Error(oauthErr) };
+    }
+
+    const code = extractOAuthCodeFromUrl(result.url);
+    if (!code) {
+      return { error: new Error("No authorization code returned from Google.") };
+    }
+
+    const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+    return { error: exchangeError ?? null };
+  }, []);
+
   const signOut = useCallback(async () => {
     const supabase = getSupabase();
     useHabitStore.getState().resetStore();
@@ -173,6 +241,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       supabaseConfigured,
       signIn,
       signUp,
+      signInWithGoogle,
       signOut,
     }),
     [
@@ -182,6 +251,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       supabaseConfigured,
       signIn,
       signUp,
+      signInWithGoogle,
       signOut,
     ],
   );
