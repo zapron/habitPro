@@ -108,7 +108,7 @@ function AnimatedDayCell({
                 delayLongPress={380}
                 style={dayButtonStyle}
                 activeOpacity={0.8}
-                disabled={!canInteract}
+                disabled={!(canInteract || (isCompleted && hasMemory))}
             >
                 {isCompleted ? (
                     <Animated.View style={[styles.badgeWrap, isMilestone && { opacity: shimmerOpacity }]}>
@@ -336,8 +336,17 @@ export default function HabitDetail() {
             return;
         }
 
-        if (canInteract && habit.streakMemories?.[dateStr]) {
-            setMemoryUi({ kind: 'view', memory: habit.streakMemories[dateStr], dateStr, day });
+        const mem = habit.streakMemories?.[dateStr];
+        if (mem) {
+            setMemoryUi({ kind: 'view', memory: mem, dateStr, day });
+            return;
+        }
+
+        if (!canInteract) {
+            Alert.alert(
+                'Locked',
+                'You can only check in for the current mission day. Each day unlocks 24 hours after the mission started (day 2 after the first 24 hours, and so on).',
+            );
             return;
         }
 

@@ -224,13 +224,19 @@ export function StreakMemorySheet({
                   </Text>
                   <View style={[styles.viewOnlyPill, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
                     <Lock size={12} color={theme.colors.amber[500]} />
-                    <Text style={[styles.viewOnlyPillText, { color: theme.colors.amber[500] }]}>Saved — view only</Text>
+                    <Text style={[styles.viewOnlyPillText, { color: theme.colors.amber[500] }]}>Locked Memory</Text>
                   </View>
-                  <Text style={[styles.title, { color: theme.colors.textPrimary, fontSize: theme.typography.h2 }]}>Your moment</Text>
+                  <Text style={[styles.title, { color: theme.colors.textPrimary, fontSize: theme.typography.h2 }]}>
+                    Your moment
+                  </Text>
                   <Text style={[styles.sub, { color: theme.colors.textSecondary }]} numberOfLines={2}>
                     {missionTitle}
                   </Text>
-                  <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollInner}>
+                  <ScrollView
+                    showsVerticalScrollIndicator={false}
+                    contentContainerStyle={styles.scrollInner}
+                    nestedScrollEnabled
+                  >
                     {vm?.imageUrl || vm?.imageUri ? (
                       <View style={[styles.photoSlotView, { borderColor: theme.colors.border }]}>
                         <Image
@@ -242,7 +248,16 @@ export function StreakMemorySheet({
                     ) : null}
                     {vm?.note ? (
                       <View style={[styles.viewNoteBox, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
-                        <Text style={[styles.viewNoteText, { color: theme.colors.textPrimary }]}>{vm.note}</Text>
+                        <Text
+                          selectable
+                          style={[
+                            styles.viewNoteText,
+                            { color: theme.colors.textPrimary },
+                            Platform.OS === "android" ? { includeFontPadding: false } : null,
+                          ]}
+                        >
+                          {vm.note}
+                        </Text>
                       </View>
                     ) : null}
                     {!vm?.imageUrl && !vm?.imageUri && !vm?.note ? (
@@ -251,15 +266,6 @@ export function StreakMemorySheet({
                       </Text>
                     ) : null}
                   </ScrollView>
-                  <Pressable
-                    onPress={handleDismiss}
-                    style={[
-                      styles.btnPrimaryBlock,
-                      { backgroundColor: theme.colors.indigo[600], ...theme.shadow.glow, marginTop: 8 },
-                    ]}
-                  >
-                    <Text style={[styles.btnPrimaryText, { color: theme.colors.white }]}>Close</Text>
-                  </Pressable>
                 </>
               ) : (
                 <View style={styles.createSheetColumn}>
@@ -452,7 +458,11 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   immutableNoticeBody: { fontSize: 12, lineHeight: 17 },
-  scrollInner: { paddingBottom: 8 },
+  scrollInner: {
+    paddingBottom: 16,
+    paddingTop: 2,
+    flexGrow: 1,
+  },
   createSheetColumn: {
     flex: 1,
     minHeight: 0,
@@ -519,14 +529,6 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     alignItems: "center",
   },
-  /** Full-width primary CTA (not flex:1) — view-only Close; avoids empty stretched bar when used alone in a column */
-  btnPrimaryBlock: {
-    alignSelf: "stretch",
-    paddingVertical: 14,
-    borderRadius: 14,
-    alignItems: "center",
-    justifyContent: "center",
-  },
   btnPrimaryText: { fontWeight: "800", fontSize: 15 },
   viewOnlyPill: {
     flexDirection: "row",
@@ -550,10 +552,19 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   viewNoteBox: {
+    alignSelf: "stretch",
+    width: "100%",
     borderRadius: 14,
     borderWidth: 1,
-    padding: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    overflow: "hidden",
   },
-  viewNoteText: { fontSize: 16, lineHeight: 24 },
+  viewNoteText: {
+    fontSize: 16,
+    lineHeight: 24,
+    width: "100%",
+    flexShrink: 1,
+  },
   emptyView: { fontSize: 14, fontStyle: "italic", textAlign: "center", paddingVertical: 12 },
 });
