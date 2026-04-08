@@ -34,7 +34,7 @@ export function CohortPeerStreakDots({
   remotePeer = true,
   showIdentityRow = true,
 }: Props) {
-  const { theme } = useTheme();
+  const { theme, isDark } = useTheme();
   const total = Math.max(1, habit.totalDays ?? 21);
   const nowMs = Date.now();
   const activeSlot = getActiveMissionDaySlot(habit.startDate, nowMs, total);
@@ -68,6 +68,15 @@ export function CohortPeerStreakDots({
           const isPublic = (habit.visibility ?? "solo") === "public";
           const hasMemory = isPublic && Boolean(memory?.note || memory?.imageUrl || memory?.imageUri);
           const tappable = completed && hasMemory;
+          /** Light mode: soft indigo wash instead of solid 600 (less blunt on white cards). */
+          const completedFill = isDark ? theme.colors.indigo[600] : "rgba(99, 102, 241, 0.18)";
+          const completedNum = isDark ? theme.colors.textPrimary : theme.colors.indigo[600];
+          const completedBorder =
+            isCurrentSlot
+              ? theme.colors.amber[500]
+              : isDark
+                ? theme.colors.border
+                : "rgba(99, 102, 241, 0.38)";
           return (
             <Pressable
               key={dateStr}
@@ -78,8 +87,8 @@ export function CohortPeerStreakDots({
               style={[
                 styles.dot,
                 {
-                  borderColor: isCurrentSlot ? theme.colors.amber[500] : theme.colors.border,
-                  backgroundColor: completed ? theme.colors.indigo[600] : theme.colors.surfaceElevated,
+                  borderColor: completed ? completedBorder : isCurrentSlot ? theme.colors.amber[500] : theme.colors.border,
+                  backgroundColor: completed ? completedFill : theme.colors.surfaceElevated,
                   opacity: tappable ? 1 : completed ? 0.95 : 0.45,
                 },
               ]}
@@ -87,7 +96,7 @@ export function CohortPeerStreakDots({
               <Text
                 style={[
                   styles.dotNum,
-                  { color: completed ? theme.colors.textPrimary : theme.colors.textMuted },
+                  { color: completed ? completedNum : theme.colors.textMuted },
                 ]}
               >
                 {dayNum}

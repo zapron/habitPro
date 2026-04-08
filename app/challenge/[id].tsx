@@ -181,7 +181,6 @@ export default function ChallengeDetailScreen() {
               const label = profileLabels[memberId];
               const habit = habitForMember(memberId);
               const nameOnCard = participantDisplayName(label);
-              const ownerHandle = label?.username ? `@${label.username}` : "—";
 
               return (
                 <View
@@ -195,16 +194,17 @@ export default function ChallengeDetailScreen() {
                     },
                   ]}
                 >
-                  <Text style={[styles.participantName, { color: theme.colors.textPrimary }]} numberOfLines={2}>
-                    {nameOnCard}
-                  </Text>
-
-                  <View style={styles.ownerStreakRow}>
-                    <Text style={[styles.ownerLabel, { color: theme.colors.textSecondary }]}>
-                      Owner <Text style={{ color: theme.colors.textMuted }}>{ownerHandle}</Text>
+                  <View style={styles.participantHeaderRow}>
+                    <Text style={[styles.participantName, { color: theme.colors.textPrimary }]} numberOfLines={2}>
+                      {nameOnCard}
                     </Text>
                     {habit ? (
-                      <View style={[styles.streakBadge, { backgroundColor: isDark ? "rgba(34, 211, 238, 0.12)" : "rgba(6, 182, 212, 0.1)" }]}>
+                      <View
+                        style={[
+                          styles.streakBadge,
+                          { backgroundColor: isDark ? "rgba(34, 211, 238, 0.12)" : "rgba(6, 182, 212, 0.1)" },
+                        ]}
+                      >
                         <Text style={[styles.streakBadgeText, { color: theme.colors.cyan[400] }]}>
                           {habit.streak} day streak
                         </Text>
@@ -265,24 +265,25 @@ const styles = StyleSheet.create({
     padding: 16,
     marginBottom: 14,
   },
-  participantName: {
-    fontSize: 18,
-    fontWeight: "800",
-    letterSpacing: -0.2,
-    marginBottom: 10,
-  },
-  ownerStreakRow: {
+  participantHeaderRow: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     justifyContent: "space-between",
     gap: 12,
     marginBottom: 6,
   },
-  ownerLabel: { fontSize: 13, fontWeight: "600", flex: 1 },
+  participantName: {
+    fontSize: 18,
+    fontWeight: "800",
+    letterSpacing: -0.2,
+    flex: 1,
+    minWidth: 0,
+  },
   streakBadge: {
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 9999,
+    flexShrink: 0,
   },
   streakBadgeText: { fontSize: 12, fontWeight: "800" },
   streakPlaceholder: { fontSize: 13, fontWeight: "700" },
