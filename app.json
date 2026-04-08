@@ -1,6 +1,7 @@
 {
   "expo": {
     "name": "habitPro",
+    "owner": "raktim24",
     "slug": "habitPro",
     "scheme": "habitpro",
     "version": "1.1.0",
@@ -33,6 +34,7 @@
     },
     "plugins": [
       "expo-router",
+      "expo-web-browser",
       "expo-notifications",
       "expo-secure-store",
       [

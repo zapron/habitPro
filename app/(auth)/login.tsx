@@ -12,10 +12,10 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 import { Eye, EyeOff } from "lucide-react-native";
-import { Screen } from "../src/components/Screen";
-import { useTheme } from "../src/context/ThemeContext";
-import { useAuth } from "../src/context/AuthContext";
-import { Button } from "../src/components/Button";
+import { Screen } from "../../src/components/Screen";
+import { useTheme } from "../../src/context/ThemeContext";
+import { useAuth } from "../../src/context/AuthContext";
+import { Button } from "../../src/components/Button";
 
 type FocusKey = "email" | "password" | "confirmPassword" | null;
 
@@ -24,18 +24,14 @@ const FORM_MAX_WIDTH = 400;
 export default function LoginScreen() {
   const router = useRouter();
   const { theme, isDark } = useTheme();
-  const {
-    supabaseConfigured,
-    signIn,
-    signUp,
-    session,
-  } = useAuth();
+  const { supabaseConfigured, signIn, signUp, signInWithGoogle, session } = useAuth();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [isSignUp, setIsSignUp] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [focused, setFocused] = useState<FocusKey>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -45,6 +41,18 @@ export default function LoginScreen() {
       router.replace("/");
     }
   }, [supabaseConfigured, session, router]);
+
+  const onGoogle = async () => {
+    setGoogleLoading(true);
+    try {
+      const { error } = await signInWithGoogle();
+      if (error) {
+        Alert.alert("Google sign-in failed", error.message);
+      }
+    } finally {
+      setGoogleLoading(false);
+    }
+  };
 
   const onSubmit = async () => {
     if (!email.trim()) {
@@ -62,9 +70,7 @@ export default function LoginScreen() {
       }
     }
     setLoading(true);
-    const { error } = isSignUp
-      ? await signUp(email, password)
-      : await signIn(email, password);
+    const { error } = isSignUp ? await signUp(email, password) : await signIn(email, password);
     setLoading(false);
     if (error) {
       Alert.alert(isSignUp ? "Sign up failed" : "Sign in failed", error.message);
@@ -80,6 +86,8 @@ export default function LoginScreen() {
 
   const borderFor = (key: Exclude<FocusKey, null>) =>
     focused === key ? theme.colors.indigo[500] : theme.colors.border;
+
+  const busy = loading || googleLoading;
 
   return (
     <Screen plain>
@@ -97,13 +105,9 @@ export default function LoginScreen() {
           <View style={styles.header}>
             <Text style={styles.titleWordmark}>
               <Text style={{ color: theme.colors.indigo[500] }}>habit</Text>
-              <Text style={{ color: isDark ? theme.colors.textPrimary : "#000000" }}>
-                Pro
-              </Text>
+              <Text style={{ color: isDark ? theme.colors.textPrimary : "#000000" }}>Pro</Text>
             </Text>
-            <Text
-              style={[styles.subtitle, { color: theme.colors.textSecondary }]}
-            >
+            <Text style={[styles.subtitle, { color: theme.colors.textSecondary }]}>
               Sign in to sync missions, streaks, and XP across devices.
             </Text>
           </View>
@@ -125,9 +129,7 @@ export default function LoginScreen() {
 
           {supabaseConfigured && (
             <>
-              <Text style={[styles.label, { color: theme.colors.textSecondary }]}>
-                Email
-              </Text>
+              <Text style={[styles.label, { color: theme.colors.textSecondary }]}>Email</Text>
               <TextInput
                 style={[
                   styles.input,
@@ -147,11 +149,10 @@ export default function LoginScreen() {
                 onChangeText={setEmail}
                 onFocus={() => setFocused("email")}
                 onBlur={() => setFocused(null)}
+                editable={!busy}
               />
 
-              <Text style={[styles.label, { color: theme.colors.textSecondary }]}>
-                Password
-              </Text>
+              <Text style={[styles.label, { color: theme.colors.textSecondary }]}>Password</Text>
               <View
                 style={[
                   styles.passwordOuter,
@@ -171,6 +172,7 @@ export default function LoginScreen() {
                   onFocus={() => setFocused("password")}
                   onBlur={() => setFocused(null)}
                   autoCapitalize="none"
+                  editable={!busy}
                 />
                 <TouchableOpacity
                   style={styles.eyeButton}
@@ -210,6 +212,7 @@ export default function LoginScreen() {
                       onFocus={() => setFocused("confirmPassword")}
                       onBlur={() => setFocused(null)}
                       autoCapitalize="none"
+                      editable={!busy}
                     />
                     <TouchableOpacity
                       style={styles.eyeButton}
@@ -236,6 +239,7 @@ export default function LoginScreen() {
                   setConfirmPassword("");
                 }}
                 activeOpacity={0.8}
+                disabled={busy}
               >
                 <Text style={[styles.switchText, { color: theme.colors.textSecondary }]}>
                   {isSignUp ? "Already have an account? " : "New here? "}
@@ -246,16 +250,43 @@ export default function LoginScreen() {
               </TouchableOpacity>
 
               {loading ? (
-                <ActivityIndicator
-                  color={theme.colors.indigo[500]}
-                  style={styles.loader}
-                />
+                <ActivityIndicator color={theme.colors.indigo[500]} style={styles.loader} />
               ) : (
                 <Button
                   title={isSignUp ? "Create account" : "Sign in"}
                   onPress={onSubmit}
                   style={{ marginTop: 4 }}
+                  disabled={busy}
                 />
+              )}
+
+              <View style={styles.dividerRow}>
+                <View style={[styles.dividerLine, { backgroundColor: theme.colors.border }]} />
+                <Text style={[styles.dividerOr, { color: theme.colors.textMuted }]}>or</Text>
+                <View style={[styles.dividerLine, { backgroundColor: theme.colors.border }]} />
+              </View>
+
+              {googleLoading ? (
+                <ActivityIndicator color={theme.colors.indigo[500]} style={{ marginBottom: 8 }} />
+              ) : (
+                <TouchableOpacity
+                  style={[
+                    styles.googleBtn,
+                    {
+                      borderColor: theme.colors.border,
+                      backgroundColor: theme.colors.surface,
+                    },
+                  ]}
+                  onPress={() => void onGoogle()}
+                  disabled={busy}
+                  activeOpacity={0.85}
+                  accessibilityRole="button"
+                  accessibilityLabel="Continue with Google"
+                >
+                  <Text style={[styles.googleBtnText, { color: theme.colors.textPrimary }]}>
+                    Continue with Google
+                  </Text>
+                </TouchableOpacity>
               )}
             </>
           )}
@@ -306,6 +337,23 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   bannerText: { fontSize: 13, lineHeight: 19, textAlign: "center" },
+  googleBtn: {
+    borderWidth: 1,
+    borderRadius: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    alignItems: "center",
+    marginBottom: 4,
+  },
+  googleBtnText: { fontSize: 16, fontWeight: "700" },
+  dividerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginVertical: 18,
+    gap: 12,
+  },
+  dividerLine: { flex: 1, height: StyleSheet.hairlineWidth },
+  dividerOr: { fontSize: 12, fontWeight: "700" },
   label: { fontSize: 12, fontWeight: "600", marginBottom: 8, alignSelf: "flex-start", width: "100%" },
   input: {
     borderWidth: 1,

@@ -1,6 +1,10 @@
 import { useEffect, useRef } from "react";
 import { View } from "react-native";
-import { Stack, useRouter, useSegments } from "expo-router";
+import * as Linking from "expo-linking";
+import * as WebBrowser from "expo-web-browser";
+import { Stack, usePathname, useRouter } from "expo-router";
+
+WebBrowser.maybeCompleteAuthSession();
 import { ThemeProvider } from "../src/context/ThemeContext";
 import { AuthProvider, useAuth } from "../src/context/AuthContext";
 import { AppVersionProvider, useAppVersion } from "../src/context/AppVersionContext";
@@ -11,10 +15,11 @@ import { setupNotifications } from "../src/utils/notifications";
 import { syncMiniMissionNotifications } from "../src/utils/miniMissionNotifications";
 import { useHabitStore } from "../src/store/habitStore";
 import { isSupabaseConfigured } from "../src/lib/env";
+import { tryCompleteOAuthFromUrl } from "../src/lib/oauthExchange";
 
 function RootLayoutNav() {
   const { session, initializing } = useAuth();
-  const segments = useSegments();
+  const pathname = usePathname();
   const router = useRouter();
   const requireAuth = isSupabaseConfigured();
   const { needsForceUpdate, downloadUrl, forceMessage } = useAppVersion();
@@ -22,6 +27,17 @@ function RootLayoutNav() {
   useEffect(() => {
     void setupNotifications();
   }, []);
+
+  /** Backup: complete PKCE if the deep link doesn’t land on `app/auth/callback` (e.g. timing). */
+  useEffect(() => {
+    const run = async (url: string | null) => {
+      const ok = await tryCompleteOAuthFromUrl(url);
+      if (ok) router.replace("/");
+    };
+    void Linking.getInitialURL().then((u) => void run(u));
+    const sub = Linking.addEventListener("url", ({ url }) => void run(url));
+    return () => sub.remove();
+  }, [router]);
 
   const challengeInviteNotificationHandledRef = useRef(false);
 
@@ -101,14 +117,15 @@ function RootLayoutNav() {
 
   useEffect(() => {
     if (!requireAuth || initializing) return;
-    const inAuth = segments[0] === "login";
+    const p = pathname ?? "";
+    const inAuth = p === "/login" || p.startsWith("/auth");
     if (!session && !inAuth) {
       router.replace("/login");
     }
     if (session && inAuth) {
       router.replace("/");
     }
-  }, [requireAuth, initializing, session, segments, router]);
+  }, [requireAuth, initializing, session, pathname, router]);
 
   if (requireAuth && initializing) {
     return null;
