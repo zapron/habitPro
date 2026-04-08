@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -8,15 +8,24 @@ import {
   StatusBar,
   ActivityIndicator,
   Platform,
+  Alert,
+  RefreshControl,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
 import { ArrowLeft } from "lucide-react-native";
+import { CohortNudgeChips } from "../../src/components/CohortNudgeChips";
 import { Screen } from "../../src/components/Screen";
 import { CohortPeerStreakDots } from "../../src/components/CohortPeerStreakDots";
+import { SquadActivitySection } from "../../src/components/SquadActivitySection";
 import { useTheme } from "../../src/context/ThemeContext";
 import { useAuth } from "../../src/context/AuthContext";
 import { useHabitStore } from "../../src/store/habitStore";
+import {
+  listChallengeActivity,
+  listRecentNudges,
+  sendChallengeNudge,
+} from "../../src/lib/challengeCohort";
 import {
   getChallengeGroup,
   getProfileLabelsForIds,
@@ -24,7 +33,12 @@ import {
   refreshCohortPeerHabits,
   type ProfileLabel,
 } from "../../src/lib/groupChallengesApi";
-import type { ChallengeGroupRow } from "../../src/types/groupChallenge";
+import type {
+  ChallengeActivityRow,
+  ChallengeGroupRow,
+  ChallengeNudgeKind,
+  ChallengeNudgeRow,
+} from "../../src/types/groupChallenge";
 import type { Habit } from "../../src/types/habit";
 
 function parseGroupMissionDisplay(g: ChallengeGroupRow | null): { title: string; description?: string } {
@@ -69,33 +83,96 @@ export default function ChallengeDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [memberIdsOrdered, setMemberIdsOrdered] = useState<string[]>([]);
   const [profileLabels, setProfileLabels] = useState<Record<string, ProfileLabel>>({});
+  const [feedActivity, setFeedActivity] = useState<ChallengeActivityRow[]>([]);
+  const [feedNudges, setFeedNudges] = useState<ChallengeNudgeRow[]>([]);
+  const [nudgeBusyKey, setNudgeBusyKey] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
-  const load = useCallback(async () => {
+  const focusOnceRef = useRef(false);
+
+  const load = useCallback(async (opts?: { silent?: boolean }) => {
     if (!challengeId) return;
-    setLoading(true);
+    const silent = opts?.silent ?? false;
+    if (!silent) setLoading(true);
     try {
-      const [g, members] = await Promise.all([
+      const [g, members, activity, nudges] = await Promise.all([
         getChallengeGroup(challengeId),
         listChallengeMembers(challengeId),
+        listChallengeActivity(challengeId).catch(() => [] as ChallengeActivityRow[]),
+        listRecentNudges(challengeId).catch(() => [] as ChallengeNudgeRow[]),
       ]);
       setGroup(g);
       const ids = members.map((m) => m.user_id);
       setMemberIdsOrdered(ids);
-      const labels = await getProfileLabelsForIds(ids);
+      setFeedActivity(activity);
+      setFeedNudges(nudges);
+      const labelIds = new Set<string>(ids);
+      for (const a of activity) labelIds.add(a.actor_user_id);
+      for (const n of nudges) {
+        labelIds.add(n.from_user_id);
+        labelIds.add(n.to_user_id);
+      }
+      const labels = await getProfileLabelsForIds([...labelIds]);
       setProfileLabels(labels);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [challengeId]);
 
-  useEffect(() => {
-    void load();
-  }, [load]);
-
   useFocusEffect(
     useCallback(() => {
+      const silent = focusOnceRef.current;
+      focusOnceRef.current = true;
+      void load({ silent });
       void refreshCohortPeerHabits();
-    }, []),
+    }, [load]),
+  );
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await Promise.all([load({ silent: true }), refreshCohortPeerHabits()]);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [load]);
+
+  const onSendNudge = useCallback(
+    async (toUserId: string, kind: ChallengeNudgeKind) => {
+      if (!challengeId || !myUserId || toUserId === myUserId) return;
+      const key = `${toUserId}-${kind}`;
+      setNudgeBusyKey(key);
+      try {
+        const { error } = await sendChallengeNudge(challengeId, toUserId, kind);
+        if (error) {
+          Alert.alert("Couldn’t send", error.message);
+          return;
+        }
+        await load({ silent: true });
+      } finally {
+        setNudgeBusyKey(null);
+      }
+    },
+    [challengeId, myUserId, load],
+  );
+
+  const onCongrats = useCallback(
+    async (actorUserId: string) => {
+      if (!challengeId || !myUserId || actorUserId === myUserId) return;
+      const key = `${actorUserId}-congrats`;
+      setNudgeBusyKey(key);
+      try {
+        const { error } = await sendChallengeNudge(challengeId, actorUserId, "congrats");
+        if (error) {
+          Alert.alert("Couldn’t send", error.message);
+          return;
+        }
+        await load({ silent: true });
+      } finally {
+        setNudgeBusyKey(null);
+      }
+    },
+    [challengeId, myUserId, load],
   );
 
   const myHabit = useMemo(
@@ -149,7 +226,18 @@ export default function ChallengeDetailScreen() {
       {loading ? (
         <ActivityIndicator color={theme.colors.indigo[400]} style={{ marginTop: 24 }} />
       ) : (
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: bottomPad }}>
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: bottomPad }}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={theme.colors.indigo[400]}
+              colors={[theme.colors.indigo[400]]}
+            />
+          }
+        >
           <Text style={[styles.heroTitle, { color: theme.colors.textPrimary }]}>{missionTitle}</Text>
 
           <Text style={[styles.metaLine, { color: theme.colors.textMuted }]}>
@@ -171,6 +259,17 @@ export default function ChallengeDetailScreen() {
               {missionDescription}
             </Text>
           ) : null}
+
+          <SquadActivitySection
+            theme={theme}
+            isDark={isDark}
+            feedActivity={feedActivity}
+            feedNudges={feedNudges}
+            profileLabels={profileLabels}
+            myUserId={myUserId}
+            nudgeBusyKey={nudgeBusyKey}
+            onCongrats={(actorUserId) => void onCongrats(actorUserId)}
+          />
 
           <Text style={[styles.sectionLabel, { color: theme.colors.textMuted }]}>PARTICIPANTS</Text>
 
@@ -225,6 +324,16 @@ export default function ChallengeDetailScreen() {
                       Mission progress will show here once it syncs.
                     </Text>
                   )}
+
+                  {myUserId && memberId !== myUserId ? (
+                    <CohortNudgeChips
+                      theme={theme}
+                      isDark={isDark}
+                      memberId={memberId}
+                      nudgeBusyKey={nudgeBusyKey}
+                      onPress={(kind) => void onSendNudge(memberId, kind)}
+                    />
+                  ) : null}
                 </View>
               );
             })
