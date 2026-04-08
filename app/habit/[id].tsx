@@ -3,7 +3,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { View, Text, ScrollView, TouchableOpacity, Alert, StyleSheet, StatusBar, Animated, Easing, LayoutChangeEvent, Switch } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import { ArrowLeft, Trash2, Lock, RotateCcw, Sparkles, Star, Plane, Gamepad2, Globe, User, Users } from 'lucide-react-native';
+import { ArrowLeft, Trash2, Lock, RotateCcw, Sparkles, Star, Plane, Gamepad2, Globe, User, Users, Info } from 'lucide-react-native';
 import { useHabitStore } from '../../src/store/habitStore';
 import { Button } from '../../src/components/Button';
 import { Timer } from '../../src/components/Timer';
@@ -19,6 +19,7 @@ import { getActiveMissionDaySlot, isHabitCalendarDateToggleable } from '../../sr
 import { StreakMemorySheet } from '../../src/components/StreakMemorySheet';
 import { StreakMemoryGallery } from '../../src/components/StreakMemoryGallery';
 import { GroupChallengeSheet } from '../../src/components/GroupChallengeSheet';
+import { MissionDetailsSheet } from '../../src/components/MissionDetailsSheet';
 import type { StreakMemory } from '../../src/types/habit';
 import {
     canUseStreakMemoryUpload,
@@ -185,6 +186,7 @@ export default function HabitDetail() {
         | null;
     const [memoryUi, setMemoryUi] = useState<MemoryUiState>(null);
     const [groupSheetOpen, setGroupSheetOpen] = useState(false);
+    const [missionDetailsOpen, setMissionDetailsOpen] = useState(false);
     const pendingMemoryRef = useRef<{ dateStr: string; day: number; dayIndex: number } | null>(null);
 
     useEffect(() => {
@@ -376,6 +378,7 @@ export default function HabitDetail() {
             </View>
 
             <GroupChallengeSheet visible={groupSheetOpen} onClose={() => setGroupSheetOpen(false)} habit={habit} />
+            <MissionDetailsSheet visible={missionDetailsOpen} onClose={() => setMissionDetailsOpen(false)} habit={habit} />
 
             <StreakMemorySheet
                 visible={memoryUi !== null}
@@ -398,8 +401,32 @@ export default function HabitDetail() {
                     </Text>
                 </View>
 
-                <Text style={[styles.title, { color: theme.colors.textPrimary, fontSize: theme.typography.h1 }]}>{habit.title}</Text>
-                <Text style={[styles.description, { color: theme.colors.textSecondary, fontSize: theme.typography.body }]}>{habit.description || 'No brief added yet.'}</Text>
+                <View style={styles.titleRow}>
+                    <Text
+                        style={[
+                            styles.title,
+                            {
+                                color: theme.colors.textPrimary,
+                                fontSize: theme.typography.h1,
+                                lineHeight: Math.round(theme.typography.h1 * 1.2),
+                            },
+                        ]}
+                    >
+                        {habit.title}
+                    </Text>
+                    <TouchableOpacity
+                        style={styles.titleInfoBtn}
+                        onPress={() => {
+                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                            setMissionDetailsOpen(true);
+                        }}
+                        hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                        accessibilityRole="button"
+                        accessibilityLabel="Mission details and brief"
+                    >
+                        <Info size={theme.icon.lg} color={theme.colors.indigo[400]} />
+                    </TouchableOpacity>
+                </View>
 
                 <View style={[styles.visibilityRow, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, borderRadius: theme.radius.md }]}>
                     {(habit.visibility ?? 'solo') === 'public' ? (
@@ -514,8 +541,20 @@ const styles = StyleSheet.create({
     modeBadge: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 6, paddingVertical: 4, paddingHorizontal: 10, borderRadius: 9999, backgroundColor: 'rgba(34, 211, 238, 0.1)', borderWidth: 1, borderColor: 'rgba(34, 211, 238, 0.3)', marginBottom: 10 },
     modeBadgeManual: { backgroundColor: 'rgba(245, 158, 11, 0.1)', borderColor: 'rgba(245, 158, 11, 0.3)' },
     modeBadgeText: { fontSize: 11, fontWeight: '800', letterSpacing: 1 },
-    title: { fontWeight: '800', marginBottom: 8 },
-    description: { marginBottom: 12 },
+    titleRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 12,
+        marginBottom: 12,
+    },
+    title: { fontWeight: '800', flex: 1, minWidth: 0, paddingRight: 4 },
+    titleInfoBtn: {
+        flexShrink: 0,
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 6,
+    },
     visibilityRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingHorizontal: 14, borderWidth: 1, marginBottom: 20 },
     visibilityTextCol: { flex: 1 },
     visibilityTitle: { fontWeight: '700', fontSize: 14 },
