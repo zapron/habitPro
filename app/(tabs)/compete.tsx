@@ -429,7 +429,7 @@ export default function CompeteScreen() {
 
       <Text style={[styles.title, { color: theme.colors.textPrimary, fontSize: theme.typography.h1 }]}>Compete</Text>
       <Text style={[styles.subtitle, { color: theme.colors.textSecondary, fontSize: theme.typography.caption }]}>
-        Weekly tiers and time-boxed challenges — all local for now; online leaderboards later.
+        Weekly tiers and time-boxed challenges.
       </Text>
 
       <View
@@ -558,9 +558,6 @@ export default function CompeteScreen() {
                     {weeklyScore} pts
                   </Text>
                 </View>
-                <Text style={[styles.scoreHint, { color: theme.colors.textMuted }]}>
-                  Score blends habit days, mini completions, and level — for solo motivation until global ranks ship.
-                </Text>
               </View>
             </View>
 
@@ -587,10 +584,6 @@ export default function CompeteScreen() {
                 <Text style={[styles.statValue, { color: theme.colors.amber[500] }]}>{minisWeek}</Text>
               </View>
             </View>
-
-            <Text style={[styles.roadmap, { color: theme.colors.textMuted }]}>
-              Next: global leaderboards (Supabase), friend duels, and shared group mission invites.
-            </Text>
           </>
         ) : challengesSubTab === "invites" ? (
           <>
@@ -933,8 +926,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     overflow: "hidden",
   },
-  scoreHint: { fontSize: 12, lineHeight: 17, fontStyle: "italic" },
-  roadmap: { fontSize: 12, lineHeight: 18, marginTop: 4, fontStyle: "italic" },
   activeCard: {
     borderRadius: 16,
     borderWidth: 1,

@@ -8,7 +8,6 @@ import {
   StyleSheet,
   StatusBar,
   Alert,
-  Platform,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -375,11 +374,6 @@ export default function ProfileScreen() {
   const showAccount = isSupabaseConfigured();
   const appVersion = useAppVersion();
 
-  const serverMinVersion =
-    Platform.OS === "ios" ? appVersion.policy?.min_ios_version : appVersion.policy?.min_android_version;
-  const serverLatestVersion =
-    Platform.OS === "ios" ? appVersion.policy?.latest_ios_version : appVersion.policy?.latest_android_version;
-
   return (
     <Screen>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={theme.colors.background} />
@@ -562,41 +556,10 @@ export default function ProfileScreen() {
           ]}
         >
           <Text style={[styles.versionPrimary, { color: theme.colors.textPrimary }]}>
-            This build · v{appVersion.currentVersion}
-            {appVersion.nativeBuildLabel ? ` · build ${appVersion.nativeBuildLabel}` : ""}
+            v{appVersion.currentVersion}
+            {appVersion.nativeBuildLabel ? ` (${appVersion.nativeBuildLabel})` : ""}
           </Text>
-          {showAccount && !appVersion.loading && appVersion.policy ? (
-            <>
-              <Text style={[styles.versionLine, { color: theme.colors.textSecondary }]}>
-                Minimum required ({Platform.OS === "ios" ? "iOS" : "Android"}):{" "}
-                {serverMinVersion?.trim().length ? serverMinVersion : "— (not set)"}
-              </Text>
-              <Text style={[styles.versionLine, { color: theme.colors.textSecondary }]}>
-                Latest listed: {serverLatestVersion?.trim().length ? serverLatestVersion : "—"}
-              </Text>
-            </>
-          ) : null}
-          {showAccount && !appVersion.loading && appVersion.releases.length > 0 ? (
-            <View style={{ marginTop: 10 }}>
-              <Text style={[styles.versionReleasesLabel, { color: theme.colors.textMuted }]}>Release history</Text>
-              {appVersion.releases.slice(0, 6).map((r) => (
-                <Text key={r.id} style={[styles.versionReleaseRow, { color: theme.colors.textSecondary }]}>
-                  v{r.version} · {r.platform}
-                  {r.notes ? ` — ${r.notes}` : ""}
-                </Text>
-              ))}
-            </View>
-          ) : null}
-          {!showAccount ? (
-            <Text style={[styles.versionLine, { color: theme.colors.textMuted, marginTop: 6 }]}>
-              Connect Supabase in this build to sync version policy from the server.
-            </Text>
-          ) : null}
         </View>
-
-        <Text style={[styles.footerHint, { color: theme.colors.textMuted }]}>
-          Charts, streak heatmaps, and richer public profile cards can build on this hub later.
-        </Text>
       </ScrollView>
 
       {hubModalContent && hubModalContent.variant === "habits" ? (
@@ -706,7 +669,6 @@ const styles = StyleSheet.create({
   hubSubSectionTitle: { fontSize: 14, fontWeight: "800" },
   hubVisRow: { flexDirection: "row" },
   hubSubSectionDivider: { height: 1, marginVertical: 14, opacity: 0.5 },
-  footerHint: { fontSize: 12, lineHeight: 18, marginTop: 20, fontStyle: "italic" },
   versionCard: {
     borderRadius: 16,
     borderWidth: 1,
@@ -714,7 +676,4 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   versionPrimary: { fontSize: 15, fontWeight: "800" },
-  versionLine: { fontSize: 13, lineHeight: 19, marginTop: 8 },
-  versionReleasesLabel: { fontSize: 11, fontWeight: "800", letterSpacing: 0.6, marginBottom: 6 },
-  versionReleaseRow: { fontSize: 12, lineHeight: 17, marginBottom: 4 },
 });
