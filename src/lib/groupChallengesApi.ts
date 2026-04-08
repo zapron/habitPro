@@ -383,3 +383,10 @@ export async function refreshCohortPeerHabits(): Promise<void> {
   useHabitStore.getState().setCohortPeerHabits(snap.cohortPeerHabits);
 }
 
+export {
+  listChallengeActivity,
+  listRecentNudges,
+  sendChallengeNudge,
+  tryRecordChallengeMilestones,
+} from "./challengeCohort";
+

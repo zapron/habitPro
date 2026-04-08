@@ -42,3 +42,25 @@ export type ProfileSearchRow = {
   username: string;
   display_name: string | null;
 };
+
+export type ChallengeNudgeKind = "cheer" | "same" | "fire" | "congrats";
+
+export type ChallengeNudgeRow = {
+  id: string;
+  challenge_id: string;
+  from_user_id: string;
+  to_user_id: string;
+  kind: ChallengeNudgeKind;
+  created_at: string;
+};
+
+export type ChallengeActivityKind = "mission_day" | "streak_milestone";
+
+export type ChallengeActivityRow = {
+  id: string;
+  challenge_id: string;
+  actor_user_id: string;
+  kind: ChallengeActivityKind;
+  value: number;
+  created_at: string;
+};
