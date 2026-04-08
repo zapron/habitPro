@@ -29,6 +29,7 @@ export function getSupabase(): SupabaseClient | null {
         autoRefreshToken: true,
         persistSession: true,
         detectSessionInUrl: false,
+        flowType: "pkce",
       },
     });
   }
