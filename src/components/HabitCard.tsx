@@ -97,20 +97,20 @@ export const HabitCard = memo(({ item }: HabitCardProps) => {
                 <View style={styles.cardStats}>
                     <View style={styles.statIcon}>
                         {isFinished ? (
-                            <TreePine size={20} color={theme.colors.green[500]} />
+                            <TreePine size={16} color={theme.colors.green[500]} />
                         ) : item.streak >= 14 ? (
                             <View style={styles.flameStack}>
-                                <Flame size={18} color="#f59e0b" fill="#fde68a" />
-                                <Flame size={12} color="#ef4444" fill="#fca5a5" style={{ position: 'absolute', left: 8, top: -2 }} />
+                                <Flame size={14} color="#f59e0b" fill="#fde68a" />
+                                <Flame size={10} color="#ef4444" fill="#fca5a5" style={{ position: 'absolute', left: 6, top: -2 }} />
                             </View>
                         ) : item.streak >= 7 ? (
                             <View style={styles.flameStack}>
-                                <Flame size={18} color="#f59e0b" fill="#fde68a" />
+                                <Flame size={14} color="#f59e0b" fill="#fde68a" />
                             </View>
                         ) : item.streak > 0 ? (
-                            <Flame size={18} color="#f59e0b" fill="#fde68a" />
+                            <Flame size={14} color="#f59e0b" fill="#fde68a" />
                         ) : (
-                            <Flame size={18} color={theme.colors.textMuted} />
+                            <Flame size={14} color={theme.colors.textMuted} />
                         )}
                     </View>
                     <Text
@@ -222,9 +222,9 @@ const styles = StyleSheet.create({
     modePillText: { fontSize: 9, fontWeight: '800', letterSpacing: 0.8 },
     cardTitle: { fontWeight: '700', marginBottom: 4 },
     cardDescription: { fontSize: 14 },
-    cardStats: { flexDirection: 'row', alignItems: 'center', marginTop: 12 },
-    statIcon: { marginRight: 8 },
-    cardStreak: { fontWeight: '700', marginRight: 16, flexShrink: 1 },
+    cardStats: { flexDirection: 'row', alignItems: 'center', marginTop: 10 },
+    statIcon: { marginRight: 6 },
+    cardStreak: { fontWeight: '700', fontSize: 12, marginRight: 12, flexShrink: 1 },
     cardProgress: { flexShrink: 0 },
     groupStreakPill: {
         flexDirection: 'row',
@@ -240,7 +240,7 @@ const styles = StyleSheet.create({
     },
     groupStreakPillText: { fontSize: 8, fontWeight: '800', letterSpacing: 0.25 },
     progressText: { fontWeight: '700', fontSize: 18 },
-    flameStack: { position: 'relative', width: 24, height: 20 },
+    flameStack: { position: 'relative', width: 20, height: 18 },
     progressBarBg: {
         height: 4,
         backgroundColor: 'rgba(100, 116, 139, 0.3)',

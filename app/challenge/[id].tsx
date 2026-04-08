@@ -4,6 +4,7 @@ import {
   Text,
   ScrollView,
   TouchableOpacity,
+  Pressable,
   StyleSheet,
   StatusBar,
   ActivityIndicator,
@@ -238,7 +239,18 @@ export default function ChallengeDetailScreen() {
             />
           }
         >
-          <Text style={[styles.heroTitle, { color: theme.colors.textPrimary }]}>{missionTitle}</Text>
+          {myHabit?.id ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Open mission: ${missionTitle}`}
+              onPress={() => router.push(`/habit/${myHabit.id}`)}
+              style={({ pressed }) => [{ opacity: pressed ? 0.85 : 1 }]}
+            >
+              <Text style={[styles.heroTitle, { color: theme.colors.textPrimary }]}>{missionTitle}</Text>
+            </Pressable>
+          ) : (
+            <Text style={[styles.heroTitle, { color: theme.colors.textPrimary }]}>{missionTitle}</Text>
+          )}
 
           <Text style={[styles.metaLine, { color: theme.colors.textMuted }]}>
             {memberIdsOrdered.length} participant{memberIdsOrdered.length === 1 ? "" : "s"} ·{" "}
