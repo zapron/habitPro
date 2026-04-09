@@ -43,7 +43,7 @@ export type ProfileSearchRow = {
   display_name: string | null;
 };
 
-export type ChallengeNudgeKind = "cheer" | "same" | "fire" | "congrats";
+export type ChallengeNudgeKind = "cheer" | "ping" | "fire" | "congrats";
 
 export type ChallengeNudgeRow = {
   id: string;
