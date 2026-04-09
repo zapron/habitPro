@@ -14,6 +14,7 @@ import { ArrowLeft } from "lucide-react-native";
 import { Screen } from "../src/components/Screen";
 import { useTheme } from "../src/context/ThemeContext";
 import { listNotifications, markNotificationRead } from "../src/lib/groupChallengesApi";
+import { parseCommunityWinCheerPayload } from "../src/lib/notificationPayloads";
 import type { ChallengeNudgeKind, NotificationRow } from "../src/types/groupChallenge";
 
 function groupMissionInviteSubtitle(n: NotificationRow): string {
@@ -52,6 +53,8 @@ function notificationTitle(type: string): string {
       return "Invite declined";
     case "challenge_nudge":
       return "Squad nudge";
+    case "community_win_cheer":
+      return "Cheer on your win";
     default:
       return type;
   }
@@ -71,6 +74,15 @@ function notificationSubtitle(n: NotificationRow): string | null {
       const who =
         typeof from === "string" && from.trim().length > 0 ? `@${from.trim().toLowerCase()}` : "Someone";
       return `${who} sent you ${nudgeKindLabel(p.kind)} · Tap to open squad`;
+    }
+    case "community_win_cheer": {
+      const parsed = parseCommunityWinCheerPayload(p);
+      if (!parsed) return "Someone cheered your Community win · Tap to view";
+      const who =
+        parsed.from_username && parsed.from_username !== "someone"
+          ? `@${parsed.from_username.toLowerCase()}`
+          : "Someone";
+      return `${who} cheered “${parsed.mini_mission_title}” · Tap for Community`;
     }
     default:
       return null;
@@ -135,6 +147,14 @@ export default function NotificationsScreen() {
 
     if (n.type === "challenge_nudge" && challengeId) {
       router.push(`/challenge/${challengeId}`);
+      return;
+    }
+
+    if (n.type === "community_win_cheer") {
+      router.push({
+        pathname: "/(tabs)/compete",
+        params: { focusCommunity: "1" },
+      });
     }
   };
 
