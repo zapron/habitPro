@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import type { ComponentType } from "react";
+import type { ComponentType, ReactNode } from "react";
 import {
   View,
   Text,
@@ -9,8 +9,8 @@ import {
   StatusBar,
   Alert,
 } from "react-native";
+import Svg, { Circle, G } from "react-native-svg";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
 import { Settings, Zap, Globe, User, Target, Flame, LogOut } from "lucide-react-native";
 import { Screen } from "../../src/components/Screen";
 import { useTheme } from "../../src/context/ThemeContext";
@@ -23,6 +23,25 @@ import { UsernameSetupFields } from "../../src/components/UsernameSetupFields";
 import { HubListModal } from "../../src/components/HubListModal";
 import type { AppTheme } from "../../src/styles/theme";
 import type { MissionVisibility, MiniMission } from "../../src/types/habit";
+import {
+  weeklyCompeteScore,
+  weeklyTierLabel,
+  countDistinctHabitDaysThisWeek,
+  countMiniCompletionsThisWeek,
+} from "../../src/utils/weekStats";
+import {
+  lastNDaysHabitCheckInsPerDay,
+  miniCompletionsByWeekBuckets,
+  maxHabitStreak,
+  totalLifetimeCheckIns,
+  countActiveHabits,
+  buildActivityChartA11ySummary,
+  buildMiniWeekA11ySummary,
+} from "../../src/utils/profileStats";
+import { ProfileWeeklyPulse } from "../../src/components/profile/ProfileWeeklyPulse";
+import { ProfileActivityChart } from "../../src/components/profile/ProfileActivityChart";
+import { ProfileMiniWeekTrend } from "../../src/components/profile/ProfileMiniWeekTrend";
+import { ProfileStatChips } from "../../src/components/profile/ProfileStatChips";
 
 type HubSheetState =
   | null
@@ -171,7 +190,7 @@ function VisibilityMiniColumn({
           activeOpacity={0.85}
           disabled={!onPressActive}
         >
-          <FigureLabel color={theme.colors.textMuted}>ACTIVE</FigureLabel>
+          <FigureLabel color={theme.colors.textMuted}>LIVE</FigureLabel>
           <Text style={[hubVisStyles.figureNum, { color: theme.colors.amber[500] }]}>{live}</Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -223,19 +242,60 @@ const hubVisStyles = StyleSheet.create({
     gap: 4,
   },
   figureLbl: {
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: "800",
-    letterSpacing: 0.15,
+    letterSpacing: 0.12,
     textAlign: "center",
     width: "100%",
   },
   figureNum: { fontSize: 20, fontWeight: "900", fontVariant: ["tabular-nums"] },
 });
 
+const RING_SIZE = 102;
+const RING_STROKE = 4;
+
+function LevelXpRing({
+  xpInLevel,
+  theme,
+  isDark,
+  children,
+}: {
+  xpInLevel: number;
+  theme: AppTheme;
+  isDark: boolean;
+  children: ReactNode;
+}) {
+  const c = RING_SIZE / 2;
+  const r = (RING_SIZE - RING_STROKE) / 2 - 1;
+  const circ = 2 * Math.PI * r;
+  const pct = Math.min(1, Math.max(0, xpInLevel / 100));
+  const track = isDark ? "rgba(255,255,255,0.1)" : "rgba(15,23,42,0.1)";
+  return (
+    <View style={{ width: RING_SIZE, height: RING_SIZE, alignItems: "center", justifyContent: "center" }}>
+      <Svg width={RING_SIZE} height={RING_SIZE} style={StyleSheet.absoluteFill}>
+        <G transform={`rotate(-90 ${c} ${c})`}>
+          <Circle cx={c} cy={c} r={r} stroke={track} strokeWidth={RING_STROKE} fill="none" />
+          <Circle
+            cx={c}
+            cy={c}
+            r={r}
+            stroke={theme.colors.indigo[500]}
+            strokeWidth={RING_STROKE}
+            fill="none"
+            strokeLinecap="round"
+            strokeDasharray={`${circ} ${circ}`}
+            strokeDashoffset={circ * (1 - pct)}
+          />
+        </G>
+      </Svg>
+      {children}
+    </View>
+  );
+}
+
 export default function ProfileScreen() {
   const { theme, isDark } = useTheme();
   const insets = useSafeAreaInsets();
-  const router = useRouter();
   const { session, signOut } = useAuth();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [hubSheet, setHubSheet] = useState<HubSheetState>(null);
@@ -304,6 +364,28 @@ export default function ProfileScreen() {
       },
     };
   }, [habits, miniMissions]);
+
+  const insights = useMemo(() => {
+    const weeklyScore = weeklyCompeteScore(habits, miniMissions, level);
+    const tier = weeklyTierLabel(weeklyScore);
+    const habitDaysThisWeek = countDistinctHabitDaysThisWeek(habits);
+    const miniCompletionsThisWeek = countMiniCompletionsThisWeek(miniMissions);
+    const activityPoints = lastNDaysHabitCheckInsPerDay(habits, 7);
+    const miniWeekBuckets = miniCompletionsByWeekBuckets(miniMissions, 4);
+    return {
+      weeklyScore,
+      tier,
+      habitDaysThisWeek,
+      miniCompletionsThisWeek,
+      activityPoints,
+      miniWeekBuckets,
+      maxStreak: maxHabitStreak(habits),
+      activeHabits: countActiveHabits(habits),
+      lifetimeCheckIns: totalLifetimeCheckIns(habits),
+      activityA11y: buildActivityChartA11ySummary(activityPoints),
+      miniA11y: buildMiniWeekA11ySummary(miniWeekBuckets),
+    };
+  }, [habits, miniMissions, level]);
 
   const hubModalContent = useMemo(() => {
     if (!hubSheet) return null;
@@ -413,10 +495,12 @@ export default function ProfileScreen() {
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: bottomPad }}>
         <View style={[styles.hero, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, ...theme.shadow.card }]}>
-          <View style={[styles.levelOrb, { borderColor: theme.colors.indigo[500] }]}>
-            <Text style={[styles.levelHuge, { color: theme.colors.yellow[400] }]}>{level}</Text>
-            <Text style={[styles.levelTag, { color: theme.colors.textMuted }]}>LEVEL</Text>
-          </View>
+          <LevelXpRing xpInLevel={xpInLevel} theme={theme} isDark={isDark}>
+            <View style={[styles.levelOrb, { borderColor: theme.colors.indigo[500] + "cc", ...theme.shadow.glow }]}>
+              <Text style={[styles.levelHuge, { color: theme.colors.yellow[400] }]}>{level}</Text>
+              <Text style={[styles.levelTag, { color: theme.colors.textMuted }]}>LEVEL</Text>
+            </View>
+          </LevelXpRing>
           <View style={styles.heroText}>
             <View style={styles.xpLine}>
               <Zap size={16} color={theme.colors.yellow[400]} fill={theme.colors.yellow[400]} />
@@ -435,11 +519,45 @@ export default function ProfileScreen() {
           </View>
         </View>
 
-        <Text style={[styles.sectionLabel, { color: theme.colors.textMuted }]}>HABITS & MISSIONS</Text>
+        <Text style={[styles.sectionLabel, { color: theme.colors.textMuted }]}>INSIGHTS</Text>
+
+        <ProfileWeeklyPulse
+          theme={theme}
+          isDark={isDark}
+          weeklyScore={insights.weeklyScore}
+          tierLabel={insights.tier.label}
+          tierDetail={insights.tier.detail}
+          habitDaysThisWeek={insights.habitDaysThisWeek}
+          miniCompletionsThisWeek={insights.miniCompletionsThisWeek}
+        />
+
+        <ProfileActivityChart
+          theme={theme}
+          isDark={isDark}
+          points={insights.activityPoints}
+          accessibilityLabel={insights.activityA11y}
+        />
+
+        <ProfileMiniWeekTrend
+          theme={theme}
+          isDark={isDark}
+          buckets={insights.miniWeekBuckets}
+          accessibilityLabel={insights.miniA11y}
+        />
+
+        <ProfileStatChips
+          theme={theme}
+          isDark={isDark}
+          maxStreak={insights.maxStreak}
+          activeHabits={insights.activeHabits}
+          lifetimeCheckIns={insights.lifetimeCheckIns}
+        />
+
+        <Text style={[styles.sectionLabel, { color: theme.colors.textMuted }]}>YOUR HABITS</Text>
 
         <View
           style={[
-            styles.missionsHub,
+            styles.missionCard,
             {
               backgroundColor: theme.colors.surface,
               borderColor: theme.colors.border,
@@ -447,44 +565,27 @@ export default function ProfileScreen() {
             },
           ]}
         >
-          <View style={styles.hubHeroRow}>
-            <TouchableOpacity
-              style={styles.hubHeroCol}
-              onPress={() => setHubSheet({ mode: "habits-all" })}
-              activeOpacity={0.85}
-              accessibilityRole="button"
-              accessibilityLabel="View all habits"
-            >
-              <Text style={[styles.hubHeroLabel, { color: theme.colors.textMuted }]}>HABITS</Text>
-              <Text style={[styles.hubHeroNum, { color: theme.colors.textPrimary }]}>{missionStats.habitsTotal}</Text>
-            </TouchableOpacity>
-            <View style={[styles.hubHeroDivider, { backgroundColor: theme.colors.border }]} />
-            <TouchableOpacity
-              style={styles.hubHeroCol}
-              onPress={() => setHubSheet({ mode: "minis-all" })}
-              activeOpacity={0.85}
-              accessibilityRole="button"
-              accessibilityLabel="View all mini missions"
-            >
-              <Text style={[styles.hubHeroLabel, { color: theme.colors.textMuted }]}>MINI</Text>
-              <Text style={[styles.hubHeroNum, { color: theme.colors.textPrimary }]}>{missionStats.minisTotal}</Text>
-            </TouchableOpacity>
-          </View>
-
+          <TouchableOpacity
+            style={styles.cardHeaderRow}
+            onPress={() => setHubSheet({ mode: "habits-all" })}
+            activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityLabel="View all habits"
+          >
+            <View style={styles.cardHeaderMain}>
+              <Target size={18} color={theme.colors.cyan[400]} />
+              <Text style={[styles.cardHeaderTitle, { color: theme.colors.textPrimary }]}>Habits</Text>
+            </View>
+            <Text style={[styles.cardHeaderTotal, { color: theme.colors.textPrimary }]}>{missionStats.habitsTotal}</Text>
+          </TouchableOpacity>
           <View
             style={[
-              styles.hubNested,
+              styles.cardInner,
               {
-                borderColor: theme.colors.border,
                 backgroundColor: isDark ? "rgba(255,255,255,0.04)" : "rgba(15, 23, 42, 0.04)",
               },
             ]}
           >
-            {/* Habits: Public | Solo with Active + Done figures */}
-            <View style={styles.hubSubSectionHead}>
-              <Target size={16} color={theme.colors.cyan[400]} />
-              <Text style={[styles.hubSubSectionTitle, { color: theme.colors.textPrimary }]}>Habits</Text>
-            </View>
             <View style={[styles.hubVisRow, { gap: 10 }]}>
               <VisibilityHabitColumn
                 theme={theme}
@@ -511,14 +612,42 @@ export default function ProfileScreen() {
                 onPressDone={() => setHubSheet({ mode: "habits-filter", visibility: "solo", status: "done" })}
               />
             </View>
+          </View>
+        </View>
 
-            <View style={[styles.hubSubSectionDivider, { backgroundColor: theme.colors.border }]} />
+        <Text style={[styles.sectionLabel, { color: theme.colors.textMuted }]}>MINI MISSIONS</Text>
 
-            {/* Mini: Public | Solo with Live + Completed figures */}
-            <View style={styles.hubSubSectionHead}>
-              <Flame size={16} color={theme.colors.amber[500]} />
-              <Text style={[styles.hubSubSectionTitle, { color: theme.colors.textPrimary }]}>Mini missions</Text>
+        <View
+          style={[
+            styles.missionCard,
+            {
+              backgroundColor: theme.colors.surface,
+              borderColor: theme.colors.border,
+              ...theme.shadow.card,
+            },
+          ]}
+        >
+          <TouchableOpacity
+            style={styles.cardHeaderRow}
+            onPress={() => setHubSheet({ mode: "minis-all" })}
+            activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityLabel="View all mini missions"
+          >
+            <View style={styles.cardHeaderMain}>
+              <Flame size={18} color={theme.colors.amber[500]} />
+              <Text style={[styles.cardHeaderTitle, { color: theme.colors.textPrimary }]}>Mini missions</Text>
             </View>
+            <Text style={[styles.cardHeaderTotal, { color: theme.colors.textPrimary }]}>{missionStats.minisTotal}</Text>
+          </TouchableOpacity>
+          <View
+            style={[
+              styles.cardInner,
+              {
+                backgroundColor: isDark ? "rgba(255,255,255,0.04)" : "rgba(15, 23, 42, 0.04)",
+              },
+            ]}
+          >
             <View style={[styles.hubVisRow, { gap: 10 }]}>
               <VisibilityMiniColumn
                 theme={theme}
@@ -548,7 +677,7 @@ export default function ProfileScreen() {
           </View>
         </View>
 
-        <Text style={[styles.sectionLabel, { color: theme.colors.textMuted, marginTop: 8 }]}>APP VERSION</Text>
+        <Text style={[styles.sectionLabel, { color: theme.colors.textMuted, marginTop: 4, opacity: 0.85 }]}>APP VERSION</Text>
         <View
           style={[
             styles.versionCard,
@@ -634,46 +763,37 @@ const styles = StyleSheet.create({
     letterSpacing: 1.2,
     marginBottom: 10,
   },
-  missionsHub: {
+  missionCard: {
     borderRadius: 18,
     borderWidth: 1,
     padding: 16,
-    marginBottom: 4,
+    marginBottom: 20,
   },
-  hubHeroRow: {
+  cardHeaderRow: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 18,
+    justifyContent: "space-between",
+    marginBottom: 14,
+    gap: 12,
   },
-  hubHeroCol: { flex: 1, alignItems: "center" },
-  hubHeroLabel: {
-    fontSize: 11,
-    fontWeight: "900",
-    letterSpacing: 1.4,
-    marginBottom: 4,
-  },
-  hubHeroNum: {
-    fontSize: 40,
+  cardHeaderMain: { flexDirection: "row", alignItems: "center", gap: 10, flex: 1, minWidth: 0 },
+  cardHeaderTitle: { fontSize: 17, fontWeight: "800" },
+  cardHeaderTotal: {
+    fontSize: 34,
     fontWeight: "900",
     fontVariant: ["tabular-nums"],
-    lineHeight: 44,
+    lineHeight: 38,
   },
-  hubHeroDivider: { width: 1, alignSelf: "stretch", minHeight: 52, opacity: 0.5 },
-  hubNested: {
-    borderRadius: 16,
-    borderWidth: 1,
+  cardInner: {
+    borderRadius: 14,
     padding: 14,
-    gap: 6,
   },
-  hubSubSectionHead: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 4, marginBottom: 10 },
-  hubSubSectionTitle: { fontSize: 14, fontWeight: "800" },
   hubVisRow: { flexDirection: "row" },
-  hubSubSectionDivider: { height: 1, marginVertical: 14, opacity: 0.5 },
   versionCard: {
-    borderRadius: 16,
+    borderRadius: 14,
     borderWidth: 1,
-    padding: 16,
+    padding: 12,
     marginBottom: 8,
   },
-  versionPrimary: { fontSize: 15, fontWeight: "800" },
+  versionPrimary: { fontSize: 13, fontWeight: "700", opacity: 0.92 },
 });
