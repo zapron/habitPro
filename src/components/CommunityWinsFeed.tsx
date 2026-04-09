@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -17,7 +17,8 @@ import { useTheme } from "../context/ThemeContext";
 import { useAuth } from "../context/AuthContext";
 import { isSupabaseConfigured } from "../lib/env";
 import {
-  fetchCommunityWinsFeed,
+  COMMUNITY_WINS_PAGE_SIZE,
+  fetchCommunityWinsFeedPage,
   toggleCheer,
   type CommunityWinFeedItem,
 } from "../lib/communityWinsApi";
@@ -47,32 +48,67 @@ export function CommunityWinsFeed({ contentPaddingBottom = 24 }: Props) {
   const [items, setItems] = useState<CommunityWinFeedItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
   const [detailWin, setDetailWin] = useState<CommunityWinFeedItem | null>(null);
   const [lightboxUri, setLightboxUri] = useState<string | null>(null);
+  const itemsRef = useRef<CommunityWinFeedItem[]>([]);
+  const loadMoreInFlight = useRef(false);
 
-  const load = useCallback(async () => {
+  itemsRef.current = items;
+
+  const loadInitial = useCallback(async () => {
     if (!isSupabaseConfigured() || !session) {
       setItems([]);
+      setHasMore(false);
       setLoading(false);
       return;
     }
-    const data = await fetchCommunityWinsFeed(40);
-    setItems(data);
+    setLoading(true);
+    const { items: first, hasMore: more } = await fetchCommunityWinsFeedPage(0, COMMUNITY_WINS_PAGE_SIZE);
+    setItems(first);
+    setHasMore(more);
     setLoading(false);
   }, [session]);
 
   useFocusEffect(
     useCallback(() => {
       setLoading(true);
-      void load();
-    }, [load]),
+      void loadInitial();
+    }, [loadInitial]),
   );
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await load();
+    await loadInitial();
     setRefreshing(false);
-  }, [load]);
+  }, [loadInitial]);
+
+  const loadMore = useCallback(async () => {
+    if (!session?.user || !hasMore || loadMoreInFlight.current) return;
+    loadMoreInFlight.current = true;
+    setLoadingMore(true);
+    const offset = itemsRef.current.length;
+    const { items: next, hasMore: more } = await fetchCommunityWinsFeedPage(offset, COMMUNITY_WINS_PAGE_SIZE);
+    loadMoreInFlight.current = false;
+    setLoadingMore(false);
+    if (next.length === 0) {
+      setHasMore(false);
+      return;
+    }
+    setItems((prev) => {
+      const seen = new Set(prev.map((x) => x.id));
+      const merged = [...prev];
+      for (const row of next) {
+        if (!seen.has(row.id)) {
+          seen.add(row.id);
+          merged.push(row);
+        }
+      }
+      return merged;
+    });
+    setHasMore(more);
+  }, [session?.user, hasMore]);
 
   const openDetail = useCallback((win: CommunityWinFeedItem) => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -245,6 +281,15 @@ export function CommunityWinsFeed({ contentPaddingBottom = 24 }: Props) {
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.indigo[400]} />
         }
+        onEndReached={() => void loadMore()}
+        onEndReachedThreshold={0.35}
+        ListFooterComponent={
+          loadingMore && hasMore ? (
+            <View style={styles.footerLoading}>
+              <ActivityIndicator size="small" color={theme.colors.indigo[400]} />
+            </View>
+          ) : null
+        }
         ListEmptyComponent={
           <View style={[styles.emptyCard, { borderColor: theme.colors.border, backgroundColor: theme.colors.surface }]}>
             <Sparkles size={28} color={theme.colors.amber[500]} />
@@ -319,4 +364,5 @@ const styles = StyleSheet.create({
     minWidth: 14,
   },
   ownHint: { fontSize: 12, fontWeight: "600" },
+  footerLoading: { paddingVertical: 16, alignItems: "center" },
 });

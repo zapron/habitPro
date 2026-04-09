@@ -71,25 +71,23 @@ export async function deleteCommunityWin(
   return { ok: true };
 }
 
-export async function fetchCommunityWinsFeed(limit = 40): Promise<CommunityWinFeedItem[]> {
+/** Default page size for Community feed (fetches pageSize+1 to detect hasMore). */
+export const COMMUNITY_WINS_PAGE_SIZE = 15;
+
+export type CommunityWinsFeedPage = {
+  items: CommunityWinFeedItem[];
+  hasMore: boolean;
+};
+
+async function enrichWinsWithProfilesAndCheers(
+  wins: CommunityWinRow[],
+  viewerId: string | null,
+): Promise<CommunityWinFeedItem[]> {
   const supabase = getSupabase();
-  if (!supabase) return [];
+  if (!supabase || wins.length === 0) return [];
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  const viewerId = user?.id ?? null;
-
-  const { data: wins, error: winsErr } = await supabase
-    .from("community_wins")
-    .select("id, user_id, mini_mission_id, title, completed_at, memory_note, memory_image_url, created_at")
-    .order("created_at", { ascending: false })
-    .limit(limit);
-
-  if (winsErr || !wins?.length) return [];
-
-  const winIds = wins.map((w) => w.id as string);
-  const userIds = [...new Set(wins.map((w) => w.user_id as string))];
+  const winIds = wins.map((w) => w.id);
+  const userIds = [...new Set(wins.map((w) => w.user_id))];
 
   const [{ data: profiles }, { data: allCheers }] = await Promise.all([
     supabase.from("profiles").select("id, username").in("id", userIds),
@@ -115,15 +113,52 @@ export async function fetchCommunityWinsFeed(limit = 40): Promise<CommunityWinFe
     if (viewerId && uid === viewerId) viewerCheered.add(wid);
   }
 
-  return wins.map((w) => {
-    const row = w as CommunityWinRow;
-    return {
-      ...row,
-      username: usernameByUserId.get(row.user_id) ?? null,
-      cheerCount: countByWin.get(row.id) ?? 0,
-      viewerHasCheered: viewerCheered.has(row.id),
-    };
-  });
+  return wins.map((row) => ({
+    ...row,
+    username: usernameByUserId.get(row.user_id) ?? null,
+    cheerCount: countByWin.get(row.id) ?? 0,
+    viewerHasCheered: viewerCheered.has(row.id),
+  }));
+}
+
+/**
+ * One page of Community wins (newest first). Requests `pageSize + 1` rows to set `hasMore` without a count query.
+ */
+export async function fetchCommunityWinsFeedPage(
+  offset: number,
+  pageSize: number = COMMUNITY_WINS_PAGE_SIZE,
+): Promise<CommunityWinsFeedPage> {
+  const supabase = getSupabase();
+  if (!supabase) return { items: [], hasMore: false };
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const viewerId = user?.id ?? null;
+
+  const take = pageSize + 1;
+  const { data: winsRaw, error: winsErr } = await supabase
+    .from("community_wins")
+    .select("id, user_id, mini_mission_id, title, completed_at, memory_note, memory_image_url, created_at")
+    .order("created_at", { ascending: false })
+    .range(offset, offset + take - 1);
+
+  if (winsErr || !winsRaw?.length) {
+    return { items: [], hasMore: false };
+  }
+
+  const wins = winsRaw as CommunityWinRow[];
+  const hasMore = wins.length > pageSize;
+  const slice = wins.slice(0, pageSize);
+  const items = await enrichWinsWithProfilesAndCheers(slice, viewerId);
+
+  return { items, hasMore };
+}
+
+/** @deprecated Prefer fetchCommunityWinsFeedPage for pagination */
+export async function fetchCommunityWinsFeed(limit = 40): Promise<CommunityWinFeedItem[]> {
+  const { items } = await fetchCommunityWinsFeedPage(0, limit);
+  return items;
 }
 
 export async function toggleCheer(winId: string, currentlyCheered: boolean): Promise<{ ok: true } | { ok: false; error: string }> {
