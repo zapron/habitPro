@@ -13,7 +13,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { ChevronRight, Eye, Medal, Swords, Trophy, Clock, X, Sparkles } from "lucide-react-native";
+import { ChevronRight, Eye, Medal, Swords, Trophy, Clock, X, Users } from "lucide-react-native";
 import { Screen } from "../../src/components/Screen";
 import { useTheme } from "../../src/context/ThemeContext";
 import { useHabitStore } from "../../src/store/habitStore";
@@ -235,7 +235,13 @@ export default function CompeteScreen() {
   const { theme, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const params = useLocalSearchParams<{ inviteId?: string; challengeId?: string; focusInvites?: string }>();
+  const params = useLocalSearchParams<{
+    inviteId?: string;
+    challengeId?: string;
+    focusInvites?: string;
+    /** Deep link from in-app notification: Community wins segment */
+    focusCommunity?: string;
+  }>();
   const { session } = useAuth();
   const [segment, setSegment] = useState<CompeteSegment>("challenges");
   const [challengesSubTab, setChallengesSubTab] = useState<ChallengesSubTab>("missions");
@@ -245,6 +251,7 @@ export default function CompeteScreen() {
   const [highlightInviteId, setHighlightInviteId] = useState<string | null>(null);
   const [highlightChallengeId, setHighlightChallengeId] = useState<string | null>(null);
   const deepLinkHandledRef = useRef(false);
+  const communityFocusHandledRef = useRef(false);
 
   const xp = useHabitStore((s) => s.xp);
   const habits = useHabitStore((s) => s.habits);
@@ -314,6 +321,19 @@ export default function CompeteScreen() {
 
     router.setParams({ inviteId: undefined, challengeId: undefined, focusInvites: undefined });
   }, [params.inviteId, params.challengeId, params.focusInvites, router]);
+
+  useEffect(() => {
+    const focus =
+      params.focusCommunity === "1" || params.focusCommunity === "true";
+    if (!focus) {
+      communityFocusHandledRef.current = false;
+      return;
+    }
+    if (communityFocusHandledRef.current) return;
+    communityFocusHandledRef.current = true;
+    setSegment("wins");
+    router.setParams({ focusCommunity: undefined });
+  }, [params.focusCommunity, router]);
 
   useEffect(() => {
     if (!highlightInviteId && !highlightChallengeId) return;
@@ -464,6 +484,27 @@ export default function CompeteScreen() {
         <TouchableOpacity
           style={[
             styles.segment,
+            segment === "wins" && [
+              styles.segmentActive,
+              { backgroundColor: theme.colors.indigo[600], ...theme.shadow.glow },
+            ],
+          ]}
+          onPress={() => setSegment("wins")}
+          activeOpacity={0.85}
+        >
+          <Users size={16} color={segment === "wins" ? theme.colors.white : theme.colors.textMuted} />
+          <Text
+            style={[
+              styles.segmentLabel,
+              { color: segment === "wins" ? theme.colors.white : theme.colors.textSecondary },
+            ]}
+          >
+            Community
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[
+            styles.segment,
             segment === "leaderboard" && [
               styles.segmentActive,
               { backgroundColor: theme.colors.indigo[600], ...theme.shadow.glow },
@@ -480,27 +521,6 @@ export default function CompeteScreen() {
             ]}
           >
             Leaderboard
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[
-            styles.segment,
-            segment === "wins" && [
-              styles.segmentActive,
-              { backgroundColor: theme.colors.indigo[600], ...theme.shadow.glow },
-            ],
-          ]}
-          onPress={() => setSegment("wins")}
-          activeOpacity={0.85}
-        >
-          <Sparkles size={16} color={segment === "wins" ? theme.colors.white : theme.colors.textMuted} />
-          <Text
-            style={[
-              styles.segmentLabel,
-              { color: segment === "wins" ? theme.colors.white : theme.colors.textSecondary },
-            ]}
-          >
-            Wins
           </Text>
         </TouchableOpacity>
       </View>
