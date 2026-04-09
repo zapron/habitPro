@@ -3,7 +3,6 @@ import {
   View,
   Text,
   FlatList,
-  TouchableOpacity,
   Pressable,
   StyleSheet,
   Image,
@@ -13,7 +12,7 @@ import {
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import * as Haptics from "expo-haptics";
-import { Eye, Sparkles } from "lucide-react-native";
+import { Eye, Sparkles, ThumbsUp } from "lucide-react-native";
 import { useTheme } from "../context/ThemeContext";
 import { useAuth } from "../context/AuthContext";
 import { isSupabaseConfigured } from "../lib/env";
@@ -162,34 +161,39 @@ export function CommunityWinsFeed({ contentPaddingBottom = 24 }: Props) {
             ) : null}
           </View>
           <View style={styles.cheerRow}>
-            <TouchableOpacity
-              style={[
-                styles.cheerBtn,
-                {
-                  borderColor: win.viewerHasCheered ? theme.colors.indigo[400] : theme.colors.border,
-                  backgroundColor: win.viewerHasCheered
-                    ? isDark
-                      ? "rgba(99,102,241,0.2)"
-                      : "rgba(79,70,229,0.1)"
-                    : theme.colors.surfaceElevated,
-                },
-              ]}
+            <Pressable
               onPress={() => void handleCheer(win)}
               disabled={isOwn}
-              activeOpacity={0.85}
-              accessibilityLabel={win.viewerHasCheered ? "Remove cheer" : "Cheer"}
+              style={({ pressed }) => [
+                styles.cheerTap,
+                { opacity: isOwn ? 0.55 : pressed ? 0.7 : 1 },
+              ]}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              accessibilityRole="button"
+              accessibilityLabel={
+                isOwn
+                  ? `${win.cheerCount} cheers on your win`
+                  : win.viewerHasCheered
+                    ? "Unlike, remove cheer"
+                    : "Cheer"
+              }
+              accessibilityState={{ disabled: isOwn, selected: win.viewerHasCheered }}
             >
-              <Sparkles size={16} color={win.viewerHasCheered ? theme.colors.indigo[400] : theme.colors.textMuted} />
+              <ThumbsUp
+                size={17}
+                color={win.viewerHasCheered ? theme.colors.indigo[400] : theme.colors.textMuted}
+                fill={win.viewerHasCheered ? theme.colors.indigo[400] : "transparent"}
+                strokeWidth={2}
+              />
               <Text
                 style={[
-                  styles.cheerText,
+                  styles.cheerCount,
                   { color: win.viewerHasCheered ? theme.colors.indigo[400] : theme.colors.textMuted },
                 ]}
               >
-                Cheer
+                {win.cheerCount}
               </Text>
-              <Text style={[styles.cheerCount, { color: theme.colors.textPrimary }]}>{win.cheerCount}</Text>
-            </TouchableOpacity>
+            </Pressable>
             {isOwn ? (
               <Text style={[styles.ownHint, { color: theme.colors.textMuted }]}>Your win</Text>
             ) : null}
@@ -301,16 +305,18 @@ const styles = StyleSheet.create({
   memImg: { width: "100%", height: 140, borderRadius: 12, marginBottom: 10 },
   memNote: { fontSize: 14, lineHeight: 20, marginBottom: 12 },
   cheerRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
-  cheerBtn: {
+  cheerTap: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 12,
-    borderWidth: 1,
+    gap: 5,
+    paddingVertical: 2,
+    paddingRight: 4,
   },
-  cheerText: { fontSize: 14, fontWeight: "800" },
-  cheerCount: { fontSize: 15, fontWeight: "900", fontVariant: ["tabular-nums"] },
+  cheerCount: {
+    fontSize: 12,
+    fontWeight: "600",
+    fontVariant: ["tabular-nums"],
+    minWidth: 14,
+  },
   ownHint: { fontSize: 12, fontWeight: "600" },
 });
