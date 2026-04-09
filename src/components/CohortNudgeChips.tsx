@@ -1,12 +1,14 @@
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { Copy, Flame, Heart } from "lucide-react-native";
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text } from "react-native";
+import { Flame, Heart } from "lucide-react-native";
 import type { AppTheme } from "../styles/theme";
 import type { ChallengeNudgeKind } from "../types/groupChallenge";
 
 const NUDGE_SPECS: {
   kind: ChallengeNudgeKind;
   label: string;
-  Icon: typeof Heart;
+  Icon?: typeof Heart;
+  glyph?: string;
+  suffixGlyph?: string;
   bgLight: string;
   bgDark: string;
 }[] = [
@@ -18,9 +20,9 @@ const NUDGE_SPECS: {
     bgDark: "rgba(129, 140, 248, 0.18)",
   },
   {
-    kind: "same",
-    label: "Same",
-    Icon: Copy,
+    kind: "ping",
+    label: "What's up",
+    suffixGlyph: "?!",
     bgLight: "rgba(8, 145, 178, 0.12)",
     bgDark: "rgba(34, 211, 238, 0.14)",
   },
@@ -51,13 +53,13 @@ export function CohortNudgeChips({ theme, isDark, memberId, nudgeBusyKey, onPres
       contentContainerStyle={styles.scrollContent}
       style={styles.scroll}
     >
-      {NUDGE_SPECS.map(({ kind, label, Icon, bgLight, bgDark }) => {
+      {NUDGE_SPECS.map(({ kind, label, Icon, glyph, suffixGlyph, bgLight, bgDark }) => {
         const busy = nudgeBusyKey === `${memberId}-${kind}`;
         const bg = isDark ? bgDark : bgLight;
         const iconColor =
           kind === "cheer"
             ? theme.colors.indigo[400]
-            : kind === "same"
+            : kind === "ping"
               ? theme.colors.cyan[400]
               : theme.colors.amber[500];
 
@@ -79,8 +81,15 @@ export function CohortNudgeChips({ theme, isDark, memberId, nudgeBusyKey, onPres
               <ActivityIndicator size="small" color={iconColor} />
             ) : (
               <>
-                <Icon size={theme.icon.md} color={iconColor} strokeWidth={2.4} />
+                {glyph ? (
+                  <Text style={[styles.glyph, { color: iconColor }]}>{glyph}</Text>
+                ) : Icon ? (
+                  <Icon size={theme.icon.md} color={iconColor} strokeWidth={2.4} />
+                ) : null}
                 <Text style={[styles.chipLabel, { color: theme.colors.textPrimary }]}>{label}</Text>
+                {suffixGlyph ? (
+                  <Text style={[styles.glyph, { color: iconColor }]}>{suffixGlyph}</Text>
+                ) : null}
               </>
             )}
           </Pressable>
@@ -107,6 +116,11 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 9999,
     minHeight: 40,
+  },
+  glyph: {
+    fontSize: 17,
+    fontWeight: "900",
+    letterSpacing: -0.5,
   },
   chipLabel: {
     fontSize: 13,

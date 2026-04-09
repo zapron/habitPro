@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from "react-native";
-import { ChevronDown, Copy, Flame, Heart, Sparkles, Flag, Users } from "lucide-react-native";
+import { ChevronDown, Flame, Heart, Sparkles, Flag, Users } from "lucide-react-native";
 import type { AppTheme } from "../styles/theme";
 import type {
   ChallengeActivityRow,
@@ -64,12 +64,11 @@ function NudgeActivityLine({
           <Text style={{ color: base }}> {to}</Text>
         </Text>
       );
-    case "same":
+    case "ping":
       return (
         <Text style={[styles.nudgeLine, { color: base }]} numberOfLines={3} {...textProps}>
-          <Text style={{ color: base }}>{from} nodded </Text>
-          <Text style={{ color: theme.colors.cyan[400], fontWeight: accentWeight }}>same</Text>
-          <Text style={{ color: base }}> to {to}</Text>
+          <Text style={{ color: base }}>{from} nudged {to} — </Text>
+          <Text style={{ color: theme.colors.cyan[400], fontWeight: accentWeight }}>where are you?</Text>
         </Text>
       );
     case "fire":
@@ -97,8 +96,12 @@ function NudgeKindIcon({ kind, theme }: { kind: ChallengeNudgeKind; theme: AppTh
   switch (kind) {
     case "cheer":
       return <Heart {...common} color={theme.colors.indigo[400]} />;
-    case "same":
-      return <Copy {...common} color={theme.colors.cyan[400]} />;
+    case "ping":
+      return (
+        <Text style={{ fontSize: size * 0.95, fontWeight: "900", color: theme.colors.cyan[400] }}>
+          ?!
+        </Text>
+      );
     case "fire":
       return <Flame {...common} color={theme.colors.amber[500]} />;
     case "congrats":

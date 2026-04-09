@@ -35,7 +35,7 @@ function nudgeKindLabel(kind: unknown): string {
   const k = typeof kind === "string" ? kind : "";
   const map: Record<ChallengeNudgeKind, string> = {
     cheer: "Cheer",
-    same: "Same",
+    ping: "What's up?!",
     fire: "Fire",
     congrats: "Congrats",
   };
