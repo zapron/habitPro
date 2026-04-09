@@ -232,6 +232,21 @@ export default function LoginScreen() {
                 </>
               )}
 
+              {!isSignUp && (
+                <TouchableOpacity
+                  style={styles.forgotRow}
+                  onPress={() => router.push("/forgot-password")}
+                  activeOpacity={0.8}
+                  disabled={busy}
+                  accessibilityRole="button"
+                  accessibilityLabel="Forgot password"
+                >
+                  <Text style={[styles.forgotText, { color: theme.colors.indigo[500] }]}>
+                    Forgot password?
+                  </Text>
+                </TouchableOpacity>
+              )}
+
               <TouchableOpacity
                 style={styles.switchRow}
                 onPress={() => {
@@ -384,6 +399,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
+  forgotRow: {
+    alignSelf: "flex-end",
+    marginBottom: 8,
+    paddingVertical: 4,
+  },
+  forgotText: { fontSize: 14, fontWeight: "700" },
   switchRow: {
     flexDirection: "row",
     flexWrap: "wrap",
