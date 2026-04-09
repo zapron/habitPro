@@ -10,13 +10,11 @@ import {
   Alert,
 } from "react-native";
 import { useRouter } from "expo-router";
-import { ArrowLeft, Zap, Globe, User, Minus, Plus } from "lucide-react-native";
+import { ArrowLeft, Zap, Minus, Plus } from "lucide-react-native";
 import { Screen } from "../../src/components/Screen";
 import { Button } from "../../src/components/Button";
 import { useHabitStore } from "../../src/store/habitStore";
 import { useTheme } from "../../src/context/ThemeContext";
-import type { MissionVisibility } from "../../src/types/habit";
-
 type StartMode = "now" | "later";
 
 const MIN_FUEL_MINUTES = 1;
@@ -34,7 +32,6 @@ export default function CreateMiniMission() {
   const [title, setTitle] = useState("");
   const [objective, setObjective] = useState("");
   const [totalMinutes, setTotalMinutes] = useState(15);
-  const [visibility, setVisibility] = useState<MissionVisibility>("solo");
   const [startMode, setStartMode] = useState<StartMode>("now");
   const [focused, setFocused] = useState<"title" | "objective" | null>(null);
 
@@ -59,7 +56,6 @@ export default function CreateMiniMission() {
       objective: objective.trim(),
       estimatedMinutes: minutes,
       startMode,
-      visibility,
     });
 
     if (startMode === "now") {
@@ -90,7 +86,7 @@ export default function CreateMiniMission() {
           </View>
           <Text style={[styles.heroTitle, { color: theme.colors.textPrimary, fontSize: theme.typography.h3 }]}>A mission needs fuel</Text>
           <Text style={[styles.heroText, { color: theme.colors.textSecondary }]}>
-            Time is the fuel you carry—set how much you bring, choose solo or public, then launch when you are ready.
+            Time is the fuel you carry—set duration, then launch when you are ready. You can choose whether to publish to Community when you complete.
           </Text>
         </View>
 
@@ -170,26 +166,6 @@ export default function CreateMiniMission() {
             {displayHours > 0 ? ` (${displayHours}h ${displayMins}m)` : ""}
           </Text>
           <Text style={[styles.durationCap, { color: theme.colors.textMuted }]}>You can carry 1 min to 8 hours of fuel</Text>
-        </View>
-
-        <Text style={[styles.label, { color: theme.colors.textSecondary, fontSize: theme.typography.caption }]}>Who can see this</Text>
-        <View style={styles.startModeRow}>
-          <TouchableOpacity
-            style={[styles.modeButton, { borderColor: theme.colors.border, backgroundColor: theme.colors.surface, borderRadius: theme.radius.md }, visibility === "solo" && { borderColor: theme.colors.indigo[500], backgroundColor: theme.colors.surfaceElevated }]}
-            onPress={() => setVisibility("solo")}
-            activeOpacity={0.85}
-          >
-            <User size={18} color={visibility === "solo" ? theme.colors.indigo[400] : theme.colors.textMuted} />
-            <Text style={[styles.modeText, { color: theme.colors.textSecondary }, visibility === "solo" && { color: theme.colors.textPrimary }]}>Solo</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.modeButton, { borderColor: theme.colors.border, backgroundColor: theme.colors.surface, borderRadius: theme.radius.md }, visibility === "public" && { borderColor: theme.colors.cyan[400], backgroundColor: theme.colors.surfaceElevated }]}
-            onPress={() => setVisibility("public")}
-            activeOpacity={0.85}
-          >
-            <Globe size={18} color={visibility === "public" ? theme.colors.cyan[400] : theme.colors.textMuted} />
-            <Text style={[styles.modeText, { color: theme.colors.textSecondary }, visibility === "public" && { color: theme.colors.textPrimary }]}>Public</Text>
-          </TouchableOpacity>
         </View>
 
         <Text style={[styles.label, { color: theme.colors.textSecondary, fontSize: theme.typography.caption }]}>Start</Text>

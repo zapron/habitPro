@@ -8,9 +8,10 @@ import {
   Alert,
   Vibration,
   Animated,
-  Switch,
   Image,
+  ScrollView,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import {
   ArrowLeft,
@@ -21,8 +22,6 @@ import {
   Trophy,
   Fuel,
   Flame,
-  Globe,
-  User,
   Sparkles,
 } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
@@ -39,6 +38,13 @@ import {
   subscribeSyncFailure,
   subscribeSyncSuccess,
 } from "../../src/lib/syncQueue";
+import { useAuth } from "../../src/context/AuthContext";
+import { isSupabaseConfigured } from "../../src/lib/env";
+import { MiniVisibilityRow } from "../../src/components/MiniVisibilityRow";
+import {
+  deleteCommunityWin,
+  postCommunityWin,
+} from "../../src/lib/communityWinsApi";
 import { MAX_RESERVE_FUEL_MINUTES } from "../../src/constants/miniMission";
 import {
   canUseStreakMemoryUpload,
@@ -111,7 +117,10 @@ export default function MiniMissionDetail() {
   const { id } = useLocalSearchParams<{ id?: string | string[] }>();
   const router = useRouter();
   const { theme, isDark } = useTheme();
+  const insets = useSafeAreaInsets();
+  const { session } = useAuth();
   const missionId = Array.isArray(id) ? id[0] : id;
+  const scrollBottomPad = Math.max(insets.bottom, 16) + 16;
 
   const mission = useHabitStore((state) =>
     missionId ? state.getMiniMission(missionId) : undefined,
@@ -122,9 +131,15 @@ export default function MiniMissionDetail() {
   );
   const extendMiniMission = useHabitStore((state) => state.extendMiniMission);
   const cancelMiniMission = useHabitStore((state) => state.cancelMiniMission);
+  const retryFailedMiniMission = useHabitStore(
+    (state) => state.retryFailedMiniMission,
+  );
   const deleteMiniMission = useHabitStore((state) => state.deleteMiniMission);
   const setMiniMissionVisibility = useHabitStore(
     (state) => state.setMiniMissionVisibility,
+  );
+  const setMiniMissionCommunityFeedRevoked = useHabitStore(
+    (state) => state.setMiniMissionCommunityFeedRevoked,
   );
 
   const lastVisibilityRef = useRef<{
@@ -132,6 +147,8 @@ export default function MiniMissionDetail() {
     prev: MissionVisibility;
   } | null>(null);
   const [completeSheetOpen, setCompleteSheetOpen] = useState(false);
+  /** Wall time when user tapped Mark Complete — freezes countdown until sheet closes or mission completes. */
+  const [timerFrozenAtMs, setTimerFrozenAtMs] = useState<number | null>(null);
 
   useEffect(() => {
     const unsubFail = subscribeSyncFailure(() => {
@@ -183,21 +200,21 @@ export default function MiniMissionDetail() {
     [quoteFade],
   );
 
-  // Auto-rotate quotes every 5s when in progress
+  // Auto-rotate quotes every 5s when in progress (pause while memory sheet is open)
   useEffect(() => {
-    if (mission?.status !== "in_progress") return;
+    if (mission?.status !== "in_progress" || completeSheetOpen) return;
     const interval = setInterval(() => {
       const next = (quoteIdxRef.current + 1) % QUOTES.length;
       animateQuoteChange(next);
     }, 5000);
     return () => clearInterval(interval);
-  }, [mission?.status, animateQuoteChange]);
+  }, [mission?.status, completeSheetOpen, animateQuoteChange]);
 
   useEffect(() => {
-    if (mission?.status !== "in_progress") return;
+    if (mission?.status !== "in_progress" || completeSheetOpen) return;
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
-  }, [mission?.status]);
+  }, [mission?.status, completeSheetOpen]);
 
   const totalMinutes = mission
     ? mission.estimatedMinutes + (mission.extendedMinutes ?? 0)
@@ -210,9 +227,11 @@ export default function MiniMissionDetail() {
     const nowAnchor =
       mission.status === "completed" && mission.completedAt
         ? new Date(mission.completedAt).getTime()
-        : now;
+        : completeSheetOpen && timerFrozenAtMs !== null
+          ? timerFrozenAtMs
+          : now;
     return Math.max(0, endMs - nowAnchor);
-  }, [mission, now, totalMinutes]);
+  }, [mission, now, totalMinutes, completeSheetOpen, timerFrozenAtMs]);
 
   const isTimerUp = mission?.status === "in_progress" && countdown === 0;
 
@@ -220,9 +239,11 @@ export default function MiniMissionDetail() {
     if (!mission || mission.status !== "in_progress" || !mission.startedAt)
       return 0;
     const totalMs = totalMinutes * 60 * 1000;
-    const elapsedMs = now - new Date(mission.startedAt).getTime();
+    const tick =
+      completeSheetOpen && timerFrozenAtMs !== null ? timerFrozenAtMs : now;
+    const elapsedMs = tick - new Date(mission.startedAt).getTime();
     return Math.min(1, Math.max(0, elapsedMs / totalMs));
-  }, [mission, now, totalMinutes]);
+  }, [mission, now, totalMinutes, completeSheetOpen, timerFrozenAtMs]);
 
   // Timer expiry while this screen is open: haptics + cancel OS schedule (avoid duplicate) + in-app banner.
   // Dedupe by mission id + planned end (module map) so leaving and reopening the card does not spam.
@@ -272,7 +293,10 @@ export default function MiniMissionDetail() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
   };
 
-  const handleCompleteCommit = async (memory: StreakMemory | null) => {
+  const handleCompleteCommit = async (
+    memory: StreakMemory | null,
+    meta?: { publishToCommunity?: boolean },
+  ) => {
     let memoryToSave = memory;
     if (
       memory &&
@@ -291,8 +315,117 @@ export default function MiniMissionDetail() {
         throw e;
       }
     }
-    completeMiniMission(mission.id, memoryToSave);
+
+    const completedAt = new Date(timerFrozenAtMs ?? Date.now()).toISOString();
+    const wantsPublish = meta?.publishToCommunity === true;
+    const canPublish =
+      wantsPublish && isSupabaseConfigured() && session?.user != null;
+
+    if (wantsPublish && !isSupabaseConfigured()) {
+      Alert.alert(
+        "Can’t publish",
+        "Cloud sync isn’t configured. Your mission is saved as private.",
+      );
+    } else if (wantsPublish && !session?.user) {
+      Alert.alert(
+        "Sign in to publish",
+        "Sign in to share this win in Community. Your mission is saved as private.",
+      );
+    }
+
+    /** Solo at completion (or can’t publish) locks Community; successful publish sets public afterward. */
+    const lockCommunity = !canPublish;
+
+    completeMiniMission(mission.id, memoryToSave, {
+      visibility: "solo",
+      communityFeedRevoked: lockCommunity,
+      completedAt,
+    });
+
+    if (canPublish) {
+      const res = await postCommunityWin({
+        miniMissionId: mission.id,
+        title: mission.title,
+        completedAt,
+        memoryNote: memoryToSave?.note ?? null,
+        memoryImageUrl: memoryToSave?.imageUrl ?? null,
+      });
+      if (res.ok === true) {
+        setMiniMissionVisibility(mission.id, "public");
+        setMiniMissionCommunityFeedRevoked(mission.id, false);
+      } else {
+        Alert.alert("Couldn’t publish", res.error);
+        // Solo + not locked so they can retry from mission details.
+      }
+    }
+
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  };
+
+  const handleVisibilityChange = (next: MissionVisibility) => {
+    if (!mission) return;
+    const prev = mission.visibility ?? "solo";
+    if (prev === next) return;
+
+    if (prev === "public" && next === "solo") {
+      Alert.alert(
+        "Remove from Community?",
+        "This removes your win from the feed. You won’t be able to publish this mission to Community again.",
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Remove",
+            style: "destructive",
+            onPress: () => {
+              void (async () => {
+                const del = await deleteCommunityWin(mission.id);
+                if (del.ok === false) {
+                  Alert.alert("Couldn’t remove", del.error);
+                  return;
+                }
+                setMiniMissionVisibility(mission.id, "solo");
+                setMiniMissionCommunityFeedRevoked(mission.id, true);
+              })();
+            },
+          },
+        ],
+      );
+      return;
+    }
+
+    if (prev === "solo" && next === "public") {
+      if (mission.communityFeedRevoked) {
+        Alert.alert(
+          "Can’t publish to Community",
+          "This mission stays private — Community sharing was turned off when you completed it, or you removed it from the feed.",
+        );
+        return;
+      }
+      if (!isSupabaseConfigured() || !session?.user) {
+        Alert.alert(
+          "Sign in required",
+          "Sign in to publish to Community wins.",
+        );
+        return;
+      }
+      void (async () => {
+        lastVisibilityRef.current = { id: mission.id, prev };
+        const res = await postCommunityWin({
+          miniMissionId: mission.id,
+          title: mission.title,
+          completedAt: mission.completedAt ?? new Date().toISOString(),
+          memoryNote: mission.completionMemory?.note ?? null,
+          memoryImageUrl: mission.completionMemory?.imageUrl ?? null,
+        });
+        if (res.ok === false) {
+          Alert.alert("Couldn’t publish", res.error);
+          lastVisibilityRef.current = null;
+          return;
+        }
+        setMiniMissionVisibility(mission.id, "public");
+        lastVisibilityRef.current = null;
+      })();
+    }
   };
 
   const reserveUsed = mission.extendedMinutes ?? 0;
@@ -314,6 +447,11 @@ export default function MiniMissionDetail() {
   const handleCancel = () => {
     cancelMiniMission(mission.id);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+  };
+
+  const handleRetryFailed = () => {
+    retryFailedMiniMission(mission.id);
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
   };
 
   const handleDelete = () => {
@@ -342,8 +480,12 @@ export default function MiniMissionDetail() {
         mode="create"
         missionTitle={mission.title}
         dayLabel="1"
-        onClose={() => setCompleteSheetOpen(false)}
+        onClose={() => {
+          setCompleteSheetOpen(false);
+          setTimerFrozenAtMs(null);
+        }}
         onCommit={handleCompleteCommit}
+        miniPublishAvailable={isSupabaseConfigured() && !!session?.user}
       />
       <StatusBar
         barStyle={isDark ? "light-content" : "dark-content"}
@@ -376,7 +518,12 @@ export default function MiniMissionDetail() {
         </TouchableOpacity>
       </View>
 
-      <View style={styles.content}>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={{ paddingBottom: scrollBottomPad }}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
         <Text
           style={[
             styles.title,
@@ -412,7 +559,11 @@ export default function MiniMissionDetail() {
           ]}
         >
           <Text style={[styles.timerLabel, { color: theme.colors.textMuted }]}>
-            {isTimerUp ? "MISSION FAILED" : "Fuel on board"}
+            {completeSheetOpen
+              ? "TIMER PAUSED"
+              : isTimerUp
+                ? "MISSION FAILED"
+                : "Fuel on board"}
           </Text>
           <Text
             style={[
@@ -431,7 +582,9 @@ export default function MiniMissionDetail() {
               : isTimerUp
                 ? "Timer depleted — no reserve fuel after zero. Cancel this mission or go back."
                 : mission.status === "in_progress"
-                  ? `Stay with it until done. Reserve fuel is capped at ${MAX_RESERVE_FUEL_MINUTES} min total.`
+                  ? completeSheetOpen
+                    ? "Timer paused while you save your moment."
+                    : `Stay with it until done. Reserve fuel is capped at ${MAX_RESERVE_FUEL_MINUTES} min total.`
                   : "Ready when you are."}
           </Text>
         </View>
@@ -468,79 +621,19 @@ export default function MiniMissionDetail() {
           </View>
         </View>
 
-        <View
-          style={[
-            styles.visibilityRow,
-            {
-              backgroundColor: theme.colors.surface,
-              borderColor: theme.colors.border,
-              borderRadius: theme.radius.md,
-            },
-          ]}
-        >
-          {(mission.visibility ?? "solo") === "public" ? (
-            <Globe size={theme.icon.md} color={theme.colors.cyan[400]} />
-          ) : (
-            <User size={theme.icon.md} color={theme.colors.indigo[400]} />
-          )}
-          <View style={styles.visibilityTextCol}>
-            {(mission.visibility ?? "solo") === "public" ? (
-              <>
-                <Text
-                  style={[
-                    styles.visibilityTitle,
-                    { color: theme.colors.textPrimary },
-                  ]}
-                >
-                  Public
-                </Text>
-                <Text
-                  style={[
-                    styles.visibilityHint,
-                    { color: theme.colors.textMuted },
-                  ]}
-                >
-                  Others can see this later. Turn off to keep it solo.
-                </Text>
-              </>
-            ) : (
-              <>
-                <Text
-                  style={[
-                    styles.visibilityTitle,
-                    { color: theme.colors.textPrimary },
-                  ]}
-                >
-                  Solo
-                </Text>
-                <Text
-                  style={[
-                    styles.visibilityHint,
-                    { color: theme.colors.textMuted },
-                  ]}
-                >
-                  Only you can see this. Turn on to share with others later.
-                </Text>
-              </>
-            )}
-          </View>
-          <Switch
-            value={(mission.visibility ?? "solo") === "public"}
-            onValueChange={(v) => {
-              const next = v ? "public" : "solo";
-              const prev = mission.visibility ?? "solo";
-              if (prev === next) return;
-              lastVisibilityRef.current = { id: mission.id, prev };
-              setMiniMissionVisibility(mission.id, next);
-            }}
-            trackColor={{
-              false: theme.colors.border,
-              true: theme.colors.indigo[600],
-            }}
-            thumbColor={theme.colors.white}
-            ios_backgroundColor={theme.colors.border}
+        {mission.status === "completed" ? (
+          <MiniVisibilityRow
+            theme={theme}
+            visibility={mission.visibility ?? "solo"}
+            onChange={handleVisibilityChange}
+            showToggle={
+              !(
+                (mission.visibility ?? "solo") === "solo" &&
+                mission.communityFeedRevoked
+              )
+            }
           />
-        </View>
+        ) : null}
 
         <View style={styles.actions}>
           {mission.status !== "in_progress" &&
@@ -551,7 +644,13 @@ export default function MiniMissionDetail() {
 
           {mission.status === "in_progress" && !isTimerUp && (
             <>
-              <Button title="Mark Complete" onPress={() => setCompleteSheetOpen(true)} />
+              <Button
+                title="Mark Complete"
+                onPress={() => {
+                  setTimerFrozenAtMs(Date.now());
+                  setCompleteSheetOpen(true);
+                }}
+              />
               {reserveFull ? (
                 <View
                   style={[
@@ -617,11 +716,7 @@ export default function MiniMissionDetail() {
                   </Text>
                 </View>
               </View>
-              <Button
-                title="Cancel Mission"
-                variant="secondary"
-                onPress={handleCancel}
-              />
+              <Button title="Retry mission" onPress={handleRetryFailed} />
             </>
           )}
 
@@ -737,7 +832,7 @@ export default function MiniMissionDetail() {
         </View>
 
         {/* Motivational quotes — glass card at the bottom, only while timer is running */}
-        {mission.status === "in_progress" && !isTimerUp && (
+        {mission.status === "in_progress" && !isTimerUp && !completeSheetOpen && (
           <TouchableOpacity
             activeOpacity={0.8}
             onPress={() => animateQuoteChange((quoteIdx + 1) % QUOTES.length)}
@@ -805,7 +900,7 @@ export default function MiniMissionDetail() {
             </View>
           </TouchableOpacity>
         )}
-      </View>
+      </ScrollView>
     </Screen>
   );
 }
@@ -827,7 +922,7 @@ const styles = StyleSheet.create({
   },
   centered: { flex: 1, alignItems: "center", justifyContent: "center" },
   notFound: { marginBottom: 12 },
-  content: { flex: 1 },
+  scroll: { flex: 1 },
   title: { fontWeight: "800", marginBottom: 8 },
   objective: { marginBottom: 20, lineHeight: 23 },
   timerCard: {
@@ -854,18 +949,6 @@ const styles = StyleSheet.create({
   },
   timerHint: { textAlign: "center", marginTop: 2 },
   metaRow: { marginTop: 16, marginBottom: 12 },
-  visibilityRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    borderWidth: 1,
-    marginBottom: 16,
-  },
-  visibilityTextCol: { flex: 1 },
-  visibilityTitle: { fontWeight: "700", fontSize: 14 },
-  visibilityHint: { fontSize: 11, marginTop: 3, lineHeight: 15 },
   metaPill: {
     alignSelf: "flex-start",
     flexDirection: "row",

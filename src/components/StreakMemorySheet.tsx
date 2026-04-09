@@ -15,10 +15,11 @@ import {
   Easing,
   Alert,
   ActivityIndicator,
+  Switch,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as ImagePicker from "expo-image-picker";
-import { Flag, ImageIcon, Lock, X } from "lucide-react-native";
+import { Flag, Globe, ImageIcon, Lock, X } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import { useTheme } from "../context/ThemeContext";
 import type { StreakMemory } from "../types/habit";
@@ -33,7 +34,12 @@ type StreakMemorySheetProps = {
   dayLabel: string;
   onClose: () => void;
   /** create only: called only from explicit actions — null = check in without a memory; not called when user dismisses */
-  onCommit?: (memory: StreakMemory | null) => void | Promise<void>;
+  onCommit?: (
+    memory: StreakMemory | null,
+    meta?: { publishToCommunity?: boolean },
+  ) => void | Promise<void>;
+  /** When variant is mini, whether Community publish is allowed (signed in + Supabase). */
+  miniPublishAvailable?: boolean;
   /** view only */
   viewMemory?: StreakMemory | null;
 };
@@ -46,16 +52,19 @@ export function StreakMemorySheet({
   dayLabel,
   onClose,
   onCommit,
+  miniPublishAvailable,
   viewMemory,
 }: StreakMemorySheetProps) {
   const isMini = variant === "mini";
   const isView = mode === "view";
+  const canPublishCommunity = isMini && miniPublishAvailable === true;
   const { theme, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const { height: windowH } = useWindowDimensions();
   const slideY = useRef(new Animated.Value(420)).current;
   const [note, setNote] = useState("");
   const [imageUri, setImageUri] = useState<string | undefined>();
+  const [publishToCommunity, setPublishToCommunity] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -65,6 +74,7 @@ export function StreakMemorySheet({
       if (!isView) {
         setNote("");
         setImageUri(undefined);
+        setPublishToCommunity(false);
       }
       Animated.spring(slideY, {
         toValue: 0,
@@ -135,9 +145,29 @@ export function StreakMemorySheet({
   const handleJustMarkDone = useCallback(() => {
     if (isView || submitting) return;
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    onCommit?.(null);
-    onClose();
-  }, [isView, submitting, onCommit, onClose]);
+    const meta = isMini
+      ? { publishToCommunity: publishToCommunity && canPublishCommunity }
+      : undefined;
+    setSubmitting(true);
+    void (async () => {
+      try {
+        await Promise.resolve(onCommit?.(null, meta));
+        onClose();
+      } catch {
+        // onCommit may alert; keep sheet open for retry
+      } finally {
+        setSubmitting(false);
+      }
+    })();
+  }, [
+    isView,
+    submitting,
+    onCommit,
+    onClose,
+    isMini,
+    publishToCommunity,
+    canPublishCommunity,
+  ]);
 
   const handleSave = useCallback(async () => {
     if (isView || submitting) return;
@@ -156,37 +186,56 @@ export function StreakMemorySheet({
       );
       return;
     }
+    const meta = isMini
+      ? { publishToCommunity: publishToCommunity && canPublishCommunity }
+      : undefined;
     setSubmitting(true);
     try {
-      await Promise.resolve(onCommit?.(memory));
+      await Promise.resolve(onCommit?.(memory, meta));
       onClose();
     } catch {
       // onCommit may alert; keep sheet open for retry
     } finally {
       setSubmitting(false);
     }
-  }, [isView, isMini, note, imageUri, onCommit, onClose]);
+  }, [isView, isMini, note, imageUri, onCommit, onClose, publishToCommunity, canPublishCommunity, submitting]);
 
   const maxSheetView = Math.min(windowH * 0.88, 560);
-  /** Taller create sheet so photo + note + actions fit; scroll includes title/hint so drags register anywhere in the body */
-  const maxSheetCreate = Math.min(windowH * 0.93, 720);
+  /** Nearly full-screen create sheet so mini mission (community row + actions) fits and scrolls cleanly. */
+  const createSheetMaxHeight = Math.max(380, windowH - insets.top - 8);
 
   const vm = viewMemory;
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={handleDismiss}>
-      <Pressable style={[styles.backdrop, { backgroundColor: isDark ? "rgba(0,0,0,0.72)" : "rgba(15,23,42,0.55)" }]} onPress={handleDismiss}>
-        <KeyboardAvoidingView behavior={Platform.OS === "ios" && !isView ? "padding" : undefined} style={styles.kav}>
-          {/* View stops backdrop dismiss; avoid Pressable here so ScrollView pan gestures are not contested */}
-          <View style={styles.sheetPress}>
+      <View style={[styles.backdrop, { backgroundColor: isDark ? "rgba(0,0,0,0.72)" : "rgba(15,23,42,0.55)" }]}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Dismiss"
+          style={StyleSheet.absoluteFill}
+          onPress={handleDismiss}
+        />
+        <KeyboardAvoidingView
+          pointerEvents="box-none"
+          behavior={Platform.OS === "ios" && !isView ? "padding" : undefined}
+          style={styles.kav}
+        >
+          <View style={styles.sheetPress} pointerEvents="box-none">
             <Animated.View
+              pointerEvents="auto"
               style={[
                 styles.sheet,
                 {
                   ...(isView
-                    ? { maxHeight: maxSheetView }
-                    : { height: maxSheetCreate, maxHeight: maxSheetCreate }),
-                  paddingBottom: Math.max(insets.bottom, 16),
+                    ? {
+                        maxHeight: maxSheetView,
+                        paddingBottom: Math.max(insets.bottom, 16),
+                      }
+                    : {
+                        height: createSheetMaxHeight,
+                        maxHeight: createSheetMaxHeight,
+                        paddingBottom: 0,
+                      }),
                   backgroundColor: theme.colors.surfaceElevated,
                   borderColor: theme.colors.border,
                   ...theme.shadow.card,
@@ -274,7 +323,7 @@ export function StreakMemorySheet({
                     contentContainerStyle={styles.createScrollContent}
                     keyboardShouldPersistTaps="handled"
                     keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
-                    showsVerticalScrollIndicator={false}
+                    showsVerticalScrollIndicator
                     nestedScrollEnabled
                   >
                     <Text style={[styles.kicker, { color: theme.colors.cyan[400] }]}>
@@ -357,9 +406,51 @@ export function StreakMemorySheet({
                       ]}
                     />
                     <Text style={[styles.counter, { color: theme.colors.textMuted }]}>{note.length}/280</Text>
+
+                    {isMini ? (
+                      <View
+                        style={[
+                          styles.communityPublishRow,
+                          {
+                            borderColor: theme.colors.border,
+                            backgroundColor: theme.colors.surface,
+                          },
+                        ]}
+                      >
+                        <View style={styles.communityPublishTopRow}>
+                          <Globe size={20} color={theme.colors.cyan[400]} style={styles.communityPublishGlobe} />
+                          <View style={styles.communityPublishTextCol}>
+                            <Text style={[styles.communityPublishTitle, { color: theme.colors.textPrimary }]}>
+                              Publish to Community wins
+                            </Text>
+                            <Text style={[styles.communityPublishHint, { color: theme.colors.textMuted }]}>
+                              {canPublishCommunity
+                                ? "Leaving this off locks Community for this mission. If you publish, you can remove your win from the feed in details later."
+                                : "Sign in with cloud sync to publish to Community wins."}
+                            </Text>
+                          </View>
+                          <Switch
+                            value={Boolean(publishToCommunity && canPublishCommunity)}
+                            onValueChange={setPublishToCommunity}
+                            disabled={!canPublishCommunity}
+                            trackColor={{
+                              false: theme.colors.border,
+                              true: theme.colors.indigo[600],
+                            }}
+                            thumbColor={theme.colors.white}
+                            ios_backgroundColor={theme.colors.border}
+                          />
+                        </View>
+                      </View>
+                    ) : null}
                   </ScrollView>
 
-                  <View style={styles.actions}>
+                  <View
+                    style={[
+                      styles.actions,
+                      { paddingBottom: Math.max(insets.bottom, 16) + 4, paddingTop: 10 },
+                    ]}
+                  >
                     <Pressable
                       onPress={handleJustMarkDone}
                       disabled={submitting}
@@ -372,7 +463,12 @@ export function StreakMemorySheet({
                         },
                       ]}
                     >
-                      <Text style={[styles.btnSecondaryText, { color: theme.colors.textSecondary }]}>
+                      <Text
+                        style={[styles.btnSecondaryText, { color: theme.colors.textSecondary }]}
+                        numberOfLines={2}
+                        adjustsFontSizeToFit
+                        minimumFontScale={0.85}
+                      >
                         {isMini ? "Complete without extras" : "Just mark done"}
                       </Text>
                     </Pressable>
@@ -387,7 +483,12 @@ export function StreakMemorySheet({
                       {submitting ? (
                         <ActivityIndicator color={theme.colors.white} />
                       ) : (
-                        <Text style={[styles.btnPrimaryText, { color: theme.colors.white }]}>
+                        <Text
+                          style={[styles.btnPrimaryText, { color: theme.colors.white }]}
+                          numberOfLines={2}
+                          adjustsFontSizeToFit
+                          minimumFontScale={0.85}
+                        >
                           {isMini ? "Save & complete" : "Save moment"}
                         </Text>
                       )}
@@ -398,7 +499,7 @@ export function StreakMemorySheet({
             </Animated.View>
           </View>
         </KeyboardAvoidingView>
-      </Pressable>
+      </View>
     </Modal>
   );
 }
@@ -507,27 +608,47 @@ const styles = StyleSheet.create({
     textAlignVertical: "top",
   },
   counter: { alignSelf: "flex-end", fontSize: 11, marginTop: 4, marginBottom: 4 },
+  communityPublishRow: {
+    marginTop: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+  },
+  communityPublishTopRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+  },
+  communityPublishGlobe: { marginTop: 2 },
+  communityPublishTextCol: { flex: 1, minWidth: 0 },
+  communityPublishTitle: { fontWeight: "700", fontSize: 14 },
+  communityPublishHint: { fontSize: 11, marginTop: 4, lineHeight: 16 },
   actions: {
     flexDirection: "row",
     gap: 10,
-    marginTop: 18,
-    paddingTop: 4,
     flexShrink: 0,
+    paddingHorizontal: 0,
   },
   btnSecondary: {
     flex: 1,
-    paddingVertical: 14,
+    minHeight: 48,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
     borderRadius: 14,
     borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
   },
-  btnSecondaryText: { fontWeight: "700", fontSize: 15 },
+  btnSecondaryText: { fontWeight: "700", fontSize: 14, textAlign: "center" },
   btnPrimary: {
     flex: 1,
-    paddingVertical: 14,
+    minHeight: 48,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
     borderRadius: 14,
     alignItems: "center",
+    justifyContent: "center",
   },
   btnPrimaryText: { fontWeight: "800", fontSize: 15 },
   viewOnlyPill: {

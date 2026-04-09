@@ -237,20 +237,27 @@ export const useHabitStore = create<HabitStore>()(
         }));
         requestRemoteSync({ immediate: false });
       },
-      addMiniMission: ({ title, objective, estimatedMinutes, startMode, visibility }) => {
+      setMiniMissionCommunityFeedRevoked: (id, revoked) => {
+        set((state) => ({
+          miniMissions: state.miniMissions.map((m) =>
+            m.id === id ? { ...m, communityFeedRevoked: revoked } : m,
+          ),
+        }));
+        requestRemoteSync({ immediate: false });
+      },
+      addMiniMission: ({ title, objective, estimatedMinutes, startMode }) => {
         const now = new Date().toISOString();
         const id =
           Date.now().toString(36) + Math.random().toString(36).substring(2);
         const normalizedMinutes = Math.max(1, Math.floor(estimatedMinutes));
-        const vis: MissionVisibility =
-          visibility === "public" || visibility === "solo" ? visibility : "solo";
 
         const newMiniMission: MiniMission = {
           ownerUserId: getRemoteSyncUserId() ?? undefined,
           id,
           title,
           objective,
-          visibility: vis,
+          visibility: "solo",
+          communityFeedRevoked: false,
           estimatedMinutes: normalizedMinutes,
           extendedMinutes: 0,
           status: startMode === "now" ? "in_progress" : "pending",
@@ -281,26 +288,39 @@ export const useHabitStore = create<HabitStore>()(
         }));
         requestRemoteSync({ immediate: false });
       },
-      completeMiniMission: (id, memory) => {
+      completeMiniMission: (id, memory, opts) => {
         const now = new Date().toISOString();
+        const completedAt = opts?.completedAt ?? now;
         const mission = get().miniMissions.find((m) => m.id === id);
         let completionMemory: StreakMemory | undefined;
         if (memory && (memory.note || memory.imageUri || memory.imageUrl)) {
           completionMemory = {
-            createdAt: memory.createdAt ?? now,
+            createdAt: memory.createdAt ?? completedAt,
             ...(memory.note ? { note: memory.note } : {}),
             ...(memory.imageUri ? { imageUri: memory.imageUri } : {}),
             ...(memory.imageUrl ? { imageUrl: memory.imageUrl } : {}),
           };
         }
+        const visOverride = opts?.visibility;
+        const nextVisibility: MissionVisibility | undefined =
+          visOverride === "public" || visOverride === "solo" ? visOverride : undefined;
+        const nextRevoked =
+          opts?.communityFeedRevoked !== undefined
+            ? opts.communityFeedRevoked
+            : undefined;
+
         set((state) => ({
           miniMissions: state.miniMissions.map((m) => {
             if (m.id !== id) return m;
             return {
               ...m,
               status: "completed",
-              completedAt: now,
-              startedAt: m.startedAt ?? now,
+              completedAt,
+              startedAt: m.startedAt ?? completedAt,
+              ...(nextVisibility !== undefined ? { visibility: nextVisibility } : {}),
+              ...(nextRevoked !== undefined
+                ? { communityFeedRevoked: nextRevoked }
+                : {}),
               ...(completionMemory ? { completionMemory } : {}),
             };
           }),
@@ -309,7 +329,9 @@ export const useHabitStore = create<HabitStore>()(
         // Award XP for mini mission completion
         let xpGain = 15;
         if (mission?.startedAt) {
-          const elapsed = Date.now() - new Date(mission.startedAt).getTime();
+          const elapsed =
+            new Date(completedAt).getTime() -
+            new Date(mission.startedAt).getTime();
           const allocated =
             (mission.estimatedMinutes + (mission.extendedMinutes ?? 0)) * 60_000;
           if (elapsed < allocated) xpGain += 10; // early finish bonus
@@ -329,6 +351,30 @@ export const useHabitStore = create<HabitStore>()(
           }),
         }));
         requestRemoteSync({ immediate: false });
+      },
+      retryFailedMiniMission: (id) => {
+        const mission = get().miniMissions.find((m) => m.id === id);
+        if (!mission || mission.status !== "in_progress" || !mission.startedAt) return;
+        const totalMinutes =
+          mission.estimatedMinutes + (mission.extendedMinutes ?? 0);
+        const totalMs = totalMinutes * 60_000;
+        const elapsed =
+          Date.now() - new Date(mission.startedAt).getTime();
+        if (elapsed < totalMs) return;
+        const now = new Date().toISOString();
+        set((state) => ({
+          miniMissions: state.miniMissions.map((m) => {
+            if (m.id !== id) return m;
+            return {
+              ...m,
+              status: "in_progress",
+              startedAt: now,
+              extendedMinutes: 0,
+              scheduledStartAt: undefined,
+            };
+          }),
+        }));
+        requestRemoteSync({ immediate: true });
       },
       extendMiniMission: (id, extraMinutes) => {
         set((state) => ({
@@ -383,15 +429,28 @@ export const useHabitStore = create<HabitStore>()(
             };
           });
           // Migrate legacy mini missions missing extendedMinutes
-          state.miniMissions = state.miniMissions.map((m) => ({
-            ...m,
-            extendedMinutes: m.extendedMinutes ?? 0,
-            ownerUserId: m.ownerUserId ?? null,
-            visibility:
+          state.miniMissions = state.miniMissions.map((m) => {
+            const vis: MissionVisibility =
               m.visibility === "public" || m.visibility === "solo"
                 ? m.visibility
-                : "solo",
-          }));
+                : "solo";
+            const explicitRevoked = m.communityFeedRevoked;
+            const communityFeedRevoked =
+              explicitRevoked === true
+                ? true
+                : explicitRevoked === false
+                  ? false
+                  : m.status === "completed" && vis === "solo"
+                    ? true
+                    : false;
+            return {
+              ...m,
+              extendedMinutes: m.extendedMinutes ?? 0,
+              ownerUserId: m.ownerUserId ?? null,
+              visibility: vis,
+              communityFeedRevoked,
+            };
+          });
           // Migrate: ensure xp exists
           if (state.xp == null) state.xp = 0;
           if (state.username === undefined) state.username = null;

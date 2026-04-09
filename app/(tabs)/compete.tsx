@@ -13,7 +13,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { ChevronRight, Eye, Medal, Swords, Trophy, Clock, X } from "lucide-react-native";
+import { ChevronRight, Eye, Medal, Swords, Trophy, Clock, X, Sparkles } from "lucide-react-native";
 import { Screen } from "../../src/components/Screen";
 import { useTheme } from "../../src/context/ThemeContext";
 import { useHabitStore } from "../../src/store/habitStore";
@@ -40,8 +40,9 @@ import {
   refreshCohortPeerHabits,
 } from "../../src/lib/groupChallengesApi";
 import { subscribeSyncSuccess } from "../../src/lib/syncQueue";
+import { CommunityWinsFeed } from "../../src/components/CommunityWinsFeed";
 
-type CompeteSegment = "leaderboard" | "challenges";
+type CompeteSegment = "leaderboard" | "challenges" | "wins";
 
 /** Sub-tabs when main segment is Challenges */
 type ChallengesSubTab = "missions" | "invites";
@@ -481,6 +482,27 @@ export default function CompeteScreen() {
             Leaderboard
           </Text>
         </TouchableOpacity>
+        <TouchableOpacity
+          style={[
+            styles.segment,
+            segment === "wins" && [
+              styles.segmentActive,
+              { backgroundColor: theme.colors.indigo[600], ...theme.shadow.glow },
+            ],
+          ]}
+          onPress={() => setSegment("wins")}
+          activeOpacity={0.85}
+        >
+          <Sparkles size={16} color={segment === "wins" ? theme.colors.white : theme.colors.textMuted} />
+          <Text
+            style={[
+              styles.segmentLabel,
+              { color: segment === "wins" ? theme.colors.white : theme.colors.textSecondary },
+            ]}
+          >
+            Wins
+          </Text>
+        </TouchableOpacity>
       </View>
 
       {segment === "challenges" ? (
@@ -536,6 +558,15 @@ export default function CompeteScreen() {
         </View>
       ) : null}
 
+      {segment === "wins" ? (
+        <View style={{ flex: 1, minHeight: 320 }}>
+          <Text style={[styles.sectionLabel, { color: theme.colors.textMuted }]}>COMMUNITY</Text>
+          <Text style={[styles.winsIntro, { color: theme.colors.textSecondary }]}>
+            Cheer on public mini mission wins. Post yours when you complete a public mini.
+          </Text>
+          <CommunityWinsFeed contentPaddingBottom={bottomPad} />
+        </View>
+      ) : (
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: bottomPad }}
@@ -809,6 +840,7 @@ export default function CompeteScreen() {
           </>
         )}
       </ScrollView>
+      )}
     </Screen>
   );
 }
@@ -839,7 +871,8 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   segmentActive: {},
-  segmentLabel: { fontWeight: "700", fontSize: 13 },
+  segmentLabel: { fontWeight: "700", fontSize: 12 },
+  winsIntro: { fontSize: 13, lineHeight: 18, marginBottom: 12 },
   /** Secondary row — mirrors tryitfirst-mobile-v2 dashboard selling/buying sub-tabs (rounded pills + brand tint). */
   challengesSubOuter: {
     flexDirection: "row",

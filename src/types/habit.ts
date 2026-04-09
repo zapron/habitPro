@@ -51,6 +51,8 @@ export interface MiniMission {
   title: string;
   objective?: string;
   visibility: MissionVisibility;
+  /** After removing from Community wins, user cannot publish this mission again. */
+  communityFeedRevoked?: boolean;
   estimatedMinutes: number;
   extendedMinutes: number; // +1 min per reserve tap; capped (see MAX_RESERVE_FUEL_MINUTES)
   status: MiniMissionStatus;
@@ -95,14 +97,25 @@ export type HabitStore = {
     objective?: string;
     estimatedMinutes: number;
     startMode: "now" | "later";
-    visibility?: MissionVisibility;
   }) => string;
   setHabitVisibility: (id: string, visibility: MissionVisibility) => void;
   setMiniMissionVisibility: (id: string, visibility: MissionVisibility) => void;
+  setMiniMissionCommunityFeedRevoked: (id: string, revoked: boolean) => void;
   startMiniMission: (id: string) => void;
-  completeMiniMission: (id: string, memory?: StreakMemory | null) => void;
+  completeMiniMission: (
+    id: string,
+    memory?: StreakMemory | null,
+    opts?: {
+      visibility?: MissionVisibility;
+      communityFeedRevoked?: boolean;
+      /** When set (e.g. when timer was frozen at “Mark Complete”), used for completedAt and XP early-finish. */
+      completedAt?: string;
+    },
+  ) => void;
   extendMiniMission: (id: string, extraMinutes: number) => void;
   cancelMiniMission: (id: string) => void;
+  /** Timer depleted: restart same mission with fresh clock (reserve fuel cleared). */
+  retryFailedMiniMission: (id: string) => void;
   deleteMiniMission: (id: string) => void;
   getMiniMission: (id: string) => MiniMission | undefined;
   addXp: (amount: number) => void;

@@ -1,11 +1,23 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, StatusBar, Switch } from "react-native";
+import * as Haptics from "expo-haptics";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useIsFocused } from "@react-navigation/native";
 import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { FlashList } from "@shopify/flash-list";
-import { Clock3, CircleCheck, ArrowLeft, Check, Timer, Globe, Sparkles } from "lucide-react-native";
+import {
+  Clock3,
+  CircleCheck,
+  ArrowLeft,
+  Check,
+  Timer,
+  Globe,
+  Sparkles,
+  Plus,
+  CircleX,
+} from "lucide-react-native";
 import { Screen } from "../../src/components/Screen";
 import { Button } from "../../src/components/Button";
 import { MiniMissionFireProgressBar } from "../../src/components/MiniMissionFireProgressBar";
@@ -13,7 +25,16 @@ import { useTheme } from "../../src/context/ThemeContext";
 import { useHabitStore } from "../../src/store/habitStore";
 import { MiniMission } from "../../src/types/habit";
 
-type MiniTab = "active" | "queued" | "completed";
+type MiniTab = "active" | "queued" | "completed" | "failed";
+
+/** Remaining time for an in-progress mission; 0 means timer depleted (failed). */
+function getMiniRemainingMs(m: MiniMission, now: number): number {
+  if (m.status !== "in_progress" || !m.startedAt) return 0;
+  const totalMinutes = m.estimatedMinutes + (m.extendedMinutes ?? 0);
+  const totalMs = totalMinutes * 60 * 1000;
+  const elapsedMs = now - new Date(m.startedAt).getTime();
+  return Math.max(0, totalMs - elapsedMs);
+}
 
 const KEEP_SCREEN_ON_KEY = "@habitpro_mini_keep_screen_on";
 const MINI_MISSIONS_KEEP_AWAKE_TAG = "mini-missions-list";
@@ -29,6 +50,12 @@ const formatCountdown = (ms: number) => {
 function MiniMissionCard({ item, now }: { item: MiniMission; now: number }) {
   const router = useRouter();
   const { theme, isDark } = useTheme();
+  const retryFailedMiniMission = useHabitStore((s) => s.retryFailedMiniMission);
+
+  const handleRetry = useCallback(() => {
+    retryFailedMiniMission(item.id);
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+  }, [item.id, retryFailedMiniMission]);
 
   const totalMinutes = item.estimatedMinutes + (item.extendedMinutes ?? 0);
   const totalMs = totalMinutes * 60 * 1000;
@@ -63,7 +90,7 @@ function MiniMissionCard({ item, now }: { item: MiniMission; now: number }) {
           : { label: "Waiting", color: theme.colors.textSecondary };
 
   return (
-    <TouchableOpacity
+    <View
       style={[
         styles.card,
         {
@@ -74,9 +101,13 @@ function MiniMissionCard({ item, now }: { item: MiniMission; now: number }) {
           ...theme.shadow.card,
         },
       ]}
-      activeOpacity={0.9}
-      onPress={() => router.push(`/mini/${item.id}`)}
     >
+      <TouchableOpacity
+        activeOpacity={0.9}
+        onPress={() => router.push(`/mini/${item.id}`)}
+        accessibilityRole="button"
+        accessibilityLabel={`Open mission: ${item.title}`}
+      >
       {/* Top row: title + status badge */}
       <View style={styles.cardTopRow}>
         <View style={styles.cardTitleRow}>
@@ -153,18 +184,36 @@ function MiniMissionCard({ item, now }: { item: MiniMission; now: number }) {
           <Text style={[styles.totalTime, { color: theme.colors.textMuted }]}>of {totalMinutes} min</Text>
         </View>
       )}
-    </TouchableOpacity>
+      </TouchableOpacity>
+
+      {isTimerUp ? (
+        <View style={[styles.cardRetrySection, { borderTopColor: theme.colors.border }]}>
+          <Button
+            title="Retry mission"
+            onPress={handleRetry}
+            accessibilityLabel={`Retry mission: ${item.title}`}
+          />
+        </View>
+      ) : null}
+    </View>
   );
 }
 
 /* ─── Screen ─────────────────────────────────────────────── */
 export default function MiniMissionsScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { theme, isDark } = useTheme();
   const { view, tab: tabParam } = useLocalSearchParams<{ view?: string; tab?: string }>();
   const miniMissions = useHabitStore((state) => state.miniMissions);
   const initialTab: MiniTab =
-    tabParam === "queued" ? "queued" : tabParam === "completed" ? "completed" : "active";
+    tabParam === "queued"
+      ? "queued"
+      : tabParam === "completed"
+        ? "completed"
+        : tabParam === "failed"
+          ? "failed"
+          : "active";
   const [tab, setTab] = useState<MiniTab>(initialTab);
   const [now, setNow] = useState(Date.now());
   const [keepScreenOn, setKeepScreenOn] = useState(false);
@@ -199,23 +248,44 @@ export default function MiniMissionsScreen() {
     AsyncStorage.setItem(KEEP_SCREEN_ON_KEY, value ? "true" : "false").catch(() => {});
   }, []);
 
-  // Tick every second for live countdowns
-  const hasInProgress = miniMissions.some((m) => m.status === "in_progress");
+  // Tick only while at least one mission still has countdown > 0 (stops when all are failed or completed)
+  const hasActiveCountdown = useMemo(
+    () =>
+      miniMissions.some((m) => {
+        if (m.status !== "in_progress") return false;
+        return getMiniRemainingMs(m, now) > 0;
+      }),
+    [miniMissions, now],
+  );
   useEffect(() => {
-    if (!hasInProgress) return;
+    if (!hasActiveCountdown) return;
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
-  }, [hasInProgress]);
+  }, [hasActiveCountdown]);
 
   const filtered = useMemo(() => {
     if (view === "running") return miniMissions.filter((m) => m.status === "in_progress");
-    if (tab === "active") return miniMissions.filter((m) => m.status === "in_progress");
+    if (tab === "active") {
+      return miniMissions.filter(
+        (m) => m.status === "in_progress" && getMiniRemainingMs(m, now) > 0,
+      );
+    }
+    if (tab === "failed") {
+      return miniMissions.filter(
+        (m) => m.status === "in_progress" && getMiniRemainingMs(m, now) === 0,
+      );
+    }
     if (tab === "queued") return miniMissions.filter((m) => m.status === "pending" || m.status === "scheduled");
     if (tab === "completed") return miniMissions.filter((m) => m.status === "completed" || m.status === "cancelled");
     return [];
-  }, [miniMissions, tab, view]);
+  }, [miniMissions, tab, view, now]);
 
-  const inProgressCount = miniMissions.filter((m) => m.status === "in_progress").length;
+  const activeCount = miniMissions.filter(
+    (m) => m.status === "in_progress" && getMiniRemainingMs(m, now) > 0,
+  ).length;
+  const failedCount = miniMissions.filter(
+    (m) => m.status === "in_progress" && getMiniRemainingMs(m, now) === 0,
+  ).length;
   const queuedCount = miniMissions.filter((m) => m.status === "pending" || m.status === "scheduled").length;
   const completedCount = miniMissions.filter((m) => m.status === "completed" || m.status === "cancelled").length;
 
@@ -266,33 +336,64 @@ export default function MiniMissionsScreen() {
           style={[styles.tab, (tab === "active" || view === "running") && [styles.activeTab, { backgroundColor: theme.colors.indigo[600] }]]}
           onPress={() => { setTab("active"); if (view === "running") router.replace("/mini?tab=active"); }}
         >
-          <Text style={[styles.tabText, { color: theme.colors.textSecondary }, (tab === "active" || view === "running") && styles.activeTabText]}>
-            Active ({inProgressCount})
+          <Text
+            style={[styles.tabText, { color: theme.colors.textSecondary }, (tab === "active" || view === "running") && styles.activeTabText]}
+            numberOfLines={1}
+          >
+            Active ({activeCount})
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.tab, tab === "queued" && [styles.activeTab, { backgroundColor: theme.colors.indigo[600] }]]}
           onPress={() => { setTab("queued"); if (view === "running") router.replace("/mini?tab=queued"); }}
         >
-          <Text style={[styles.tabText, { color: theme.colors.textSecondary }, tab === "queued" && styles.activeTabText]}>Waiting ({queuedCount})</Text>
+          <Text style={[styles.tabText, { color: theme.colors.textSecondary }, tab === "queued" && styles.activeTabText]} numberOfLines={1}>
+            Waiting ({queuedCount})
+          </Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.tab, tab === "completed" && [styles.activeTab, { backgroundColor: theme.colors.indigo[600] }]]}
           onPress={() => { setTab("completed"); if (view === "running") router.replace("/mini?tab=completed"); }}
         >
-          <Text style={[styles.tabText, { color: theme.colors.textSecondary }, tab === "completed" && styles.activeTabText]}>Completed ({completedCount})</Text>
+          <Text style={[styles.tabText, { color: theme.colors.textSecondary }, tab === "completed" && styles.activeTabText]} numberOfLines={1}>
+            Done ({completedCount})
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tab, tab === "failed" && [styles.activeTab, { backgroundColor: theme.colors.indigo[600] }]]}
+          onPress={() => { setTab("failed"); if (view === "running") router.replace("/mini?tab=failed"); }}
+        >
+          <Text style={[styles.tabText, { color: theme.colors.textSecondary }, tab === "failed" && styles.activeTabText]} numberOfLines={1}>
+            Failed ({failedCount})
+          </Text>
         </TouchableOpacity>
       </View>
 
       <View style={styles.listWrap}>
         {filtered.length === 0 ? (
           <View style={styles.empty}>
-            <CircleCheck size={40} color={theme.colors.slate[500]} />
+            {tab === "failed" ? (
+              <CircleX size={40} color={theme.colors.slate[500]} />
+            ) : (
+              <CircleCheck size={40} color={theme.colors.slate[500]} />
+            )}
             <Text style={[styles.emptyTitle, { color: theme.colors.textPrimary, fontSize: theme.typography.h3 }]}>
-              {tab === "active" ? "No active mini missions" : tab === "queued" ? "No missions waiting yet" : "No completed mini missions yet"}
+              {tab === "active"
+                ? "No active mini missions"
+                : tab === "failed"
+                  ? "No failed missions"
+                  : tab === "queued"
+                    ? "No missions waiting yet"
+                    : "No completed mini missions yet"}
             </Text>
             <Text style={[styles.emptyText, { color: theme.colors.textSecondary }]}>
-              {tab === "active" ? "Start a mini mission to see it here." : tab === "queued" ? "Create a mission and choose Start Later when you are ready." : "Finish a mission to build momentum."}
+              {tab === "active"
+                ? "Start a mini mission to see it here."
+                : tab === "failed"
+                  ? "When time runs out before you mark complete, the mission lands here."
+                  : tab === "queued"
+                    ? "Create a mission and choose Start Later when you are ready."
+                    : "Finish a mission to build momentum."}
             </Text>
           </View>
         ) : (
@@ -307,8 +408,31 @@ export default function MiniMissionsScreen() {
         )}
       </View>
 
-      <View style={styles.fab}>
-        <Button title="Create Mini Mission" onPress={() => router.push("/mini/create")} style={{ ...theme.shadow.glow }} />
+      <View
+        style={[
+          styles.fabWrap,
+          {
+            bottom: Math.max(insets.bottom, 12) + 12,
+            right: Math.max(insets.right, 16),
+          },
+        ]}
+        pointerEvents="box-none"
+      >
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityLabel="Create mini mission"
+          onPress={() => router.push("/mini/create")}
+          activeOpacity={0.92}
+          style={[
+            styles.fab,
+            {
+              backgroundColor: theme.colors.indigo[600],
+              ...theme.shadow.glow,
+            },
+          ]}
+        >
+          <Plus size={28} color={theme.colors.white} strokeWidth={2.5} />
+        </TouchableOpacity>
       </View>
     </Screen>
   );
@@ -341,12 +465,17 @@ const styles = StyleSheet.create({
   tabContainer: { flexDirection: "row", borderWidth: 1, padding: 4, marginBottom: 14 },
   tab: { flex: 1, alignItems: "center", justifyContent: "center", paddingVertical: 10, borderRadius: 10 },
   activeTab: {},
-  tabText: { fontWeight: "700" },
+  tabText: { fontWeight: "700", fontSize: 11 },
   activeTabText: { color: "#ffffff" },
   listWrap: { flex: 1 },
   listContent: { paddingBottom: 100 },
   // Card styles
   card: { padding: 16, marginBottom: 12 },
+  cardRetrySection: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
   cardTopRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 4 },
   cardTitleRow: { flex: 1, flexDirection: "row", alignItems: "center", marginRight: 8, minWidth: 0 },
   publicTitleIcon: { marginRight: 6 },
@@ -381,5 +510,15 @@ const styles = StyleSheet.create({
   empty: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 24 },
   emptyTitle: { marginTop: 12, marginBottom: 8, fontWeight: "700", textAlign: "center" },
   emptyText: { textAlign: "center", marginBottom: 16 },
-  fab: { position: "absolute", bottom: 28, left: 24, right: 24 },
+  fabWrap: {
+    position: "absolute",
+    zIndex: 20,
+  },
+  fab: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: "center",
+    justifyContent: "center",
+  },
 });

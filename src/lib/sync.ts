@@ -114,6 +114,7 @@ function miniFromRow(row: {
   title: string;
   objective: string | null;
   visibility?: string | null;
+  community_feed_revoked?: boolean | null;
   estimated_minutes: number;
   extended_minutes: number;
   status: string;
@@ -127,12 +128,22 @@ function miniFromRow(row: {
     row.visibility === "public" || row.visibility === "solo"
       ? row.visibility
       : "solo";
+  const rawRevoked = row.community_feed_revoked;
+  const communityFeedRevoked =
+    rawRevoked === true
+      ? true
+      : rawRevoked === false
+        ? false
+        : row.status === "completed" && vis === "solo"
+          ? true
+          : false;
   return {
     ownerUserId: row.user_id,
     id: row.id,
     title: row.title,
     objective: row.objective ?? undefined,
     visibility: vis,
+    communityFeedRevoked,
     estimatedMinutes: row.estimated_minutes,
     extendedMinutes: row.extended_minutes,
     status: row.status as MiniMission["status"],
@@ -151,6 +162,7 @@ function miniToRow(sessionUserId: string, m: MiniMission) {
     title: m.title,
     objective: m.objective ?? null,
     visibility: m.visibility ?? "solo",
+    community_feed_revoked: m.communityFeedRevoked === true,
     estimated_minutes: m.estimatedMinutes,
     extended_minutes: m.extendedMinutes,
     status: m.status,
