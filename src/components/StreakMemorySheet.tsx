@@ -181,7 +181,7 @@ export function StreakMemorySheet({
       Alert.alert(
         "Nothing to save",
         isMini
-          ? "Add a photo or a note to save with your completion, or tap Complete without extras to finish without one."
+          ? "Add a photo or a note first to use Complete with Memory, or tap Just Mark Complete to finish without one."
           : "Add a photo or a note to save a moment, or tap Just mark done to check in without one.",
       );
       return;
@@ -201,8 +201,11 @@ export function StreakMemorySheet({
   }, [isView, isMini, note, imageUri, onCommit, onClose, publishToCommunity, canPublishCommunity, submitting]);
 
   const maxSheetView = Math.min(windowH * 0.88, 560);
-  /** Nearly full-screen create sheet so mini mission (community row + actions) fits and scrolls cleanly. */
-  const createSheetMaxHeight = Math.max(380, windowH - insets.top - 8);
+  const isMemoryCreate = !isView;
+  const isMiniCreate = !isView && isMini;
+  const isHabitCreate = !isView && !isMini;
+  /** Streak memory capture (habit + mini): fixed height + flex scroll — same cap for both drawers. */
+  const memoryCaptureSheetMaxHeight = Math.min(windowH * 0.78, windowH - insets.top - 8);
 
   const vm = viewMemory;
 
@@ -232,8 +235,8 @@ export function StreakMemorySheet({
                         paddingBottom: Math.max(insets.bottom, 16),
                       }
                     : {
-                        height: createSheetMaxHeight,
-                        maxHeight: createSheetMaxHeight,
+                        height: memoryCaptureSheetMaxHeight,
+                        maxHeight: memoryCaptureSheetMaxHeight,
                         paddingBottom: 0,
                       }),
                   backgroundColor: theme.colors.surfaceElevated,
@@ -243,7 +246,7 @@ export function StreakMemorySheet({
                 },
               ]}
             >
-              <View style={styles.sheetHeader}>
+              <View style={[styles.sheetHeader, isMemoryCreate && styles.sheetHeaderCompact]}>
                 <View
                   style={[
                     styles.iconOrb,
@@ -288,11 +291,13 @@ export function StreakMemorySheet({
                   >
                     {vm?.imageUrl || vm?.imageUri ? (
                       <View style={[styles.photoSlotView, { borderColor: theme.colors.border }]}>
-                        <Image
-                          source={{ uri: vm.imageUrl ?? vm.imageUri! }}
-                          style={styles.photo}
-                          resizeMode="cover"
-                        />
+                        <View style={styles.photoSlotImageFill}>
+                          <Image
+                            source={{ uri: vm.imageUrl ?? vm.imageUri! }}
+                            style={StyleSheet.absoluteFillObject}
+                            resizeMode="cover"
+                          />
+                        </View>
                       </View>
                     ) : null}
                     {vm?.note ? (
@@ -320,54 +325,134 @@ export function StreakMemorySheet({
                 <View style={styles.createSheetColumn}>
                   <ScrollView
                     style={styles.createScroll}
-                    contentContainerStyle={styles.createScrollContent}
+                    contentContainerStyle={[
+                      styles.createScrollContent,
+                      isMemoryCreate && styles.createScrollContentMemory,
+                    ]}
                     keyboardShouldPersistTaps="handled"
                     keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
                     showsVerticalScrollIndicator
                     nestedScrollEnabled
                   >
-                    <Text style={[styles.kicker, { color: theme.colors.cyan[400] }]}>
+                    <Text
+                      style={[
+                        styles.kicker,
+                        isMemoryCreate && styles.kickerMemory,
+                        { color: theme.colors.cyan[400] },
+                      ]}
+                    >
                       {isMini ? "MINI MISSION" : `DAY ${dayLabel}`}
                     </Text>
-                    <Text style={[styles.title, { color: theme.colors.textPrimary, fontSize: theme.typography.h2 }]}>
-                      {isMini ? "Seal this mini" : "Seal this win"}
+                    <Text
+                      style={[
+                        styles.title,
+                        isMemoryCreate && styles.titleMemory,
+                        { color: theme.colors.textPrimary, fontSize: theme.typography.h2 },
+                      ]}
+                    >
+                      {isMini ? "Record this Memory" : "Seal this win"}
                     </Text>
-                    <Text style={[styles.sub, { color: theme.colors.textSecondary }]} numberOfLines={2}>
+                    <Text
+                      style={[styles.sub, isMemoryCreate && styles.subMemory, { color: theme.colors.textSecondary }]}
+                      numberOfLines={2}
+                    >
                       {missionTitle}
                     </Text>
-                    <Text style={[styles.hint, { color: theme.colors.textMuted }]}>
-                      {isMini
-                        ? "Add a photo or a line you’ll love reading later, or tap Complete without extras to finish. Closing without choosing an action cancels — your mission stays open."
-                        : "Add a photo or a line you’ll love reading later, or tap Just mark done to check in without a memory. Closing this sheet without choosing an action cancels — your day stays unchecked."}
-                    </Text>
+                    {isHabitCreate ? (
+                      <Text style={[styles.hint, styles.hintMemory, { color: theme.colors.textMuted }]}>
+                        Add a photo or a line you’ll love reading later, or tap Just mark done to check in without a memory.
+                        Closing this sheet without choosing an action cancels — your day stays unchecked.
+                      </Text>
+                    ) : null}
 
                     <View
                       style={[
                         styles.immutableNotice,
+                        styles.immutableNoticeMemory,
                         {
-                          borderColor: isDark ? "rgba(245, 158, 11, 0.45)" : "rgba(217, 119, 6, 0.35)",
-                          backgroundColor: isDark ? "rgba(245, 158, 11, 0.1)" : "rgba(251, 191, 36, 0.14)",
+                          backgroundColor: isDark
+                            ? "rgba(245, 158, 11, 0.1)"
+                            : "rgba(251, 191, 36, 0.14)",
                         },
                       ]}
                     >
                       <View style={styles.immutableNoticeIconWrap}>
-                        <Lock size={18} color={theme.colors.amber[500]} />
+                        <Lock
+                          size={15}
+                          color={isDark ? theme.colors.yellow[400] : theme.colors.amber[500]}
+                        />
                       </View>
                       <View style={styles.immutableNoticeTextCol}>
-                        <Text style={[styles.immutableNoticeTitle, { color: theme.colors.amber[500] }]}>
-                          No edits after you save
-                        </Text>
-                        <Text style={[styles.immutableNoticeBody, { color: theme.colors.textSecondary }]}>
-                          Your photo and note become fixed — you won’t be able to change or delete them from this screen.
+                        <Text
+                          style={[
+                            styles.immutableNoticeTitle,
+                            styles.immutableNoticeTitleMemory,
+                            { color: isDark ? theme.colors.yellow[400] : theme.colors.amber[500] },
+                          ]}
+                        >
+                          No edits after you Save
                         </Text>
                       </View>
                     </View>
 
-                    <View style={styles.photoSlotWrap}>
+                    {isMini ? (
+                      <View
+                        style={[
+                          styles.communityPublishRow,
+                          isMiniCreate && styles.communityPublishRowMini,
+                          {
+                            borderColor: theme.colors.border,
+                            backgroundColor: theme.colors.surface,
+                          },
+                        ]}
+                      >
+                        <View
+                          style={[
+                            styles.communityPublishTopRow,
+                            isMiniCreate && styles.communityPublishTopRowMini,
+                          ]}
+                        >
+                          <Globe
+                            size={isMiniCreate ? 18 : 20}
+                            color={theme.colors.cyan[400]}
+                            style={[styles.communityPublishGlobe, isMiniCreate && styles.communityPublishGlobeMini]}
+                          />
+                          <View style={styles.communityPublishTextCol}>
+                            <Text style={[styles.communityPublishTitle, { color: theme.colors.textPrimary }]}>
+                              Publish to Community
+                            </Text>
+                            <Text
+                              style={[
+                                isMiniCreate ? styles.communityPublishHintMiniBody : styles.communityPublishHint,
+                                { color: theme.colors.textMuted },
+                              ]}
+                            >
+                              {canPublishCommunity
+                                ? "Leaving this off locks Community for this mission. If you publish, you can remove your win from the feed in details later."
+                                : "Sign in with cloud sync to publish to Community."}
+                            </Text>
+                          </View>
+                          <Switch
+                            style={isMiniCreate ? { marginTop: 2 } : undefined}
+                            value={Boolean(publishToCommunity && canPublishCommunity)}
+                            onValueChange={setPublishToCommunity}
+                            disabled={!canPublishCommunity}
+                            trackColor={{
+                              false: theme.colors.border,
+                              true: theme.colors.indigo[600],
+                            }}
+                            thumbColor={theme.colors.white}
+                            ios_backgroundColor={theme.colors.border}
+                          />
+                        </View>
+                      </View>
+                    ) : null}
+
+                    <View style={[styles.photoSlotWrap, styles.photoSlotWrapMemory]}>
                       <Pressable
                         onPress={choosePhotoSource}
                         style={[
-                          styles.photoSlot,
+                          styles.photoSlotMemory,
                           {
                             borderColor: imageUri ? theme.colors.indigo[500] : theme.colors.border,
                             backgroundColor: isDark ? "rgba(255,255,255,0.04)" : theme.colors.surface,
@@ -375,11 +460,15 @@ export function StreakMemorySheet({
                         ]}
                       >
                         {imageUri ? (
-                          <Image source={{ uri: imageUri }} style={styles.photo} resizeMode="cover" />
+                          <View style={styles.photoSlotImageFill}>
+                            <Image source={{ uri: imageUri }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
+                          </View>
                         ) : (
-                          <View style={styles.photoEmpty}>
-                            <ImageIcon size={36} color={theme.colors.indigo[400]} />
-                            <Text style={[styles.photoCta, { color: theme.colors.textSecondary }]}>Tap to add a photo</Text>
+                          <View style={[styles.photoEmpty, styles.photoEmptyMemory]}>
+                            <ImageIcon size={28} color={theme.colors.indigo[400]} />
+                            <Text style={[styles.photoCta, styles.photoCtaMemory, { color: theme.colors.textSecondary }]}>
+                              Tap to add a photo
+                            </Text>
                           </View>
                         )}
                       </Pressable>
@@ -398,6 +487,7 @@ export function StreakMemorySheet({
                       maxLength={280}
                       style={[
                         styles.input,
+                        styles.inputMemory,
                         {
                           color: theme.colors.textPrimary,
                           borderColor: theme.colors.border,
@@ -405,50 +495,19 @@ export function StreakMemorySheet({
                         },
                       ]}
                     />
-                    <Text style={[styles.counter, { color: theme.colors.textMuted }]}>{note.length}/280</Text>
-
-                    {isMini ? (
-                      <View
-                        style={[
-                          styles.communityPublishRow,
-                          {
-                            borderColor: theme.colors.border,
-                            backgroundColor: theme.colors.surface,
-                          },
-                        ]}
-                      >
-                        <View style={styles.communityPublishTopRow}>
-                          <Globe size={20} color={theme.colors.cyan[400]} style={styles.communityPublishGlobe} />
-                          <View style={styles.communityPublishTextCol}>
-                            <Text style={[styles.communityPublishTitle, { color: theme.colors.textPrimary }]}>
-                              Publish to Community wins
-                            </Text>
-                            <Text style={[styles.communityPublishHint, { color: theme.colors.textMuted }]}>
-                              {canPublishCommunity
-                                ? "Leaving this off locks Community for this mission. If you publish, you can remove your win from the feed in details later."
-                                : "Sign in with cloud sync to publish to Community wins."}
-                            </Text>
-                          </View>
-                          <Switch
-                            value={Boolean(publishToCommunity && canPublishCommunity)}
-                            onValueChange={setPublishToCommunity}
-                            disabled={!canPublishCommunity}
-                            trackColor={{
-                              false: theme.colors.border,
-                              true: theme.colors.indigo[600],
-                            }}
-                            thumbColor={theme.colors.white}
-                            ios_backgroundColor={theme.colors.border}
-                          />
-                        </View>
-                      </View>
-                    ) : null}
+                    <Text style={[styles.counter, styles.counterMemory, { color: theme.colors.textMuted }]}>
+                      {note.length}/280
+                    </Text>
                   </ScrollView>
 
                   <View
                     style={[
                       styles.actions,
-                      { paddingBottom: Math.max(insets.bottom, 16) + 4, paddingTop: 10 },
+                      styles.actionsMemory,
+                      {
+                        paddingBottom: Math.max(insets.bottom, 12),
+                        paddingTop: 12,
+                      },
                     ]}
                   >
                     <Pressable
@@ -456,6 +515,7 @@ export function StreakMemorySheet({
                       disabled={submitting}
                       style={[
                         styles.btnSecondary,
+                        styles.btnSecondaryMemory,
                         {
                           borderColor: theme.colors.border,
                           backgroundColor: isDark ? "rgba(148, 163, 184, 0.12)" : theme.colors.slate[750],
@@ -464,12 +524,17 @@ export function StreakMemorySheet({
                       ]}
                     >
                       <Text
-                        style={[styles.btnSecondaryText, { color: theme.colors.textSecondary }]}
+                        style={[
+                          styles.btnSecondaryText,
+                          styles.btnSecondaryTextMemory,
+                          { color: theme.colors.textSecondary },
+                          Platform.OS === "android" ? styles.btnTextAndroid : null,
+                        ]}
                         numberOfLines={2}
-                        adjustsFontSizeToFit
+                        adjustsFontSizeToFit={false}
                         minimumFontScale={0.85}
                       >
-                        {isMini ? "Complete without extras" : "Just mark done"}
+                        {isMini ? "Just Mark Complete" : "Just mark done"}
                       </Text>
                     </Pressable>
                     <Pressable
@@ -477,6 +542,7 @@ export function StreakMemorySheet({
                       disabled={submitting}
                       style={[
                         styles.btnPrimary,
+                        styles.btnPrimaryMemory,
                         { backgroundColor: theme.colors.indigo[600], ...theme.shadow.glow, opacity: submitting ? 0.92 : 1 },
                       ]}
                     >
@@ -484,12 +550,17 @@ export function StreakMemorySheet({
                         <ActivityIndicator color={theme.colors.white} />
                       ) : (
                         <Text
-                          style={[styles.btnPrimaryText, { color: theme.colors.white }]}
+                          style={[
+                            styles.btnPrimaryText,
+                            styles.btnPrimaryTextMemory,
+                            { color: theme.colors.white },
+                            Platform.OS === "android" ? styles.btnTextAndroid : null,
+                          ]}
                           numberOfLines={2}
-                          adjustsFontSizeToFit
+                          adjustsFontSizeToFit={false}
                           minimumFontScale={0.85}
                         >
-                          {isMini ? "Save & complete" : "Save moment"}
+                          {isMini ? "Complete with Memory" : "Save moment"}
                         </Text>
                       )}
                     </Pressable>
@@ -521,6 +592,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     marginBottom: 8,
   },
+  sheetHeaderCompact: { marginBottom: 8 },
   iconOrb: {
     width: 48,
     height: 48,
@@ -537,9 +609,13 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   kicker: { fontSize: 11, fontWeight: "800", letterSpacing: 1.4, marginBottom: 4 },
+  kickerMemory: { marginBottom: 4 },
   title: { fontWeight: "800", marginBottom: 6 },
+  titleMemory: { marginBottom: 6 },
   sub: { fontSize: 15, lineHeight: 20, marginBottom: 10 },
+  subMemory: { marginBottom: 12 },
   hint: { fontSize: 13, lineHeight: 18, marginBottom: 12 },
+  hintMemory: { fontSize: 12, lineHeight: 17, marginBottom: 10 },
   immutableNotice: {
     flexDirection: "row",
     alignItems: "flex-start",
@@ -550,15 +626,29 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     marginBottom: 16,
   },
+  /** Habit + mini create: borderless, compact (orangish fill applied inline). */
+  immutableNoticeMemory: {
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginTop: 2,
+    marginBottom: 12,
+    borderRadius: 12,
+    borderWidth: 0,
+  },
   immutableNoticeIconWrap: { paddingTop: 1 },
   immutableNoticeTextCol: { flex: 1 },
   immutableNoticeTitle: {
     fontSize: 13,
     fontWeight: "800",
     letterSpacing: 0.2,
-    marginBottom: 4,
   },
-  immutableNoticeBody: { fontSize: 12, lineHeight: 17 },
+  immutableNoticeTitleMemory: {
+    fontSize: 12,
+    fontWeight: "600",
+    letterSpacing: 0.15,
+  },
   scrollInner: {
     paddingBottom: 16,
     paddingTop: 2,
@@ -575,20 +665,44 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
     flexGrow: 1,
   },
+  /**
+   * Memory capture (habit + mini): do not stretch scroll content — avoids a huge empty band above footer.
+   */
+  createScrollContentMemory: {
+    flexGrow: 0,
+    paddingBottom: 8,
+  },
   photoSlotWrap: {
-    alignItems: "center",
+    alignSelf: "stretch",
+    width: "100%",
     marginBottom: 14,
+  },
+  photoSlotWrapMemory: {
+    marginTop: 2,
+    marginBottom: 12,
   },
   photoSlot: {
     width: "100%",
-    maxWidth: 300,
-    alignSelf: "center",
+    alignSelf: "stretch",
     aspectRatio: 4 / 5,
-    maxHeight: 220,
     borderRadius: 16,
     borderWidth: 2,
     borderStyle: "dashed",
     overflow: "hidden",
+  },
+  /** Short fixed height — habit + mini (cover fills the frame). */
+  photoSlotMemory: {
+    width: "100%",
+    alignSelf: "stretch",
+    height: 128,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderStyle: "dashed",
+    overflow: "hidden",
+  },
+  /** Fills the aspect-ratio box so `Image` + cover cannot letterbox inside the slot. */
+  photoSlotImageFill: {
+    ...StyleSheet.absoluteFillObject,
   },
   photo: { width: "100%", height: "100%" },
   photoEmpty: {
@@ -597,7 +711,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     padding: 16,
   },
+  photoEmptyMemory: {
+    padding: 8,
+  },
   photoCta: { marginTop: 10, fontSize: 13, fontWeight: "600" },
+  photoCtaMemory: { marginTop: 4, fontSize: 12 },
   input: {
     minHeight: 88,
     borderRadius: 14,
@@ -607,7 +725,16 @@ const styles = StyleSheet.create({
     fontSize: 15,
     textAlignVertical: "top",
   },
+  inputMemory: {
+    minHeight: 52,
+    marginTop: 4,
+    paddingVertical: 9,
+    fontSize: 12,
+    lineHeight: 17,
+    borderRadius: 12,
+  },
   counter: { alignSelf: "flex-end", fontSize: 11, marginTop: 4, marginBottom: 4 },
+  counterMemory: { marginTop: 6, marginBottom: 0 },
   communityPublishRow: {
     marginTop: 12,
     paddingVertical: 12,
@@ -615,20 +742,36 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1,
   },
+  communityPublishRowMini: {
+    marginTop: 0,
+    marginBottom: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+  },
   communityPublishTopRow: {
     flexDirection: "row",
     alignItems: "flex-start",
     gap: 10,
   },
+  communityPublishTopRowMini: {
+    alignItems: "flex-start",
+  },
   communityPublishGlobe: { marginTop: 2 },
+  communityPublishGlobeMini: { marginTop: 3 },
   communityPublishTextCol: { flex: 1, minWidth: 0 },
   communityPublishTitle: { fontWeight: "700", fontSize: 14 },
   communityPublishHint: { fontSize: 11, marginTop: 4, lineHeight: 16 },
+  /** Shorter line height for mini row when description is shown under the title. */
+  communityPublishHintMiniBody: { fontSize: 11, marginTop: 4, lineHeight: 15 },
   actions: {
     flexDirection: "row",
     gap: 10,
     flexShrink: 0,
     paddingHorizontal: 0,
+  },
+  actionsMemory: {
+    gap: 8,
   },
   btnSecondary: {
     flex: 1,
@@ -640,7 +783,19 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  btnSecondaryMemory: {
+    minHeight: 42,
+    paddingVertical: 9,
+    paddingHorizontal: 6,
+    borderRadius: 12,
+  },
   btnSecondaryText: { fontWeight: "700", fontSize: 14, textAlign: "center" },
+  btnSecondaryTextMemory: {
+    fontSize: 12.5,
+    fontWeight: "600",
+    letterSpacing: 0.25,
+    lineHeight: 16,
+  },
   btnPrimary: {
     flex: 1,
     minHeight: 48,
@@ -650,7 +805,20 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  btnPrimaryMemory: {
+    minHeight: 42,
+    paddingVertical: 9,
+    paddingHorizontal: 6,
+    borderRadius: 12,
+  },
   btnPrimaryText: { fontWeight: "800", fontSize: 15 },
+  btnPrimaryTextMemory: {
+    fontSize: 12.5,
+    fontWeight: "600",
+    letterSpacing: 0.25,
+    lineHeight: 16,
+  },
+  btnTextAndroid: { includeFontPadding: false },
   viewOnlyPill: {
     flexDirection: "row",
     alignItems: "center",
@@ -665,8 +833,8 @@ const styles = StyleSheet.create({
   viewOnlyPillText: { fontSize: 11, fontWeight: "800", letterSpacing: 0.4 },
   photoSlotView: {
     width: "100%",
+    alignSelf: "stretch",
     aspectRatio: 4 / 5,
-    maxHeight: 240,
     borderRadius: 16,
     borderWidth: 1,
     overflow: "hidden",
