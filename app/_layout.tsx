@@ -15,10 +15,12 @@ import { setupNotifications } from "../src/utils/notifications";
 import { syncMiniMissionNotifications } from "../src/utils/miniMissionNotifications";
 import { useHabitStore } from "../src/store/habitStore";
 import { isSupabaseConfigured } from "../src/lib/env";
-import { tryCompleteOAuthFromUrl } from "../src/lib/oauthExchange";
+import { tryCompleteAuthFromUrl } from "../src/lib/oauthExchange";
+import { isPasswordRecoverySession } from "../src/lib/passwordRecovery";
+import { getSupabase } from "../src/lib/supabase";
 
 function RootLayoutNav() {
-  const { session, initializing } = useAuth();
+  const { session, initializing, passwordRecoveryPending } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
   const requireAuth = isSupabaseConfigured();
@@ -28,11 +30,27 @@ function RootLayoutNav() {
     void setupNotifications();
   }, []);
 
-  /** Backup: complete PKCE if the deep link doesn’t land on `app/auth/callback` (e.g. timing). */
+  /** Complete PKCE / recovery tokens from deep links. Recovery → `/reset-password`; do not force `/` (races PASSWORD_RECOVERY → home). */
   useEffect(() => {
     const run = async (url: string | null) => {
-      const ok = await tryCompleteOAuthFromUrl(url);
-      if (ok) router.replace("/");
+      if (!url) return;
+      const isRecoveryDeepLink =
+        url.includes("reset-password") ||
+        url.includes("type=recovery") ||
+        /[#&?]type=recovery\b/.test(url);
+      const ok = await tryCompleteAuthFromUrl(url);
+      if (!ok) return;
+      const supabase = getSupabase();
+      if (supabase) {
+        const { data } = await supabase.auth.getSession();
+        if (data.session && isPasswordRecoverySession(data.session)) {
+          router.replace("/reset-password");
+          return;
+        }
+      }
+      if (isRecoveryDeepLink) {
+        router.replace("/reset-password");
+      }
     };
     void Linking.getInitialURL().then((u) => void run(u));
     const sub = Linking.addEventListener("url", ({ url }) => void run(url));
@@ -118,14 +136,22 @@ function RootLayoutNav() {
   useEffect(() => {
     if (!requireAuth || initializing) return;
     const p = pathname ?? "";
-    const inAuth = p === "/login" || p.startsWith("/auth");
+    if (passwordRecoveryPending && session && p !== "/reset-password") {
+      router.replace("/reset-password");
+      return;
+    }
+    const inAuth =
+      p === "/login" ||
+      p.startsWith("/auth") ||
+      p === "/forgot-password" ||
+      p === "/reset-password";
     if (!session && !inAuth) {
       router.replace("/login");
     }
-    if (session && inAuth) {
+    if (session && inAuth && p !== "/reset-password") {
       router.replace("/");
     }
-  }, [requireAuth, initializing, session, pathname, router]);
+  }, [requireAuth, initializing, session, pathname, router, passwordRecoveryPending]);
 
   if (requireAuth && initializing) {
     return null;

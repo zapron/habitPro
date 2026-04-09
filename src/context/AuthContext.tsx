@@ -9,7 +9,7 @@ import React, {
 } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as WebBrowser from "expo-web-browser";
-import type { Session } from "@supabase/supabase-js";
+import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 import { useHabitStore } from "../store/habitStore";
 import { useChallengeStore } from "../store/challengeStore";
 import { isSupabaseConfigured, logSupabaseEnvHint } from "../lib/env";
@@ -19,6 +19,8 @@ import {
   getOAuthReturnUrl,
 } from "../lib/oauthRedirect";
 import { extractOAuthCodeFromUrl } from "../lib/oauthExchange";
+import { getSignupConfirmationRedirectUrl } from "../lib/authRedirects";
+import { isPasswordRecoverySession } from "../lib/passwordRecovery";
 import { getSupabase } from "../lib/supabase";
 import { hydrateStoreAfterAuth } from "../lib/sync";
 
@@ -31,6 +33,9 @@ type AuthContextValue = {
   /** True after first hydrate from Supabase for this session (safe to push). */
   syncReady: boolean;
   supabaseConfigured: boolean;
+  /** True after PASSWORD_RECOVERY until password is updated or cleared — used to avoid routing recovery to home. */
+  passwordRecoveryPending: boolean;
+  clearPasswordRecovery: () => void;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signUp: (email: string, password: string) => Promise<{ error: Error | null }>;
   /** Google OAuth (PKCE + system browser). Configure provider + redirect URLs in Supabase. */
@@ -45,13 +50,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [initializing, setInitializing] = useState(true);
   const [syncReady, setSyncReady] = useState(false);
+  const [passwordRecoveryPending, setPasswordRecoveryPending] = useState(false);
   const prevAuthUserIdRef = useRef<string | null>(null);
+
+  const clearPasswordRecovery = useCallback(() => {
+    setPasswordRecoveryPending(false);
+  }, []);
 
   useEffect(() => {
     logSupabaseEnvHint();
     const supabase = getSupabase();
     if (!supabase) {
       setSession(null);
+      setPasswordRecoveryPending(false);
       setInitializing(false);
       return;
     }
@@ -62,6 +73,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .getSession()
       .then(({ data: { session: s } }) => {
         setSession(s);
+        if (isPasswordRecoverySession(s)) {
+          setPasswordRecoveryPending(true);
+        }
       })
       .catch((e: unknown) => {
         const msg = e instanceof Error ? e.message : String(e);
@@ -75,8 +89,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setInitializing(false);
       });
 
-    const { data } = supabase.auth.onAuthStateChange((_event, s) => {
+    const { data } = supabase.auth.onAuthStateChange((event: AuthChangeEvent, s) => {
       setSession(s);
+      if (!s) {
+        setPasswordRecoveryPending(false);
+        return;
+      }
+      if (event === "PASSWORD_RECOVERY") {
+        setPasswordRecoveryPending(true);
+        return;
+      }
+      if (event === "USER_UPDATED") {
+        if (!isPasswordRecoverySession(s)) {
+          setPasswordRecoveryPending(false);
+        }
+        return;
+      }
+      /** PKCE recovery uses exchangeCodeForSession → SIGNED_IN; detect via JWT amr. */
+      if (isPasswordRecoverySession(s)) {
+        setPasswordRecoveryPending(true);
+      } else {
+        setPasswordRecoveryPending(false);
+      }
     });
     sub = data.subscription;
 
@@ -150,9 +184,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!supabase) {
       return { error: new Error("Supabase is not configured.") };
     }
+    const emailRedirectTo = getSignupConfirmationRedirectUrl();
     const { data, error } = await supabase.auth.signUp({
       email: email.trim(),
       password,
+      options: { emailRedirectTo },
     });
     if (data.session) setSession(data.session);
     return { error: error ?? null };
@@ -231,6 +267,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (supabase) {
       await supabase.auth.signOut();
     }
+    setPasswordRecoveryPending(false);
   }, []);
 
   const value = useMemo<AuthContextValue>(
@@ -239,6 +276,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       initializing,
       syncReady,
       supabaseConfigured,
+      passwordRecoveryPending,
+      clearPasswordRecovery,
       signIn,
       signUp,
       signInWithGoogle,
@@ -249,6 +288,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       initializing,
       syncReady,
       supabaseConfigured,
+      passwordRecoveryPending,
+      clearPasswordRecovery,
       signIn,
       signUp,
       signInWithGoogle,
