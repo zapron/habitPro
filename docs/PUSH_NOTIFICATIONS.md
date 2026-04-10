@@ -58,7 +58,27 @@ Header: `x-cron-secret: <CRON_SECRET>`
 
 Recommended: every **15 minutes** so the rolling “last hour before slot end” window is hit reliably.
 
-### 5. iOS (when you have a device)
+### 5. Android: FCM (system tray on real devices)
+
+Remote pushes use **Expo’s service**, which talks to **FCM** on Android. You do **not** add FCM keys to Supabase; you configure **Firebase + EAS**.
+
+1. **Firebase** ( [console.firebase.google.com](https://console.firebase.google.com/) )  
+   - Create or open a project → **Add app** → **Android** → package name **`com.rakti.habitpro`** (must match `app.json`).  
+   - Download **`google-services.json`** and put it in the **repo root** next to `app.json`.  
+   - `app.config.js` picks it up automatically and sets `android.googleServicesFile` (builds work without it, but **FCM will not** until the file exists).
+
+2. **FCM v1 for Expo** (server-side delivery through Expo)  
+   - Firebase → **Project settings** → **Service accounts** → **Generate new private key** (JSON).  
+   - **Do not commit** that JSON.  
+   - Upload it to **EAS**: [FCM credentials](https://docs.expo.dev/push-notifications/fcm-credentials/) — e.g. `eas credentials` → Android → **Google Service Account Key for Push Notifications (FCM V1)**.
+
+3. **Rebuild** an APK/AAB with EAS after `google-services.json` is in place.
+
+4. **Test** — [expo.dev/notifications](https://expo.dev/notifications) with a device **ExpoPushToken** from your dev/production build, or trigger a real `notifications` insert + webhook.
+
+The app registers a **`default`** notification channel (high importance) and `notify-push` sends `channelId: "default"` so remote pushes use that channel.
+
+### 6. iOS (when you have a device)
 
 - Configure **Apple Push Notification** in your Apple Developer account.
 - In **Expo / EAS**, add the push key and rebuild; **no separate RN module** — same `getExpoPushTokenAsync` + Expo Push service.
