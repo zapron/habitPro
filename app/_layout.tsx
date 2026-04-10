@@ -1,3 +1,4 @@
+import "../src/splashInit";
 import { useEffect, useRef } from "react";
 import { View } from "react-native";
 import * as Linking from "expo-linking";
@@ -9,6 +10,7 @@ import { ThemeProvider } from "../src/context/ThemeContext";
 import { AuthProvider, useAuth } from "../src/context/AuthContext";
 import { AppVersionProvider, useAppVersion } from "../src/context/AppVersionContext";
 import { ForceUpdateModal } from "../src/components/ForceUpdateModal";
+import { SplashGate } from "../src/components/SplashGate";
 import { SyncManager } from "../src/components/SyncManager";
 import { SyncToast } from "../src/components/SyncToast";
 import { setupNotifications } from "../src/utils/notifications";
@@ -210,7 +212,9 @@ export default function Layout() {
     <ThemeProvider>
       <AuthProvider>
         <AppVersionProvider>
-          <RootLayoutNav />
+          <SplashGate>
+            <RootLayoutNav />
+          </SplashGate>
         </AppVersionProvider>
       </AuthProvider>
     </ThemeProvider>
