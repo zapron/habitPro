@@ -16,6 +16,7 @@ import { Screen } from "../../src/components/Screen";
 import { useTheme } from "../../src/context/ThemeContext";
 import { useAuth } from "../../src/context/AuthContext";
 import { Button } from "../../src/components/Button";
+import { GoogleGIcon } from "../../src/components/GoogleGIcon";
 
 type FocusKey = "email" | "password" | "confirmPassword" | null;
 
@@ -298,9 +299,12 @@ export default function LoginScreen() {
                   accessibilityRole="button"
                   accessibilityLabel="Continue with Google"
                 >
-                  <Text style={[styles.googleBtnText, { color: theme.colors.textPrimary }]}>
-                    Continue with Google
-                  </Text>
+                  <View style={styles.googleBtnContent}>
+                    <GoogleGIcon size={22} />
+                    <Text style={[styles.googleBtnText, { color: theme.colors.textPrimary }]}>
+                      Continue with Google
+                    </Text>
+                  </View>
                 </TouchableOpacity>
               )}
             </>
@@ -358,7 +362,14 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     paddingHorizontal: 16,
     alignItems: "center",
+    justifyContent: "center",
     marginBottom: 4,
+  },
+  googleBtnContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 12,
   },
   googleBtnText: { fontSize: 16, fontWeight: "700" },
   dividerRow: {
