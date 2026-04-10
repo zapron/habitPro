@@ -43,7 +43,13 @@ function nudgeKindLabel(kind: unknown): string {
   return k.length > 0 ? k : "Nudge";
 }
 
-function notificationTitle(type: string): string {
+function notificationTitle(type: string, payload?: Record<string, unknown>): string {
+  if (type === "streak_window_reminder") {
+    const phase = payload?.reminder_phase;
+    if (phase === "open") return "Streak window is open";
+    if (phase === "closing") return "Almost time’s up";
+    return "Streak window closing";
+  }
   switch (type) {
     case "challenge_invite":
       return "Group mission invite";
@@ -55,8 +61,6 @@ function notificationTitle(type: string): string {
       return "Squad nudge";
     case "community_win_cheer":
       return "Cheer on your win";
-    case "streak_window_reminder":
-      return "Streak window closing";
     default:
       return type;
   }
@@ -88,6 +92,13 @@ function notificationSubtitle(n: NotificationRow): string | null {
     }
     case "streak_window_reminder": {
       const title = typeof p.habit_title === "string" ? p.habit_title : "Mission";
+      const phase = p.reminder_phase;
+      if (phase === "open") {
+        return `You have 24 hours to finish today’s habit for “${title}” · Tap to open`;
+      }
+      if (phase === "closing") {
+        return `You have almost an hour left — complete your streak for “${title}” · Tap to open`;
+      }
       return `About 1 hour left to mark today for “${title}” · Tap to open`;
     }
     default:
@@ -216,7 +227,7 @@ export default function NotificationsScreen() {
                 )}
                 <View style={{ flex: 1 }}>
                   <Text style={{ color: theme.colors.textPrimary, fontWeight: "700" }}>
-                    {notificationTitle(item.type)}
+                    {notificationTitle(item.type, item.payload)}
                   </Text>
                   {notificationSubtitle(item) ? (
                     <Text style={{ color: theme.colors.cyan[400], fontSize: 13, marginTop: 4, fontWeight: "600" }}>
