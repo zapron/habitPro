@@ -165,6 +165,8 @@ Deno.serve(async (req) => {
     body: msgBody,
     data,
     priority: "high" as const,
+    /** Android channel created at app startup (`default` channel, MAX importance). */
+    channelId: "default",
   }));
 
   const chunkSize = 100;
