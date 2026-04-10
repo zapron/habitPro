@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "672898436331",
+    "project_id": "habitpro-c4dfe",
+    "storage_bucket": "habitpro-c4dfe.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:672898436331:android:bfba7b8f4381ab9551c2ae",
+        "android_client_info": {
+          "package_name": "com.rakti.habitpro"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB-f26J9i24nqMkK2-kGsn7cFniDFwHvVs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
