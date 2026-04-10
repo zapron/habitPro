@@ -4,7 +4,6 @@ import { Platform } from "react-native";
 /** Used for remote pushes (Expo/FCM) + matches manifest `default_notification_channel_id`. */
 const DEFAULT_REMOTE_CHANNEL_ID = "default";
 const CHANNEL_ID = "timer-alerts";
-const ONGOING_CHANNEL_ID = "mission-progress";
 
 /**
  * Expo Go on Android (SDK 53+) removed remote push; loading expo-notifications
@@ -63,13 +62,6 @@ export async function setupNotifications() {
       vibrationPattern: [0, 250, 250, 250],
       lightColor: "#6366f1",
     });
-    await Notifications.setNotificationChannelAsync(ONGOING_CHANNEL_ID, {
-      name: "Mission Progress",
-      importance: Notifications.AndroidImportance.LOW,
-      sound: undefined,
-      vibrationPattern: [0],
-      enableVibrate: false,
-    });
   }
 
   const { status } = await Notifications.getPermissionsAsync();
@@ -82,16 +74,19 @@ export async function scheduleTimerNotification(
   title: string,
   body: string,
   seconds: number,
+  options?: { data?: Record<string, unknown> },
 ): Promise<string | null> {
   const Notifications = await getNotifications();
   if (!Notifications) return null;
   try {
     if (seconds <= 0) return null;
+    const data = options?.data;
     const id = await Notifications.scheduleNotificationAsync({
       content: {
         title,
         body,
         sound: true,
+        ...(data && Object.keys(data).length > 0 ? { data } : {}),
         ...(Platform.OS === "android" ? { channelId: CHANNEL_ID } : {}),
       },
       trigger: {
@@ -120,53 +115,6 @@ export async function fireImmediateNotification(title: string, body: string) {
     });
   } catch {
     // Silent fail
-  }
-}
-
-export async function showOngoingMissionNotification(
-  missionTitle: string,
-  endTimeMs: number,
-): Promise<string | null> {
-  const Notifications = await getNotifications();
-  if (!Notifications) return null;
-  try {
-    const endDate = new Date(endTimeMs);
-    const timeStr = endDate.toLocaleTimeString([], {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-
-    const id = await Notifications.scheduleNotificationAsync({
-      content: {
-        title: `🚀 ${missionTitle}`,
-        body: `In progress — ends at ${timeStr}`,
-        sound: false,
-        sticky: true,
-        autoDismiss: false,
-        ...(Platform.OS === "android"
-          ? {
-              channelId: ONGOING_CHANNEL_ID,
-              ongoing: true,
-              priority: Notifications.AndroidNotificationPriority.LOW,
-            }
-          : {}),
-      },
-      trigger: null,
-    });
-    return id;
-  } catch {
-    return null;
-  }
-}
-
-export async function dismissOngoingNotification(id: string | null) {
-  if (!id) return;
-  const Notifications = await getNotifications();
-  if (!Notifications) return;
-  try {
-    await Notifications.dismissNotificationAsync(id);
-  } catch {
-    // Already dismissed or unavailable
   }
 }
 

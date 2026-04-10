@@ -1,15 +1,14 @@
+import { MAX_RESERVE_FUEL_MINUTES } from "../constants/miniMission";
 import type { MiniMission } from "../types/habit";
-import {
-  cancelNotification,
-  dismissOngoingNotification,
-  scheduleTimerNotification,
-  showOngoingMissionNotification,
-} from "./notifications";
+import { cancelNotification, scheduleTimerNotification } from "./notifications";
+
+/** Min total mission length (estimated + reserve) to show the T−1 minute heads-up. */
+const MIN_TOTAL_MINUTES_FOR_WARN = 2;
 
 /** Tracks OS notification ids per mission so we can reschedule without cancelling on screen unmount. */
 const lastEndMsByMission = new Map<string, number>();
-const scheduledIdByMission = new Map<string, string | null>();
-const ongoingIdByMission = new Map<string, string | null>();
+const warnIdByMission = new Map<string, string | null>();
+const failIdByMission = new Map<string, string | null>();
 
 function getMissionEndMs(mission: MiniMission): number | null {
   if (mission.status !== "in_progress" || !mission.startedAt) return null;
@@ -18,9 +17,24 @@ function getMissionEndMs(mission: MiniMission): number | null {
   return startMs + totalMinutes * 60 * 1000;
 }
 
+function getWarnCopy(mission: MiniMission): { title: string; body: string } {
+  const extended = mission.extendedMinutes ?? 0;
+  const reserveMaxed = extended >= MAX_RESERVE_FUEL_MINUTES;
+  if (reserveMaxed) {
+    return {
+      title: "One minute left",
+      body: `Just 1 minute left — try to complete "${mission.title}" and get XP.`,
+    };
+  }
+  return {
+    title: "Mini mission ending soon",
+    body: `Your mini mission is about to end — pack some reserve fuel for "${mission.title}".`,
+  };
+}
+
 /**
  * Reconcile local notifications with store state. Safe to call on every miniMissions change
- * and after hydration — skips work when end time unchanged.
+ * and after hydration — skips work when end time unchanged and warn/fail ids still match intent.
  */
 export async function syncMiniMissionNotifications(missions: MiniMission[]) {
   const active = missions.filter((m) => m.status === "in_progress" && m.startedAt);
@@ -28,11 +42,11 @@ export async function syncMiniMissionNotifications(missions: MiniMission[]) {
 
   for (const missionId of [...lastEndMsByMission.keys()]) {
     if (!activeIds.has(missionId)) {
-      await cancelNotification(scheduledIdByMission.get(missionId) ?? null);
-      await dismissOngoingNotification(ongoingIdByMission.get(missionId) ?? null);
+      await cancelNotification(warnIdByMission.get(missionId) ?? null);
+      await cancelNotification(failIdByMission.get(missionId) ?? null);
       lastEndMsByMission.delete(missionId);
-      scheduledIdByMission.delete(missionId);
-      ongoingIdByMission.delete(missionId);
+      warnIdByMission.delete(missionId);
+      failIdByMission.delete(missionId);
     }
   }
 
@@ -43,45 +57,64 @@ export async function syncMiniMissionNotifications(missions: MiniMission[]) {
     const secondsUntilEnd = Math.floor((endMs - Date.now()) / 1000);
 
     if (secondsUntilEnd <= 1) {
-      await cancelNotification(scheduledIdByMission.get(mission.id) ?? null);
-      await dismissOngoingNotification(ongoingIdByMission.get(mission.id) ?? null);
+      await cancelNotification(warnIdByMission.get(mission.id) ?? null);
+      await cancelNotification(failIdByMission.get(mission.id) ?? null);
       lastEndMsByMission.delete(mission.id);
-      scheduledIdByMission.delete(mission.id);
-      ongoingIdByMission.delete(mission.id);
+      warnIdByMission.delete(mission.id);
+      failIdByMission.delete(mission.id);
       continue;
     }
+
+    const totalMinutes = mission.estimatedMinutes + (mission.extendedMinutes ?? 0);
+    const needsWarn = totalMinutes > MIN_TOTAL_MINUTES_FOR_WARN && secondsUntilEnd > 60;
 
     const prevEnd = lastEndMsByMission.get(mission.id);
-    if (prevEnd === endMs && scheduledIdByMission.get(mission.id)) {
+    const warnId = warnIdByMission.get(mission.id);
+    const failId = failIdByMission.get(mission.id);
+    if (prevEnd === endMs && failId) {
+      const warnOk = needsWarn === !!warnId;
+      if (warnOk) continue;
+    }
+
+    await cancelNotification(warnIdByMission.get(mission.id) ?? null);
+    await cancelNotification(failIdByMission.get(mission.id) ?? null);
+
+    let newWarnId: string | null = null;
+    if (needsWarn) {
+      const warnSeconds = secondsUntilEnd - 60;
+      if (warnSeconds >= 1) {
+        const { title, body } = getWarnCopy(mission);
+        newWarnId = await scheduleTimerNotification(title, body, warnSeconds, {
+          data: { kind: "mini_warn", missionId: mission.id },
+        });
+      }
+    }
+
+    const failTitle = "Mini failed";
+    const failBody = `Your mini mission failed. Retry "${mission.title}" and try to win again.`;
+    const newFailId = await scheduleTimerNotification(failTitle, failBody, secondsUntilEnd, {
+      data: { kind: "mini_fail", missionId: mission.id },
+    });
+
+    if (!newFailId) {
+      await cancelNotification(newWarnId);
+      warnIdByMission.delete(mission.id);
+      failIdByMission.delete(mission.id);
+      lastEndMsByMission.delete(mission.id);
       continue;
     }
 
-    await cancelNotification(scheduledIdByMission.get(mission.id) ?? null);
-    await dismissOngoingNotification(ongoingIdByMission.get(mission.id) ?? null);
-
-    const oId = await showOngoingMissionNotification(mission.title, endMs);
-    ongoingIdByMission.set(mission.id, oId);
-
-    const nId = await scheduleTimerNotification(
-      "⏰ Mission failed",
-      `"${mission.title}" — timer hit zero.`,
-      secondsUntilEnd,
-    );
-    if (nId) {
-      scheduledIdByMission.set(mission.id, nId);
-      lastEndMsByMission.set(mission.id, endMs);
-    } else {
-      await dismissOngoingNotification(oId);
-      ongoingIdByMission.delete(mission.id);
-    }
+    warnIdByMission.set(mission.id, newWarnId);
+    failIdByMission.set(mission.id, newFailId);
+    lastEndMsByMission.set(mission.id, endMs);
   }
 }
 
-/** Cancel scheduled + dismiss ongoing for one mission (e.g. timer fired in foreground). */
+/** Cancel scheduled warn + fail for one mission (e.g. timer fired in foreground). */
 export async function clearMiniMissionNotifications(missionId: string) {
-  await cancelNotification(scheduledIdByMission.get(missionId) ?? null);
-  await dismissOngoingNotification(ongoingIdByMission.get(missionId) ?? null);
+  await cancelNotification(warnIdByMission.get(missionId) ?? null);
+  await cancelNotification(failIdByMission.get(missionId) ?? null);
   lastEndMsByMission.delete(missionId);
-  scheduledIdByMission.delete(missionId);
-  ongoingIdByMission.delete(missionId);
+  warnIdByMission.delete(missionId);
+  failIdByMission.delete(missionId);
 }
