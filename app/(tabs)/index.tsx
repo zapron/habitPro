@@ -25,6 +25,7 @@ import { Screen } from "../../src/components/Screen";
 import { useTheme } from "../../src/context/ThemeContext";
 import { useReducedMotion } from "../../src/hooks/useReducedMotion";
 import { AnimatedFire } from "../../src/components/AnimatedFire";
+import { getMiniRemainingMs } from "../../src/utils/miniMissionTime";
 
 function getGreeting(): { text: string; emoji: string; Icon: typeof Sun } {
   const hour = new Date().getHours();
@@ -64,6 +65,7 @@ export default function Home() {
   const [storeHydrated, setStoreHydrated] = useState(() => useHabitStore.persist.hasHydrated());
   const [unreadNotifCount, setUnreadNotifCount] = useState(0);
   const [notifRefreshBusy, setNotifRefreshBusy] = useState(false);
+  const [miniNow, setMiniNow] = useState(() => Date.now());
   const showAccount = isSupabaseConfigured();
 
   const listBottomPad = Math.max(insets.bottom, 12) + 56;
@@ -84,13 +86,32 @@ export default function Home() {
     return { activeCount, completedCount };
   }, [habits]);
 
-  const miniMissionStats = useMemo(() => {
-    const queued = miniMissions.filter((m) => m.status !== "completed").length;
-    const running = miniMissions.filter((m) => m.status === "in_progress").length;
-    return { queued, running };
-  }, [miniMissions]);
+  const hasActiveMiniCountdown = useMemo(
+    () =>
+      miniMissions.some(
+        (m) => m.status === "in_progress" && getMiniRemainingMs(m, miniNow) > 0,
+      ),
+    [miniMissions, miniNow],
+  );
 
-  const miniCount = miniMissionStats.running > 0 ? miniMissionStats.running : miniMissionStats.queued;
+  useEffect(() => {
+    if (!hasActiveMiniCountdown) return;
+    const t = setInterval(() => setMiniNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [hasActiveMiniCountdown]);
+
+  const miniMissionStats = useMemo(() => {
+    const live = miniMissions.filter(
+      (m) => m.status === "in_progress" && getMiniRemainingMs(m, miniNow) > 0,
+    ).length;
+    const waiting = miniMissions.filter(
+      (m) => m.status === "pending" || m.status === "scheduled",
+    ).length;
+    return { live, waiting };
+  }, [miniMissions, miniNow]);
+
+  const miniCount =
+    miniMissionStats.live > 0 ? miniMissionStats.live : miniMissionStats.waiting;
 
   const greeting = useMemo(() => getGreeting(), []);
 
@@ -266,7 +287,7 @@ export default function Home() {
           </View>
           <Text style={[styles.commandTitle, { color: theme.colors.textPrimary }]}>Mini Missions</Text>
           <Text style={[styles.commandHint, { color: theme.colors.textMuted }]}>
-            {miniMissionStats.running > 0 ? "live now" : "waiting"}
+            {miniMissionStats.live > 0 ? "live now" : "waiting"}
           </Text>
           <View style={[styles.commandCtaMini, { borderColor: isDark ? "rgba(245, 158, 11, 0.3)" : "rgba(217, 119, 6, 0.25)" }]}>
             <ChevronRight size={theme.icon.sm} color={theme.colors.amber[500]} strokeWidth={3} />

@@ -24,17 +24,9 @@ import { MiniMissionFireProgressBar } from "../../src/components/MiniMissionFire
 import { useTheme } from "../../src/context/ThemeContext";
 import { useHabitStore } from "../../src/store/habitStore";
 import { MiniMission } from "../../src/types/habit";
+import { getMiniRemainingMs } from "../../src/utils/miniMissionTime";
 
 type MiniTab = "active" | "queued" | "completed" | "failed";
-
-/** Remaining time for an in-progress mission; 0 means timer depleted (failed). */
-function getMiniRemainingMs(m: MiniMission, now: number): number {
-  if (m.status !== "in_progress" || !m.startedAt) return 0;
-  const totalMinutes = m.estimatedMinutes + (m.extendedMinutes ?? 0);
-  const totalMs = totalMinutes * 60 * 1000;
-  const elapsedMs = now - new Date(m.startedAt).getTime();
-  return Math.max(0, totalMs - elapsedMs);
-}
 
 const KEEP_SCREEN_ON_KEY = "@habitpro_mini_keep_screen_on";
 const MINI_MISSIONS_KEEP_AWAKE_TAG = "mini-missions-list";

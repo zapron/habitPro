@@ -31,6 +31,8 @@ import { Screen } from "../../src/components/Screen";
 import { Button } from "../../src/components/Button";
 import { StreakMemorySheet } from "../../src/components/StreakMemorySheet";
 import { MiniMissionFireProgressBar } from "../../src/components/MiniMissionFireProgressBar";
+import { MiniMissionFlightCountdown } from "../../src/components/MiniMissionFlightCountdown";
+import { remainingMsToProgressiveCountdown } from "../../src/utils/flightCountdownDisplay";
 import { useTheme } from "../../src/context/ThemeContext";
 import { useHabitStore } from "../../src/store/habitStore";
 import type { MissionVisibility, StreakMemory } from "../../src/types/habit";
@@ -234,6 +236,36 @@ export default function MiniMissionDetail() {
   }, [mission, now, totalMinutes, completeSheetOpen, timerFrozenAtMs]);
 
   const isTimerUp = mission?.status === "in_progress" && countdown === 0;
+
+  const flightProgressive = useMemo(
+    () => remainingMsToProgressiveCountdown(countdown),
+    [countdown],
+  );
+
+  const flightBoard = useMemo(() => {
+    if (!mission) {
+      return {
+        label: "",
+        tone: "muted" as const,
+      };
+    }
+    if (completeSheetOpen) {
+      return { label: "TIMER PAUSED", tone: "countdown" as const };
+    }
+    if (isTimerUp) {
+      return { label: "TIME'S UP", tone: "danger" as const };
+    }
+    if (mission.status === "completed") {
+      return { label: "COMPLETED", tone: "muted" as const };
+    }
+    if (mission.status === "cancelled") {
+      return { label: "CANCELLED", tone: "muted" as const };
+    }
+    if (mission.status === "in_progress") {
+      return { label: "COUNTDOWN", tone: "countdown" as const };
+    }
+    return { label: "PLANNED TIME", tone: "countdown" as const };
+  }, [mission, completeSheetOpen, isTimerUp]);
 
   const missionFuelProgress = useMemo(() => {
     if (!mission || mission.status !== "in_progress" || !mission.startedAt)
@@ -546,48 +578,25 @@ export default function MiniMissionDetail() {
           </Text>
         )}
 
-        <View
-          style={[
-            styles.timerCard,
-            {
-              borderRadius: theme.radius.lg,
-              borderColor: theme.colors.border,
-              backgroundColor: theme.colors.surface,
-              ...(isTimerUp ? {} : theme.shadow.card),
-            },
-            isTimerUp && styles.timerCardExpired,
-          ]}
+        <MiniMissionFlightCountdown
+          label={flightBoard.label}
+          display={flightProgressive.display}
+          phase={flightProgressive.phase}
+          tone={flightBoard.tone}
+        />
+        <Text
+          style={[styles.timerHint, { color: theme.colors.textSecondary }]}
         >
-          <Text style={[styles.timerLabel, { color: theme.colors.textMuted }]}>
-            {completeSheetOpen
-              ? "TIMER PAUSED"
-              : isTimerUp
-                ? "MISSION FAILED"
-                : "Fuel on board"}
-          </Text>
-          <Text
-            style={[
-              styles.timerValue,
-              { color: theme.colors.textPrimary },
-              isTimerUp && { color: theme.colors.red[500] },
-            ]}
-          >
-            {formatDuration(countdown)}
-          </Text>
-          <Text
-            style={[styles.timerHint, { color: theme.colors.textSecondary }]}
-          >
-            {mission.status === "completed"
-              ? "Completed"
-              : isTimerUp
-                ? "Timer depleted — no reserve fuel after zero. Cancel this mission or go back."
-                : mission.status === "in_progress"
-                  ? completeSheetOpen
-                    ? "Timer paused while you save your moment."
-                    : `Stay with it until done. Reserve fuel is capped at ${MAX_RESERVE_FUEL_MINUTES} min total.`
-                  : "Ready when you are."}
-          </Text>
-        </View>
+          {mission.status === "completed"
+            ? "Completed"
+            : isTimerUp
+              ? "Timer depleted — no reserve fuel after zero. Cancel this mission or go back."
+              : mission.status === "in_progress"
+                ? completeSheetOpen
+                  ? "Timer paused while you save your moment."
+                  : `Stay with it until done. Reserve fuel is capped at ${MAX_RESERVE_FUEL_MINUTES} min total.`
+                : "Ready when you are."}
+        </Text>
 
         {mission.status === "in_progress" && !isTimerUp && (
           <MiniMissionFireProgressBar
@@ -925,29 +934,7 @@ const styles = StyleSheet.create({
   scroll: { flex: 1 },
   title: { fontWeight: "800", marginBottom: 8 },
   objective: { marginBottom: 20, lineHeight: 23 },
-  timerCard: {
-    borderWidth: 1,
-    alignItems: "center",
-    paddingVertical: 20,
-    paddingHorizontal: 16,
-  },
-  timerCardExpired: {
-    borderColor: "rgba(239, 68, 68, 0.5)",
-    backgroundColor: "rgba(239, 68, 68, 0.08)",
-  },
-  timerLabel: {
-    textTransform: "uppercase",
-    letterSpacing: 1,
-    fontWeight: "700",
-    fontSize: 11,
-  },
-  timerValue: {
-    fontSize: 52,
-    fontWeight: "800",
-    marginVertical: 2,
-    includeFontPadding: false,
-  },
-  timerHint: { textAlign: "center", marginTop: 2 },
+  timerHint: { textAlign: "center", marginTop: 4, marginBottom: 4, paddingHorizontal: 4 },
   metaRow: { marginTop: 16, marginBottom: 12 },
   metaPill: {
     alignSelf: "flex-start",
