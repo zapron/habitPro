@@ -83,6 +83,21 @@ function buildMessage(
     case "streak_window_reminder": {
       const habitTitle =
         typeof payload.habit_title === "string" ? payload.habit_title : "Your mission";
+      const phase = payload.reminder_phase;
+      if (phase === "open") {
+        return {
+          title: "Streak window is open",
+          body: `You have 24 hours to finish today’s habit for “${habitTitle}”.`,
+          data,
+        };
+      }
+      if (phase === "closing") {
+        return {
+          title: "Almost time’s up",
+          body: `You have almost an hour left — complete your streak for “${habitTitle}”.`,
+          data,
+        };
+      }
       return {
         title: "Streak window closing",
         body: `About 1 hour left to mark today for “${habitTitle}”.`,
