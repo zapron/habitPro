@@ -23,6 +23,11 @@ import { getSignupConfirmationRedirectUrl } from "../lib/authRedirects";
 import { isPasswordRecoverySession } from "../lib/passwordRecovery";
 import { getSupabase } from "../lib/supabase";
 import { hydrateStoreAfterAuth } from "../lib/sync";
+import {
+  clearPushTokenForCurrentUser,
+  registerPushTokenForCurrentUser,
+  syncProfileTimezone,
+} from "../lib/pushTokens";
 
 const PERSIST_KEY = "habit-storage";
 const CHALLENGE_STORAGE_KEY = "challenge-storage";
@@ -166,6 +171,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, [session?.user?.id, supabaseConfigured]);
 
+  useEffect(() => {
+    if (!supabaseConfigured || !session?.user || !syncReady) return;
+    const uid = session.user.id;
+    void (async () => {
+      await syncProfileTimezone(uid);
+      await registerPushTokenForCurrentUser(uid);
+    })();
+  }, [session?.user?.id, syncReady, supabaseConfigured]);
+
   const signIn = useCallback(async (email: string, password: string) => {
     const supabase = getSupabase();
     if (!supabase) {
@@ -255,6 +269,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = useCallback(async () => {
     const supabase = getSupabase();
+    let uid: string | undefined;
+    if (supabase) {
+      const { data } = await supabase.auth.getSession();
+      uid = data.session?.user?.id;
+    }
+    if (uid) {
+      await clearPushTokenForCurrentUser(uid);
+    }
     useHabitStore.getState().resetStore();
     useChallengeStore.getState().reset();
     setSyncReady(false);

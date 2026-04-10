@@ -57,7 +57,7 @@ function RootLayoutNav() {
     return () => sub.remove();
   }, [router]);
 
-  const challengeInviteNotificationHandledRef = useRef(false);
+  const remotePushRouteHandledRef = useRef(false);
 
   useEffect(() => {
     if (!session || initializing) return;
@@ -65,19 +65,57 @@ function RootLayoutNav() {
     let cancelled = false;
     let subscription: { remove: () => void } | undefined;
 
-    const routeChallengeInvite = (data: Record<string, unknown> | undefined) => {
-      if (!data || data.type !== "challenge_invite") return;
-      const challengeId = typeof data.challenge_id === "string" ? data.challenge_id : "";
-      const inviteId = typeof data.invite_id === "string" ? data.invite_id : "";
-      if (!challengeId && !inviteId) return;
-      router.push({
-        pathname: "/(tabs)/compete",
-        params: {
-          ...(inviteId ? { inviteId } : {}),
-          ...(challengeId ? { challengeId } : {}),
-          focusInvites: "1",
-        },
-      });
+    const routeFromNotificationData = (data: Record<string, unknown> | undefined) => {
+      if (!data) return;
+      const type = typeof data.type === "string" ? data.type : "";
+
+      if (type === "challenge_invite") {
+        const challengeId = typeof data.challenge_id === "string" ? data.challenge_id : "";
+        const inviteId = typeof data.invite_id === "string" ? data.invite_id : "";
+        if (!challengeId && !inviteId) return;
+        router.push({
+          pathname: "/(tabs)/compete",
+          params: {
+            ...(inviteId ? { inviteId } : {}),
+            ...(challengeId ? { challengeId } : {}),
+            focusInvites: "1",
+          },
+        });
+        return;
+      }
+
+      if (type === "community_win_cheer") {
+        router.push({ pathname: "/(tabs)/compete", params: { focusCommunity: "1" } });
+        return;
+      }
+
+      if (type === "challenge_nudge") {
+        const challengeId = typeof data.challenge_id === "string" ? data.challenge_id : "";
+        if (challengeId) {
+          router.push(`/challenge/${challengeId}`);
+        } else {
+          router.push("/(tabs)/compete");
+        }
+        return;
+      }
+
+      if (type === "challenge_invite_accepted" || type === "challenge_invite_declined") {
+        const challengeId = typeof data.challenge_id === "string" ? data.challenge_id : "";
+        if (challengeId) {
+          router.push(`/challenge/${challengeId}`);
+        } else {
+          router.push("/(tabs)/compete");
+        }
+        return;
+      }
+
+      if (type === "streak_window_reminder") {
+        const habitId = typeof data.habit_id === "string" ? data.habit_id : "";
+        if (habitId) {
+          router.push(`/habit/${habitId}`);
+        }
+        return;
+      }
     };
 
     (async () => {
@@ -87,18 +125,18 @@ function RootLayoutNav() {
       const Notifications = await import("expo-notifications");
       if (cancelled) return;
 
-      if (!challengeInviteNotificationHandledRef.current) {
+      if (!remotePushRouteHandledRef.current) {
         const last = await Notifications.getLastNotificationResponseAsync();
         const data = last?.notification.request.content.data as Record<string, unknown> | undefined;
-        if (data?.type === "challenge_invite") {
-          challengeInviteNotificationHandledRef.current = true;
-          routeChallengeInvite(data);
+        if (data?.type) {
+          remotePushRouteHandledRef.current = true;
+          routeFromNotificationData(data);
         }
       }
 
       subscription = Notifications.addNotificationResponseReceivedListener((response) => {
         const data = response.notification.request.content.data as Record<string, unknown> | undefined;
-        routeChallengeInvite(data);
+        routeFromNotificationData(data);
       });
     })();
 

@@ -55,6 +55,8 @@ function notificationTitle(type: string): string {
       return "Squad nudge";
     case "community_win_cheer":
       return "Cheer on your win";
+    case "streak_window_reminder":
+      return "Streak window closing";
     default:
       return type;
   }
@@ -83,6 +85,10 @@ function notificationSubtitle(n: NotificationRow): string | null {
           ? `@${parsed.from_username.toLowerCase()}`
           : "Someone";
       return `${who} cheered “${parsed.mini_mission_title}” · Tap for Community`;
+    }
+    case "streak_window_reminder": {
+      const title = typeof p.habit_title === "string" ? p.habit_title : "Mission";
+      return `About 1 hour left to mark today for “${title}” · Tap to open`;
     }
     default:
       return null;
@@ -155,6 +161,14 @@ export default function NotificationsScreen() {
         pathname: "/(tabs)/compete",
         params: { focusCommunity: "1" },
       });
+      return;
+    }
+
+    if (n.type === "streak_window_reminder") {
+      const hid = typeof p.habit_id === "string" ? p.habit_id : "";
+      if (hid) {
+        router.push(`/habit/${hid}`);
+      }
     }
   };
 
