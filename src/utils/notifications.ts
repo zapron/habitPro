@@ -1,6 +1,8 @@
 import Constants from "expo-constants";
 import { Platform } from "react-native";
 
+/** Used for remote pushes (Expo/FCM) + matches manifest `default_notification_channel_id`. */
+const DEFAULT_REMOTE_CHANNEL_ID = "default";
 const CHANNEL_ID = "timer-alerts";
 const ONGOING_CHANNEL_ID = "mission-progress";
 
@@ -47,6 +49,13 @@ export async function setupNotifications() {
   });
 
   if (Platform.OS === "android") {
+    await Notifications.setNotificationChannelAsync(DEFAULT_REMOTE_CHANNEL_ID, {
+      name: "Alerts",
+      importance: Notifications.AndroidImportance.MAX,
+      sound: "default",
+      vibrationPattern: [0, 250, 250, 250],
+      lightColor: "#6366f1",
+    });
     await Notifications.setNotificationChannelAsync(CHANNEL_ID, {
       name: "Timer Alerts",
       importance: Notifications.AndroidImportance.HIGH,
