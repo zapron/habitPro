@@ -1,6 +1,6 @@
 export type HabitMode = "autopilot" | "manual";
 
-/** Public = discoverable by others later; solo = private to you. */
+/** Public = group mission members can see streak memory; solo = private to you. */
 export type MissionVisibility = "public" | "solo";
 
 /** Optional capture when marking a day complete. */

@@ -447,12 +447,16 @@ export default function HabitDetail() {
                         {(habit.visibility ?? 'solo') === 'public' ? (
                             <>
                                 <Text style={[styles.visibilityTitle, { color: theme.colors.textPrimary }]}>Public</Text>
-                                <Text style={[styles.visibilityHint, { color: theme.colors.textMuted }]}>Others can see this later. Turn off to keep it solo.</Text>
+                                <Text style={[styles.visibilityHint, { color: theme.colors.textMuted }]}>
+                                    Users in your group mission can see your streak memory. Turn off to keep it solo.
+                                </Text>
                             </>
                         ) : (
                             <>
                                 <Text style={[styles.visibilityTitle, { color: theme.colors.textPrimary }]}>Solo</Text>
-                                <Text style={[styles.visibilityHint, { color: theme.colors.textMuted }]}>Only you can see this. Turn on to share with others later.</Text>
+                                <Text style={[styles.visibilityHint, { color: theme.colors.textMuted }]}>
+                                    Only you can see your streak memory. Turn on to share with your group mission.
+                                </Text>
                             </>
                         )}
                     </View>

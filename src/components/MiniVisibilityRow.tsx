@@ -3,8 +3,9 @@ import { Globe, User } from "lucide-react-native";
 import type { AppTheme } from "../styles/theme";
 import type { MissionVisibility } from "../types/habit";
 
-const PUBLIC_HINT = "Shown in Community wins.";
-const SOLO_HINT = "Not shown on the community feed.";
+const PUBLIC_HINT =
+  "Users in your group mission can see your streak memory. Turn off to keep it solo.";
+const SOLO_HINT = "Only you can see your streak memory. Turn on to share with your group mission.";
 
 type Props = {
   theme: AppTheme;
