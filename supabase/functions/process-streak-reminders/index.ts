@@ -1,17 +1,19 @@
 /**
- * Scheduled Edge Function: during the **last hour** of each mission’s **24h day** (same model as
- * `src/utils/missionDaySlots.ts` — not calendar midnight), remind if that day’s check-in key
- * is still missing from `completed_dates`.
+ * Scheduled Edge Function: mission streak reminders (rolling 24h from `start_date`, same as
+ * `src/utils/missionDaySlots.ts`). From **mission day 2 onward** only:
+ * - **slot_open:** first hour after the current mission day starts — “window is open”
+ * - **slot_closing:** last hour before that day ends — “almost an hour left”
+ * Mission day 1 is skipped (user just created the mission).
  *
- * `profiles.timezone` should match the device (synced on login) so `YYYY-MM-DD` keys align
- * with the client’s `getDayDate` grid labels.
+ * `profiles.timezone` aligns `YYYY-MM-DD` keys with the client grid.
  *
- * Schedule in Supabase Dashboard (e.g. every 15 minutes) with header x-cron-secret.
- * Secrets: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, CRON_SECRET
+ * Schedule with header x-cron-secret. Secrets: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, CRON_SECRET
  */
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+
+type Supabase = ReturnType<typeof createClient>;
 
 const MS_PER_MISSION_DAY = 24 * 60 * 60 * 1000;
 const MS_REMINDER_WINDOW = 60 * 60 * 1000;
@@ -24,6 +26,8 @@ type HabitRow = {
   total_days: number;
   completed_dates: string[] | null;
 };
+
+type ReminderKind = "slot_open" | "slot_closing";
 
 /** Same slot index as `getActiveMissionDaySlot` in missionDaySlots.ts */
 function getActiveMissionDaySlot(startIso: string, nowMs: number, totalDays: number): number | null {
@@ -39,7 +43,6 @@ function pad2(n: number): string {
   return String(n).padStart(2, "0");
 }
 
-/** Wall calendar Y/M/D for `iso` in `timeZone` */
 function ymdPartsInTz(iso: string, timeZone: string): { y: number; m: number; d: number } | null {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone,
@@ -59,21 +62,79 @@ function ymdPartsInTz(iso: string, timeZone: string): { y: number; m: number; d:
   return { y, m, d };
 }
 
-/** Calendar add; mirrors `setDate(getDate()+n)` for typical days */
 function addCalendarDaysYmd(y: number, m: number, d: number, days: number): { y: number; m: number; d: number } {
   const dt = new Date(Date.UTC(y, m - 1, d + days));
   return { y: dt.getUTCFullYear(), m: dt.getUTCMonth() + 1, d: dt.getUTCDate() };
 }
 
-/**
- * Same key the app stores for mission day `(slot)` — `getDayDate(slot - 1)` using wall date
- * in the user’s timezone (see habit/[id].tsx).
- */
 function missionDayDateKey(startIso: string, dayIndexZeroBased: number, timeZone: string): string | null {
   const base = ymdPartsInTz(startIso, timeZone);
   if (!base) return null;
   const { y, m, d } = addCalendarDaysYmd(base.y, base.m, base.d, dayIndexZeroBased);
   return `${y}-${pad2(m)}-${pad2(d)}`;
+}
+
+async function insertStreakReminderIfEligible(
+  supabase: Supabase,
+  h: HabitRow,
+  expectedDateKey: string,
+  dates: string[],
+  reminderKind: ReminderKind,
+  reminderPhase: "open" | "closing",
+): Promise<boolean> {
+  // No reminders if this mission day is already marked in `completed_dates` (same YYYY-MM-DD key as the grid).
+  if (dates.includes(expectedDateKey)) return false;
+
+  const { data: existing } = await supabase
+    .from("streak_reminder_log")
+    .select("user_id")
+    .eq("user_id", h.user_id)
+    .eq("habit_id", h.id)
+    .eq("reminder_date", expectedDateKey)
+    .eq("reminder_kind", reminderKind)
+    .maybeSingle();
+
+  if (existing) return false;
+
+  const { error: logErr } = await supabase.from("streak_reminder_log").insert({
+    user_id: h.user_id,
+    habit_id: h.id,
+    reminder_date: expectedDateKey,
+    reminder_kind: reminderKind,
+  });
+
+  if (logErr) {
+    if (logErr.code === "23505") return false;
+    console.warn("[streak-reminders] log skip", logErr.message);
+    return false;
+  }
+
+  const { error: nErr } = await supabase.from("notifications").insert({
+    user_id: h.user_id,
+    type: "streak_window_reminder",
+    payload: {
+      schema: "habitpro.notification.v1",
+      kind: "streak_window_reminder",
+      habit_id: h.id,
+      habit_title: h.title,
+      reminder_date: expectedDateKey,
+      reminder_phase: reminderPhase,
+    },
+  });
+
+  if (nErr) {
+    console.error("[streak-reminders] notification", nErr);
+    await supabase
+      .from("streak_reminder_log")
+      .delete()
+      .eq("user_id", h.user_id)
+      .eq("habit_id", h.id)
+      .eq("reminder_date", expectedDateKey)
+      .eq("reminder_kind", reminderKind);
+    return false;
+  }
+
+  return true;
 }
 
 Deno.serve(async (req) => {
@@ -134,11 +195,11 @@ Deno.serve(async (req) => {
     const totalDays = Math.max(1, h.total_days ?? 21);
 
     const slot = getActiveMissionDaySlot(h.start_date, nowMs, totalDays);
-    if (slot == null) continue;
+    if (slot == null || slot < 2) continue;
 
     const startMs = new Date(h.start_date).getTime();
+    const slotStartMs = startMs + (slot - 1) * MS_PER_MISSION_DAY;
     const slotEndMs = startMs + slot * MS_PER_MISSION_DAY;
-    if (nowMs < slotEndMs - MS_REMINDER_WINDOW || nowMs >= slotEndMs) continue;
 
     const expectedDateKey = missionDayDateKey(h.start_date, slot - 1, tz);
     if (!expectedDateKey) continue;
@@ -147,54 +208,30 @@ Deno.serve(async (req) => {
     const dates = Array.isArray(raw)
       ? raw.filter((x): x is string => typeof x === "string")
       : [];
-    if (dates.includes(expectedDateKey)) continue;
 
-    const { data: existing } = await supabase
-      .from("streak_reminder_log")
-      .select("user_id")
-      .eq("user_id", h.user_id)
-      .eq("habit_id", h.id)
-      .eq("reminder_date", expectedDateKey)
-      .maybeSingle();
-
-    if (existing) continue;
-
-    const { error: logErr } = await supabase.from("streak_reminder_log").insert({
-      user_id: h.user_id,
-      habit_id: h.id,
-      reminder_date: expectedDateKey,
-    });
-
-    if (logErr) {
-      if (logErr.code === "23505") continue;
-      console.warn("[streak-reminders] log skip", logErr.message);
-      continue;
+    if (nowMs >= slotStartMs && nowMs < slotStartMs + MS_REMINDER_WINDOW) {
+      const ok = await insertStreakReminderIfEligible(
+        supabase,
+        h,
+        expectedDateKey,
+        dates,
+        "slot_open",
+        "open",
+      );
+      if (ok) inserted++;
     }
 
-    const { error: nErr } = await supabase.from("notifications").insert({
-      user_id: h.user_id,
-      type: "streak_window_reminder",
-      payload: {
-        schema: "habitpro.notification.v1",
-        kind: "streak_window_reminder",
-        habit_id: h.id,
-        habit_title: h.title,
-        reminder_date: expectedDateKey,
-      },
-    });
-
-    if (nErr) {
-      console.error("[streak-reminders] notification", nErr);
-      await supabase
-        .from("streak_reminder_log")
-        .delete()
-        .eq("user_id", h.user_id)
-        .eq("habit_id", h.id)
-        .eq("reminder_date", expectedDateKey);
-      continue;
+    if (nowMs >= slotEndMs - MS_REMINDER_WINDOW && nowMs < slotEndMs) {
+      const ok = await insertStreakReminderIfEligible(
+        supabase,
+        h,
+        expectedDateKey,
+        dates,
+        "slot_closing",
+        "closing",
+      );
+      if (ok) inserted++;
     }
-
-    inserted++;
   }
 
   return new Response(JSON.stringify({ ok: true, reminders: inserted }), {
