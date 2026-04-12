@@ -10,6 +10,7 @@ import {
   Habit,
   HabitStore,
   MiniMission,
+  type MissionReport,
   type MissionVisibility,
   type StreakMemory,
 } from "../types/habit";
@@ -17,6 +18,7 @@ import { MAX_RESERVE_FUEL_MINUTES } from "../constants/miniMission";
 import { tryRecordChallengeMilestones } from "../lib/challengeCohort";
 import { getDerivedState } from "../utils/habitDerived";
 import { isHabitCalendarDateToggleable } from "../utils/missionDaySlots";
+import { isHabitMissionWindowClosed } from "../utils/habitMissionWindow";
 
 /** Calculate endDate by adding `totalDays` to a start ISO string. */
 const calculateEndDate = (startIso: string, totalDays: number): string => {
@@ -29,21 +31,29 @@ const calculateEndDate = (startIso: string, totalDays: number): string => {
  * Migrate legacy habits that were created before the mode field existed.
  * They become autopilot missions with totalDays 21.
  */
-const migrateHabit = (h: any): Habit => ({
-  ...h,
-  mode: h.mode ?? "autopilot",
-  totalDays: h.totalDays ?? 21,
-  ownerUserId: h.ownerUserId ?? null,
-  visibility:
-    h.visibility === "public" || h.visibility === "solo" ? h.visibility : "solo",
-  streakMemories:
-    h.streakMemories && typeof h.streakMemories === "object"
-      ? h.streakMemories
-      : undefined,
-  challengeGroupId: h.challengeGroupId ?? null,
-  challengeCreatorTimezone: h.challengeCreatorTimezone ?? null,
-  // endDate is intentionally left undefined for autopilot
-});
+const migrateHabit = (h: any): Habit => {
+  const rawReport = h.missionReport;
+  const missionReport: MissionReport | undefined =
+    rawReport === "accomplished" || rawReport === "failed" ? rawReport : undefined;
+  return {
+    ...h,
+    mode: h.mode ?? "autopilot",
+    totalDays: h.totalDays ?? 21,
+    ownerUserId: h.ownerUserId ?? null,
+    visibility:
+      h.visibility === "public" || h.visibility === "solo" ? h.visibility : "solo",
+    streakMemories:
+      h.streakMemories && typeof h.streakMemories === "object"
+        ? h.streakMemories
+        : undefined,
+    challengeGroupId: h.challengeGroupId ?? null,
+    challengeCreatorTimezone: h.challengeCreatorTimezone ?? null,
+    missionReport,
+    missionReportAt:
+      typeof h.missionReportAt === "string" ? h.missionReportAt : undefined,
+    // endDate is intentionally left undefined for autopilot
+  };
+};
 
 export const useHabitStore = create<HabitStore>()(
   persist(
@@ -148,6 +158,9 @@ export const useHabitStore = create<HabitStore>()(
               isCompleted,
               status,
               streakMemories: nextMemories,
+              ...(isCompleted
+                ? { missionReport: undefined, missionReportAt: undefined }
+                : {}),
             };
           });
           return { habits: updatedHabits };
@@ -209,6 +222,8 @@ export const useHabitStore = create<HabitStore>()(
               status: "active",
               startDate: now,
               streakMemories: {},
+              missionReport: undefined,
+              missionReportAt: undefined,
               endDate:
                 h.mode === "manual"
                   ? calculateEndDate(now, h.totalDays)
@@ -217,6 +232,29 @@ export const useHabitStore = create<HabitStore>()(
           }),
         }));
         requestRemoteSync({ immediate: false });
+      },
+      setMissionReport: (id, report) => {
+        set((state) => ({
+          habits: state.habits.map((habit) => {
+            if (habit.id !== id) return habit;
+            const nowMs = Date.now();
+            if (
+              !isHabitMissionWindowClosed(habit, nowMs) ||
+              habit.isCompleted ||
+              habit.missionReport
+            ) {
+              return habit;
+            }
+            const at = new Date().toISOString();
+            return {
+              ...habit,
+              missionReport: report,
+              missionReportAt: at,
+              status: report === "failed" ? "failed" : habit.status,
+            };
+          }),
+        }));
+        requestRemoteSync({ immediate: true });
       },
       getHabit: (id) => {
         return get().habits.find((h) => h.id === id);
@@ -419,13 +457,17 @@ export const useHabitStore = create<HabitStore>()(
           state.habits = state.habits.map((h) => {
             const migrated = migrateHabit(h);
             const d = getDerivedState(migrated.completedDates ?? [], migrated.totalDays ?? 21);
+            let status: Habit["status"] = d.status;
+            if (!d.isCompleted && migrated.missionReport === "failed") {
+              status = "failed";
+            }
             return {
               ...migrated,
               completedDates: d.normalized,
               totalDays: d.totalDays,
               streak: d.streak,
               isCompleted: d.isCompleted,
-              status: d.status,
+              status,
             };
           });
           // Migrate legacy mini missions missing extendedMinutes

@@ -2,6 +2,7 @@ import type {
   Habit,
   HabitStore,
   MiniMission,
+  MissionReport,
   MissionVisibility,
   StreakMemory,
 } from "../types/habit";
@@ -11,6 +12,10 @@ import { getSupabase } from "./supabase";
 type RemoteSnapshot = Pick<HabitStore, "habits" | "miniMissions" | "xp" | "username"> & {
   cohortPeerHabits: Habit[];
 };
+
+function parseMissionReport(v: unknown): MissionReport | undefined {
+  return v === "accomplished" || v === "failed" ? v : undefined;
+}
 
 function habitFromRow(row: {
   user_id: string;
@@ -29,12 +34,21 @@ function habitFromRow(row: {
   streak_memories?: unknown;
   challenge_group_id?: string | null;
   challenge_creator_timezone?: string | null;
+  mission_report?: string | null;
+  mission_report_at?: string | null;
 }): Habit {
   const vis: MissionVisibility =
     row.visibility === "public" || row.visibility === "solo"
       ? row.visibility
       : "solo";
   const d = getDerivedState(row.completed_dates ?? [], row.total_days ?? 21);
+  const missionReport = parseMissionReport(row.mission_report);
+  const missionReportAt =
+    typeof row.mission_report_at === "string" ? row.mission_report_at : undefined;
+  let status: Habit["status"] = d.status;
+  if (!d.isCompleted && (missionReport === "failed" || row.status === "failed")) {
+    status = "failed";
+  }
   const rawMem = row.streak_memories;
   const streakMemories =
     rawMem && typeof rawMem === "object" && !Array.isArray(rawMem)
@@ -53,7 +67,9 @@ function habitFromRow(row: {
     streak: d.streak,
     totalDays: d.totalDays,
     isCompleted: d.isCompleted,
-    status: d.status,
+    status,
+    missionReport,
+    missionReportAt,
     streakMemories,
     challengeGroupId: row.challenge_group_id ?? null,
     challengeCreatorTimezone: row.challenge_creator_timezone ?? null,
@@ -78,6 +94,8 @@ function habitToRow(sessionUserId: string, h: Habit) {
     streak_memories: h.streakMemories ?? {},
     challenge_group_id: h.challengeGroupId ?? null,
     challenge_creator_timezone: h.challengeCreatorTimezone ?? null,
+    mission_report: h.missionReport ?? null,
+    mission_report_at: h.missionReportAt ?? null,
   };
 }
 
