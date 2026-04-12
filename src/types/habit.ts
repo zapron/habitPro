@@ -1,5 +1,8 @@
 export type HabitMode = "autopilot" | "manual";
 
+/** User answer after the mission window ends without a full grid (honor system). */
+export type MissionReport = "accomplished" | "failed";
+
 /** Public = group mission members can see streak memory; solo = private to you. */
 export type MissionVisibility = "public" | "solo";
 
@@ -29,6 +32,9 @@ export interface Habit {
   totalDays: number; // Fixed 21 for autopilot, user-defined for manual
   isCompleted: boolean;
   status: "active" | "completed" | "failed";
+  /** Set after mission window ends (incomplete grid); drives Mission Reports + pills. */
+  missionReport?: MissionReport;
+  missionReportAt?: string;
   /** YYYY-MM-DD → memory for that check-in */
   streakMemories?: Record<string, StreakMemory>;
   /** When set, this habit is part of a Supabase-backed group mission. */
@@ -91,6 +97,7 @@ export type HabitStore = {
   setStreakMemory: (id: string, date: string, memory: StreakMemory | null) => void;
   deleteHabit: (id: string) => void;
   resetHabit: (id: string) => void;
+  setMissionReport: (id: string, report: MissionReport) => void;
   getHabit: (id: string) => Habit | undefined;
   addMiniMission: (input: {
     title: string;

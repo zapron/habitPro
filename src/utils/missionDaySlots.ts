@@ -36,6 +36,13 @@ export function missionDayNumberForCalendarDate(habit: Habit, dateStr: string): 
 
 /** Whether this calendar date may be toggled (only the current 24h slot). */
 export function isHabitCalendarDateToggleable(habit: Habit, dateStr: string, nowMs: number): boolean {
+  if (
+    habit.mode === "manual" &&
+    habit.endDate &&
+    nowMs >= new Date(habit.endDate).getTime()
+  ) {
+    return false;
+  }
   const day = missionDayNumberForCalendarDate(habit, dateStr);
   if (day == null) return false;
   const slot = getActiveMissionDaySlot(habit.startDate, nowMs, habit.totalDays ?? 21);
