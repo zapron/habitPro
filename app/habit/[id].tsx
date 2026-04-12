@@ -16,6 +16,7 @@ import type { MissionVisibility } from '../../src/types/habit';
 import { ConfettiBurst } from '../../src/components/ConfettiBurst';
 import { StreakBanner } from '../../src/components/StreakBanner';
 import { getActiveMissionDaySlot, isHabitCalendarDateToggleable } from '../../src/utils/missionDaySlots';
+import { isHabitMissionWindowClosed } from '../../src/utils/habitMissionWindow';
 import { StreakMemorySheet } from '../../src/components/StreakMemorySheet';
 import { StreakMemoryGallery } from '../../src/components/StreakMemoryGallery';
 import { GroupChallengeSheet } from '../../src/components/GroupChallengeSheet';
@@ -147,6 +148,7 @@ export default function HabitDetail() {
     const resetHabit = useHabitStore((state) => state.resetHabit);
     const deleteHabit = useHabitStore((state) => state.deleteHabit);
     const setHabitVisibility = useHabitStore((state) => state.setHabitVisibility);
+    const setMissionReport = useHabitStore((state) => state.setMissionReport);
 
     const lastVisibilityRef = useRef<{ id: string; prev: MissionVisibility } | null>(null);
 
@@ -190,9 +192,10 @@ export default function HabitDetail() {
     const pendingMemoryRef = useRef<{ dateStr: string; day: number; dayIndex: number } | null>(null);
 
     useEffect(() => {
-        const t = setInterval(() => setNow(Date.now()), 60_000);
+        const tick = habit && !habit.isCompleted ? 30_000 : 60_000;
+        const t = setInterval(() => setNow(Date.now()), tick);
         return () => clearInterval(t);
-    }, []);
+    }, [habit?.id, habit?.isCompleted]);
 
     useFocusEffect(
         useCallback(() => {
@@ -537,6 +540,76 @@ export default function HabitDetail() {
                 </View>
 
                 <StreakMemoryGallery entries={memoryGalleryEntries} />
+
+                {(() => {
+                    if (!habit || habit.isCompleted) return null;
+                    const windowClosed = isHabitMissionWindowClosed(habit, now);
+                    if (!windowClosed) return null;
+
+                    if (habit.missionReport === 'accomplished') {
+                        return (
+                            <View
+                                style={[
+                                    styles.missionReportBanner,
+                                    { backgroundColor: theme.colors.surface, borderColor: theme.colors.green[500] + '44' },
+                                ]}
+                            >
+                                <Text style={[styles.missionReportTitle, { color: theme.colors.textPrimary }]}>Accomplished</Text>
+                                <Text style={[styles.missionReportHint, { color: theme.colors.textSecondary }]}>
+                                    You marked this mission complete after the window ended.
+                                </Text>
+                            </View>
+                        );
+                    }
+                    if (habit.missionReport === 'failed') {
+                        return (
+                            <View
+                                style={[
+                                    styles.missionReportBanner,
+                                    { backgroundColor: theme.colors.surface, borderColor: theme.colors.red[500] + '44' },
+                                ]}
+                            >
+                                <Text style={[styles.missionReportTitle, { color: theme.colors.textPrimary }]}>Failed</Text>
+                                <Text style={[styles.missionReportHint, { color: theme.colors.textSecondary }]}>
+                                    You marked this mission as not completed.
+                                </Text>
+                            </View>
+                        );
+                    }
+
+                    return (
+                        <View
+                            style={[
+                                styles.missionReportBanner,
+                                { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
+                            ]}
+                        >
+                            <Text style={[styles.missionReportTitle, { color: theme.colors.textPrimary }]}>Mission window ended</Text>
+                            <Text style={[styles.missionReportHint, { color: theme.colors.textSecondary, marginBottom: 14 }]}>
+                                The timer ran out before every day was checked in. Is this mission complete for you?
+                            </Text>
+                            <View style={styles.missionReportActions}>
+                                <Button
+                                    title="Yes"
+                                    onPress={() => {
+                                        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                                        setMissionReport(habit.id, 'accomplished');
+                                    }}
+                                    style={{ flex: 1, marginRight: 8 }}
+                                />
+                                <Button
+                                    title="No"
+                                    variant="danger"
+                                    onPress={() => {
+                                        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+                                        setMissionReport(habit.id, 'failed');
+                                    }}
+                                    style={{ flex: 1, marginLeft: 8 }}
+                                />
+                            </View>
+                        </View>
+                    );
+                })()}
             </ScrollView>
         </Screen>
     );
@@ -596,4 +669,14 @@ const styles = StyleSheet.create({
     badgeAccent: { position: 'absolute', top: 6, right: 6 },
     memoryDot: { position: 'absolute', bottom: 5, width: 7, height: 7, borderRadius: 4, borderWidth: 1.5 },
     dayButtonPlaceholder: { width: '13%', aspectRatio: 1, marginBottom: 14 },
+    missionReportBanner: {
+        marginTop: 8,
+        marginBottom: 28,
+        padding: 18,
+        borderRadius: 14,
+        borderWidth: 1,
+    },
+    missionReportTitle: { fontWeight: '800', fontSize: 16, marginBottom: 6 },
+    missionReportHint: { fontSize: 13, lineHeight: 19 },
+    missionReportActions: { flexDirection: 'row', alignItems: 'stretch' },
 });

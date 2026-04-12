@@ -67,6 +67,32 @@ export const HabitCard = memo(({ item }: HabitCardProps) => {
                             <Text style={[styles.challengePillText, { color: theme.colors.indigo[400] }]}>GROUP MISSION</Text>
                         </View>
                     )}
+                    {item.missionReport === 'accomplished' && (
+                        <View
+                            style={[
+                                styles.reportPill,
+                                {
+                                    borderColor: theme.colors.green[500] + '55',
+                                    backgroundColor: theme.colors.green[500] + '18',
+                                },
+                            ]}
+                        >
+                            <Text style={[styles.reportPillText, { color: theme.colors.green[500] }]}>ACCOMPLISHED</Text>
+                        </View>
+                    )}
+                    {item.missionReport === 'failed' && (
+                        <View
+                            style={[
+                                styles.reportPill,
+                                {
+                                    borderColor: theme.colors.red[500] + '55',
+                                    backgroundColor: 'rgba(239, 68, 68, 0.14)',
+                                },
+                            ]}
+                        >
+                            <Text style={[styles.reportPillText, { color: theme.colors.red[500] }]}>FAILED</Text>
+                        </View>
+                    )}
                 </View>
 
                 <Text style={[styles.cardTitle, { color: theme.colors.textPrimary, fontSize: theme.typography.h3 }]}>{item.title}</Text>
@@ -219,6 +245,17 @@ const styles = StyleSheet.create({
         borderWidth: 1,
     },
     challengePillText: { fontSize: 9, fontWeight: '800', letterSpacing: 0.8 },
+    reportPill: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        alignSelf: 'flex-start',
+        gap: 4,
+        paddingVertical: 2,
+        paddingHorizontal: 8,
+        borderRadius: 9999,
+        borderWidth: 1,
+    },
+    reportPillText: { fontSize: 9, fontWeight: '800', letterSpacing: 0.8 },
     modePillText: { fontSize: 9, fontWeight: '800', letterSpacing: 0.8 },
     cardTitle: { fontWeight: '700', marginBottom: 4 },
     cardDescription: { fontSize: 14 },
