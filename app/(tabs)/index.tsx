@@ -62,7 +62,7 @@ export default function Home() {
   const habits = useHabitStore((state) => state.habits);
   const miniMissions = useHabitStore((state) => state.miniMissions);
   const xp = useHabitStore((state) => state.xp);
-  const [activeTab, setActiveTab] = useState<"active" | "completed" | "reports">("active");
+  const [activeTab, setActiveTab] = useState<"missions" | "reports">("missions");
   const [storeHydrated, setStoreHydrated] = useState(() => useHabitStore.persist.hasHydrated());
   const [unreadNotifCount, setUnreadNotifCount] = useState(0);
   const [notifRefreshBusy, setNotifRefreshBusy] = useState(false);
@@ -77,28 +77,27 @@ export default function Home() {
   const xpProgress = xpInLevel / 100;
 
   const filteredHabits = useMemo(() => {
-    if (activeTab === "completed") {
-      return habits.filter((h) => h.isCompleted);
-    }
     if (activeTab === "reports") {
       return habits.filter(
         (h) => !h.isCompleted && isHabitMissionWindowClosed(h, missionNow),
       );
     }
     return habits.filter(
-      (h) => !h.isCompleted && !isHabitMissionWindowClosed(h, missionNow),
+      (h) => !( !h.isCompleted && isHabitMissionWindowClosed(h, missionNow) ),
     );
   }, [habits, activeTab, missionNow]);
 
   const stats = useMemo(() => {
-    const activeCount = habits.filter(
-      (h) => !h.isCompleted && !isHabitMissionWindowClosed(h, missionNow),
+    const missionsCount = habits.filter(
+      (h) => !( !h.isCompleted && isHabitMissionWindowClosed(h, missionNow) ),
     ).length;
     const reportsCount = habits.filter(
       (h) => !h.isCompleted && isHabitMissionWindowClosed(h, missionNow),
     ).length;
-    const completedCount = habits.filter((h) => h.isCompleted).length;
-    return { activeCount, reportsCount, completedCount };
+    const openMissionCount = habits.filter(
+      (h) => !h.isCompleted && !isHabitMissionWindowClosed(h, missionNow),
+    ).length;
+    return { missionsCount, reportsCount, openMissionCount };
   }, [habits, missionNow]);
 
   const hasActiveMiniCountdown = useMemo(
@@ -283,14 +282,14 @@ export default function Home() {
         >
           <View style={styles.commandTopRow}>
             <View style={styles.commandIconMain}>
-              {stats.activeCount > 0 ? (
+              {stats.openMissionCount > 0 ? (
                 <AnimatedFire size={theme.icon.sm} color={theme.colors.cyan[400]} />
               ) : (
                 <Target size={theme.icon.md} color={theme.colors.cyan[400]} />
               )}
             </View>
-            {stats.activeCount > 0 && (
-              <Text style={[styles.countMain, { color: theme.colors.cyan[400] }]}>{stats.activeCount}</Text>
+            {stats.openMissionCount > 0 && (
+              <Text style={[styles.countMain, { color: theme.colors.cyan[400] }]}>{stats.openMissionCount}</Text>
             )}
           </View>
           <Text style={[styles.commandTitle, { color: theme.colors.textPrimary }]}>New Mission</Text>
@@ -333,13 +332,13 @@ export default function Home() {
         <TouchableOpacity
           style={[
             styles.tab,
-            activeTab === "active" && [styles.tabSelected, { backgroundColor: theme.colors.indigo[600], ...theme.shadow.glow }],
+            activeTab === "missions" && [styles.tabSelected, { backgroundColor: theme.colors.indigo[600], ...theme.shadow.glow }],
           ]}
-          onPress={() => setActiveTab("active")}
+          onPress={() => setActiveTab("missions")}
           activeOpacity={0.8}
         >
-          <Text style={[styles.tabText, { color: theme.colors.textSecondary }, activeTab === "active" && styles.activeTabText]}>
-            Active{stats.activeCount > 0 ? ` (${stats.activeCount})` : ""}
+          <Text style={[styles.tabText, { color: theme.colors.textSecondary }, activeTab === "missions" && styles.activeTabText]}>
+            Missions{stats.missionsCount > 0 ? ` (${stats.missionsCount})` : ""}
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -352,18 +351,6 @@ export default function Home() {
         >
           <Text style={[styles.tabText, { color: theme.colors.textSecondary }, activeTab === "reports" && styles.activeTabText]}>
             Reports{stats.reportsCount > 0 ? ` (${stats.reportsCount})` : ""}
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[
-            styles.tab,
-            activeTab === "completed" && [styles.tabSelected, { backgroundColor: theme.colors.indigo[600], ...theme.shadow.glow }],
-          ]}
-          onPress={() => setActiveTab("completed")}
-          activeOpacity={0.8}
-        >
-          <Text style={[styles.tabText, { color: theme.colors.textSecondary }, activeTab === "completed" && styles.activeTabText]}>
-            Completed{stats.completedCount > 0 ? ` (${stats.completedCount})` : ""}
           </Text>
         </TouchableOpacity>
       </View>
@@ -383,20 +370,20 @@ export default function Home() {
                 <Trophy size={50} color={theme.colors.slate[500]} />
               </View>
               <Text style={[styles.emptyTitle, { color: theme.colors.textPrimary, fontSize: theme.typography.h3 }]}>
-                {activeTab === "active"
-                  ? "No active missions"
-                  : activeTab === "reports"
-                    ? "No mission reports"
-                    : "No completed missions yet"}
+                {activeTab === "missions"
+                  ? habits.length === 0
+                    ? "No missions yet"
+                    : "Nothing in Missions"
+                  : "No mission reports"}
               </Text>
               <Text style={[styles.emptyDescription, { color: theme.colors.textSecondary }]}>
-                {activeTab === "active"
-                  ? "Start your first mission and keep momentum daily."
-                  : activeTab === "reports"
-                    ? "When a mission window ends before the grid is full, it appears here so you can close it out."
-                    : "Complete your first mission to unlock this section."}
+                {activeTab === "missions"
+                  ? habits.length === 0
+                    ? "Start your first mission and keep momentum daily."
+                    : "Open missions and finished grids live here. If a window ended before the grid was full, check the Reports tab."
+                  : "When a mission window ends before the grid is full, it appears here so you can close it out."}
               </Text>
-              {activeTab === "active" && (
+              {activeTab === "missions" && habits.length === 0 && (
                 <View style={styles.emptyActions}>
                   <Button title="Start a Mission" onPress={() => router.push("/create")} style={styles.emptyButton} />
                   <TouchableOpacity onPress={() => router.push("/mini")} style={styles.emptySecondary} activeOpacity={0.85}>
