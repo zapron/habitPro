@@ -26,6 +26,7 @@ import { useTheme } from "../../src/context/ThemeContext";
 import { useReducedMotion } from "../../src/hooks/useReducedMotion";
 import { AnimatedFire } from "../../src/components/AnimatedFire";
 import { getMiniRemainingMs } from "../../src/utils/miniMissionTime";
+import { isHabitMissionWindowClosed } from "../../src/utils/habitMissionWindow";
 
 function getGreeting(): { text: string; emoji: string; Icon: typeof Sun } {
   const hour = new Date().getHours();
@@ -61,11 +62,12 @@ export default function Home() {
   const habits = useHabitStore((state) => state.habits);
   const miniMissions = useHabitStore((state) => state.miniMissions);
   const xp = useHabitStore((state) => state.xp);
-  const [activeTab, setActiveTab] = useState<"active" | "completed">("active");
+  const [activeTab, setActiveTab] = useState<"active" | "completed" | "reports">("active");
   const [storeHydrated, setStoreHydrated] = useState(() => useHabitStore.persist.hasHydrated());
   const [unreadNotifCount, setUnreadNotifCount] = useState(0);
   const [notifRefreshBusy, setNotifRefreshBusy] = useState(false);
   const [miniNow, setMiniNow] = useState(() => Date.now());
+  const [missionNow, setMissionNow] = useState(() => Date.now());
   const showAccount = isSupabaseConfigured();
 
   const listBottomPad = Math.max(insets.bottom, 12) + 56;
@@ -75,16 +77,29 @@ export default function Home() {
   const xpProgress = xpInLevel / 100;
 
   const filteredHabits = useMemo(() => {
-    return habits.filter((habit) =>
-      activeTab === "active" ? !habit.isCompleted : habit.isCompleted,
+    if (activeTab === "completed") {
+      return habits.filter((h) => h.isCompleted);
+    }
+    if (activeTab === "reports") {
+      return habits.filter(
+        (h) => !h.isCompleted && isHabitMissionWindowClosed(h, missionNow),
+      );
+    }
+    return habits.filter(
+      (h) => !h.isCompleted && !isHabitMissionWindowClosed(h, missionNow),
     );
-  }, [habits, activeTab]);
+  }, [habits, activeTab, missionNow]);
 
   const stats = useMemo(() => {
-    const activeCount = habits.filter((habit) => !habit.isCompleted).length;
-    const completedCount = habits.filter((habit) => habit.isCompleted).length;
-    return { activeCount, completedCount };
-  }, [habits]);
+    const activeCount = habits.filter(
+      (h) => !h.isCompleted && !isHabitMissionWindowClosed(h, missionNow),
+    ).length;
+    const reportsCount = habits.filter(
+      (h) => !h.isCompleted && isHabitMissionWindowClosed(h, missionNow),
+    ).length;
+    const completedCount = habits.filter((h) => h.isCompleted).length;
+    return { activeCount, reportsCount, completedCount };
+  }, [habits, missionNow]);
 
   const hasActiveMiniCountdown = useMemo(
     () =>
@@ -99,6 +114,17 @@ export default function Home() {
     const t = setInterval(() => setMiniNow(Date.now()), 1000);
     return () => clearInterval(t);
   }, [hasActiveMiniCountdown]);
+
+  const hasIncompleteMission = useMemo(
+    () => habits.some((h) => !h.isCompleted),
+    [habits],
+  );
+
+  useEffect(() => {
+    if (!hasIncompleteMission) return;
+    const t = setInterval(() => setMissionNow(Date.now()), 30_000);
+    return () => clearInterval(t);
+  }, [hasIncompleteMission]);
 
   const miniMissionStats = useMemo(() => {
     const live = miniMissions.filter(
@@ -170,6 +196,12 @@ export default function Home() {
         cancelled = true;
       };
     }, [session?.user, showAccount]),
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      setMissionNow(Date.now());
+    }, []),
   );
 
   const notifRefreshControl = (
@@ -313,6 +345,18 @@ export default function Home() {
         <TouchableOpacity
           style={[
             styles.tab,
+            activeTab === "reports" && [styles.tabSelected, { backgroundColor: theme.colors.indigo[600], ...theme.shadow.glow }],
+          ]}
+          onPress={() => setActiveTab("reports")}
+          activeOpacity={0.8}
+        >
+          <Text style={[styles.tabText, { color: theme.colors.textSecondary }, activeTab === "reports" && styles.activeTabText]}>
+            Reports{stats.reportsCount > 0 ? ` (${stats.reportsCount})` : ""}
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[
+            styles.tab,
             activeTab === "completed" && [styles.tabSelected, { backgroundColor: theme.colors.indigo[600], ...theme.shadow.glow }],
           ]}
           onPress={() => setActiveTab("completed")}
@@ -339,12 +383,18 @@ export default function Home() {
                 <Trophy size={50} color={theme.colors.slate[500]} />
               </View>
               <Text style={[styles.emptyTitle, { color: theme.colors.textPrimary, fontSize: theme.typography.h3 }]}>
-                {activeTab === "active" ? "No active missions" : "No completed missions yet"}
+                {activeTab === "active"
+                  ? "No active missions"
+                  : activeTab === "reports"
+                    ? "No mission reports"
+                    : "No completed missions yet"}
               </Text>
               <Text style={[styles.emptyDescription, { color: theme.colors.textSecondary }]}>
                 {activeTab === "active"
                   ? "Start your first mission and keep momentum daily."
-                  : "Complete your first mission to unlock this section."}
+                  : activeTab === "reports"
+                    ? "When a mission window ends before the grid is full, it appears here so you can close it out."
+                    : "Complete your first mission to unlock this section."}
               </Text>
               {activeTab === "active" && (
                 <View style={styles.emptyActions}>
