@@ -87,7 +87,7 @@ function RootLayoutNav() {
       }
 
       if (type === "community_win_cheer") {
-        router.push({ pathname: "/(tabs)/compete", params: { focusCommunity: "1" } });
+        router.push({ pathname: "/(tabs)/community" });
         return;
       }
 

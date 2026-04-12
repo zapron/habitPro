@@ -15,6 +15,7 @@ import {
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
 import { ArrowLeft } from "lucide-react-native";
+import { CohortMasthead } from "../../src/components/CohortMasthead";
 import { CohortNudgeChips } from "../../src/components/CohortNudgeChips";
 import { Screen } from "../../src/components/Screen";
 import { CohortPeerStreakDots } from "../../src/components/CohortPeerStreakDots";
@@ -201,6 +202,49 @@ export default function ChallengeDetailScreen() {
     [peers, myUserId, myHabit],
   );
 
+  const sortedMemberIds = useMemo(() => {
+    return [...memberIdsOrdered].sort((a, b) => {
+      const ha = habitForMember(a);
+      const hb = habitForMember(b);
+      const sa = ha?.streak ?? -1;
+      const sb = hb?.streak ?? -1;
+      if (sb !== sa) return sb - sa;
+      const da = ha?.completedDates.length ?? 0;
+      const db = hb?.completedDates.length ?? 0;
+      return db - da;
+    });
+  }, [memberIdsOrdered, habitForMember]);
+
+  const cohortMastheadMessage = useMemo(() => {
+    if (memberIdsOrdered.length === 0) return "";
+    const rows = memberIdsOrdered.map((id) => ({
+      id,
+      habit: habitForMember(id),
+      name: participantDisplayName(profileLabels[id]),
+    }));
+    const withHabit = rows.filter((r): r is typeof r & { habit: Habit } => Boolean(r.habit));
+    if (withHabit.length === 0) {
+      return "Squad loading… complete a day to appear on the streak board.";
+    }
+    const sorted = [...withHabit].sort((a, b) => {
+      const d = b.habit.streak - a.habit.streak;
+      if (d !== 0) return d;
+      return b.habit.completedDates.length - a.habit.completedDates.length;
+    });
+    const top = sorted[0];
+    const maxS = top.habit.streak;
+    const leaders = sorted.filter((r) => r.habit.streak === maxS);
+    if (maxS === 0) {
+      const byDays = [...sorted].sort((a, b) => b.habit.completedDates.length - a.habit.completedDates.length)[0];
+      const n = byDays.habit.completedDates.length;
+      return `${byDays.name} has checked the most days (${n}). Build the next streak!`;
+    }
+    if (leaders.length >= 2) {
+      return `${leaders.length} tied with a ${maxS}-day streak — who pulls ahead?`;
+    }
+    return `${top.name} is leading on a ${maxS}-day streak.`;
+  }, [memberIdsOrdered, profileLabels, habitForMember]);
+
   const bottomPad = 40;
 
   if (!challengeId) {
@@ -283,12 +327,14 @@ export default function ChallengeDetailScreen() {
             onCongrats={(actorUserId) => void onCongrats(actorUserId)}
           />
 
+          {cohortMastheadMessage ? <CohortMasthead theme={theme} message={cohortMastheadMessage} /> : null}
+
           <Text style={[styles.sectionLabel, { color: theme.colors.textMuted }]}>PARTICIPANTS</Text>
 
           {memberIdsOrdered.length === 0 ? (
             <Text style={{ color: theme.colors.textSecondary }}>No members loaded yet.</Text>
           ) : (
-            memberIdsOrdered.map((memberId) => {
+            sortedMemberIds.map((memberId) => {
               const label = profileLabels[memberId];
               const habit = habitForMember(memberId);
               const nameOnCard = participantDisplayName(label);
