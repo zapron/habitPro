@@ -1,5 +1,5 @@
 import { Tabs } from "expo-router";
-import { Home, Swords, User } from "lucide-react-native";
+import { Home, Swords, User, Users } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "../../src/context/ThemeContext";
 
@@ -43,6 +43,13 @@ export default function TabLayout() {
         options={{
           title: "Compete",
           tabBarIcon: ({ color, size }) => <Swords size={size ?? 22} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="community"
+        options={{
+          title: "Community",
+          tabBarIcon: ({ color, size }) => <Users size={size ?? 22} color={color} />,
         }}
       />
       <Tabs.Screen
