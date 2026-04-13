@@ -329,6 +329,18 @@ export async function listChallengeMembers(challengeId: string): Promise<Challen
   return (data ?? []) as ChallengeMemberRow[];
 }
 
+/**
+ * Leave a group mission: removes your `challenge_members` row and deletes your linked habit on the server.
+ * Call `deleteHabit` locally afterward so device state and sync match.
+ */
+export async function leaveChallengeGroup(challengeId: string): Promise<{ error: Error | null }> {
+  const supabase = getSupabase();
+  if (!supabase) return { error: new Error("Supabase not configured") };
+  const { error } = await supabase.rpc("rpc_leave_challenge", { p_challenge_id: challengeId });
+  if (error) return { error: new Error(error.message) };
+  return { error: null };
+}
+
 export async function declineInvite(inviteId: string): Promise<{ error: Error | null }> {
   const supabase = getSupabase();
   if (!supabase) return { error: new Error("Supabase not configured") };
