@@ -1,5 +1,6 @@
 import React, { ReactNode } from "react";
 import { KeyboardAvoidingView, Platform, StyleProp, StyleSheet, View, ViewStyle } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "../context/ThemeContext";
 
 type ScreenProps = {
@@ -11,6 +12,11 @@ type ScreenProps = {
 
 export function Screen({ children, style, plain }: ScreenProps) {
   const { theme } = useTheme();
+  const insets = useSafeAreaInsets();
+  /** Tight top inset: only safe area + small gap (replaces fixed 48px). */
+  const paddingTop = plain
+    ? Math.max(insets.top, 20)
+    : Math.max(insets.top + 4, 12);
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }, style]}>
@@ -18,7 +24,7 @@ export function Screen({ children, style, plain }: ScreenProps) {
         style={[
           styles.content,
           plain && styles.contentPlain,
-          { paddingHorizontal: theme.spacing.lg },
+          { paddingHorizontal: theme.spacing.sm, paddingTop },
         ]}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         keyboardVerticalOffset={Platform.OS === "ios" ? 12 : 0}
@@ -35,10 +41,8 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    paddingTop: 48,
   },
   contentPlain: {
-    paddingTop: 24,
     justifyContent: "center",
   },
 });

@@ -62,7 +62,7 @@ function ToastBanner({ payload }: { payload: ToastPayload }) {
       style={[
         styles.wrap,
         {
-          paddingBottom: Math.max(insets.bottom, 12),
+          paddingTop: Math.max(insets.top, 12),
           paddingHorizontal: theme.spacing.md,
         },
       ]}
@@ -129,7 +129,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: 0,
     right: 0,
-    bottom: 0,
+    top: 0,
     zIndex: 9998,
   },
   text: {

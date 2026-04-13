@@ -10,7 +10,7 @@ import type { MiniWeekBucket } from "../../utils/profileStats";
 import { Flame } from "lucide-react-native";
 
 const CHART_HEIGHT = 96;
-/** Screen horizontal padding (theme.spacing.lg×2) + card padding + small inset so SVG never clips card edges. */
+/** Screen horizontal padding (theme.spacing.sm×2) + card padding + small inset so SVG never clips card edges. */
 const CHART_SIDE_RESERVE = 96;
 
 type Props = {

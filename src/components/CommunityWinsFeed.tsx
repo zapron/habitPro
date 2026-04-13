@@ -55,7 +55,7 @@ export function CommunityWinsFeed({ contentPaddingBottom = 24, variant = "feed" 
 
   itemsRef.current = items;
 
-  const feedBleed = variant === "feed" ? theme.spacing.lg : 0;
+  const feedBleed = variant === "feed" ? theme.spacing.sm : 0;
 
   const listRows: ListRow[] = useMemo(() => {
     if (loading && items.length === 0 && session && isSupabaseConfigured()) {
