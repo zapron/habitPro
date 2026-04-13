@@ -1,6 +1,8 @@
 import "../src/splashInit";
 import { useEffect, useRef } from "react";
 import { View } from "react-native";
+import { useFonts } from "expo-font";
+import { fontAssets } from "../src/styles/fonts";
 import * as Linking from "expo-linking";
 import * as WebBrowser from "expo-web-browser";
 import { Stack, usePathname, useRouter } from "expo-router";
@@ -209,6 +211,16 @@ function RootLayoutNav() {
 }
 
 export default function Layout() {
+  const [fontsLoaded, fontError] = useFonts(fontAssets);
+
+  useEffect(() => {
+    if (fontError) throw fontError;
+  }, [fontError]);
+
+  if (!fontsLoaded) {
+    return null;
+  }
+
   return (
     <ThemeProvider>
       <ToastProvider>
