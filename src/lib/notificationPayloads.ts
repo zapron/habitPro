@@ -7,6 +7,16 @@
 
 export const NOTIFICATION_SCHEMA = "habitpro.notification.v1" as const;
 
+/** challenge_squad_checkin — cohort member marked a day (in-app + push); DB trigger on habits */
+export type ChallengeSquadCheckinPayload = {
+  schema: typeof NOTIFICATION_SCHEMA;
+  challenge_id: string;
+  actor_user_id: string;
+  actor_username: string | null;
+  habit_title: string;
+  date_str: string;
+};
+
 /** community_win_cheer — someone cheered your published win */
 export type CommunityWinCheerPayload = {
   schema: typeof NOTIFICATION_SCHEMA;

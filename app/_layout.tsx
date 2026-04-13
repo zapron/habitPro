@@ -91,7 +91,7 @@ function RootLayoutNav() {
         return;
       }
 
-      if (type === "challenge_nudge") {
+      if (type === "challenge_nudge" || type === "challenge_squad_checkin") {
         const challengeId = typeof data.challenge_id === "string" ? data.challenge_id : "";
         if (challengeId) {
           router.push(`/challenge/${challengeId}`);

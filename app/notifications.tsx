@@ -59,6 +59,8 @@ function notificationTitle(type: string, payload?: Record<string, unknown>): str
       return "Invite declined";
     case "challenge_nudge":
       return "Squad nudge";
+    case "challenge_squad_checkin":
+      return "Squad streak";
     case "community_win_cheer":
       return "Cheer on your win";
     default:
@@ -80,6 +82,14 @@ function notificationSubtitle(n: NotificationRow): string | null {
       const who =
         typeof from === "string" && from.trim().length > 0 ? `@${from.trim().toLowerCase()}` : "Someone";
       return `${who} sent you ${nudgeKindLabel(p.kind)} · Tap to open squad`;
+    }
+    case "challenge_squad_checkin": {
+      const from = p.actor_username;
+      const who =
+        typeof from === "string" && from.trim().length > 0 ? `@${from.trim().toLowerCase()}` : "Someone";
+      const mission =
+        typeof p.habit_title === "string" && p.habit_title.trim().length > 0 ? p.habit_title.trim() : "Mission";
+      return `${who} updated the streak on “${mission}” · Tap for squad`;
     }
     case "community_win_cheer": {
       const parsed = parseCommunityWinCheerPayload(p);
@@ -162,7 +172,7 @@ export default function NotificationsScreen() {
       return;
     }
 
-    if (n.type === "challenge_nudge" && challengeId) {
+    if ((n.type === "challenge_nudge" || n.type === "challenge_squad_checkin") && challengeId) {
       router.push(`/challenge/${challengeId}`);
       return;
     }
