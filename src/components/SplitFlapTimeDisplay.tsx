@@ -2,6 +2,7 @@ import { Text } from "./AppText";
 import {
   Fragment,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState } from "react";
@@ -45,6 +46,15 @@ function SplitFlapDigit({
   const [bottom, setBottom] = useState(digit);
   const translateY = useRef(new Animated.Value(0)).current;
 
+  /** When the roll has settled (same glyph top + bottom), force translateY=0 before paint.
+   *  Deferring reset with rAF after setState let translate stay at -lineHeight for one frame
+   *  with two identical lines — on some Android GPUs that reads as a ghost/blurred double. */
+  useLayoutEffect(() => {
+    if (top === bottom) {
+      translateY.setValue(0);
+    }
+  }, [top, bottom, translateY]);
+
   useEffect(() => {
     if (digit === prev.current) return;
     setTop(prev.current);
@@ -61,20 +71,26 @@ function SplitFlapDigit({
       prev.current = digit;
       setTop(digit);
       setBottom(digit);
-      // Reset after commit so translateY=0 never pairs with stale `top` (avoids one-frame flash).
-      requestAnimationFrame(() => {
-        translateY.setValue(0);
-      });
     });
     return () => {
       anim.stop();
     };
   }, [digit, lineHeight, translateY]);
 
+  const shadowForDigit =
+    Platform.OS === "android" ? undefined : textShadowStyle;
+
   return (
-    <View style={[styles.digitShell, { width: digitWidth, height: lineHeight }]}>
-      <View style={[styles.clip, { height: lineHeight, width: digitWidth }]}>
+    <View
+      collapsable={false}
+      style={[styles.digitShell, { width: digitWidth, height: lineHeight }]}
+    >
+      <View
+        collapsable={false}
+        style={[styles.clip, { height: lineHeight, width: digitWidth }]}
+      >
         <Animated.View
+          collapsable={false}
           style={[
             styles.rollCol,
             { width: digitWidth },
@@ -95,7 +111,7 @@ function SplitFlapDigit({
                 width: digitWidth,
                 color,
               },
-              textShadowStyle,
+              shadowForDigit,
             ]}
           >
             {top}
@@ -112,7 +128,7 @@ function SplitFlapDigit({
                 width: digitWidth,
                 color,
               },
-              textShadowStyle,
+              shadowForDigit,
             ]}
           >
             {bottom}
