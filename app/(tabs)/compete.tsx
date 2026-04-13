@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   StyleSheet,
   StatusBar,
-  Alert,
   ActivityIndicator,
   Platform,
 } from "react-native";
@@ -15,7 +14,9 @@ import { useFocusEffect } from "@react-navigation/native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { ChevronRight, Eye, Medal, Swords, Trophy, Clock, X } from "lucide-react-native";
 import { Screen } from "../../src/components/Screen";
+import { ConfirmDialog } from "../../src/components/ConfirmDialog";
 import { useTheme } from "../../src/context/ThemeContext";
+import { useToast } from "../../src/context/ToastContext";
 import { useHabitStore } from "../../src/store/habitStore";
 import { useChallengeStore } from "../../src/store/challengeStore";
 import { CHALLENGE_TEMPLATES, getChallengeTemplate } from "../../src/constants/challengeTemplates";
@@ -40,6 +41,9 @@ import {
   refreshCohortPeerHabits,
 } from "../../src/lib/groupChallengesApi";
 import { subscribeSyncSuccess } from "../../src/lib/syncQueue";
+
+const INVITE_ACCEPT_TIMEOUT_MS = 45_000;
+
 type CompeteSegment = "leaderboard" | "challenges";
 
 /** Sub-tabs when main segment is Challenges */
@@ -164,14 +168,14 @@ function ActiveChallengeCard({
   miniMissions,
   theme,
   isDark,
-  onAbandon,
+  onRequestAbandon,
 }: {
   enrollment: ChallengeEnrollment;
   habits: Habit[];
   miniMissions: MiniMission[];
   theme: ReturnType<typeof useTheme>["theme"];
   isDark: boolean;
-  onAbandon: (id: string) => void;
+  onRequestAbandon: () => void;
 }) {
   const template = getChallengeTemplate(enrollment.templateId);
   if (!template) return null;
@@ -198,16 +202,7 @@ function ActiveChallengeCard({
           <Text style={[styles.activeTitle, { color: theme.colors.textPrimary }]}>{template.title}</Text>
           <Text style={[styles.activeSub, { color: theme.colors.textSecondary }]}>{template.goalLine}</Text>
         </View>
-        <TouchableOpacity
-          onPress={() =>
-            Alert.alert("Leave challenge?", "Progress for this run will be lost.", [
-              { text: "Cancel", style: "cancel" },
-              { text: "Leave", style: "destructive", onPress: () => onAbandon(enrollment.id) },
-            ])
-          }
-          hitSlop={10}
-          style={[styles.abandonBtn, { borderColor: theme.colors.border }]}
-        >
+        <TouchableOpacity onPress={onRequestAbandon} hitSlop={10} style={[styles.abandonBtn, { borderColor: theme.colors.border }]}>
           <X size={18} color={theme.colors.textMuted} />
         </TouchableOpacity>
       </View>
@@ -231,6 +226,7 @@ function ActiveChallengeCard({
 
 export default function CompeteScreen() {
   const { theme, isDark } = useTheme();
+  const { showToast } = useToast();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const params = useLocalSearchParams<{
@@ -244,6 +240,7 @@ export default function CompeteScreen() {
   const [groupInvites, setGroupInvites] = useState<ChallengeInviteRow[]>([]);
   const [inviteCardMeta, setInviteCardMeta] = useState<Record<string, InviteCardMeta>>({});
   const [inviteBusy, setInviteBusy] = useState<string | null>(null);
+  const [leaveEnrollmentId, setLeaveEnrollmentId] = useState<string | null>(null);
   const [highlightInviteId, setHighlightInviteId] = useState<string | null>(null);
   const [highlightChallengeId, setHighlightChallengeId] = useState<string | null>(null);
   const deepLinkHandledRef = useRef(false);
@@ -331,7 +328,7 @@ export default function CompeteScreen() {
     try {
       const group = await getChallengeGroup(invite.challenge_id);
       if (!group) {
-        Alert.alert("Error", "Group mission not found.");
+        showToast("Group mission not found.", "error");
         return;
       }
       const tpl = group.habit_template as Record<string, unknown>;
@@ -342,26 +339,54 @@ export default function CompeteScreen() {
       const startIso = inviteeHabitStartIsoFromGroupStartDate(group.start_date);
 
       let newHabitId = "";
-      const unsub = subscribeSyncSuccess(() => {
-        unsub();
-        void acceptInviteAndJoin(invite, newHabitId).then(({ error }) => {
-          if (error) {
-            Alert.alert("Could not join", error.message);
-            return;
-          }
-          void refreshCohortPeerHabits();
-          void loadInvites();
+      await new Promise<void>((resolve, reject) => {
+        let unsub: (() => void) | undefined;
+        const timeoutId = setTimeout(() => {
+          unsub?.();
+          reject(new Error("Couldn’t sync in time. Check your connection and try again."));
+        }, INVITE_ACCEPT_TIMEOUT_MS);
+
+        const finish = (err?: unknown) => {
+          clearTimeout(timeoutId);
+          if (err) reject(err);
+          else resolve();
+        };
+
+        newHabitId = addHabit({
+          title,
+          description,
+          mode,
+          totalDays: mode === "manual" ? totalDays : undefined,
+          challengeGroupId: group.id,
+          challengeCreatorTimezone: group.creator_timezone,
+          startDate: startIso,
+        });
+
+        unsub = subscribeSyncSuccess(() => {
+          unsub?.();
+          unsub = undefined;
+          void acceptInviteAndJoin(invite, newHabitId)
+            .then(({ error }) => {
+              if (error) {
+                finish(error);
+                return;
+              }
+              void refreshCohortPeerHabits();
+              void loadInvites();
+              showToast("Joined the group mission", "success");
+              finish();
+            })
+            .catch(finish);
         });
       });
-      newHabitId = addHabit({
-        title,
-        description,
-        mode,
-        totalDays: mode === "manual" ? totalDays : undefined,
-        challengeGroupId: group.id,
-        challengeCreatorTimezone: group.creator_timezone,
-        startDate: startIso,
-      });
+    } catch (e: unknown) {
+      const msg =
+        e instanceof Error
+          ? e.message
+          : typeof e === "object" && e && "message" in e
+            ? String((e as { message: string }).message)
+            : String(e);
+      showToast(msg, "error");
     } finally {
       setInviteBusy(null);
     }
@@ -372,9 +397,10 @@ export default function CompeteScreen() {
     try {
       const { error } = await declineInvite(invite.id);
       if (error) {
-        Alert.alert("Could not decline", error.message);
+        showToast(error.message, "error");
         return;
       }
+      showToast("Invite declined", "success");
       void loadInvites();
     } finally {
       setInviteBusy(null);
@@ -422,7 +448,9 @@ export default function CompeteScreen() {
   const handleJoin = (templateId: (typeof CHALLENGE_TEMPLATES)[number]["id"]) => {
     const r = enroll(templateId);
     if (r.ok === false) {
-      Alert.alert("Can't join", r.reason);
+      showToast(r.reason, "error");
+    } else {
+      showToast("Challenge joined", "success");
     }
   };
 
@@ -759,7 +787,7 @@ export default function CompeteScreen() {
                   miniMissions={miniMissions}
                   theme={theme}
                   isDark={isDark}
-                  onAbandon={abandon}
+                  onRequestAbandon={() => setLeaveEnrollmentId(e.id)}
                 />
               ))
             )}
@@ -812,6 +840,28 @@ export default function CompeteScreen() {
           </>
         )}
         </ScrollView>
+
+      <ConfirmDialog
+        visible={leaveEnrollmentId !== null}
+        onRequestClose={() => setLeaveEnrollmentId(null)}
+        title="Leave challenge?"
+        message="Progress for this run will be lost."
+        actions={[
+          { label: "Cancel", variant: "secondary", onPress: () => setLeaveEnrollmentId(null) },
+          {
+            label: "Leave",
+            variant: "danger",
+            onPress: () => {
+              const id = leaveEnrollmentId;
+              setLeaveEnrollmentId(null);
+              if (id) {
+                abandon(id);
+                showToast("Left challenge", "success");
+              }
+            },
+          },
+        ]}
+      />
     </Screen>
   );
 }
