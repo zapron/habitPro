@@ -9,7 +9,6 @@ import {
   StatusBar,
   ActivityIndicator,
   Platform,
-  Alert,
   RefreshControl,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -18,9 +17,11 @@ import { ArrowLeft, LogOut } from "lucide-react-native";
 import { CohortMasthead } from "../../src/components/CohortMasthead";
 import { CohortNudgeChips } from "../../src/components/CohortNudgeChips";
 import { Screen } from "../../src/components/Screen";
+import { ConfirmDialog } from "../../src/components/ConfirmDialog";
 import { CohortPeerStreakDots } from "../../src/components/CohortPeerStreakDots";
 import { SquadActivitySection } from "../../src/components/SquadActivitySection";
 import { useTheme } from "../../src/context/ThemeContext";
+import { useToast } from "../../src/context/ToastContext";
 import { useAuth } from "../../src/context/AuthContext";
 import { useHabitStore } from "../../src/store/habitStore";
 import {
@@ -78,6 +79,7 @@ export default function ChallengeDetailScreen() {
   const challengeId = Array.isArray(id) ? id[0] : id;
   const router = useRouter();
   const { theme, isDark } = useTheme();
+  const { showToast } = useToast();
   const { session } = useAuth();
   const myUserId = session?.user?.id ?? null;
 
@@ -95,6 +97,7 @@ export default function ChallengeDetailScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [cohortNow, setCohortNow] = useState(() => Date.now());
   const [leaveBusy, setLeaveBusy] = useState(false);
+  const [leaveDialogOpen, setLeaveDialogOpen] = useState(false);
 
   const focusOnceRef = useRef(false);
 
@@ -162,7 +165,7 @@ export default function ChallengeDetailScreen() {
       try {
         const { error } = await sendChallengeNudge(challengeId, toUserId, kind);
         if (error) {
-          Alert.alert("Couldn’t send", error.message);
+          showToast(error.message, "error");
           return;
         }
         await load({ silent: true });
@@ -170,7 +173,7 @@ export default function ChallengeDetailScreen() {
         setNudgeBusyKey(null);
       }
     },
-    [challengeId, myUserId, load, habits],
+    [challengeId, myUserId, load, habits, showToast],
   );
 
   const onCongrats = useCallback(
@@ -189,7 +192,7 @@ export default function ChallengeDetailScreen() {
       try {
         const { error } = await sendChallengeNudge(challengeId, actorUserId, "congrats");
         if (error) {
-          Alert.alert("Couldn’t send", error.message);
+          showToast(error.message, "error");
           return;
         }
         await load({ silent: true });
@@ -197,7 +200,7 @@ export default function ChallengeDetailScreen() {
         setNudgeBusyKey(null);
       }
     },
-    [challengeId, myUserId, load, habits],
+    [challengeId, myUserId, load, habits, showToast],
   );
 
   const myHabit = useMemo(
@@ -211,36 +214,30 @@ export default function ChallengeDetailScreen() {
 
   const onLeaveMission = useCallback(() => {
     if (!challengeId || !myHabit?.id) return;
-    Alert.alert(
-      "Leave group mission?",
-      "You’ll be removed from the squad and this mission will disappear from your list. This can’t be undone.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Leave",
-          style: "destructive",
-          onPress: () => {
-            void (async () => {
-              setLeaveBusy(true);
-              try {
-                const habitId = myHabit.id;
-                const { error } = await leaveChallengeGroup(challengeId);
-                if (error) {
-                  Alert.alert("Couldn’t leave", error.message);
-                  return;
-                }
-                deleteHabit(habitId);
-                await refreshCohortPeerHabits().catch(() => {});
-                router.back();
-              } finally {
-                setLeaveBusy(false);
-              }
-            })();
-          },
-        },
-      ],
-    );
-  }, [challengeId, myHabit?.id, deleteHabit, router]);
+    setLeaveDialogOpen(true);
+  }, [challengeId, myHabit?.id]);
+
+  const confirmLeaveMission = useCallback(() => {
+    if (!challengeId || !myHabit?.id) return;
+    setLeaveDialogOpen(false);
+    void (async () => {
+      setLeaveBusy(true);
+      try {
+        const habitId = myHabit.id;
+        const { error } = await leaveChallengeGroup(challengeId);
+        if (error) {
+          showToast(error.message, "error");
+          return;
+        }
+        deleteHabit(habitId);
+        await refreshCohortPeerHabits().catch(() => {});
+        showToast("Left group mission", "success");
+        router.back();
+      } finally {
+        setLeaveBusy(false);
+      }
+    })();
+  }, [challengeId, myHabit, deleteHabit, router, showToast]);
 
   useEffect(() => {
     if (!myHabit || myHabit.isCompleted) return;
@@ -496,6 +493,17 @@ export default function ChallengeDetailScreen() {
           )}
         </ScrollView>
       )}
+
+      <ConfirmDialog
+        visible={leaveDialogOpen}
+        onRequestClose={() => setLeaveDialogOpen(false)}
+        title="Leave group mission?"
+        message="You’ll be removed from the squad and this mission will disappear from your list. This can’t be undone."
+        actions={[
+          { label: "Cancel", variant: "secondary", onPress: () => setLeaveDialogOpen(false) },
+          { label: "Leave", variant: "danger", onPress: confirmLeaveMission },
+        ]}
+      />
     </Screen>
   );
 }
