@@ -7,6 +7,7 @@ import { Stack, usePathname, useRouter } from "expo-router";
 
 WebBrowser.maybeCompleteAuthSession();
 import { ThemeProvider } from "../src/context/ThemeContext";
+import { ToastProvider } from "../src/context/ToastContext";
 import { AuthProvider, useAuth } from "../src/context/AuthContext";
 import { AppVersionProvider, useAppVersion } from "../src/context/AppVersionContext";
 import { ForceUpdateModal } from "../src/components/ForceUpdateModal";
@@ -210,13 +211,15 @@ function RootLayoutNav() {
 export default function Layout() {
   return (
     <ThemeProvider>
-      <AuthProvider>
-        <AppVersionProvider>
-          <SplashGate>
-            <RootLayoutNav />
-          </SplashGate>
-        </AppVersionProvider>
-      </AuthProvider>
+      <ToastProvider>
+        <AuthProvider>
+          <AppVersionProvider>
+            <SplashGate>
+              <RootLayoutNav />
+            </SplashGate>
+          </AppVersionProvider>
+        </AuthProvider>
+      </ToastProvider>
     </ThemeProvider>
   );
 }
