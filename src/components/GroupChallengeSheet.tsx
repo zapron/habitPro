@@ -37,6 +37,7 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
   const router = useRouter();
   const { session } = useAuth();
   const setHabitChallengeMeta = useHabitStore((s) => s.setHabitChallengeMeta);
+  const myUsername = useHabitStore((s) => s.username);
 
   const [creating, setCreating] = useState(false);
   const [query, setQuery] = useState("");
@@ -132,6 +133,24 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
         Alert.alert("Create a group mission first", "Start a group mission from this habit, then invite friends.");
         return;
       }
+      const uname = myUsername?.trim() ?? "";
+      if (!uname) {
+        Alert.alert(
+          "Set a username first",
+          "You need a public username so your squad knows who sent the invite. Open Profile → settings and choose a username.",
+          [
+            { text: "Cancel", style: "cancel" },
+            {
+              text: "Go to Profile",
+              onPress: () => {
+                onClose();
+                router.push("/(tabs)/profile");
+              },
+            },
+          ],
+        );
+        return;
+      }
       if (inviteeStatusById[userId]) return;
       setInvitingId(userId);
       try {
@@ -147,7 +166,7 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
         setInvitingId(null);
       }
     },
-    [habit.challengeGroupId, inviteeStatusById],
+    [habit.challengeGroupId, inviteeStatusById, myUsername, onClose, router],
   );
 
   const openChallenge = () => {
@@ -186,8 +205,7 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
               <TextInput
                 value={query}
                 onChangeText={setQuery}
-                placeholder="Search by email"
-                keyboardType="email-address"
+                placeholder="Search by username"
                 placeholderTextColor={theme.colors.textMuted}
                 autoCapitalize="none"
                 autoCorrect={false}
