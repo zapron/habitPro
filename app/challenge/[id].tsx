@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -14,7 +14,7 @@ import {
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
-import { ArrowLeft } from "lucide-react-native";
+import { ArrowLeft, LogOut } from "lucide-react-native";
 import { CohortMasthead } from "../../src/components/CohortMasthead";
 import { CohortNudgeChips } from "../../src/components/CohortNudgeChips";
 import { Screen } from "../../src/components/Screen";
@@ -31,10 +31,12 @@ import {
 import {
   getChallengeGroup,
   getProfileLabelsForIds,
+  leaveChallengeGroup,
   listChallengeMembers,
   refreshCohortPeerHabits,
   type ProfileLabel,
 } from "../../src/lib/groupChallengesApi";
+import { isSupabaseConfigured } from "../../src/lib/env";
 import type {
   ChallengeActivityRow,
   ChallengeGroupRow,
@@ -42,6 +44,7 @@ import type {
   ChallengeNudgeRow,
 } from "../../src/types/groupChallenge";
 import type { Habit } from "../../src/types/habit";
+import { isHabitMissionWindowClosed } from "../../src/utils/habitMissionWindow";
 
 function parseGroupMissionDisplay(g: ChallengeGroupRow | null): { title: string; description?: string } {
   if (!g) return { title: "Group mission" };
@@ -80,6 +83,7 @@ export default function ChallengeDetailScreen() {
 
   const habits = useHabitStore((s) => s.habits);
   const cohortPeerHabits = useHabitStore((s) => s.cohortPeerHabits);
+  const deleteHabit = useHabitStore((s) => s.deleteHabit);
 
   const [group, setGroup] = useState<ChallengeGroupRow | null>(null);
   const [loading, setLoading] = useState(true);
@@ -89,6 +93,8 @@ export default function ChallengeDetailScreen() {
   const [feedNudges, setFeedNudges] = useState<ChallengeNudgeRow[]>([]);
   const [nudgeBusyKey, setNudgeBusyKey] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [cohortNow, setCohortNow] = useState(() => Date.now());
+  const [leaveBusy, setLeaveBusy] = useState(false);
 
   const focusOnceRef = useRef(false);
 
@@ -123,6 +129,7 @@ export default function ChallengeDetailScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      setCohortNow(Date.now());
       const silent = focusOnceRef.current;
       focusOnceRef.current = true;
       void load({ silent });
@@ -142,6 +149,14 @@ export default function ChallengeDetailScreen() {
   const onSendNudge = useCallback(
     async (toUserId: string, kind: ChallengeNudgeKind) => {
       if (!challengeId || !myUserId || toUserId === myUserId) return;
+      const viewerHabit = habits.find((h) => h.challengeGroupId === challengeId);
+      if (
+        viewerHabit &&
+        !viewerHabit.isCompleted &&
+        isHabitMissionWindowClosed(viewerHabit, Date.now())
+      ) {
+        return;
+      }
       const key = `${toUserId}-${kind}`;
       setNudgeBusyKey(key);
       try {
@@ -155,12 +170,20 @@ export default function ChallengeDetailScreen() {
         setNudgeBusyKey(null);
       }
     },
-    [challengeId, myUserId, load],
+    [challengeId, myUserId, load, habits],
   );
 
   const onCongrats = useCallback(
     async (actorUserId: string) => {
       if (!challengeId || !myUserId || actorUserId === myUserId) return;
+      const viewerHabit = habits.find((h) => h.challengeGroupId === challengeId);
+      if (
+        viewerHabit &&
+        !viewerHabit.isCompleted &&
+        isHabitMissionWindowClosed(viewerHabit, Date.now())
+      ) {
+        return;
+      }
       const key = `${actorUserId}-congrats`;
       setNudgeBusyKey(key);
       try {
@@ -174,13 +197,62 @@ export default function ChallengeDetailScreen() {
         setNudgeBusyKey(null);
       }
     },
-    [challengeId, myUserId, load],
+    [challengeId, myUserId, load, habits],
   );
 
   const myHabit = useMemo(
     () => habits.find((h) => h.challengeGroupId === challengeId),
     [habits, challengeId],
   );
+
+  const canLeaveMission = Boolean(
+    challengeId && myHabit?.id && session && isSupabaseConfigured(),
+  );
+
+  const onLeaveMission = useCallback(() => {
+    if (!challengeId || !myHabit?.id) return;
+    Alert.alert(
+      "Leave group mission?",
+      "You’ll be removed from the squad and this mission will disappear from your list. This can’t be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Leave",
+          style: "destructive",
+          onPress: () => {
+            void (async () => {
+              setLeaveBusy(true);
+              try {
+                const habitId = myHabit.id;
+                const { error } = await leaveChallengeGroup(challengeId);
+                if (error) {
+                  Alert.alert("Couldn’t leave", error.message);
+                  return;
+                }
+                deleteHabit(habitId);
+                await refreshCohortPeerHabits().catch(() => {});
+                router.back();
+              } finally {
+                setLeaveBusy(false);
+              }
+            })();
+          },
+        },
+      ],
+    );
+  }, [challengeId, myHabit?.id, deleteHabit, router]);
+
+  useEffect(() => {
+    if (!myHabit || myHabit.isCompleted) return;
+    const t = setInterval(() => setCohortNow(Date.now()), 30_000);
+    return () => clearInterval(t);
+  }, [myHabit?.id, myHabit?.isCompleted]);
+
+  const squadNudgeActionsEnabled = useMemo(() => {
+    if (!myHabit) return true;
+    if (myHabit.isCompleted) return true;
+    return !isHabitMissionWindowClosed(myHabit, cohortNow);
+  }, [myHabit, cohortNow]);
 
   const peers = useMemo(
     () => cohortPeerHabits.filter((h) => h.challengeGroupId === challengeId),
@@ -266,6 +338,29 @@ export default function ChallengeDetailScreen() {
         >
           <ArrowLeft size={theme.icon.xl} color={theme.colors.textPrimary} />
         </TouchableOpacity>
+        {canLeaveMission ? (
+          <TouchableOpacity
+            style={[
+              styles.leaveButton,
+              {
+                backgroundColor: theme.colors.surface,
+                borderColor: theme.colors.border,
+                opacity: leaveBusy ? 0.65 : 1,
+              },
+            ]}
+            onPress={onLeaveMission}
+            disabled={leaveBusy}
+            accessibilityRole="button"
+            accessibilityLabel="Leave group mission"
+          >
+            {leaveBusy ? (
+              <ActivityIndicator color={theme.colors.red[500]} size="small" />
+            ) : (
+              <LogOut size={theme.icon.md} color={theme.colors.red[500]} />
+            )}
+            <Text style={[styles.leaveButtonText, { color: theme.colors.red[500] }]}>Leave</Text>
+          </TouchableOpacity>
+        ) : null}
       </View>
 
       {loading ? (
@@ -325,9 +420,12 @@ export default function ChallengeDetailScreen() {
             myUserId={myUserId}
             nudgeBusyKey={nudgeBusyKey}
             onCongrats={(actorUserId) => void onCongrats(actorUserId)}
+            allowNudgeActions={squadNudgeActionsEnabled}
           />
 
-          {cohortMastheadMessage ? <CohortMasthead theme={theme} message={cohortMastheadMessage} /> : null}
+          {cohortMastheadMessage ? (
+            <CohortMasthead theme={theme} isDark={isDark} message={cohortMastheadMessage} />
+          ) : null}
 
           <Text style={[styles.sectionLabel, { color: theme.colors.textMuted }]}>PARTICIPANTS</Text>
 
@@ -383,7 +481,7 @@ export default function ChallengeDetailScreen() {
                     </Text>
                   )}
 
-                  {myUserId && memberId !== myUserId ? (
+                  {squadNudgeActionsEnabled && myUserId && memberId !== myUserId ? (
                     <CohortNudgeChips
                       theme={theme}
                       isDark={isDark}
@@ -403,8 +501,24 @@ export default function ChallengeDetailScreen() {
 }
 
 const styles = StyleSheet.create({
-  header: { flexDirection: "row", marginBottom: 12 },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 12,
+    gap: 12,
+  },
   iconButton: { padding: 8, borderRadius: 9999, borderWidth: 1 },
+  leaveButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 9999,
+    borderWidth: 1,
+  },
+  leaveButtonText: { fontSize: 14, fontWeight: "800" },
   heroTitle: {
     fontSize: 28,
     fontWeight: "900",
