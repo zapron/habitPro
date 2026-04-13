@@ -284,14 +284,52 @@ export default function HabitDetail() {
         );
     }
 
+    const isGroupMission = Boolean(habit.challengeGroupId);
+
     const handleReset = () => {
+        if (isGroupMission) {
+            Alert.alert(
+                'Cannot reset',
+                'Group missions use one shared timeline for the squad. Restarting your run here would break the challenge—finish this mission or work with your group.',
+                [{ text: 'OK', style: 'default' }],
+            );
+            return;
+        }
         Alert.alert('Reset Mission', 'Restart this mission from day 1?', [
             { text: 'Cancel', style: 'cancel' },
-            { text: 'Reset', style: 'destructive', onPress: () => { resetHabit(habit.id); Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); router.back(); } },
+            {
+                text: 'Reset',
+                style: 'destructive',
+                onPress: () => {
+                    if (resetHabit(habit.id)) {
+                        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                        router.back();
+                    }
+                },
+            },
         ]);
     };
 
     const handleDelete = () => {
+        if (isGroupMission) {
+            Alert.alert(
+                'Group mission',
+                'Deleting only removes this mission from your device. You may still appear in the squad until the host or server state catches up. Prefer finishing the run or coordinating with your group if you need out.',
+                [
+                    { text: 'Cancel', style: 'cancel' },
+                    {
+                        text: 'Delete from device',
+                        style: 'destructive',
+                        onPress: () => {
+                            deleteHabit(habit.id);
+                            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+                            router.back();
+                        },
+                    },
+                ],
+            );
+            return;
+        }
         Alert.alert('Delete Mission', 'Give up on this mission?', [
             { text: 'Cancel', style: 'cancel' },
             { text: 'Delete', style: 'destructive', onPress: () => { deleteHabit(habit.id); Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); router.back(); } },
@@ -385,9 +423,11 @@ export default function HabitDetail() {
                     >
                         <Users size={theme.icon.xl} color={theme.colors.cyan[400]} />
                     </TouchableOpacity>
-                    <TouchableOpacity style={styles.resetButton} onPress={handleReset}>
-                        <RotateCcw size={theme.icon.xl} color={theme.colors.amber[500]} />
-                    </TouchableOpacity>
+                    {!isGroupMission ? (
+                        <TouchableOpacity style={styles.resetButton} onPress={handleReset}>
+                            <RotateCcw size={theme.icon.xl} color={theme.colors.amber[500]} />
+                        </TouchableOpacity>
+                    ) : null}
                     <TouchableOpacity style={styles.deleteButton} onPress={handleDelete}>
                         <Trash2 size={theme.icon.xl} color={theme.colors.red[500]} />
                     </TouchableOpacity>
