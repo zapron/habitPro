@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Text } from "../../src/components/AppText";
 import {
   View,
-  Text,
   TouchableOpacity,
   StyleSheet,
   StatusBar,
@@ -246,7 +246,12 @@ export default function Home() {
             </View>
           </View>
         </View>
-        <Text style={[styles.headerTitle, { color: theme.colors.textPrimary }]}>
+        <Text
+          style={[
+            styles.headerTitle,
+            { color: theme.colors.textPrimary, letterSpacing: theme.letterSpacing.tight },
+          ]}
+        >
           {greeting.text} {greeting.emoji}
         </Text>
       </Animated.View>

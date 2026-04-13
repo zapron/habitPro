@@ -1,7 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Text } from "../../src/components/AppText";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState } from "react";
 import {
   View,
-  Text,
   TouchableOpacity,
   StyleSheet,
   StatusBar,

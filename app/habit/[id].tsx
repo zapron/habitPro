@@ -1,6 +1,21 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Text } from "../../src/components/AppText";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, StatusBar, Animated, Easing, LayoutChangeEvent, Switch } from 'react-native';
+import { View,
+  ScrollView,
+  TouchableOpacity,
+  StyleSheet,
+  StatusBar,
+  Animated,
+  Easing,
+  LayoutChangeEvent,
+  Switch,
+} from "react-native";
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { ArrowLeft, Trash2, Lock, RotateCcw, Sparkles, Star, Plane, Gamepad2, Globe, User, Users, Info } from 'lucide-react-native';

@@ -1,5 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, StatusBar, Switch } from "react-native";
+import { Text } from "../../src/components/AppText";
+import {
+  View,
+  StyleSheet,
+  TouchableOpacity,
+  StatusBar,
+  Switch,
+} from "react-native";
 import * as Haptics from "expo-haptics";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";

@@ -1,7 +1,9 @@
-import { useEffect, useState } from "react";
+import { Text } from "../../src/components/AppText";
+import {
+  useEffect,
+  useState } from "react";
 import {
   View,
-  Text,
   TextInput,
   TouchableOpacity,
   StyleSheet,

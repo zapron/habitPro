@@ -1,5 +1,11 @@
-import { useEffect, useState } from "react";
-import { ActivityIndicator, Text, TouchableOpacity, View } from "react-native";
+import { Text } from "../../src/components/AppText";
+import {
+  useEffect,
+  useState } from "react";
+import { ActivityIndicator,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import * as Linking from "expo-linking";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Screen } from "../../src/components/Screen";

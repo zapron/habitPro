@@ -1,5 +1,14 @@
-import { useState } from 'react';
-import { View, Text, TextInput, Alert, ScrollView, StyleSheet, TouchableOpacity, StatusBar } from 'react-native';
+import { Text } from "../src/components/AppText";
+import {
+  useState } from 'react';
+import { View,
+  TextInput,
+  Alert,
+  ScrollView,
+  StyleSheet,
+  TouchableOpacity,
+  StatusBar,
+} from "react-native";
 import { useRouter } from 'expo-router';
 
 import { ArrowLeft, Target, Gamepad2, Plane, Globe, User } from 'lucide-react-native';

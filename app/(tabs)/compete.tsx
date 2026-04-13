@@ -1,7 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Text } from "../../src/components/AppText";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState } from "react";
 import {
   View,
-  Text,
   ScrollView,
   TouchableOpacity,
   StyleSheet,
@@ -458,7 +463,18 @@ export default function CompeteScreen() {
     <Screen>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={theme.colors.background} />
 
-      <Text style={[styles.title, { color: theme.colors.textPrimary, fontSize: theme.typography.h1 }]}>Compete</Text>
+      <Text
+        style={[
+          styles.title,
+          {
+            color: theme.colors.textPrimary,
+            fontSize: theme.typography.h1,
+            letterSpacing: theme.letterSpacing.tight,
+          },
+        ]}
+      >
+        Compete
+      </Text>
       <Text style={[styles.subtitle, { color: theme.colors.textSecondary, fontSize: theme.typography.caption }]}>
         Weekly tiers and time-boxed challenges.
       </Text>

@@ -1,7 +1,9 @@
-import { useCallback, useState } from "react";
+import { Text } from "../src/components/AppText";
+import {
+  useCallback,
+  useState } from "react";
 import {
   View,
-  Text,
   FlatList,
   TouchableOpacity,
   StyleSheet,

@@ -1,4 +1,9 @@
-import { StatusBar, StyleSheet, Text, View } from "react-native";
+import { Text } from "../../src/components/AppText";
+import {
+  StatusBar,
+  StyleSheet,
+  View,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Screen } from "../../src/components/Screen";
 import { CommunityWinsFeed } from "../../src/components/CommunityWinsFeed";

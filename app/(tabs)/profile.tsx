@@ -1,8 +1,11 @@
-import { useMemo, useState } from "react";
-import type { ComponentType, ReactNode } from "react";
+import { Text } from "../../src/components/AppText";
+import {
+  useMemo,
+  useState } from "react";
+import type { ComponentType,
+  ReactNode } from "react";
 import {
   View,
-  Text,
   ScrollView,
   TouchableOpacity,
   StyleSheet,
