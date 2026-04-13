@@ -41,15 +41,30 @@ function habitFromRow(row: {
     row.visibility === "public" || row.visibility === "solo"
       ? row.visibility
       : "solo";
-  const d = getDerivedState(row.completed_dates ?? [], row.total_days ?? 21);
   const storedStreak = typeof row.streak === "number" && Number.isFinite(row.streak) ? row.streak : 0;
-  /** Prefer derived streak; max with stored column when present (reconcile cohort / older rows). */
-  const streak = Math.max(d.streak, storedStreak);
   const missionReport = parseMissionReport(row.mission_report);
   const missionReportAt =
     typeof row.mission_report_at === "string" ? row.mission_report_at : undefined;
+
+  let effectiveReport = missionReport;
+  const pre = getDerivedState(
+    row.completed_dates ?? [],
+    row.total_days ?? 21,
+    missionReport,
+  );
+  if (!effectiveReport && row.is_completed && pre.gridFull) {
+    effectiveReport = "accomplished";
+  }
+
+  const d = getDerivedState(
+    row.completed_dates ?? [],
+    row.total_days ?? 21,
+    effectiveReport,
+  );
+  /** Prefer derived streak; max with stored column when present (reconcile cohort / older rows). */
+  const streak = Math.max(d.streak, storedStreak);
   let status: Habit["status"] = d.status;
-  if (!d.isCompleted && (missionReport === "failed" || row.status === "failed")) {
+  if (!d.isCompleted && (effectiveReport === "failed" || row.status === "failed")) {
     status = "failed";
   }
   const rawMem = row.streak_memories;
@@ -71,7 +86,7 @@ function habitFromRow(row: {
     totalDays: d.totalDays,
     isCompleted: d.isCompleted,
     status,
-    missionReport,
+    missionReport: effectiveReport,
     missionReportAt,
     streakMemories,
     challengeGroupId: row.challenge_group_id ?? null,

@@ -9,6 +9,7 @@ import { useRouter } from 'expo-router';
 import { TreePine, Flame, Check, Plane, Gamepad2, Globe, Swords, Users } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
 import { Habit } from '../types/habit';
+import { needsMainMissionOutcome } from '../utils/mainMissionUi';
 import { ProgressRing } from './ProgressRing';
 
 interface HabitCardProps {
@@ -19,7 +20,8 @@ export const HabitCard = memo(({ item }: HabitCardProps) => {
     const router = useRouter();
     const { theme } = useTheme();
     const totalDays = Math.max(1, item.totalDays ?? 21);
-    const isFinished = item.completedDates.length >= totalDays;
+    const needsReport = needsMainMissionOutcome(item, Date.now());
+    const missionWon = item.missionReport === 'accomplished';
     const isManual = (item.mode ?? 'autopilot') === 'manual';
     /** Mission completion: distinct days checked / campaign length */
     const campaignProgress = Math.min(item.completedDates.length / totalDays, 1);
@@ -98,6 +100,19 @@ export const HabitCard = memo(({ item }: HabitCardProps) => {
                             <Text style={[styles.reportPillText, { color: theme.colors.red[500] }]}>FAILED</Text>
                         </View>
                     )}
+                    {needsReport ? (
+                        <View
+                            style={[
+                                styles.reportPill,
+                                {
+                                    borderColor: theme.colors.amber[500] + '55',
+                                    backgroundColor: 'rgba(245, 158, 11, 0.14)',
+                                },
+                            ]}
+                        >
+                            <Text style={[styles.reportPillText, { color: theme.colors.amber[500] }]}>REVIEW DUE</Text>
+                        </View>
+                    ) : null}
                 </View>
 
                 <Text style={[styles.cardTitle, { color: theme.colors.textPrimary, fontSize: theme.typography.h3 }]}>{item.title}</Text>
@@ -107,7 +122,7 @@ export const HabitCard = memo(({ item }: HabitCardProps) => {
                     </Text>
                 ) : null}
 
-                {!isFinished && (
+                {!missionWon && (
                     <View style={styles.progressBarBg}>
                         <View
                             style={{
@@ -127,7 +142,7 @@ export const HabitCard = memo(({ item }: HabitCardProps) => {
 
                 <View style={styles.cardStats}>
                     <View style={styles.statIcon}>
-                        {isFinished ? (
+                        {missionWon ? (
                             <TreePine size={16} color={theme.colors.green[500]} />
                         ) : item.streak >= 14 ? (
                             <View style={styles.flameStack}>
@@ -147,8 +162,10 @@ export const HabitCard = memo(({ item }: HabitCardProps) => {
                     <Text
                         style={[
                             styles.cardStreak,
-                            isFinished
+                            missionWon
                                 ? { color: theme.colors.green[500] }
+                                : needsReport
+                                    ? { color: theme.colors.amber[500] }
                                 : item.streak >= 14
                                     ? { color: '#fbbf24' }
                                     : item.streak >= 7
@@ -158,9 +175,15 @@ export const HabitCard = memo(({ item }: HabitCardProps) => {
                                             : { color: theme.colors.textMuted },
                         ]}
                     >
-                        {isFinished ? 'Completed!' : item.streak > 0 ? `${item.streak} day streak` : 'Start a streak'}
+                        {missionWon
+                            ? 'Completed!'
+                            : needsReport
+                              ? 'Confirm mission outcome'
+                              : item.streak > 0
+                                ? `${item.streak} day streak`
+                                : 'Start a streak'}
                     </Text>
-                    {!isFinished && (
+                    {!missionWon && (
                         <>
                             <Text style={[styles.cardProgress, { color: theme.colors.textMuted }]}>
                                 {Math.round(campaignProgress * 100)}%
@@ -191,12 +214,12 @@ export const HabitCard = memo(({ item }: HabitCardProps) => {
             </View>
 
             <ProgressRing
-                progress={isFinished ? 1 : streakProgress}
+                progress={missionWon ? 1 : streakProgress}
                 size={52}
                 strokeWidth={3}
-                color={isManual ? theme.colors.amber[500] : isFinished ? theme.colors.green[500] : theme.colors.indigo[500]}
+                color={isManual ? theme.colors.amber[500] : missionWon ? theme.colors.green[500] : theme.colors.indigo[500]}
             >
-                {isFinished ? (
+                {missionWon ? (
                     <Check size={20} color={theme.colors.green[500]} strokeWidth={3} />
                 ) : (
                     <Text style={[styles.progressText, { color: theme.colors.textPrimary }]}>{item.streak}</Text>

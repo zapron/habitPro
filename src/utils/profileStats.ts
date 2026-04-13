@@ -73,9 +73,11 @@ export function maxHabitStreak(habits: Habit[]): number {
   return m;
 }
 
-/** Habits that are not finished (still active campaign). */
+/** Habits still in an open campaign (excludes failed / accomplished archive). */
 export function countActiveHabits(habits: Habit[]): number {
-  return habits.filter((h) => !h.isCompleted).length;
+  return habits.filter(
+    (h) => h.status === "active" && !h.missionReport,
+  ).length;
 }
 
 /**

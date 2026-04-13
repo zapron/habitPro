@@ -13,7 +13,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
 import { FlashList } from "@shopify/flash-list";
-import { Trophy, Bolt, Target, Plus, ChevronRight, Sun, Moon, Sunrise, Sunset, Zap, Bell } from "lucide-react-native";
+import { Trophy, Bolt, Target, Plus, ChevronRight, Zap, Bell } from "lucide-react-native";
 import { useHabitStore } from "../../src/store/habitStore";
 import { useAuth } from "../../src/context/AuthContext";
 import { isSupabaseConfigured } from "../../src/lib/env";
@@ -26,19 +26,22 @@ import { useTheme } from "../../src/context/ThemeContext";
 import { useReducedMotion } from "../../src/hooks/useReducedMotion";
 import { AnimatedFire } from "../../src/components/AnimatedFire";
 import { getMiniRemainingMs } from "../../src/utils/miniMissionTime";
-import { isHabitMissionWindowClosed } from "../../src/utils/habitMissionWindow";
+import {
+  isMainMissionPlayableOnHome,
+  needsMainMissionOutcome,
+} from "../../src/utils/mainMissionUi";
 
-function getGreeting(): { text: string; emoji: string; Icon: typeof Sun } {
+function getGreeting(): string {
   const hour = new Date().getHours();
-  if (hour < 5) return { text: "Burning the midnight oil", emoji: "🌙", Icon: Moon };
-  if (hour < 12) return { text: "Good morning, warrior", emoji: "☀️", Icon: Sunrise };
-  if (hour < 17) return { text: "Keep pushing forward", emoji: "💪", Icon: Sun };
-  if (hour < 21) return { text: "Evening focus mode", emoji: "🌅", Icon: Sunset };
-  return { text: "Night owl mode", emoji: "🌙", Icon: Moon };
+  if (hour < 5) return "Burning the midnight oil";
+  if (hour < 12) return "Good morning, warrior";
+  if (hour < 17) return "Keep pushing forward";
+  if (hour < 21) return "Evening focus mode";
+  return "Night owl mode";
 }
 
-const SECTION_GAP = 16;
-const HEADER_BOTTOM_GAP = 10;
+const SECTION_GAP = 12;
+const HEADER_BOTTOM_GAP = 6;
 
 function ListSkeleton({ theme }: { theme: AppTheme }) {
   return (
@@ -63,6 +66,7 @@ export default function Home() {
   const miniMissions = useHabitStore((state) => state.miniMissions);
   const xp = useHabitStore((state) => state.xp);
   const [activeTab, setActiveTab] = useState<"missions" | "reports">("missions");
+  const [reportsSegment, setReportsSegment] = useState<"pending" | "accomplished" | "failed">("pending");
   const [storeHydrated, setStoreHydrated] = useState(() => useHabitStore.persist.hasHydrated());
   const [unreadNotifCount, setUnreadNotifCount] = useState(0);
   const [notifRefreshBusy, setNotifRefreshBusy] = useState(false);
@@ -77,27 +81,26 @@ export default function Home() {
   const xpProgress = xpInLevel / 100;
 
   const filteredHabits = useMemo(() => {
-    if (activeTab === "reports") {
-      return habits.filter(
-        (h) => !h.isCompleted && isHabitMissionWindowClosed(h, missionNow),
-      );
+    if (activeTab === "missions") {
+      return habits.filter((h) => isMainMissionPlayableOnHome(h, missionNow));
     }
-    return habits.filter(
-      (h) => !( !h.isCompleted && isHabitMissionWindowClosed(h, missionNow) ),
-    );
-  }, [habits, activeTab, missionNow]);
+    if (reportsSegment === "pending") {
+      return habits.filter((h) => needsMainMissionOutcome(h, missionNow));
+    }
+    if (reportsSegment === "accomplished") {
+      return habits.filter((h) => h.missionReport === "accomplished");
+    }
+    return habits.filter((h) => h.missionReport === "failed");
+  }, [habits, activeTab, reportsSegment, missionNow]);
 
   const stats = useMemo(() => {
-    const missionsCount = habits.filter(
-      (h) => !( !h.isCompleted && isHabitMissionWindowClosed(h, missionNow) ),
-    ).length;
-    const reportsCount = habits.filter(
-      (h) => !h.isCompleted && isHabitMissionWindowClosed(h, missionNow),
-    ).length;
-    const openMissionCount = habits.filter(
-      (h) => !h.isCompleted && !isHabitMissionWindowClosed(h, missionNow),
-    ).length;
-    return { missionsCount, reportsCount, openMissionCount };
+    const missionsCount = habits.filter((h) => isMainMissionPlayableOnHome(h, missionNow)).length;
+    const pending = habits.filter((h) => needsMainMissionOutcome(h, missionNow)).length;
+    const accomplished = habits.filter((h) => h.missionReport === "accomplished").length;
+    const failed = habits.filter((h) => h.missionReport === "failed").length;
+    const reportsCount = pending + accomplished + failed;
+    const openMissionCount = missionsCount;
+    return { missionsCount, reportsCount, openMissionCount, pending, accomplished, failed };
   }, [habits, missionNow]);
 
   const hasActiveMiniCountdown = useMemo(
@@ -115,7 +118,7 @@ export default function Home() {
   }, [hasActiveMiniCountdown]);
 
   const hasIncompleteMission = useMemo(
-    () => habits.some((h) => !h.isCompleted),
+    () => habits.some((h) => !h.missionReport && h.status === "active"),
     [habits],
   );
 
@@ -138,7 +141,7 @@ export default function Home() {
   const miniCount =
     miniMissionStats.live > 0 ? miniMissionStats.live : miniMissionStats.waiting;
 
-  const greeting = useMemo(() => getGreeting(), []);
+  const greetingText = useMemo(() => getGreeting(), []);
 
   const headerOpacity = useRef(new Animated.Value(0)).current;
   const headerSlide = useRef(new Animated.Value(-15)).current;
@@ -220,8 +223,17 @@ export default function Home() {
       <Animated.View
         style={[styles.header, { opacity: headerOpacity, transform: [{ translateY: headerSlide }] }]}
       >
-        <View style={styles.headerTopRow}>
-          <Text style={[styles.headerEyebrow, { color: theme.colors.cyan[400] }]}>MISSION CONTROL</Text>
+        <Text style={[styles.headerEyebrow, { color: theme.colors.cyan[400] }]}>MISSION CONTROL</Text>
+        <View style={styles.headerGreetingRow}>
+          <Text
+            style={[
+              styles.headerTitle,
+              { color: theme.colors.textPrimary, letterSpacing: theme.letterSpacing.tight },
+            ]}
+            numberOfLines={2}
+          >
+            {greetingText}
+          </Text>
           <View style={styles.headerRightCluster}>
             {showAccount && session?.user ? (
               <View style={styles.bellWrap}>
@@ -233,7 +245,7 @@ export default function Home() {
                     unreadNotifCount > 0 ? `Notifications, ${unreadNotifCount} unread` : "Notifications"
                   }
                 >
-                  <Bell size={20} color={theme.colors.textPrimary} />
+                  <Bell size={18} color={theme.colors.textPrimary} />
                 </TouchableOpacity>
                 {unreadNotifCount > 0 ? (
                   <View style={[styles.notifBadge, { borderColor: theme.colors.background, backgroundColor: theme.colors.red[500] }]} />
@@ -246,14 +258,6 @@ export default function Home() {
             </View>
           </View>
         </View>
-        <Text
-          style={[
-            styles.headerTitle,
-            { color: theme.colors.textPrimary, letterSpacing: theme.letterSpacing.tight },
-          ]}
-        >
-          {greeting.text} {greeting.emoji}
-        </Text>
       </Animated.View>
 
       <View style={[styles.xpBar, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, borderRadius: theme.radius.md }]}>
@@ -360,6 +364,40 @@ export default function Home() {
         </TouchableOpacity>
       </View>
 
+      {activeTab === "reports" ? (
+        <View style={[styles.reportSegRow, { borderColor: theme.colors.border }]}>
+          {(
+            [
+              ["pending", "Pending", stats.pending] as const,
+              ["accomplished", "Accomplished", stats.accomplished] as const,
+              ["failed", "Failed", stats.failed] as const,
+            ] as const
+          ).map(([key, label, count]) => (
+            <TouchableOpacity
+              key={key}
+              style={[
+                styles.reportSegBtn,
+                reportsSegment === key && { backgroundColor: theme.colors.indigo[600], ...theme.shadow.glow },
+              ]}
+              onPress={() => setReportsSegment(key)}
+              activeOpacity={0.85}
+            >
+              <Text
+                style={[
+                  styles.reportSegText,
+                  { color: theme.colors.textSecondary },
+                  reportsSegment === key && styles.activeTabText,
+                ]}
+                numberOfLines={1}
+              >
+                {label}
+                {count > 0 ? ` (${count})` : ""}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      ) : null}
+
       <View style={styles.listWrap}>
         {!storeHydrated ? (
           <ListSkeleton theme={theme} />
@@ -379,14 +417,22 @@ export default function Home() {
                   ? habits.length === 0
                     ? "No missions yet"
                     : "Nothing in Missions"
-                  : "No mission reports"}
+                  : reportsSegment === "pending"
+                    ? "Nothing pending"
+                    : reportsSegment === "accomplished"
+                      ? "No accomplished missions"
+                      : "No failed missions"}
               </Text>
               <Text style={[styles.emptyDescription, { color: theme.colors.textSecondary }]}>
                 {activeTab === "missions"
                   ? habits.length === 0
                     ? "Start your first mission and keep momentum daily."
-                    : "Open missions and finished grids live here. If a window ended before the grid was full, check the Reports tab."
-                  : "When a mission window ends before the grid is full, it appears here so you can close it out."}
+                    : "Active missions you can still check in on appear here. When the timer ends or the grid is full, move to Reports."
+                  : reportsSegment === "pending"
+                    ? "When the mission window ends or every day is checked in, open Reports → Pending to confirm if the mission is complete for you."
+                    : reportsSegment === "accomplished"
+                      ? "Missions you mark as complete in the review step are listed here."
+                      : "Missions you mark as not completed appear here."}
               </Text>
               {activeTab === "missions" && habits.length === 0 && (
                 <View style={styles.emptyActions}>
@@ -417,16 +463,17 @@ export default function Home() {
 const styles = StyleSheet.create({
   rootCol: { flex: 1, minHeight: 0 },
   header: { marginBottom: HEADER_BOTTOM_GAP },
-  headerTopRow: {
+  headerGreetingRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: 12,
-    marginBottom: 4,
+    gap: 10,
+    marginTop: 2,
+    minHeight: 44,
   },
-  headerRightCluster: { flexDirection: "row", alignItems: "center", gap: 12, flexShrink: 0 },
-  headerEyebrow: { fontSize: 11, fontWeight: "700", letterSpacing: 1.3, flex: 1, minWidth: 0 },
-  headerTitle: { fontSize: 22, fontWeight: "800", lineHeight: 28 },
+  headerRightCluster: { flexDirection: "row", alignItems: "center", gap: 8, flexShrink: 0 },
+  headerEyebrow: { fontSize: 10, fontWeight: "700", letterSpacing: 1.25 },
+  headerTitle: { flex: 1, minWidth: 0, fontSize: 20, fontWeight: "800", lineHeight: 24 },
   bellWrap: { position: "relative" },
   notifBadge: {
     position: "absolute",
@@ -438,23 +485,23 @@ const styles = StyleSheet.create({
     borderWidth: 2,
   },
   headerIconBtn: {
-    width: 44,
-    height: 44,
+    width: 40,
+    height: 40,
     borderRadius: 9999,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
   },
   headerBadge: {
-    width: 52,
-    height: 52,
+    width: 44,
+    height: 44,
     borderRadius: 9999,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
     flexShrink: 0,
   },
-  levelNumber: { fontSize: 20, fontWeight: "800", lineHeight: 22 },
+  levelNumber: { fontSize: 18, fontWeight: "800", lineHeight: 20 },
   levelLabel: { fontSize: 9, fontWeight: "800", letterSpacing: 1 },
   commandRow: { flexDirection: "row", gap: 10, marginBottom: SECTION_GAP },
   commandCard: { flex: 1, paddingVertical: 14, paddingHorizontal: 14, position: "relative", overflow: "hidden", borderWidth: 1 },
@@ -467,12 +514,30 @@ const styles = StyleSheet.create({
   commandHint: { fontSize: 11 },
   commandCta: { position: "absolute", bottom: 12, right: 12, width: 28, height: 28, borderRadius: 9999, alignItems: "center", justifyContent: "center" },
   commandCtaMini: { position: "absolute", bottom: 12, right: 12, width: 28, height: 28, borderRadius: 9999, backgroundColor: "rgba(245, 158, 11, 0.15)", borderWidth: 1, alignItems: "center", justifyContent: "center" },
-  missionsLabel: { fontSize: 11, fontWeight: "800", letterSpacing: 1.2, marginBottom: 8 },
-  tabContainer: { flexDirection: "row", borderRadius: 14, padding: 4, marginBottom: 12, borderWidth: 1 },
+  missionsLabel: { fontSize: 11, fontWeight: "800", letterSpacing: 1.2, marginBottom: 6 },
+  tabContainer: { flexDirection: "row", borderRadius: 14, padding: 4, marginBottom: 10, borderWidth: 1 },
   tab: { flex: 1, paddingVertical: 10, alignItems: "center", borderRadius: 10, minHeight: 42, justifyContent: "center" },
   tabSelected: { paddingVertical: 11 },
   tabText: { fontWeight: "700" },
   activeTabText: { color: "#ffffff" },
+  reportSegRow: {
+    flexDirection: "row",
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 3,
+    marginBottom: 10,
+    gap: 4,
+  },
+  reportSegBtn: {
+    flex: 1,
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+    borderRadius: 9,
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 36,
+  },
+  reportSegText: { fontSize: 11, fontWeight: "700", textAlign: "center" },
   listWrap: { flex: 1, minHeight: 0 },
   listContent: { paddingBottom: 40 },
   emptyScroll: { flex: 1 },
@@ -485,8 +550,8 @@ const styles = StyleSheet.create({
   emptyButton: { width: "100%" },
   emptySecondary: { marginTop: 4, paddingVertical: 10, paddingHorizontal: 12 },
   emptySecondaryText: { fontSize: 14, fontWeight: "700" },
-  xpBar: { paddingHorizontal: 14, paddingVertical: 8, marginBottom: 12, borderWidth: 1 },
-  xpInfo: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 6 },
+  xpBar: { paddingHorizontal: 12, paddingVertical: 6, marginBottom: 8, borderWidth: 1 },
+  xpInfo: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 4 },
   xpLeft: { flexDirection: "row", alignItems: "center", gap: 4 },
   xpLabel: { fontSize: 12, fontWeight: "700" },
   xpValue: { fontSize: 11, fontWeight: "600" },

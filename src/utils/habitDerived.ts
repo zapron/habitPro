@@ -3,6 +3,8 @@
  * Shared by the store, AsyncStorage rehydration, and Supabase row mapping.
  */
 
+import type { MissionReport } from "../types/habit";
+
 const normalizeCompletedDates = (dates: string[]) =>
   [...new Set(dates)].sort((a, b) => a.localeCompare(b));
 
@@ -47,12 +49,57 @@ export function getConsecutiveStreak(sortedDates: string[]): number {
   return streak;
 }
 
-export function getDerivedState(completedDates: string[], totalDays: number) {
+export type DerivedHabitNumericState = {
+  normalized: string[];
+  streak: number;
+  totalDays: number;
+  gridFull: boolean;
+};
+
+/** Streak + grid fullness from dates only (no mission outcome). */
+export function getDerivedDatesState(
+  completedDates: string[],
+  totalDays: number,
+): DerivedHabitNumericState {
   const td = Math.max(1, totalDays);
   const normalized = normalizeCompletedDates(completedDates);
   const streak = getConsecutiveStreak(normalized);
-  const isCompleted = normalized.length >= td;
-  const status = (isCompleted ? "completed" : "active") as "active" | "completed" | "failed";
+  const gridFull = normalized.length >= td;
+  return { normalized, streak, totalDays: td, gridFull };
+}
 
-  return { normalized, streak, isCompleted, status, totalDays: td };
+/**
+ * Full habit flags. `isCompleted` is true only when the user chose **Accomplished** in mission reports.
+ * A full grid alone no longer marks the mission completed until that confirmation.
+ */
+export function getDerivedState(
+  completedDates: string[],
+  totalDays: number,
+  missionReport?: MissionReport | null,
+) {
+  const { normalized, streak, totalDays: td, gridFull } = getDerivedDatesState(
+    completedDates,
+    totalDays,
+  );
+
+  let isCompleted = false;
+  let status: "active" | "completed" | "failed" = "active";
+
+  if (missionReport === "accomplished") {
+    isCompleted = true;
+    status = "completed";
+  } else if (missionReport === "failed") {
+    isCompleted = false;
+    status = "failed";
+  }
+
+  return { normalized, streak, isCompleted, status, totalDays: td, gridFull };
+}
+
+/** Every mission day has a check-in (grid full); does not imply user marked Accomplished. */
+export function isMissionGridFull(habit: {
+  completedDates: string[];
+  totalDays: number;
+}): boolean {
+  return getDerivedDatesState(habit.completedDates ?? [], habit.totalDays ?? 21).gridFull;
 }

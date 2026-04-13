@@ -16,7 +16,7 @@ import {
 } from "../types/habit";
 import { MAX_RESERVE_FUEL_MINUTES } from "../constants/miniMission";
 import { tryRecordChallengeMilestones } from "../lib/challengeCohort";
-import { getDerivedState } from "../utils/habitDerived";
+import { getDerivedState, isMissionGridFull } from "../utils/habitDerived";
 import { isHabitCalendarDateToggleable } from "../utils/missionDaySlots";
 import { isHabitMissionWindowClosed } from "../utils/habitMissionWindow";
 
@@ -93,7 +93,7 @@ export const useHabitStore = create<HabitStore>()(
       }) => {
         const now = startDateOverride ?? new Date().toISOString();
         const totalDays =
-          mode === "manual" ? Math.max(3, Math.min(365, customDays ?? 21)) : 21;
+          mode === "manual" ? Math.max(1, Math.min(365, customDays ?? 21)) : 21;
         const vis: MissionVisibility =
           visibility === "public" || visibility === "solo" ? visibility : "solo";
 
@@ -143,6 +143,7 @@ export const useHabitStore = create<HabitStore>()(
             const { normalized, streak, isCompleted, status } = getDerivedState(
               newCompletedDates,
               habit.totalDays,
+              habit.missionReport,
             );
 
             let nextMemories = habit.streakMemories ?? {};
@@ -158,9 +159,6 @@ export const useHabitStore = create<HabitStore>()(
               isCompleted,
               status,
               streakMemories: nextMemories,
-              ...(isCompleted
-                ? { missionReport: undefined, missionReportAt: undefined }
-                : {}),
             };
           });
           return { habits: updatedHabits };
@@ -239,26 +237,40 @@ export const useHabitStore = create<HabitStore>()(
         return true;
       },
       setMissionReport: (id, report) => {
+        const habitBefore = get().habits.find((h) => h.id === id);
+        if (!habitBefore || habitBefore.missionReport) return;
+
+        const nowMs = Date.now();
+        if (
+          !isHabitMissionWindowClosed(habitBefore, nowMs) &&
+          !isMissionGridFull(habitBefore)
+        ) {
+          return;
+        }
+
         set((state) => ({
           habits: state.habits.map((habit) => {
             if (habit.id !== id) return habit;
-            const nowMs = Date.now();
-            if (
-              !isHabitMissionWindowClosed(habit, nowMs) ||
-              habit.isCompleted ||
-              habit.missionReport
-            ) {
-              return habit;
-            }
+            if (habit.missionReport) return habit;
+            const d = getDerivedState(habit.completedDates, habit.totalDays, report);
             const at = new Date().toISOString();
             return {
               ...habit,
+              completedDates: d.normalized,
+              streak: d.streak,
+              isCompleted: d.isCompleted,
+              status: d.status,
               missionReport: report,
               missionReportAt: at,
-              status: report === "failed" ? "failed" : habit.status,
             };
           }),
         }));
+
+        const habitAfter = get().habits.find((h) => h.id === id);
+        if (habitBefore && habitAfter && report === "accomplished") {
+          get().addXp(100);
+          void tryRecordChallengeMilestones(habitBefore, habitAfter);
+        }
         requestRemoteSync({ immediate: true });
       },
       getHabit: (id) => {
@@ -461,18 +473,33 @@ export const useHabitStore = create<HabitStore>()(
         if (state) {
           state.habits = state.habits.map((h) => {
             const migrated = migrateHabit(h);
-            const d = getDerivedState(migrated.completedDates ?? [], migrated.totalDays ?? 21);
-            let status: Habit["status"] = d.status;
-            if (!d.isCompleted && migrated.missionReport === "failed") {
-              status = "failed";
+            const pre = getDerivedState(
+              migrated.completedDates ?? [],
+              migrated.totalDays ?? 21,
+              migrated.missionReport,
+            );
+            let missionReport = migrated.missionReport;
+            if (!missionReport && migrated.isCompleted === true && pre.gridFull) {
+              missionReport = "accomplished";
             }
+            const d = getDerivedState(
+              migrated.completedDates ?? [],
+              migrated.totalDays ?? 21,
+              missionReport,
+            );
+            const missionReportAt =
+              missionReport && !migrated.missionReportAt
+                ? new Date().toISOString()
+                : migrated.missionReportAt;
             return {
               ...migrated,
+              missionReport,
+              missionReportAt,
               completedDates: d.normalized,
               totalDays: d.totalDays,
               streak: d.streak,
               isCompleted: d.isCompleted,
-              status,
+              status: d.status,
             };
           });
           // Migrate legacy mini missions missing extendedMinutes
