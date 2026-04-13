@@ -1,10 +1,14 @@
-/** Shared (non-color) design tokens. */
+import { fontFamily } from "./fonts";
+
+/** Shared (non-color) design tokens. Plus Jakarta Sans — see `AppText` + `fontAssets` in root layout. */
 const tokens = {
   spacing: { xs: 8, sm: 12, md: 16, lg: 24, xl: 32 },
   radius: { xs: 8, sm: 12, md: 16, lg: 20, xl: 24, pill: 9999 },
   typography: { h1: 30, h2: 22, h3: 18, body: 16, caption: 13, micro: 11 },
+  letterSpacing: { tight: -0.35, label: 0.85, wide: 0.5 } as const,
   /** Prefer these over ad hoc sizes for Lucide icons in rows, headers, chips */
   icon: { xs: 12, sm: 14, md: 18, lg: 20, xl: 22 },
+  fontFamily,
 } as const;
 
 /* ── Color palette shape ── */
@@ -149,7 +153,9 @@ export type AppTheme = {
   spacing: typeof tokens.spacing;
   radius: typeof tokens.radius;
   typography: typeof tokens.typography;
+  letterSpacing: typeof tokens.letterSpacing;
   icon: typeof tokens.icon;
+  fontFamily: typeof fontFamily;
 };
 
 export const darkTheme: AppTheme = {
