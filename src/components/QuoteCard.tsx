@@ -1,5 +1,10 @@
-import { useState, useEffect } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { Text } from "./AppText";
+import {
+  useState,
+  useEffect } from 'react';
+import { View,
+  StyleSheet,
+} from "react-native";
 import { useTheme } from '../context/ThemeContext';
 import { quotes } from '../data/quotes';
 import { Quote } from 'lucide-react-native';

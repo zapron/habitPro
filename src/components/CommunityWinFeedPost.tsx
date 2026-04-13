@@ -1,7 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Text } from "./AppText";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState } from "react";
 import {
   View,
-  Text,
   Pressable,
   StyleSheet,
   Image,

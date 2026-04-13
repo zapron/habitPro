@@ -1,12 +1,12 @@
 import React from 'react';
+import { Text } from "./AppText";
 import {
-    View,
-    Text,
-    TouchableOpacity,
-    Modal,
-    StyleSheet,
-    Pressable,
-} from 'react-native';
+  View,
+  TouchableOpacity,
+  Modal,
+  StyleSheet,
+  Pressable,
+} from "react-native";
 import { X, Monitor, Sun, Moon, type LucideIcon } from 'lucide-react-native';
 import { useTheme, type ThemePreference } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';

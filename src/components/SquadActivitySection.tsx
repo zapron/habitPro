@@ -1,5 +1,12 @@
-import { useState } from "react";
-import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { Text } from "./AppText";
+import {
+  useState } from "react";
+import { ActivityIndicator,
+  Platform,
+  Pressable,
+  StyleSheet,
+  View,
+} from "react-native";
 import { ChevronDown, Flame, Heart, Sparkles, Flag, Users } from "lucide-react-native";
 import type { AppTheme } from "../styles/theme";
 import type {

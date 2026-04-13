@@ -1,4 +1,11 @@
-import { TouchableOpacity, Text, TouchableOpacityProps, StyleSheet, ViewStyle, TextStyle } from "react-native";
+import { Text } from "./AppText";
+import {
+  TouchableOpacity,
+  TouchableOpacityProps,
+  StyleSheet,
+  ViewStyle,
+  TextStyle,
+} from "react-native";
 import { useTheme } from "../context/ThemeContext";
 
 interface ButtonProps extends TouchableOpacityProps {

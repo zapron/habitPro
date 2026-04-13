@@ -1,4 +1,11 @@
-import { Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Text } from "./AppText";
+import {
+  Modal,
+  ScrollView,
+  StyleSheet,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Gamepad2, Plane, X } from "lucide-react-native";
 import type { Habit } from "../types/habit";

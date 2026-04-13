@@ -1,4 +1,9 @@
-import { View, Text, StyleSheet, useWindowDimensions } from "react-native";
+import { Text } from "../AppText";
+import {
+  View,
+  StyleSheet,
+  useWindowDimensions,
+} from "react-native";
 import Svg, { Rect } from "react-native-svg";
 import type { AppTheme } from "../../styles/theme";
 import type { DayCheckInPoint } from "../../utils/profileStats";

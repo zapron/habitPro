@@ -1,5 +1,9 @@
-import { Fragment } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Text } from "./AppText";
+import {
+  Fragment } from "react";
+import { StyleSheet,
+  View,
+} from "react-native";
 import { useTheme } from "../context/ThemeContext";
 import { AnimatedFire } from "./AnimatedFire";
 import {

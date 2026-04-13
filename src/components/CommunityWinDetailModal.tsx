@@ -1,7 +1,7 @@
+import { Text } from "./AppText";
 import {
   Modal,
   View,
-  Text,
   ScrollView,
   Pressable,
   Image,

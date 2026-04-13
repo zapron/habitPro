@@ -1,4 +1,13 @@
-import { Modal, View, Text, TouchableOpacity, StyleSheet, StatusBar, Platform, Linking } from "react-native";
+import { Text } from "./AppText";
+import {
+  Modal,
+  View,
+  TouchableOpacity,
+  StyleSheet,
+  StatusBar,
+  Platform,
+  Linking,
+} from "react-native";
 import { useTheme } from "../context/ThemeContext";
 
 type Props = {

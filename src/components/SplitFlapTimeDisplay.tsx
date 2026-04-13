@@ -1,10 +1,15 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { Text } from "./AppText";
+import {
+  Fragment,
+  useEffect,
+  useMemo,
+  useRef,
+  useState } from "react";
 import {
   Animated,
   Easing,
   Platform,
   StyleSheet,
-  Text,
   TextStyle,
   useWindowDimensions,
   View,

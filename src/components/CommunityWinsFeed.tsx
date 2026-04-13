@@ -1,7 +1,11 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { Text } from "./AppText";
+import {
+  useCallback,
+  useMemo,
+  useRef,
+  useState } from "react";
 import {
   View,
-  Text,
   FlatList,
   StyleSheet,
   ActivityIndicator,

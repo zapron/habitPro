@@ -1,4 +1,10 @@
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text } from "react-native";
+import { Text } from "./AppText";
+import {
+  ActivityIndicator,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+} from "react-native";
 import { Flame, Heart } from "lucide-react-native";
 import type { AppTheme } from "../styles/theme";
 import type { ChallengeNudgeKind } from "../types/groupChallenge";

@@ -1,11 +1,14 @@
-import { useEffect, useRef, useState } from "react";
+import { Text } from "./AppText";
+import {
+  useEffect,
+  useRef,
+  useState } from "react";
 import {
   AccessibilityInfo,
   Animated,
   Easing,
   Image,
   StyleSheet,
-  Text,
   View,
   type LayoutChangeEvent,
 } from "react-native";

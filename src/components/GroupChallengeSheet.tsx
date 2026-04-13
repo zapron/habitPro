@@ -1,10 +1,13 @@
-import { useCallback, useEffect, useState } from "react";
+import { Text } from "./AppText";
+import {
+  useCallback,
+  useEffect,
+  useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
   Modal,
   StyleSheet,
-  Text,
   TextInput,
   TouchableOpacity,
   View,

@@ -1,5 +1,12 @@
-import { useEffect, useRef } from "react";
-import { Animated, Easing, StyleSheet, Text, View } from "react-native";
+import { Text } from "./AppText";
+import {
+  useEffect,
+  useRef } from "react";
+import { Animated,
+  Easing,
+  StyleSheet,
+  View,
+} from "react-native";
 import { Trophy } from "lucide-react-native";
 import { useReducedMotion } from "../hooks/useReducedMotion";
 import type { AppTheme } from "../styles/theme";

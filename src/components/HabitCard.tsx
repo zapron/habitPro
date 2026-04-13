@@ -1,5 +1,10 @@
 import React, { memo } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { Text } from "./AppText";
+import {
+  View,
+  TouchableOpacity,
+  StyleSheet,
+} from "react-native";
 import { useRouter } from 'expo-router';
 import { TreePine, Flame, Check, Plane, Gamepad2, Globe, Swords, Users } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';

@@ -1,5 +1,6 @@
-import { Fragment, useEffect, useState } from 'react';
-import { Text, StyleSheet, View } from 'react-native';
+import { Text } from "./AppText";
+import { Fragment, useEffect, useState } from "react";
+import { StyleSheet, View } from "react-native";
 import { useTheme } from '../context/ThemeContext';
 import { AnimatedFire } from './AnimatedFire';
 import { SplitFlapTimeDisplay, type ProgressivePhase } from './SplitFlapTimeDisplay';

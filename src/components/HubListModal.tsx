@@ -1,4 +1,11 @@
-import { Modal, View, Text, TouchableOpacity, FlatList, StyleSheet } from "react-native";
+import { Text } from "./AppText";
+import {
+  Modal,
+  View,
+  TouchableOpacity,
+  FlatList,
+  StyleSheet,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { X, Globe, User } from "lucide-react-native";

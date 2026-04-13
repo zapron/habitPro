@@ -1,5 +1,11 @@
 import React, { useEffect, useRef } from 'react';
-import { Animated, View, Text, StyleSheet, Easing } from 'react-native';
+import { Text } from "./AppText";
+import {
+  Animated,
+  View,
+  StyleSheet,
+  Easing,
+} from "react-native";
 import { Flame, Zap, Crown } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
 

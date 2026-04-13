@@ -1,4 +1,10 @@
-import { Modal, View, Text, Pressable, StyleSheet } from "react-native";
+import { Text } from "./AppText";
+import {
+  Modal,
+  View,
+  Pressable,
+  StyleSheet,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "../context/ThemeContext";
 import { Button } from "./Button";

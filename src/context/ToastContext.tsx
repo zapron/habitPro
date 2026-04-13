@@ -1,3 +1,4 @@
+import { Text } from "../components/AppText";
 import {
   createContext,
   useCallback,
@@ -6,8 +7,10 @@ import {
   useRef,
   useState,
   type ReactNode,
-} from "react";
-import { StyleSheet, Text, View } from "react-native";
+  } from "react";
+import { StyleSheet,
+  View,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "./ThemeContext";
 

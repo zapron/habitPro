@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { Text } from "./AppText";
+import {
+  useState } from "react";
 import {
   View,
-  Text,
   ScrollView,
   Image,
   Pressable,

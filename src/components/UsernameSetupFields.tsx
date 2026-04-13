@@ -1,5 +1,15 @@
-import { useCallback, useEffect, useState } from "react";
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert } from "react-native";
+import { Text } from "./AppText";
+import {
+  useCallback,
+  useEffect,
+  useState } from "react";
+import { View,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  ActivityIndicator,
+  Alert,
+} from "react-native";
 import { useTheme } from "../context/ThemeContext";
 import { useAuth } from "../context/AuthContext";
 import { isSupabaseConfigured } from "../lib/env";

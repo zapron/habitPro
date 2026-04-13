@@ -1,7 +1,9 @@
-import { useMemo, useState } from "react";
+import { Text } from "./AppText";
+import {
+  useMemo,
+  useState } from "react";
 import {
   View,
-  Text,
   Pressable,
   StyleSheet,
   Modal,

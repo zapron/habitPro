@@ -1,4 +1,9 @@
-import { View, Text, Switch, StyleSheet } from "react-native";
+import { Text } from "./AppText";
+import {
+  View,
+  Switch,
+  StyleSheet,
+} from "react-native";
 import { Globe, User } from "lucide-react-native";
 import type { AppTheme } from "../styles/theme";
 import type { MissionVisibility } from "../types/habit";

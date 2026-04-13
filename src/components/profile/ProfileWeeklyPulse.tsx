@@ -1,4 +1,8 @@
-import { View, Text, StyleSheet } from "react-native";
+import { Text } from "../AppText";
+import {
+  View,
+  StyleSheet,
+} from "react-native";
 import type { AppTheme } from "../../styles/theme";
 import { weeklyTierProgressFraction } from "../../utils/profileStats";
 import { Sparkles } from "lucide-react-native";
