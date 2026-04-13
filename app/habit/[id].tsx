@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
-import { View, Text, ScrollView, TouchableOpacity, Alert, StyleSheet, StatusBar, Animated, Easing, LayoutChangeEvent, Switch } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, StatusBar, Animated, Easing, LayoutChangeEvent, Switch } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { ArrowLeft, Trash2, Lock, RotateCcw, Sparkles, Star, Plane, Gamepad2, Globe, User, Users, Info } from 'lucide-react-native';
@@ -9,7 +9,9 @@ import { Button } from '../../src/components/Button';
 import { Timer } from '../../src/components/Timer';
 import { QuoteCard } from '../../src/components/QuoteCard';
 import { Screen } from '../../src/components/Screen';
+import { ConfirmDialog } from '../../src/components/ConfirmDialog';
 import { useTheme } from '../../src/context/ThemeContext';
+import { useToast } from '../../src/context/ToastContext';
 import { useReducedMotion } from '../../src/hooks/useReducedMotion';
 import { subscribeSyncFailure, subscribeSyncSuccess } from '../../src/lib/syncQueue';
 import type { MissionVisibility } from '../../src/types/habit';
@@ -27,6 +29,21 @@ import {
     shouldUploadLocalStreakImage,
     uploadHabitStreakMemoryImage,
 } from '../../src/lib/streakMemoryStorage';
+import { useAuth } from '../../src/context/AuthContext';
+import { isSupabaseConfigured } from '../../src/lib/env';
+import { leaveChallengeGroup, refreshCohortPeerHabits } from '../../src/lib/groupChallengesApi';
+
+const LOCKED_CHECKIN_MSG =
+    'You can only check in for the current mission day. Each day unlocks 24 hours after the mission started (day 2 after the first 24 hours, and so on).';
+
+type MissionDialogState =
+    | { kind: 'none' }
+    | { kind: 'reset' }
+    | { kind: 'delete' }
+    | { kind: 'leaveGroup' }
+    | { kind: 'removeCheckin'; dateStr: string }
+    | { kind: 'blockedReset' }
+    | { kind: 'signInRequired' };
 
 function getMilestones(totalDays: number, mode: string): number[] {
     if (mode === 'autopilot') return [7, 14, 21];
@@ -140,6 +157,8 @@ export default function HabitDetail() {
     const { id } = useLocalSearchParams<{ id?: string | string[] }>();
     const router = useRouter();
     const { theme, isDark } = useTheme();
+    const { showToast } = useToast();
+    const { session } = useAuth();
     const habitId = Array.isArray(id) ? id[0] : id;
 
     const habit = useHabitStore((state) => (habitId ? state.getHabit(habitId) : undefined));
@@ -189,6 +208,7 @@ export default function HabitDetail() {
     const [memoryUi, setMemoryUi] = useState<MemoryUiState>(null);
     const [groupSheetOpen, setGroupSheetOpen] = useState(false);
     const [missionDetailsOpen, setMissionDetailsOpen] = useState(false);
+    const [missionDialog, setMissionDialog] = useState<MissionDialogState>({ kind: 'none' });
     const pendingMemoryRef = useRef<{ dateStr: string; day: number; dayIndex: number } | null>(null);
 
     useEffect(() => {
@@ -251,17 +271,14 @@ export default function HabitDetail() {
                     memoryToSave = { ...memory, imageUrl, imageUri: undefined };
                 } catch (e) {
                     const msg = e instanceof Error ? e.message : String(e);
-                    Alert.alert('Photo upload failed', msg);
+                    showToast(msg, 'error');
                     throw e;
                 }
             }
 
             const changed = toggleCompletion(habit.id, ctx.dateStr);
             if (!changed) {
-                Alert.alert(
-                    'Locked',
-                    'You can only check in for the current mission day. Each day unlocks 24 hours after the mission started (day 2 after the first 24 hours, and so on).',
-                );
+                showToast(LOCKED_CHECKIN_MSG, 'info', 5000);
                 return;
             }
             if (memoryToSave) {
@@ -270,7 +287,7 @@ export default function HabitDetail() {
             const isMilestone = milestones.includes(ctx.day);
             fireCompletionCelebration(ctx.dayIndex, ctx.day, isMilestone);
         },
-        [habit, toggleCompletion, setStreakMemory, milestones, fireCompletionCelebration],
+        [habit, toggleCompletion, setStreakMemory, milestones, fireCompletionCelebration, showToast],
     );
 
     if (!habit) {
@@ -288,52 +305,24 @@ export default function HabitDetail() {
 
     const handleReset = () => {
         if (isGroupMission) {
-            Alert.alert(
-                'Cannot reset',
-                'Group missions use one shared timeline for the squad. Restarting your run here would break the challenge—finish this mission or work with your group.',
-                [{ text: 'OK', style: 'default' }],
-            );
+            setMissionDialog({ kind: 'blockedReset' });
             return;
         }
-        Alert.alert('Reset Mission', 'Restart this mission from day 1?', [
-            { text: 'Cancel', style: 'cancel' },
-            {
-                text: 'Reset',
-                style: 'destructive',
-                onPress: () => {
-                    if (resetHabit(habit.id)) {
-                        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                        router.back();
-                    }
-                },
-            },
-        ]);
+        setMissionDialog({ kind: 'reset' });
     };
 
     const handleDelete = () => {
         if (isGroupMission) {
-            Alert.alert(
-                'Group mission',
-                'Deleting only removes this mission from your device. You may still appear in the squad until the host or server state catches up. Prefer finishing the run or coordinating with your group if you need out.',
-                [
-                    { text: 'Cancel', style: 'cancel' },
-                    {
-                        text: 'Delete from device',
-                        style: 'destructive',
-                        onPress: () => {
-                            deleteHabit(habit.id);
-                            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-                            router.back();
-                        },
-                    },
-                ],
-            );
+            const challengeId = habit.challengeGroupId;
+            if (!challengeId) return;
+            if (!isSupabaseConfigured() || !session) {
+                setMissionDialog({ kind: 'signInRequired' });
+                return;
+            }
+            setMissionDialog({ kind: 'leaveGroup' });
             return;
         }
-        Alert.alert('Delete Mission', 'Give up on this mission?', [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Delete', style: 'destructive', onPress: () => { deleteHabit(habit.id); Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); router.back(); } },
-        ]);
+        setMissionDialog({ kind: 'delete' });
     };
 
     const days = Array.from({ length: totalDays }, (_, i) => i + 1);
@@ -352,16 +341,7 @@ export default function HabitDetail() {
         const mem = habit.streakMemories?.[dateStr];
         const canInteract = activeMissionDaySlot !== null && day === activeMissionDaySlot;
         if (!mem || !canInteract) return;
-        Alert.alert('Remove check-in?', 'This deletes your saved moment for this day.', [
-            { text: 'Cancel', style: 'cancel' },
-            {
-                text: 'Remove',
-                style: 'destructive',
-                onPress: () => {
-                    toggleCompletion(habit.id, dateStr);
-                },
-            },
-        ]);
+        setMissionDialog({ kind: 'removeCheckin', dateStr });
     };
 
     const handleDayPress = (dayIndex: number, day: number) => {
@@ -371,10 +351,7 @@ export default function HabitDetail() {
 
         if (!wasCompleted) {
             if (!isHabitCalendarDateToggleable(habit, dateStr, Date.now())) {
-                Alert.alert(
-                    'Locked',
-                    'You can only check in for the current mission day. Each day unlocks 24 hours after the mission started (day 2 after the first 24 hours, and so on).',
-                );
+                showToast(LOCKED_CHECKIN_MSG, 'info', 5000);
                 return;
             }
             pendingMemoryRef.current = { dateStr, day, dayIndex };
@@ -389,19 +366,13 @@ export default function HabitDetail() {
         }
 
         if (!canInteract) {
-            Alert.alert(
-                'Locked',
-                'You can only check in for the current mission day. Each day unlocks 24 hours after the mission started (day 2 after the first 24 hours, and so on).',
-            );
+            showToast(LOCKED_CHECKIN_MSG, 'info', 5000);
             return;
         }
 
         const changed = toggleCompletion(habit.id, dateStr);
         if (!changed) {
-            Alert.alert(
-                'Locked',
-                'You can only check in for the current mission day. Each day unlocks 24 hours after the mission started (day 2 after the first 24 hours, and so on).',
-            );
+            showToast(LOCKED_CHECKIN_MSG, 'info', 5000);
             return;
         }
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -451,28 +422,15 @@ export default function HabitDetail() {
             />
 
             <ScrollView showsVerticalScrollIndicator={false}>
-                <View style={[styles.modeBadge, isManual && styles.modeBadgeManual]}>
-                    {isManual ? <Gamepad2 size={13} color={theme.colors.amber[500]} /> : <Plane size={13} color={theme.colors.cyan[400]} />}
-                    <Text style={[styles.modeBadgeText, { color: theme.colors.cyan[400] }, isManual && { color: theme.colors.amber[500] }]}>
-                        {isManual ? 'MANUAL CONTROL' : 'AUTOPILOT'}
-                    </Text>
-                </View>
-
-                <View style={styles.titleRow}>
-                    <Text
-                        style={[
-                            styles.title,
-                            {
-                                color: theme.colors.textPrimary,
-                                fontSize: theme.typography.h1,
-                                lineHeight: Math.round(theme.typography.h1 * 1.2),
-                            },
-                        ]}
-                    >
-                        {habit.title}
-                    </Text>
+                <View style={styles.modeRow}>
+                    <View style={[styles.modeBadge, isManual && styles.modeBadgeManual]}>
+                        {isManual ? <Gamepad2 size={13} color={theme.colors.amber[500]} /> : <Plane size={13} color={theme.colors.cyan[400]} />}
+                        <Text style={[styles.modeBadgeText, { color: theme.colors.cyan[400] }, isManual && { color: theme.colors.amber[500] }]}>
+                            {isManual ? 'MANUAL CONTROL' : 'AUTOPILOT'}
+                        </Text>
+                    </View>
                     <TouchableOpacity
-                        style={styles.titleInfoBtn}
+                        style={styles.modeInfoBtn}
                         onPress={() => {
                             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                             setMissionDetailsOpen(true);
@@ -481,9 +439,22 @@ export default function HabitDetail() {
                         accessibilityRole="button"
                         accessibilityLabel="Mission details and brief"
                     >
-                        <Info size={theme.icon.lg} color={theme.colors.indigo[400]} />
+                        <Info size={theme.icon.md} color={theme.colors.indigo[400]} />
                     </TouchableOpacity>
                 </View>
+
+                <Text
+                    style={[
+                        styles.title,
+                        {
+                            color: theme.colors.textPrimary,
+                            fontSize: theme.typography.h1,
+                            lineHeight: Math.round(theme.typography.h1 * 1.2),
+                        },
+                    ]}
+                >
+                    {habit.title}
+                </Text>
 
                 <View style={[styles.visibilityRow, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, borderRadius: theme.radius.md }]}>
                     {(habit.visibility ?? 'solo') === 'public' ? (
@@ -659,6 +630,119 @@ export default function HabitDetail() {
 
                 <StreakMemoryGallery entries={memoryGalleryEntries} />
             </ScrollView>
+
+            <ConfirmDialog
+                visible={missionDialog.kind !== 'none'}
+                onRequestClose={() => setMissionDialog({ kind: 'none' })}
+                title={
+                    missionDialog.kind === 'reset'
+                        ? 'Reset Mission'
+                        : missionDialog.kind === 'delete'
+                          ? 'Delete Mission'
+                          : missionDialog.kind === 'leaveGroup'
+                            ? 'Leave group mission?'
+                            : missionDialog.kind === 'removeCheckin'
+                              ? 'Remove check-in?'
+                              : missionDialog.kind === 'blockedReset'
+                                ? 'Cannot reset'
+                                : missionDialog.kind === 'signInRequired'
+                                  ? 'Sign in required'
+                                  : ''
+                }
+                message={
+                    missionDialog.kind === 'blockedReset'
+                        ? 'Group missions use one shared timeline for the squad. Restarting your run here would break the challenge—finish this mission or work with your group.'
+                        : missionDialog.kind === 'signInRequired'
+                          ? 'To leave the squad and remove this group mission, sign in with your account.'
+                          : missionDialog.kind === 'leaveGroup'
+                            ? 'You’ll be removed from the squad and this mission will disappear from your list. This can’t be undone.'
+                            : missionDialog.kind === 'removeCheckin'
+                              ? 'This deletes your saved moment for this day.'
+                              : missionDialog.kind === 'reset'
+                                ? 'Restart this mission from day 1?'
+                                : missionDialog.kind === 'delete'
+                                  ? 'Give up on this mission?'
+                                  : undefined
+                }
+                actions={
+                    missionDialog.kind === 'blockedReset' || missionDialog.kind === 'signInRequired'
+                        ? [{ label: 'OK', onPress: () => setMissionDialog({ kind: 'none' }) }]
+                        : missionDialog.kind === 'reset'
+                          ? [
+                                { label: 'Cancel', variant: 'secondary', onPress: () => setMissionDialog({ kind: 'none' }) },
+                                {
+                                    label: 'Reset',
+                                    variant: 'danger',
+                                    onPress: () => {
+                                        setMissionDialog({ kind: 'none' });
+                                        if (resetHabit(habit.id)) {
+                                            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                                            showToast('Mission reset', 'success');
+                                            router.back();
+                                        }
+                                    },
+                                },
+                            ]
+                          : missionDialog.kind === 'delete'
+                            ? [
+                                  { label: 'Cancel', variant: 'secondary', onPress: () => setMissionDialog({ kind: 'none' }) },
+                                  {
+                                      label: 'Delete',
+                                      variant: 'danger',
+                                      onPress: () => {
+                                          setMissionDialog({ kind: 'none' });
+                                          deleteHabit(habit.id);
+                                          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                                          showToast('Mission deleted', 'success');
+                                          router.back();
+                                      },
+                                  },
+                              ]
+                            : missionDialog.kind === 'leaveGroup'
+                              ? [
+                                    { label: 'Cancel', variant: 'secondary', onPress: () => setMissionDialog({ kind: 'none' }) },
+                                    {
+                                        label: 'Leave',
+                                        variant: 'danger',
+                                        onPress: () => {
+                                            const challengeId = habit.challengeGroupId;
+                                            setMissionDialog({ kind: 'none' });
+                                            if (!challengeId) return;
+                                            void (async () => {
+                                                const { error } = await leaveChallengeGroup(challengeId);
+                                                if (error) {
+                                                    showToast(error.message, 'error');
+                                                    return;
+                                                }
+                                                deleteHabit(habit.id);
+                                                await refreshCohortPeerHabits().catch(() => {});
+                                                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+                                                showToast('Left group mission', 'success');
+                                                router.back();
+                                            })();
+                                        },
+                                    },
+                                ]
+                              : missionDialog.kind === 'removeCheckin'
+                                ? [
+                                      { label: 'Cancel', variant: 'secondary', onPress: () => setMissionDialog({ kind: 'none' }) },
+                                      {
+                                          label: 'Remove',
+                                          variant: 'danger',
+                                          onPress: () => {
+                                              const ds =
+                                                  missionDialog.kind === 'removeCheckin' ? missionDialog.dateStr : '';
+                                              setMissionDialog({ kind: 'none' });
+                                              if (ds) {
+                                                  toggleCompletion(habit.id, ds);
+                                                  showToast('Check-in removed', 'success');
+                                              }
+                                          },
+                                      },
+                                  ]
+                                : [{ label: 'OK', onPress: () => setMissionDialog({ kind: 'none' }) }]
+                }
+            />
         </Screen>
     );
 }
@@ -672,23 +756,22 @@ const styles = StyleSheet.create({
     iconButton: { padding: 8, borderRadius: 9999, borderWidth: 1 },
     resetButton: { padding: 8, borderRadius: 9999, backgroundColor: 'rgba(245, 158, 11, 0.12)' },
     deleteButton: { padding: 8, borderRadius: 9999, backgroundColor: 'rgba(239, 68, 68, 0.14)' },
-    modeBadge: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 6, paddingVertical: 4, paddingHorizontal: 10, borderRadius: 9999, backgroundColor: 'rgba(34, 211, 238, 0.1)', borderWidth: 1, borderColor: 'rgba(34, 211, 238, 0.3)', marginBottom: 10 },
-    modeBadgeManual: { backgroundColor: 'rgba(245, 158, 11, 0.1)', borderColor: 'rgba(245, 158, 11, 0.3)' },
-    modeBadgeText: { fontSize: 11, fontWeight: '800', letterSpacing: 1 },
-    titleRow: {
+    modeRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: 12,
-        marginBottom: 12,
+        flexWrap: 'nowrap',
+        gap: 8,
+        marginBottom: 10,
     },
-    title: { fontWeight: '800', flex: 1, minWidth: 0, paddingRight: 4 },
-    titleInfoBtn: {
-        flexShrink: 0,
+    modeBadge: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 6, paddingVertical: 4, paddingHorizontal: 10, borderRadius: 9999, backgroundColor: 'rgba(34, 211, 238, 0.1)', borderWidth: 1, borderColor: 'rgba(34, 211, 238, 0.3)' },
+    modeBadgeManual: { backgroundColor: 'rgba(245, 158, 11, 0.1)', borderColor: 'rgba(245, 158, 11, 0.3)' },
+    modeBadgeText: { fontSize: 11, fontWeight: '800', letterSpacing: 1 },
+    modeInfoBtn: {
         justifyContent: 'center',
         alignItems: 'center',
-        padding: 6,
+        padding: 4,
     },
+    title: { fontWeight: '800', marginBottom: 12 },
     visibilityRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingHorizontal: 14, borderWidth: 1, marginBottom: 20 },
     visibilityTextCol: { flex: 1 },
     visibilityTitle: { fontWeight: '700', fontSize: 14 },

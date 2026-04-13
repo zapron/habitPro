@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
   Modal,
   StyleSheet,
@@ -25,6 +24,8 @@ import { useHabitStore } from "../store/habitStore";
 import { useAuth } from "../context/AuthContext";
 import type { ProfileSearchRow } from "../types/groupChallenge";
 import { Button } from "./Button";
+import { ConfirmDialog } from "./ConfirmDialog";
+import { useToast } from "../context/ToastContext";
 
 type Props = {
   visible: boolean;
@@ -34,6 +35,7 @@ type Props = {
 
 export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
   const { theme } = useTheme();
+  const { showToast } = useToast();
   const router = useRouter();
   const { session } = useAuth();
   const setHabitChallengeMeta = useHabitStore((s) => s.setHabitChallengeMeta);
@@ -44,6 +46,7 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
   const [results, setResults] = useState<ProfileSearchRow[]>([]);
   const [searching, setSearching] = useState(false);
   const [invitingId, setInvitingId] = useState<string | null>(null);
+  const [noUsernameDialogOpen, setNoUsernameDialogOpen] = useState(false);
   const [inviteeStatusById, setInviteeStatusById] = useState<
     Partial<Record<string, "pending" | "declined" | "accepted">>
   >({});
@@ -94,7 +97,7 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
         .catch((e: unknown) => {
           if (!cancelled) {
             const msg = e instanceof Error ? e.message : String(e);
-            Alert.alert("Search failed", msg);
+            showToast(msg, "error");
             setResults([]);
           }
         })
@@ -106,7 +109,7 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
       cancelled = true;
       clearTimeout(t);
     };
-  }, [query, visible, session?.user?.id]);
+  }, [query, visible, session?.user?.id, showToast]);
 
   const handleCreateGroup = useCallback(async () => {
     if (!configured || !signedIn) return;
@@ -114,41 +117,29 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
     try {
       const { group, error } = await createGroupChallengeFromHabit(habit);
       if (error || !group) {
-        Alert.alert("Could not create group mission", error?.message ?? "Unknown error");
+        showToast(error?.message ?? "Unknown error", "error");
         return;
       }
       setHabitChallengeMeta(habit.id, {
         challengeGroupId: group.id,
         challengeCreatorTimezone: group.creator_timezone,
       });
+      showToast("Group mission ready — invite your squad", "success");
     } finally {
       setCreating(false);
     }
-  }, [configured, signedIn, habit, setHabitChallengeMeta]);
+  }, [configured, signedIn, habit, setHabitChallengeMeta, showToast]);
 
   const handleInvite = useCallback(
     async (userId: string) => {
       const gid = habit.challengeGroupId;
       if (!gid) {
-        Alert.alert("Create a group mission first", "Start a group mission from this habit, then invite friends.");
+        showToast("Start a group mission from this habit, then invite friends.", "info");
         return;
       }
       const uname = myUsername?.trim() ?? "";
       if (!uname) {
-        Alert.alert(
-          "Set a username first",
-          "You need a public username so your squad knows who sent the invite. Open Profile → settings and choose a username.",
-          [
-            { text: "Cancel", style: "cancel" },
-            {
-              text: "Go to Profile",
-              onPress: () => {
-                onClose();
-                router.push("/(tabs)/profile");
-              },
-            },
-          ],
-        );
+        setNoUsernameDialogOpen(true);
         return;
       }
       if (inviteeStatusById[userId]) return;
@@ -156,17 +147,17 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
       try {
         const { error } = await sendChallengeInvite(gid, userId);
         if (error) {
-          Alert.alert("Invite failed", error.message);
+          showToast(error.message, "error");
           return;
         }
         const m = await listChallengeInviteeStatusesForChallenge(gid);
         setInviteeStatusById(m);
-        Alert.alert("Invite sent", "They will see it under Compete and in notifications.");
+        showToast("Invite sent — they’ll see it under Compete and in notifications.", "success");
       } finally {
         setInvitingId(null);
       }
     },
-    [habit.challengeGroupId, inviteeStatusById, myUsername, onClose, router],
+    [habit.challengeGroupId, inviteeStatusById, myUsername, showToast],
   );
 
   const openChallenge = () => {
@@ -177,6 +168,7 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
   };
 
   return (
+    <>
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <View style={styles.backdrop}>
         <View style={[styles.sheet, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
@@ -281,6 +273,25 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
         </View>
       </View>
     </Modal>
+
+    <ConfirmDialog
+      visible={noUsernameDialogOpen}
+      onRequestClose={() => setNoUsernameDialogOpen(false)}
+      title="Set a username first"
+      message="You need a public username so your squad knows who sent the invite. Open Profile → settings and choose a username."
+      actions={[
+        { label: "Cancel", variant: "secondary", onPress: () => setNoUsernameDialogOpen(false) },
+        {
+          label: "Go to Profile",
+          onPress: () => {
+            setNoUsernameDialogOpen(false);
+            onClose();
+            router.push("/(tabs)/profile");
+          },
+        },
+      ]}
+    />
+    </>
   );
 }
 
