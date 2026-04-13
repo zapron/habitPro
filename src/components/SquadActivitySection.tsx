@@ -118,6 +118,8 @@ type Props = {
   myUserId: string | null;
   nudgeBusyKey: string | null;
   onCongrats: (actorUserId: string) => void;
+  /** When false (e.g. viewer mission window ended), hide Congrats on milestones */
+  allowNudgeActions?: boolean;
 };
 
 export function SquadActivitySection({
@@ -129,6 +131,7 @@ export function SquadActivitySection({
   myUserId,
   nudgeBusyKey,
   onCongrats,
+  allowNudgeActions = true,
 }: Props) {
   const [expanded, setExpanded] = useState(false);
 
@@ -237,7 +240,7 @@ export function SquadActivitySection({
                       </Text>
                     ) : null}
                   </View>
-                  {myUserId && row.actor_user_id !== myUserId ? (
+                  {allowNudgeActions && myUserId && row.actor_user_id !== myUserId ? (
                     <Pressable
                       disabled={nudgeBusyKey !== null}
                       onPress={() => onCongrats(row.actor_user_id)}
