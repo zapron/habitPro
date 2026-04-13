@@ -210,6 +210,10 @@ export const useHabitStore = create<HabitStore>()(
         requestRemoteSync({ immediate: true });
       },
       resetHabit: (id) => {
+        const target = get().habits.find((h) => h.id === id);
+        if (target?.challengeGroupId) {
+          return false;
+        }
         set((state) => ({
           habits: state.habits.map((h) => {
             if (h.id !== id) return h;
@@ -232,6 +236,7 @@ export const useHabitStore = create<HabitStore>()(
           }),
         }));
         requestRemoteSync({ immediate: false });
+        return true;
       },
       setMissionReport: (id, report) => {
         set((state) => ({

@@ -96,7 +96,8 @@ export type HabitStore = {
   toggleCompletion: (id: string, date: string) => boolean;
   setStreakMemory: (id: string, date: string, memory: StreakMemory | null) => void;
   deleteHabit: (id: string) => void;
-  resetHabit: (id: string) => void;
+  /** No-op (returns false) when the habit is linked to a group mission — avoids cohort desync. */
+  resetHabit: (id: string) => boolean;
   setMissionReport: (id: string, report: MissionReport) => void;
   getHabit: (id: string) => Habit | undefined;
   addMiniMission: (input: {
