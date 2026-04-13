@@ -42,6 +42,9 @@ function habitFromRow(row: {
       ? row.visibility
       : "solo";
   const d = getDerivedState(row.completed_dates ?? [], row.total_days ?? 21);
+  const storedStreak = typeof row.streak === "number" && Number.isFinite(row.streak) ? row.streak : 0;
+  /** Prefer derived streak; max with stored column when present (reconcile cohort / older rows). */
+  const streak = Math.max(d.streak, storedStreak);
   const missionReport = parseMissionReport(row.mission_report);
   const missionReportAt =
     typeof row.mission_report_at === "string" ? row.mission_report_at : undefined;
@@ -64,7 +67,7 @@ function habitFromRow(row: {
     startDate: row.start_date,
     endDate: row.end_date ?? undefined,
     completedDates: d.normalized,
-    streak: d.streak,
+    streak,
     totalDays: d.totalDays,
     isCompleted: d.isCompleted,
     status,

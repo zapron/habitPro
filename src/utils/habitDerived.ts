@@ -6,37 +6,42 @@
 const normalizeCompletedDates = (dates: string[]) =>
   [...new Set(dates)].sort((a, b) => a.localeCompare(b));
 
+/** YYYY-MM-DD in UTC — must match mission grid + sync (`calendarDateForMissionDayIndex` / `toISOString().split("T")[0]`). */
+function utcCalendarKey(d: Date): string {
+  return d.toISOString().split("T")[0];
+}
+
 /**
- * Current consecutive streak ending today or yesterday.
- * If the user hasn't completed today AND hasn't completed yesterday, streak = 0.
+ * Current consecutive streak ending on the latest UTC calendar day or the day before.
+ * Uses UTC dates only so this matches stored `completed_dates` (see missionDaySlots).
+ * Local-calendar logic previously mismatched those strings and showed 0 on cohort / after sync.
  */
 export function getConsecutiveStreak(sortedDates: string[]): number {
   if (sortedDates.length === 0) return 0;
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  const yesterday = new Date(today);
-  yesterday.setDate(yesterday.getDate() - 1);
-
-  const fmt = (d: Date) =>
-    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-
-  const todayStr = fmt(today);
-  const yesterdayStr = fmt(yesterday);
-
+  const now = new Date();
   const dateSet = new Set(sortedDates);
 
-  if (!dateSet.has(todayStr) && !dateSet.has(yesterdayStr)) return 0;
+  const todayUtc = utcCalendarKey(now);
+  const y = now.getUTCFullYear();
+  const mo = now.getUTCMonth();
+  const day = now.getUTCDate();
+  const yday = new Date(Date.UTC(y, mo, day, 12, 0, 0));
+  yday.setUTCDate(yday.getUTCDate() - 1);
+  const yesterdayUtc = utcCalendarKey(yday);
 
-  let cursor = dateSet.has(todayStr) ? new Date(today) : new Date(yesterday);
+  if (!dateSet.has(todayUtc) && !dateSet.has(yesterdayUtc)) return 0;
+
+  /** Noon UTC avoids DST edge cases when stepping days. */
+  let cursor = new Date(Date.UTC(y, mo, day, 12, 0, 0));
+  if (!dateSet.has(todayUtc)) {
+    cursor.setUTCDate(cursor.getUTCDate() - 1);
+  }
+
   let streak = 0;
-
-  while (true) {
-    const key = fmt(cursor);
-    if (!dateSet.has(key)) break;
+  while (dateSet.has(utcCalendarKey(cursor))) {
     streak++;
-    cursor.setDate(cursor.getDate() - 1);
+    cursor.setUTCDate(cursor.getUTCDate() - 1);
   }
 
   return streak;
