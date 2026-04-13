@@ -18,16 +18,21 @@ type NotificationRow = {
 };
 
 function buildMessage(
-  type: string,
+  type: string | undefined | null,
   payload: Record<string, unknown>,
 ): { title: string; body: string; data: Record<string, unknown> } {
+  const resolvedType =
+    String(type ?? "").trim() ||
+    (typeof payload.type === "string" ? payload.type.trim() : "");
+  const t = resolvedType.toLowerCase();
+
   const data: Record<string, unknown> = {
-    type,
+    type: resolvedType || t,
     schema: "habitpro.notification.v1",
     ...payload,
   };
 
-  switch (type) {
+  switch (t) {
     case "challenge_invite": {
       const inviter =
         typeof payload.inviter_username === "string"
@@ -62,6 +67,22 @@ function buildMessage(
       return {
         title: "Squad nudge",
         body: `@${String(from).toLowerCase()} sent ${kind}`,
+        data,
+      };
+    }
+    case "challenge_squad_checkin": {
+      const from =
+        typeof payload.actor_username === "string" && payload.actor_username.length > 0
+          ? String(payload.actor_username).toLowerCase()
+          : "someone";
+      const habitTitle =
+        typeof payload.habit_title === "string" && payload.habit_title.length > 0
+          ? payload.habit_title
+          : "Group mission";
+      const who = from === "someone" ? "Someone" : `@${from}`;
+      return {
+        title: "Squad streak",
+        body: `${who} updated the streak on “${habitTitle}”`,
         data,
       };
     }
@@ -104,12 +125,35 @@ function buildMessage(
         data,
       };
     }
-    default:
+    default: {
+      // Fallback: webhook may omit notifications.type; squad check-in payload is distinctive
+      if (
+        typeof payload.challenge_id === "string" &&
+        typeof payload.habit_title === "string" &&
+        typeof payload.date_str === "string" &&
+        typeof payload.actor_user_id === "string"
+      ) {
+        const from =
+          typeof payload.actor_username === "string" && payload.actor_username.length > 0
+            ? String(payload.actor_username).toLowerCase()
+            : "someone";
+        const habitTitle =
+          typeof payload.habit_title === "string" && payload.habit_title.length > 0
+            ? payload.habit_title
+            : "Group mission";
+        const who = from === "someone" ? "Someone" : `@${from}`;
+        return {
+          title: "Squad streak",
+          body: `${who} updated the streak on “${habitTitle}”`,
+          data: { ...data, type: "challenge_squad_checkin" },
+        };
+      }
       return {
         title: "habitPro",
         body: "You have a new notification",
         data,
       };
+    }
   }
 }
 
