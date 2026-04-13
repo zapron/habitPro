@@ -15,6 +15,7 @@ import {
   Animated,
   Image,
   ScrollView,
+  ActivityIndicator,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -156,6 +157,8 @@ export default function MiniMissionDetail() {
   const [completeSheetOpen, setCompleteSheetOpen] = useState(false);
   /** Wall time when user tapped Mark Complete — freezes countdown until sheet closes or mission completes. */
   const [timerFrozenAtMs, setTimerFrozenAtMs] = useState<number | null>(null);
+  /** Avoid not-found flash after delete; mission is removed before navigation finishes. */
+  const [pendingExitAfterRemove, setPendingExitAfterRemove] = useState(false);
 
   useEffect(() => {
     const unsubFail = subscribeSyncFailure(() => {
@@ -315,12 +318,18 @@ export default function MiniMissionDetail() {
   if (!mission) {
     return (
       <Screen>
-        <View style={styles.centered}>
-          <Text style={[styles.notFound, { color: theme.colors.textPrimary }]}>
-            Mini mission not found
-          </Text>
-          <Button title="Go Back" onPress={() => router.back()} />
-        </View>
+        {pendingExitAfterRemove ? (
+          <View style={styles.centered}>
+            <ActivityIndicator size="large" color={theme.colors.cyan[400]} />
+          </View>
+        ) : (
+          <View style={styles.centered}>
+            <Text style={[styles.notFound, { color: theme.colors.textPrimary }]}>
+              Mini mission not found
+            </Text>
+            <Button title="Go Back" onPress={() => router.back()} />
+          </View>
+        )}
       </Screen>
     );
   }
@@ -501,6 +510,7 @@ export default function MiniMissionDetail() {
           text: "Delete",
           style: "destructive",
           onPress: () => {
+            setPendingExitAfterRemove(true);
             deleteMiniMission(mission.id);
             router.replace("/mini");
           },

@@ -15,6 +15,7 @@ import { View,
   Easing,
   LayoutChangeEvent,
   Switch,
+  ActivityIndicator,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
@@ -33,7 +34,8 @@ import type { MissionVisibility } from '../../src/types/habit';
 import { ConfettiBurst } from '../../src/components/ConfettiBurst';
 import { StreakBanner } from '../../src/components/StreakBanner';
 import { getActiveMissionDaySlot, isHabitCalendarDateToggleable } from '../../src/utils/missionDaySlots';
-import { isHabitMissionWindowClosed } from '../../src/utils/habitMissionWindow';
+import { isMissionGridFull } from '../../src/utils/habitDerived';
+import { shouldShowMainMissionTimer } from '../../src/utils/mainMissionUi';
 import { StreakMemorySheet } from '../../src/components/StreakMemorySheet';
 import { StreakMemoryGallery } from '../../src/components/StreakMemoryGallery';
 import { GroupChallengeSheet } from '../../src/components/GroupChallengeSheet';
@@ -224,6 +226,8 @@ export default function HabitDetail() {
     const [groupSheetOpen, setGroupSheetOpen] = useState(false);
     const [missionDetailsOpen, setMissionDetailsOpen] = useState(false);
     const [missionDialog, setMissionDialog] = useState<MissionDialogState>({ kind: 'none' });
+    /** Avoid Mission not found flash after delete/leave; store clears before navigation finishes. */
+    const [pendingExitAfterRemove, setPendingExitAfterRemove] = useState(false);
     const pendingMemoryRef = useRef<{ dateStr: string; day: number; dayIndex: number } | null>(null);
 
     useEffect(() => {
@@ -246,8 +250,8 @@ export default function HabitDetail() {
     }, [habit?.streakMemories]);
 
     const showMissionReportInsteadOfTimer = useMemo(() => {
-        if (!habit || habit.isCompleted) return false;
-        return isHabitMissionWindowClosed(habit, now);
+        if (!habit) return false;
+        return !shouldShowMainMissionTimer(habit, now);
     }, [habit, now]);
 
     const fireCompletionCelebration = useCallback(
@@ -308,10 +312,16 @@ export default function HabitDetail() {
     if (!habit) {
         return (
             <Screen>
-                <View style={styles.notFoundContainer}>
-                    <Text style={[styles.notFoundText, { color: theme.colors.textPrimary, fontSize: theme.typography.body }]}>Mission not found</Text>
-                    <Button title='Go Back' onPress={() => router.back()} style={styles.notFoundButton} />
-                </View>
+                {pendingExitAfterRemove ? (
+                    <View style={styles.notFoundContainer}>
+                        <ActivityIndicator size="large" color={theme.colors.cyan[400]} />
+                    </View>
+                ) : (
+                    <View style={styles.notFoundContainer}>
+                        <Text style={[styles.notFoundText, { color: theme.colors.textPrimary, fontSize: theme.typography.body }]}>Mission not found</Text>
+                        <Button title='Go Back' onPress={() => router.back()} style={styles.notFoundButton} />
+                    </View>
+                )}
             </Screen>
         );
     }
@@ -471,6 +481,83 @@ export default function HabitDetail() {
                     {habit.title}
                 </Text>
 
+                {showMissionReportInsteadOfTimer ? (
+                    <View
+                        style={[
+                            styles.missionTimerSlot,
+                            {
+                                backgroundColor: theme.colors.surface,
+                                borderColor:
+                                    habit.missionReport === 'accomplished'
+                                        ? theme.colors.green[500] + '44'
+                                        : habit.missionReport === 'failed'
+                                            ? theme.colors.red[500] + '44'
+                                            : theme.colors.border,
+                                borderRadius: theme.radius.lg,
+                                ...theme.shadow.card,
+                            },
+                        ]}
+                    >
+                        <View
+                            style={[
+                                styles.missionLengthField,
+                                { borderColor: theme.colors.border, backgroundColor: theme.colors.surfaceElevated },
+                            ]}
+                        >
+                            <Text style={[styles.missionLengthLabel, { color: theme.colors.textSecondary }]}>Mission length</Text>
+                            <Text style={[styles.missionLengthValue, { color: theme.colors.textPrimary }]}>
+                                {totalDays} {totalDays === 1 ? 'day' : 'days'}
+                            </Text>
+                        </View>
+
+                        {habit.missionReport === 'accomplished' ? (
+                            <>
+                                <Text style={[styles.missionReportTitle, { color: theme.colors.textPrimary }]}>Accomplished</Text>
+                                <Text style={[styles.missionReportHint, { color: theme.colors.textSecondary }]}>
+                                    You marked this mission complete after the window ended.
+                                </Text>
+                            </>
+                        ) : habit.missionReport === 'failed' ? (
+                            <>
+                                <Text style={[styles.missionReportTitle, { color: theme.colors.textPrimary }]}>Failed</Text>
+                                <Text style={[styles.missionReportHint, { color: theme.colors.textSecondary }]}>
+                                    You marked this mission as not completed.
+                                </Text>
+                            </>
+                        ) : (
+                            <>
+                                <Text style={[styles.missionReportTitle, { color: theme.colors.textPrimary }]}>Mission review</Text>
+                                <Text style={[styles.missionReportHint, { color: theme.colors.textSecondary, marginBottom: 14 }]}>
+                                    {isMissionGridFull(habit)
+                                        ? 'Every check-in day is marked. That does not have to mean success for you — do you consider this mission complete?'
+                                        : 'The mission window has ended with at least one day unchecked. Do you still consider this mission complete for you?'}
+                                </Text>
+                                <View style={styles.missionReportActions}>
+                                    <Button
+                                        title="Yes"
+                                        onPress={() => {
+                                            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                                            setMissionReport(habit.id, 'accomplished');
+                                        }}
+                                        style={{ flex: 1, marginRight: 8 }}
+                                    />
+                                    <Button
+                                        title="No"
+                                        variant="danger"
+                                        onPress={() => {
+                                            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+                                            setMissionReport(habit.id, 'failed');
+                                        }}
+                                        style={{ flex: 1, marginLeft: 8 }}
+                                    />
+                                </View>
+                            </>
+                        )}
+                    </View>
+                ) : (
+                    <Timer startDate={habit.startDate} mode={mode} endDate={habit.endDate} />
+                )}
+
                 <View style={[styles.visibilityRow, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, borderRadius: theme.radius.md }]}>
                     {(habit.visibility ?? 'solo') === 'public' ? (
                         <Globe size={theme.icon.md} color={theme.colors.cyan[400]} />
@@ -524,81 +611,6 @@ export default function HabitDetail() {
                         <View style={[styles.progressBarFill, isManual && { backgroundColor: theme.colors.amber[500] }, { backgroundColor: theme.colors.indigo[500], width: `${(habit.completedDates.length / totalDays) * 100}%` }]} />
                     </View>
                 </View>
-
-                {showMissionReportInsteadOfTimer ? (
-                    <View
-                        style={[
-                            styles.missionTimerSlot,
-                            {
-                                backgroundColor: theme.colors.surface,
-                                borderColor:
-                                    habit.missionReport === 'accomplished'
-                                        ? theme.colors.green[500] + '44'
-                                        : habit.missionReport === 'failed'
-                                            ? theme.colors.red[500] + '44'
-                                            : theme.colors.border,
-                                borderRadius: theme.radius.lg,
-                                ...theme.shadow.card,
-                            },
-                        ]}
-                    >
-                        <View
-                            style={[
-                                styles.missionLengthField,
-                                { borderColor: theme.colors.border, backgroundColor: theme.colors.surfaceElevated },
-                            ]}
-                        >
-                            <Text style={[styles.missionLengthLabel, { color: theme.colors.textSecondary }]}>Mission length</Text>
-                            <Text style={[styles.missionLengthValue, { color: theme.colors.textPrimary }]}>
-                                {totalDays} {totalDays === 1 ? 'day' : 'days'}
-                            </Text>
-                        </View>
-
-                        {habit.missionReport === 'accomplished' ? (
-                            <>
-                                <Text style={[styles.missionReportTitle, { color: theme.colors.textPrimary }]}>Accomplished</Text>
-                                <Text style={[styles.missionReportHint, { color: theme.colors.textSecondary }]}>
-                                    You marked this mission complete after the window ended.
-                                </Text>
-                            </>
-                        ) : habit.missionReport === 'failed' ? (
-                            <>
-                                <Text style={[styles.missionReportTitle, { color: theme.colors.textPrimary }]}>Failed</Text>
-                                <Text style={[styles.missionReportHint, { color: theme.colors.textSecondary }]}>
-                                    You marked this mission as not completed.
-                                </Text>
-                            </>
-                        ) : (
-                            <>
-                                <Text style={[styles.missionReportTitle, { color: theme.colors.textPrimary }]}>Mission window ended</Text>
-                                <Text style={[styles.missionReportHint, { color: theme.colors.textSecondary, marginBottom: 14 }]}>
-                                    Not every day was checked in before the window closed. Is this mission complete for you?
-                                </Text>
-                                <View style={styles.missionReportActions}>
-                                    <Button
-                                        title="Yes"
-                                        onPress={() => {
-                                            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                                            setMissionReport(habit.id, 'accomplished');
-                                        }}
-                                        style={{ flex: 1, marginRight: 8 }}
-                                    />
-                                    <Button
-                                        title="No"
-                                        variant="danger"
-                                        onPress={() => {
-                                            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-                                            setMissionReport(habit.id, 'failed');
-                                        }}
-                                        style={{ flex: 1, marginLeft: 8 }}
-                                    />
-                                </View>
-                            </>
-                        )}
-                    </View>
-                ) : (
-                    <Timer startDate={habit.startDate} mode={mode} endDate={habit.endDate} />
-                )}
 
                 <Text style={[styles.gridTitle, { color: theme.colors.textPrimary, fontSize: theme.typography.h3 }]}>
                     {isManual ? `${totalDays}-Day Grid` : '21-Day Grid'}
@@ -706,6 +718,7 @@ export default function HabitDetail() {
                                       variant: 'danger',
                                       onPress: () => {
                                           setMissionDialog({ kind: 'none' });
+                                          setPendingExitAfterRemove(true);
                                           deleteHabit(habit.id);
                                           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                                           showToast('Mission deleted', 'success');
@@ -729,6 +742,7 @@ export default function HabitDetail() {
                                                     showToast(error.message, 'error');
                                                     return;
                                                 }
+                                                setPendingExitAfterRemove(true);
                                                 deleteHabit(habit.id);
                                                 await refreshCohortPeerHabits().catch(() => {});
                                                 Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
