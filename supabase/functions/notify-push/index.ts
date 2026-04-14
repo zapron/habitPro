@@ -64,9 +64,22 @@ function buildMessage(
       const from =
         typeof payload.from_username === "string" ? payload.from_username : "Someone";
       const kind = typeof payload.kind === "string" ? payload.kind : "nudge";
+      const fromHandle = String(from).toLowerCase();
+      if (kind === "custom_note") {
+        const msg = typeof payload.message === "string" ? payload.message.trim() : "";
+        const preview = msg.length > 100 ? `${msg.slice(0, 97)}…` : msg;
+        return {
+          title: "Squad note",
+          body:
+            preview.length > 0
+              ? `@${fromHandle}: “${preview}”`
+              : `@${fromHandle} sent you a note`,
+          data,
+        };
+      }
       return {
         title: "Squad nudge",
-        body: `@${String(from).toLowerCase()} sent ${kind}`,
+        body: `@${fromHandle} sent ${kind}`,
         data,
       };
     }
