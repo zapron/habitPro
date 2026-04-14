@@ -1,29 +1,31 @@
 import { Text } from "./AppText";
-import {
-  useEffect,
-  useRef } from "react";
-import { Animated,
-  Easing,
-  StyleSheet,
-  View,
-} from "react-native";
+import { useEffect, useRef } from "react";
+import { Animated, Easing, Platform, StyleSheet, View } from "react-native";
 import { Trophy } from "lucide-react-native";
 import { useReducedMotion } from "../hooks/useReducedMotion";
 import type { AppTheme } from "../styles/theme";
 
+/** Rich streak-board headline — copy matches `challenge/[id]` cohort logic. */
+export type CohortMastheadModel =
+  | { kind: "sync_prompt" }
+  | { kind: "most_days"; leaderName: string; daysChecked: number }
+  | { kind: "tie"; leadersCount: number; streakDays: number }
+  | { kind: "leader"; leaderName: string; streakDays: number };
+
 type Props = {
   theme: AppTheme;
-  /** One line, e.g. leading streak or tie message */
-  message: string;
+  model: CohortMastheadModel;
   isDark?: boolean;
 };
 
-export function CohortMasthead({ theme, message, isDark = false }: Props) {
+export function CohortMasthead({ theme, model, isDark = false }: Props) {
   const reduceMotion = useReducedMotion();
   const entranceScale = useRef(new Animated.Value(1)).current;
   const entranceY = useRef(new Animated.Value(0)).current;
   const trophyRock = useRef(new Animated.Value(0)).current;
-  const haloOpacity = useRef(new Animated.Value(0.45)).current;
+  const haloOpacity = useRef(new Animated.Value(0.22)).current;
+
+  const textProps = Platform.OS === "android" ? { includeFontPadding: false as const } : {};
 
   useEffect(() => {
     if (reduceMotion) {
@@ -47,7 +49,7 @@ export function CohortMasthead({ theme, message, isDark = false }: Props) {
         useNativeDriver: true,
       }),
     ]).start();
-  }, [message, reduceMotion, entranceScale, entranceY]);
+  }, [model, reduceMotion, entranceScale, entranceY]);
 
   useEffect(() => {
     if (reduceMotion) return;
@@ -76,14 +78,14 @@ export function CohortMasthead({ theme, message, isDark = false }: Props) {
     const loop = Animated.loop(
       Animated.sequence([
         Animated.timing(haloOpacity, {
-          toValue: 0.85,
-          duration: 1800,
+          toValue: 0.32,
+          duration: 2200,
           easing: Easing.inOut(Easing.ease),
           useNativeDriver: true,
         }),
         Animated.timing(haloOpacity, {
-          toValue: 0.32,
-          duration: 1800,
+          toValue: 0.18,
+          duration: 2200,
           easing: Easing.inOut(Easing.ease),
           useNativeDriver: true,
         }),
@@ -95,11 +97,54 @@ export function CohortMasthead({ theme, message, isDark = false }: Props) {
 
   const trophyRotate = trophyRock.interpolate({
     inputRange: [-1, 1],
-    outputRange: ["-10deg", "10deg"],
+    outputRange: ["-8deg", "8deg"],
   });
 
-  const iconBg = isDark ? "rgba(251, 191, 36, 0.14)" : "rgba(251, 191, 36, 0.2)";
-  const iconBorder = isDark ? "rgba(251, 191, 36, 0.35)" : "rgba(217, 119, 6, 0.45)";
+  const iconBg = isDark ? "rgba(251, 191, 36, 0.1)" : "rgba(251, 191, 36, 0.16)";
+  const iconBorder = isDark ? "rgba(251, 191, 36, 0.28)" : "rgba(217, 119, 6, 0.38)";
+
+  const base = theme.colors.textSecondary;
+  const nameColor = theme.colors.textPrimary;
+  const streakAccent = theme.colors.cyan[400];
+
+  const body = (() => {
+    switch (model.kind) {
+      case "sync_prompt":
+        return (
+          <Text style={[styles.body, { color: base }]} numberOfLines={4} {...textProps}>
+            Squad loading… complete a day to appear on the streak board.
+          </Text>
+        );
+      case "most_days":
+        return (
+          <Text style={[styles.body, { color: base }]} numberOfLines={4} {...textProps}>
+            <Text style={{ color: nameColor, fontWeight: "700" }}>{model.leaderName}</Text>
+            <Text>
+              {" "}
+              has checked the most days ({model.daysChecked}). Build the next streak!
+            </Text>
+          </Text>
+        );
+      case "tie":
+        return (
+          <Text style={[styles.body, { color: base }]} numberOfLines={4} {...textProps}>
+            <Text style={{ color: nameColor, fontWeight: "700" }}>{model.leadersCount}</Text>
+            <Text> tied with a </Text>
+            <Text style={{ color: streakAccent, fontWeight: "800" }}>{model.streakDays}-day streak</Text>
+            <Text> — who pulls ahead?</Text>
+          </Text>
+        );
+      case "leader":
+        return (
+          <Text style={[styles.body, { color: base }]} numberOfLines={4} {...textProps}>
+            <Text style={{ color: nameColor, fontWeight: "700" }}>{model.leaderName}</Text>
+            <Text> is leading on a </Text>
+            <Text style={{ color: streakAccent, fontWeight: "800" }}>{model.streakDays}-day streak</Text>
+            <Text>.</Text>
+          </Text>
+        );
+    }
+  })();
 
   return (
     <View
@@ -121,7 +166,7 @@ export function CohortMasthead({ theme, message, isDark = false }: Props) {
                 styles.halo,
                 {
                   borderColor: theme.colors.indigo[400],
-                  opacity: reduceMotion ? 0.5 : haloOpacity,
+                  opacity: reduceMotion ? 0.22 : haloOpacity,
                 },
               ]}
             />
@@ -136,11 +181,9 @@ export function CohortMasthead({ theme, message, isDark = false }: Props) {
                   },
                 ]}
               >
-                <Trophy size={26} color={theme.colors.amber[500]} strokeWidth={2.4} />
+                <Trophy size={20} color={theme.colors.amber[500]} strokeWidth={2.1} />
               </Animated.View>
-              <Text style={[styles.text, { color: theme.colors.indigo[500] }]} numberOfLines={4}>
-                {message}
-              </Text>
+              {body}
             </View>
           </View>
         </Animated.View>
@@ -157,36 +200,35 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   inner: {
-    paddingVertical: 14,
-    paddingHorizontal: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 18,
     overflow: "hidden",
     position: "relative",
   },
   halo: {
     ...StyleSheet.absoluteFillObject,
-    margin: -2,
-    borderRadius: 20,
-    borderWidth: 2,
+    margin: -1,
+    borderRadius: 19,
+    borderWidth: 1,
   },
   row: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 14,
+    gap: 12,
     zIndex: 1,
   },
   iconBadge: {
-    width: 52,
-    height: 52,
-    borderRadius: 16,
-    borderWidth: 1.5,
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
   },
-  text: {
+  body: {
     flex: 1,
-    fontSize: 16,
-    fontWeight: "900",
-    lineHeight: 22,
-    letterSpacing: -0.2,
+    fontSize: 13,
+    lineHeight: 19,
+    fontWeight: "600",
   },
 });

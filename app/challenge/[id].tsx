@@ -19,11 +19,16 @@ import {
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
 import { ArrowLeft, LogOut } from "lucide-react-native";
-import { CohortMasthead } from "../../src/components/CohortMasthead";
+import {
+  CohortMasthead,
+  type CohortMastheadModel,
+} from "../../src/components/CohortMasthead";
 import { CohortNudgeChips } from "../../src/components/CohortNudgeChips";
+import { CustomNudgeModal } from "../../src/components/CustomNudgeModal";
 import { Screen } from "../../src/components/Screen";
 import { ConfirmDialog } from "../../src/components/ConfirmDialog";
 import { CohortPeerStreakDots } from "../../src/components/CohortPeerStreakDots";
+import { CohortStreakPill } from "../../src/components/CohortStreakPill";
 import { SquadActivitySection } from "../../src/components/SquadActivitySection";
 import { useTheme } from "../../src/context/ThemeContext";
 import { useToast } from "../../src/context/ToastContext";
@@ -32,10 +37,12 @@ import { useHabitStore } from "../../src/store/habitStore";
 import {
   listChallengeActivity,
   listRecentNudges,
+  sendChallengeCustomNudge,
   sendChallengeNudge,
 } from "../../src/lib/challengeCohort";
 import {
   getChallengeGroup,
+  getMyProfileIsPremium,
   getProfileLabelsForIds,
   leaveChallengeGroup,
   listChallengeMembers,
@@ -47,8 +54,8 @@ import { deleteAllCommunityWinsForHabit } from "../../src/lib/communityWinsApi";
 import type {
   ChallengeActivityRow,
   ChallengeGroupRow,
-  ChallengeNudgeKind,
   ChallengeNudgeRow,
+  PresetChallengeNudgeKind,
 } from "../../src/types/groupChallenge";
 import type { Habit } from "../../src/types/habit";
 import { isHabitMissionWindowClosed } from "../../src/utils/habitMissionWindow";
@@ -104,6 +111,8 @@ export default function ChallengeDetailScreen() {
   const [cohortNow, setCohortNow] = useState(() => Date.now());
   const [leaveBusy, setLeaveBusy] = useState(false);
   const [leaveDialogOpen, setLeaveDialogOpen] = useState(false);
+  const [isPremium, setIsPremium] = useState(false);
+  const [customNoteToUserId, setCustomNoteToUserId] = useState<string | null>(null);
 
   const focusOnceRef = useRef(false);
 
@@ -112,12 +121,14 @@ export default function ChallengeDetailScreen() {
     const silent = opts?.silent ?? false;
     if (!silent) setLoading(true);
     try {
-      const [g, members, activity, nudges] = await Promise.all([
+      const [g, members, activity, nudges, premium] = await Promise.all([
         getChallengeGroup(challengeId),
         listChallengeMembers(challengeId),
         listChallengeActivity(challengeId).catch(() => [] as ChallengeActivityRow[]),
         listRecentNudges(challengeId).catch(() => [] as ChallengeNudgeRow[]),
+        getMyProfileIsPremium(),
       ]);
+      setIsPremium(premium);
       setGroup(g);
       const ids = members.map((m) => m.user_id);
       setMemberIdsOrdered(ids);
@@ -156,7 +167,7 @@ export default function ChallengeDetailScreen() {
   }, [load]);
 
   const onSendNudge = useCallback(
-    async (toUserId: string, kind: ChallengeNudgeKind) => {
+    async (toUserId: string, kind: PresetChallengeNudgeKind) => {
       if (!challengeId || !myUserId || toUserId === myUserId) return;
       const viewerHabit = habits.find((h) => h.challengeGroupId === challengeId);
       if (
@@ -292,8 +303,8 @@ export default function ChallengeDetailScreen() {
     });
   }, [memberIdsOrdered, habitForMember]);
 
-  const cohortMastheadMessage = useMemo(() => {
-    if (memberIdsOrdered.length === 0) return "";
+  const cohortMastheadModel = useMemo((): CohortMastheadModel | null => {
+    if (memberIdsOrdered.length === 0) return null;
     const rows = memberIdsOrdered.map((id) => ({
       id,
       habit: habitForMember(id),
@@ -301,7 +312,7 @@ export default function ChallengeDetailScreen() {
     }));
     const withHabit = rows.filter((r): r is typeof r & { habit: Habit } => Boolean(r.habit));
     if (withHabit.length === 0) {
-      return "Squad loading… complete a day to appear on the streak board.";
+      return { kind: "sync_prompt" };
     }
     const sorted = [...withHabit].sort((a, b) => {
       const d = b.habit.streak - a.habit.streak;
@@ -314,13 +325,63 @@ export default function ChallengeDetailScreen() {
     if (maxS === 0) {
       const byDays = [...sorted].sort((a, b) => b.habit.completedDates.length - a.habit.completedDates.length)[0];
       const n = byDays.habit.completedDates.length;
-      return `${byDays.name} has checked the most days (${n}). Build the next streak!`;
+      return { kind: "most_days", leaderName: byDays.name, daysChecked: n };
     }
     if (leaders.length >= 2) {
-      return `${leaders.length} tied with a ${maxS}-day streak — who pulls ahead?`;
+      return { kind: "tie", leadersCount: leaders.length, streakDays: maxS };
     }
-    return `${top.name} is leading on a ${maxS}-day streak.`;
+    return { kind: "leader", leaderName: top.name, streakDays: maxS };
   }, [memberIdsOrdered, profileLabels, habitForMember]);
+
+  const customNoteSentToUserIds = useMemo(() => {
+    if (!myUserId) return new Set<string>();
+    const s = new Set<string>();
+    for (const n of feedNudges) {
+      if (n.from_user_id === myUserId && n.kind === "custom_note") {
+        s.add(n.to_user_id);
+      }
+    }
+    return s;
+  }, [feedNudges, myUserId]);
+
+  const onOpenCustomNote = useCallback(
+    (toUserId: string) => {
+      if (!isPremium) {
+        showToast("Custom notes are a Habit Pro+ feature.", "info");
+        return;
+      }
+      setCustomNoteToUserId(toUserId);
+    },
+    [isPremium, showToast],
+  );
+
+  const onSubmitCustomNote = useCallback(
+    async (text: string) => {
+      if (!challengeId || !customNoteToUserId || !myUserId) return;
+      const viewerHabit = habits.find((h) => h.challengeGroupId === challengeId);
+      if (
+        viewerHabit &&
+        !viewerHabit.isCompleted &&
+        isHabitMissionWindowClosed(viewerHabit, Date.now())
+      ) {
+        showToast("Mission window ended — nudges are disabled.", "info");
+        return;
+      }
+      setNudgeBusyKey(`${customNoteToUserId}-custom_note`);
+      try {
+        const { error } = await sendChallengeCustomNudge(challengeId, customNoteToUserId, text);
+        if (error) {
+          showToast(error.message, "error");
+          return;
+        }
+        setCustomNoteToUserId(null);
+        await load({ silent: true });
+      } finally {
+        setNudgeBusyKey(null);
+      }
+    },
+    [challengeId, customNoteToUserId, myUserId, habits, showToast, load],
+  );
 
   const bottomPad = 40;
 
@@ -428,8 +489,8 @@ export default function ChallengeDetailScreen() {
             allowNudgeActions={squadNudgeActionsEnabled}
           />
 
-          {cohortMastheadMessage ? (
-            <CohortMasthead theme={theme} isDark={isDark} message={cohortMastheadMessage} />
+          {cohortMastheadModel ? (
+            <CohortMasthead theme={theme} isDark={isDark} model={cohortMastheadModel} />
           ) : null}
 
           <Text style={[styles.sectionLabel, { color: theme.colors.textMuted }]}>PARTICIPANTS</Text>
@@ -459,16 +520,7 @@ export default function ChallengeDetailScreen() {
                       {nameOnCard}
                     </Text>
                     {habit ? (
-                      <View
-                        style={[
-                          styles.streakBadge,
-                          { backgroundColor: isDark ? "rgba(34, 211, 238, 0.12)" : "rgba(6, 182, 212, 0.1)" },
-                        ]}
-                      >
-                        <Text style={[styles.streakBadgeText, { color: theme.colors.cyan[400] }]}>
-                          {habit.streak} day streak
-                        </Text>
-                      </View>
+                      <CohortStreakPill streak={habit.streak} isDark={isDark} />
                     ) : (
                       <Text style={[styles.streakPlaceholder, { color: theme.colors.textMuted }]}>—</Text>
                     )}
@@ -493,6 +545,9 @@ export default function ChallengeDetailScreen() {
                       memberId={memberId}
                       nudgeBusyKey={nudgeBusyKey}
                       onPress={(kind) => void onSendNudge(memberId, kind)}
+                      isPremium={isPremium}
+                      customNoteAlreadySent={customNoteSentToUserIds.has(memberId)}
+                      onCustomNotePress={() => onOpenCustomNote(memberId)}
                     />
                   ) : null}
                 </View>
@@ -501,6 +556,14 @@ export default function ChallengeDetailScreen() {
           )}
         </ScrollView>
       )}
+
+      <CustomNudgeModal
+        visible={customNoteToUserId !== null}
+        onRequestClose={() => setCustomNoteToUserId(null)}
+        recipientLabel={participantDisplayName(profileLabels[customNoteToUserId ?? ""])}
+        busy={customNoteToUserId !== null && nudgeBusyKey === `${customNoteToUserId}-custom_note`}
+        onSend={(t) => void onSubmitCustomNote(t)}
+      />
 
       <ConfirmDialog
         visible={leaveDialogOpen}
@@ -576,13 +639,6 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
   },
-  streakBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 9999,
-    flexShrink: 0,
-  },
-  streakBadgeText: { fontSize: 12, fontWeight: "800" },
   streakPlaceholder: { fontSize: 13, fontWeight: "700" },
   noSyncHint: { fontSize: 12, lineHeight: 17, fontStyle: "italic", marginTop: 4 },
 });

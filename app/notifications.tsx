@@ -40,6 +40,7 @@ function nudgeKindLabel(kind: unknown): string {
     ping: "What's up?!",
     fire: "Fire",
     congrats: "Congrats",
+    custom_note: "a custom note",
   };
   if (k in map) return map[k as ChallengeNudgeKind];
   return k.length > 0 ? k : "Nudge";
@@ -86,6 +87,14 @@ function notificationSubtitle(n: NotificationRow): string | null {
       const from = p.from_username;
       const who =
         typeof from === "string" && from.trim().length > 0 ? `@${from.trim().toLowerCase()}` : "Someone";
+      const kind = p.kind;
+      if (kind === "custom_note") {
+        const msg = typeof p.message === "string" ? p.message.trim() : "";
+        const preview = msg.length > 80 ? `${msg.slice(0, 77)}…` : msg;
+        return preview.length > 0
+          ? `${who}: “${preview}” · Tap to open squad`
+          : `${who} sent you a note · Tap to open squad`;
+      }
       return `${who} sent you ${nudgeKindLabel(p.kind)} · Tap to open squad`;
     }
     case "challenge_squad_checkin": {

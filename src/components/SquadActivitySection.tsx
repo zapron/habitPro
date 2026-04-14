@@ -7,7 +7,7 @@ import { ActivityIndicator,
   StyleSheet,
   View,
 } from "react-native";
-import { ChevronDown, Flame, Heart, Sparkles, Flag, Users } from "lucide-react-native";
+import { ChevronDown, Flame, Heart, MessageSquare, Sparkles, Flag, Users } from "lucide-react-native";
 import type { AppTheme } from "../styles/theme";
 import type {
   ChallengeActivityRow,
@@ -94,6 +94,19 @@ function NudgeActivityLine({
           <Text style={{ color: base }}> {to}</Text>
         </Text>
       );
+    case "custom_note": {
+      const m = row.message?.trim() ?? "";
+      return (
+        <Text style={[styles.nudgeLine, { color: base }]} numberOfLines={4} {...textProps}>
+          <Text style={{ color: base }}>{from} sent </Text>
+          <Text style={{ color: theme.colors.indigo[400], fontWeight: accentWeight }}>a note</Text>
+          <Text style={{ color: base }}> to {to}</Text>
+          {m.length > 0 ? (
+            <Text style={{ color: base }}>{` — “${m}”`}</Text>
+          ) : null}
+        </Text>
+      );
+    }
   }
 }
 
@@ -113,6 +126,8 @@ function NudgeKindIcon({ kind, theme }: { kind: ChallengeNudgeKind; theme: AppTh
       return <Flame {...common} color={theme.colors.amber[500]} />;
     case "congrats":
       return <Sparkles {...common} color={theme.colors.indigo[400]} />;
+    case "custom_note":
+      return <MessageSquare {...common} color={theme.colors.indigo[400]} />;
   }
 }
 

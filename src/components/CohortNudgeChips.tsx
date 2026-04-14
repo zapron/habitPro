@@ -5,12 +5,12 @@ import {
   ScrollView,
   StyleSheet,
 } from "react-native";
-import { Flame, Heart } from "lucide-react-native";
+import { Flame, Heart, MessageSquare } from "lucide-react-native";
 import type { AppTheme } from "../styles/theme";
-import type { ChallengeNudgeKind } from "../types/groupChallenge";
+import type { PresetChallengeNudgeKind } from "../types/groupChallenge";
 
 const NUDGE_SPECS: {
-  kind: ChallengeNudgeKind;
+  kind: PresetChallengeNudgeKind;
   label: string;
   Icon?: typeof Heart;
   glyph?: string;
@@ -46,11 +46,31 @@ type Props = {
   isDark: boolean;
   memberId: string;
   nudgeBusyKey: string | null;
-  onPress: (kind: ChallengeNudgeKind) => void;
+  onPress: (kind: PresetChallengeNudgeKind) => void;
+  /** Habit Pro+ — custom one-time note per squadmate. */
+  isPremium: boolean;
+  /** True after viewer already sent a custom note to this member in this challenge. */
+  customNoteAlreadySent: boolean;
+  onCustomNotePress: () => void;
 };
 
-export function CohortNudgeChips({ theme, isDark, memberId, nudgeBusyKey, onPress }: Props) {
+export function CohortNudgeChips({
+  theme,
+  isDark,
+  memberId,
+  nudgeBusyKey,
+  onPress,
+  isPremium,
+  customNoteAlreadySent,
+  onCustomNotePress,
+}: Props) {
   const busyGlobal = nudgeBusyKey !== null;
+
+  const customBusy = nudgeBusyKey === `${memberId}-custom_note`;
+  const customDisabled = busyGlobal || customNoteAlreadySent;
+  const customBg = isDark ? "rgba(167, 139, 250, 0.1)" : "rgba(124, 58, 237, 0.06)";
+  const customBorder = isDark ? "rgba(167, 139, 250, 0.28)" : "rgba(124, 58, 237, 0.22)";
+  const customIcon = isDark ? "#c4b5fd" : "#7c3aed";
 
   return (
     <ScrollView
@@ -113,6 +133,35 @@ export function CohortNudgeChips({ theme, isDark, memberId, nudgeBusyKey, onPres
           </Pressable>
         );
       })}
+
+      <Pressable
+        disabled={customDisabled}
+        onPress={onCustomNotePress}
+        style={({ pressed }) => [
+          styles.chip,
+          styles.customChip,
+          {
+            backgroundColor: customBg,
+            borderColor: customBorder,
+            opacity: customDisabled ? 0.5 : pressed ? 0.92 : 1,
+            transform: [{ scale: pressed && !customDisabled ? 0.98 : 1 }],
+          },
+        ]}
+      >
+        {customBusy ? (
+          <ActivityIndicator size="small" color={customIcon} />
+        ) : (
+          <>
+            <MessageSquare size={theme.icon.sm} color={customIcon} strokeWidth={2.2} />
+            <Text style={[styles.chipLabel, { color: theme.colors.textSecondary }]}>
+              {customNoteAlreadySent ? "Note sent" : "Note"}
+            </Text>
+            {!isPremium ? (
+              <Text style={[styles.proBadge, { color: customIcon }]}>Pro+</Text>
+            ) : null}
+          </>
+        )}
+      </Pressable>
     </ScrollView>
   );
 }
@@ -135,6 +184,15 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
     minHeight: 30,
+  },
+  customChip: {
+    borderWidth: 1,
+  },
+  proBadge: {
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 0.4,
+    marginLeft: 2,
   },
   glyph: {
     fontSize: 13,
