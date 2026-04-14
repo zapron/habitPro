@@ -18,6 +18,11 @@ export interface StreakMemory {
   communityPosted?: boolean;
   /** User removed this moment from Community; cannot publish this memory again. */
   communityFeedRevoked?: boolean;
+  /**
+   * User chose “Just mark done” with no photo/note — check-in is final (same lock as a saved moment).
+   * Prevents re-opening the capture sheet or toggling the day off with a normal tap.
+   */
+  checkInOnly?: boolean;
 }
 
 export interface Habit {

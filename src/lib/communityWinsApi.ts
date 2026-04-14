@@ -8,6 +8,8 @@ export function habitStreakCommunityWinId(habitId: string, memoryDateStr: string
   return `habitwin:${habitId}:${memoryDateStr}`;
 }
 
+export type CommunityWinFeedSource = "mini" | "habit_streak";
+
 export type CommunityWinRow = {
   id: string;
   user_id: string;
@@ -17,6 +19,9 @@ export type CommunityWinRow = {
   memory_note: string | null;
   memory_image_url: string | null;
   created_at: string;
+  feed_source: CommunityWinFeedSource;
+  streak_mission_day: number | null;
+  streak_count_at_post: number | null;
 };
 
 export type CommunityWinFeedItem = CommunityWinRow & {
@@ -31,6 +36,10 @@ export async function postCommunityWin(input: {
   completedAt: string;
   memoryNote?: string | null;
   memoryImageUrl?: string | null;
+  /** Default mini. habit_streak enables streak feed styling + cheer copy. */
+  feedSource?: CommunityWinFeedSource;
+  streakMissionDay?: number | null;
+  streakCountAtPost?: number | null;
 }): Promise<{ ok: true } | { ok: false; error: string }> {
   const supabase = getSupabase();
   if (!supabase) return { ok: false, error: "Cloud sync not configured." };
@@ -41,6 +50,16 @@ export async function postCommunityWin(input: {
   } = await supabase.auth.getUser();
   if (userErr || !user) return { ok: false, error: "Sign in to share your win." };
 
+  const feedSource = input.feedSource ?? "mini";
+  const streakDay =
+    feedSource === "habit_streak" && typeof input.streakMissionDay === "number"
+      ? input.streakMissionDay
+      : null;
+  const streakCount =
+    feedSource === "habit_streak" && typeof input.streakCountAtPost === "number"
+      ? input.streakCountAtPost
+      : null;
+
   const { error } = await supabase.from("community_wins").upsert(
     {
       user_id: user.id,
@@ -49,6 +68,9 @@ export async function postCommunityWin(input: {
       completed_at: input.completedAt,
       memory_note: input.memoryNote ?? null,
       memory_image_url: input.memoryImageUrl ?? null,
+      feed_source: feedSource,
+      streak_mission_day: streakDay,
+      streak_count_at_post: streakCount,
     },
     { onConflict: "user_id,mini_mission_id" },
   );
@@ -140,12 +162,18 @@ async function enrichWinsWithProfilesAndCheers(
     if (viewerId && uid === viewerId) viewerCheered.add(wid);
   }
 
-  return wins.map((row) => ({
-    ...row,
-    username: usernameByUserId.get(row.user_id) ?? null,
-    cheerCount: countByWin.get(row.id) ?? 0,
-    viewerHasCheered: viewerCheered.has(row.id),
-  }));
+  return wins.map((row) => {
+    const r = row as CommunityWinRow;
+    return {
+      ...r,
+      feed_source: (r.feed_source ?? "mini") as CommunityWinFeedSource,
+      streak_mission_day: r.streak_mission_day ?? null,
+      streak_count_at_post: r.streak_count_at_post ?? null,
+      username: usernameByUserId.get(row.user_id) ?? null,
+      cheerCount: countByWin.get(row.id) ?? 0,
+      viewerHasCheered: viewerCheered.has(row.id),
+    };
+  });
 }
 
 /**
@@ -166,7 +194,9 @@ export async function fetchCommunityWinsFeedPage(
   const take = pageSize + 1;
   const { data: winsRaw, error: winsErr } = await supabase
     .from("community_wins")
-    .select("id, user_id, mini_mission_id, title, completed_at, memory_note, memory_image_url, created_at")
+    .select(
+      "id, user_id, mini_mission_id, title, completed_at, memory_note, memory_image_url, created_at, feed_source, streak_mission_day, streak_count_at_post",
+    )
     .order("created_at", { ascending: false })
     .range(offset, offset + take - 1);
 
