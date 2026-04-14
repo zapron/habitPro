@@ -39,7 +39,7 @@ export function StreakMemoryGallery({
   sectionHint = "Tap a card to revisit. Moments are view-only after you save them.",
   remotePeer = false,
 }: StreakMemoryGalleryProps) {
-  const { theme } = useTheme();
+  const { theme, isDark } = useTheme();
   const [open, setOpen] = useState<Entry | null>(null);
 
   if (entries.length === 0) return null;
@@ -48,6 +48,11 @@ export function StreakMemoryGallery({
   const cardW = Math.min(160, (w - 48) / 2.2);
   const viewerUri =
     open?.memory?.imageUrl || open?.memory?.imageUri;
+  const modalHasRenderableImage = Boolean(
+    viewerUri && (!remotePeer || uriLoadsForRemoteViewer(viewerUri)),
+  );
+  const modalNoteTrim = open?.memory?.note?.trim() ?? "";
+  const modalTextOnlyHero = Boolean(modalNoteTrim && !modalHasRenderableImage);
 
   return (
     <>
@@ -68,6 +73,9 @@ export function StreakMemoryGallery({
               Boolean(memory.imageUri) &&
               !memory.imageUrl &&
               !uriLoadsForRemoteViewer(memory.imageUri);
+            const noteTrim = memory.note?.trim() ?? "";
+            const textOnlyThumb =
+              !showImage && !hasLocalOnlyPhoto && noteTrim.length > 0;
             return (
             <Pressable
               key={dateStr}
@@ -79,6 +87,25 @@ export function StreakMemoryGallery({
             >
               {showImage ? (
                 <Image source={{ uri: displayUri! }} style={styles.thumb} resizeMode="cover" />
+              ) : textOnlyThumb ? (
+                <View
+                  style={[
+                    styles.textOnlyThumb,
+                    {
+                      borderColor: theme.colors.border,
+                      borderLeftColor: theme.colors.indigo[500],
+                      backgroundColor: isDark ? "rgba(79, 70, 229, 0.14)" : "rgba(79, 70, 229, 0.08)",
+                    },
+                  ]}
+                >
+                  <Text style={[styles.textOnlyThumbKicker, { color: theme.colors.cyan[400] }]}>FIELD NOTE</Text>
+                  <Text
+                    style={[styles.textOnlyThumbBody, { color: theme.colors.textPrimary }]}
+                    numberOfLines={6}
+                  >
+                    {noteTrim}
+                  </Text>
+                </View>
               ) : (
                 <View style={[styles.thumbPlaceholder, { backgroundColor: theme.colors.surfaceElevated }]}>
                   {hasLocalOnlyPhoto ? (
@@ -93,7 +120,7 @@ export function StreakMemoryGallery({
               <Text style={[styles.cardDate, { color: theme.colors.textSecondary }]} numberOfLines={1}>
                 {dateStr}
               </Text>
-              {memory.note ? (
+              {memory.note && !textOnlyThumb ? (
                 <Text style={[styles.cardNote, { color: theme.colors.textMuted }]} numberOfLines={2}>
                   {memory.note}
                 </Text>
@@ -107,14 +134,28 @@ export function StreakMemoryGallery({
       <Modal visible={open !== null} transparent animationType="fade" onRequestClose={() => setOpen(null)}>
         <Pressable style={[styles.viewerBackdrop, { backgroundColor: "rgba(0,0,0,0.85)" }]} onPress={() => setOpen(null)}>
           <Pressable style={styles.viewerInner} onPress={(e) => e.stopPropagation()}>
-            {viewerUri && (!remotePeer || uriLoadsForRemoteViewer(viewerUri)) ? (
-              <Image source={{ uri: viewerUri }} style={styles.viewerImg} resizeMode="contain" />
+            {modalHasRenderableImage ? (
+              <Image source={{ uri: viewerUri! }} style={styles.viewerImg} resizeMode="contain" />
+            ) : modalNoteTrim ? (
+              <View
+                style={[
+                  styles.viewerTextOnlyHero,
+                  {
+                    borderColor: theme.colors.border,
+                    borderLeftColor: theme.colors.indigo[500],
+                    backgroundColor: isDark ? "rgba(79, 70, 229, 0.16)" : "rgba(79, 70, 229, 0.09)",
+                  },
+                ]}
+              >
+                <Text style={[styles.viewerTextOnlyKicker, { color: theme.colors.cyan[400] }]}>FIELD NOTE</Text>
+                <Text style={[styles.viewerTextOnlyBody, { color: theme.colors.textPrimary }]}>{modalNoteTrim}</Text>
+              </View>
             ) : null}
             <View style={[styles.viewerMeta, { backgroundColor: theme.colors.surfaceElevated, borderColor: theme.colors.border }]}>
               <Text style={[styles.viewerDate, { color: theme.colors.cyan[400] }]}>{open?.dateStr}</Text>
-              {open?.memory.note ? (
-                <Text style={[styles.viewerNote, { color: theme.colors.textPrimary }]}>{open.memory.note}</Text>
-              ) : open?.memory.imageUri &&
+              {modalHasRenderableImage && modalNoteTrim ? (
+                <Text style={[styles.viewerNote, { color: theme.colors.textPrimary }]}>{modalNoteTrim}</Text>
+              ) : modalTextOnlyHero ? null : open?.memory.imageUri &&
                 remotePeer &&
                 !open.memory.imageUrl &&
                 !uriLoadsForRemoteViewer(open.memory.imageUri) ? (
@@ -157,6 +198,30 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  textOnlyThumb: {
+    width: "100%",
+    aspectRatio: 4 / 5,
+    borderRadius: 0,
+    borderTopWidth: 0,
+    borderRightWidth: 0,
+    borderBottomWidth: 0,
+    borderLeftWidth: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 12,
+    justifyContent: "flex-start",
+  },
+  textOnlyThumbKicker: {
+    fontSize: 8,
+    fontWeight: "900",
+    letterSpacing: 1.6,
+    marginBottom: 8,
+  },
+  textOnlyThumbBody: {
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: "600",
+    letterSpacing: 0.1,
+  },
   quoteMark: { fontSize: 42, fontWeight: "700", opacity: 0.5 },
   remotePhotoHint: { fontSize: 11, lineHeight: 15, textAlign: "center", paddingHorizontal: 8 },
   cardDate: { fontSize: 11, fontWeight: "700", marginTop: 8, paddingHorizontal: 10 },
@@ -164,6 +229,24 @@ const styles = StyleSheet.create({
   viewerBackdrop: { flex: 1, justifyContent: "center", padding: 20 },
   viewerInner: { borderRadius: 20, overflow: "hidden" },
   viewerImg: { width: "100%", height: 320, backgroundColor: "#000" },
+  viewerTextOnlyHero: {
+    width: "100%",
+    minHeight: 280,
+    paddingHorizontal: 22,
+    paddingVertical: 28,
+    borderLeftWidth: 5,
+    borderTopWidth: 1,
+    borderRightWidth: 1,
+    borderBottomWidth: 1,
+    justifyContent: "center",
+  },
+  viewerTextOnlyKicker: {
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 2.2,
+    marginBottom: 14,
+  },
+  viewerTextOnlyBody: { fontSize: 18, lineHeight: 28, fontWeight: "600" },
   viewerMeta: { padding: 16, borderTopWidth: 1 },
   viewerDate: { fontSize: 12, fontWeight: "800", letterSpacing: 0.8, marginBottom: 8 },
   viewerNote: { fontSize: 16, lineHeight: 24 },

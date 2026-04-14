@@ -23,7 +23,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as ImagePicker from "expo-image-picker";
-import { Flag, Globe, ImageIcon, Lock, X } from "lucide-react-native";
+import { Flag, Globe, ImageIcon, Lock, Quote, X } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import { useTheme } from "../context/ThemeContext";
 import type { StreakMemory } from "../types/habit";
@@ -51,7 +51,11 @@ type StreakMemorySheetProps = {
     posted: boolean;
     revoked: boolean;
     available: boolean;
+    /** Signed in + cloud, but this memory has no photo — Community can’t be enabled. */
+    needsPhotoForCommunity?: boolean;
     busy?: boolean;
+    /** True while publish is in flight; keeps the Switch ON until `posted` updates. */
+    pendingPublish?: boolean;
     onChange: (next: boolean) => void | Promise<void>;
   };
   /** view only */
@@ -84,6 +88,12 @@ export function StreakMemorySheet({
   const [imageUri, setImageUri] = useState<string | undefined>();
   const [publishToCommunity, setPublishToCommunity] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!imageUri && publishToCommunity) {
+      setPublishToCommunity(false);
+    }
+  }, [imageUri, publishToCommunity]);
 
   useEffect(() => {
     if (visible) {
@@ -156,15 +166,19 @@ export function StreakMemorySheet({
 
   /** Backdrop, X, Android back — does not check in (create) or only closes (view). */
   const handleDismiss = useCallback(() => {
+    if (submitting) return;
     onClose();
-  }, [onClose]);
+  }, [onClose, submitting]);
 
   /** Explicit: check in for this day without saving a photo/note. */
   const handleJustMarkDone = useCallback(() => {
     if (isView || submitting) return;
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     const meta = isMini
-      ? { publishToCommunity: publishToCommunity && canPublishCommunity }
+      ? {
+          publishToCommunity:
+            publishToCommunity && canPublishCommunity && Boolean(imageUri),
+        }
       : undefined;
     setSubmitting(true);
     void (async () => {
@@ -183,6 +197,7 @@ export function StreakMemorySheet({
     onCommit,
     onClose,
     isMini,
+    imageUri,
     publishToCommunity,
     canPublishCommunity,
   ]);
@@ -201,13 +216,12 @@ export function StreakMemorySheet({
         isMini
           ? "Add a photo or a note first to use Complete with Memory, or tap Just Mark Complete to finish without one."
           : "Add a photo or a note to save a moment, or tap Just mark done to check in without one.",
+        [{ text: "OK" }],
       );
       return;
     }
     const enableCommunityMeta =
-      publishToCommunity &&
-      canPublishCommunity &&
-      (isMini || Boolean(note.trim() || imageUri));
+      publishToCommunity && canPublishCommunity && Boolean(imageUri);
     const meta = enableCommunityMeta ? { publishToCommunity: true } : undefined;
     setSubmitting(true);
     try {
@@ -234,18 +248,38 @@ export function StreakMemorySheet({
   const isMemoryCreate = !isView;
   const isMiniCreate = !isView && isMini;
   const isHabitCreate = !isView && !isMini;
+  /** Shown while onCommit runs (upload, check-in, optional Community publish). */
+  const submittingPublishCopy =
+    submitting && publishToCommunity && canPublishCommunity && Boolean(imageUri);
   /** Streak memory capture (habit + mini): fixed height + flex scroll — same cap for both drawers. */
   const memoryCaptureSheetMaxHeight = Math.min(windowH * 0.78, windowH - insets.top - 8);
 
   const vm = viewMemory;
+  const viewHasImage = Boolean(vm?.imageUrl || vm?.imageUri);
+  const viewNoteStr = vm?.note?.trim() ?? "";
+  const viewTextOnlyMemory = isView && viewNoteStr.length > 0 && !viewHasImage;
+  /** Main mission: “Just mark done” — locked row with no photo/note. */
+  const viewCheckInOnly =
+    isView && !isMini && vm?.checkInOnly === true && !viewHasImage && viewNoteStr.length === 0;
+  const communitySwitchOn =
+    habitViewCommunity != null &&
+    (habitViewCommunity.posted || habitViewCommunity.pendingPublish === true);
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={handleDismiss}>
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={() => {
+        if (!submitting) handleDismiss();
+      }}
+    >
       <View style={[styles.backdrop, { backgroundColor: isDark ? "rgba(0,0,0,0.72)" : "rgba(15,23,42,0.55)" }]}>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Dismiss"
           style={StyleSheet.absoluteFill}
+          disabled={submitting}
           onPress={handleDismiss}
         />
         <KeyboardAvoidingView
@@ -258,6 +292,7 @@ export function StreakMemorySheet({
               pointerEvents="auto"
               style={[
                 styles.sheet,
+                !isView ? styles.sheetCreateOverflow : null,
                 {
                   ...(isView
                     ? {
@@ -294,7 +329,15 @@ export function StreakMemorySheet({
                     <Flag size={22} color={theme.colors.green[500]} fill={theme.colors.green[500]} />
                   )}
                 </View>
-                <Pressable hitSlop={12} onPress={handleDismiss} style={[styles.closeBtn, { backgroundColor: theme.colors.surface }]}>
+                <Pressable
+                  hitSlop={12}
+                  onPress={handleDismiss}
+                  disabled={submitting}
+                  style={[
+                    styles.closeBtn,
+                    { backgroundColor: theme.colors.surface, opacity: submitting ? 0.45 : 1 },
+                  ]}
+                >
                   <X size={20} color={theme.colors.textMuted} />
                 </Pressable>
               </View>
@@ -309,7 +352,7 @@ export function StreakMemorySheet({
                     <Text style={[styles.viewOnlyPillText, { color: theme.colors.amber[500] }]}>Locked Memory</Text>
                   </View>
                   <Text style={[styles.title, { color: theme.colors.textPrimary, fontSize: theme.typography.h2 }]}>
-                    Your moment
+                    {viewCheckInOnly ? "This day" : "Your moment"}
                   </Text>
                   <Text style={[styles.sub, { color: theme.colors.textSecondary }]} numberOfLines={2}>
                     {missionTitle}
@@ -319,36 +362,100 @@ export function StreakMemorySheet({
                     contentContainerStyle={styles.scrollInner}
                     nestedScrollEnabled
                   >
-                    {vm?.imageUrl || vm?.imageUri ? (
-                      <View style={[styles.photoSlotView, { borderColor: theme.colors.border }]}>
-                        <View style={styles.photoSlotImageFill}>
-                          <Image
-                            source={{ uri: vm.imageUrl ?? vm.imageUri! }}
-                            style={StyleSheet.absoluteFillObject}
-                            resizeMode="cover"
-                          />
-                        </View>
-                      </View>
-                    ) : null}
-                    {vm?.note ? (
-                      <View style={[styles.viewNoteBox, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
+                    {viewTextOnlyMemory ? (
+                      <View
+                        style={[
+                          styles.textOnlyMemoryCard,
+                          {
+                            borderColor: theme.colors.border,
+                            backgroundColor: isDark ? "rgba(79, 70, 229, 0.12)" : "rgba(79, 70, 229, 0.07)",
+                            borderLeftColor: theme.colors.indigo[500],
+                            ...theme.shadow.card,
+                          },
+                        ]}
+                      >
+                        <Quote
+                          size={56}
+                          color={theme.colors.indigo[500]}
+                          style={styles.textOnlyMemoryWatermark}
+                          strokeWidth={1.2}
+                        />
+                        <Text
+                          style={[
+                            styles.textOnlyMemoryKicker,
+                            { color: theme.colors.cyan[400] },
+                          ]}
+                        >
+                          {isMini ? "MISSION LOG" : "FIELD NOTE"}
+                        </Text>
                         <Text
                           selectable
                           style={[
-                            styles.viewNoteText,
+                            styles.textOnlyMemoryBody,
                             { color: theme.colors.textPrimary },
                             Platform.OS === "android" ? { includeFontPadding: false } : null,
                           ]}
                         >
-                          {vm.note}
+                          {viewNoteStr}
                         </Text>
                       </View>
-                    ) : null}
-                    {!vm?.imageUrl && !vm?.imageUri && !vm?.note ? (
-                      <Text style={[styles.emptyView, { color: theme.colors.textMuted }]}>
-                        {isMini ? "No photo or note saved for this mission." : "No details saved for this day."}
-                      </Text>
-                    ) : null}
+                    ) : viewCheckInOnly ? (
+                      <View
+                        style={[
+                          styles.checkInOnlyCard,
+                          {
+                            borderColor: theme.colors.border,
+                            backgroundColor: isDark ? "rgba(148, 163, 184, 0.1)" : "rgba(100, 116, 139, 0.08)",
+                          },
+                        ]}
+                      >
+                        <Text style={[styles.checkInOnlyTitle, { color: theme.colors.textPrimary }]}>
+                          Check-in only
+                        </Text>
+                        <Text style={[styles.checkInOnlyBody, { color: theme.colors.textSecondary }]}>
+                          You used Just mark done — no photo or note was saved. This day is locked like other check-ins and
+                          can’t be changed from here.
+                        </Text>
+                      </View>
+                    ) : (
+                      <>
+                        {viewHasImage ? (
+                          <View style={[styles.photoSlotView, { borderColor: theme.colors.border }]}>
+                            <View style={styles.photoSlotImageFill}>
+                              <Image
+                                source={{ uri: vm!.imageUrl ?? vm!.imageUri! }}
+                                style={StyleSheet.absoluteFillObject}
+                                resizeMode="cover"
+                              />
+                            </View>
+                          </View>
+                        ) : null}
+                        {viewNoteStr ? (
+                          <View
+                            style={[
+                              styles.viewNoteBox,
+                              { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
+                            ]}
+                          >
+                            <Text
+                              selectable
+                              style={[
+                                styles.viewNoteText,
+                                { color: theme.colors.textPrimary },
+                                Platform.OS === "android" ? { includeFontPadding: false } : null,
+                              ]}
+                            >
+                              {viewNoteStr}
+                            </Text>
+                          </View>
+                        ) : null}
+                        {!viewHasImage && !viewNoteStr ? (
+                          <Text style={[styles.emptyView, { color: theme.colors.textMuted }]}>
+                            {isMini ? "No photo or note saved for this mission." : "No details saved for this day."}
+                          </Text>
+                        ) : null}
+                      </>
+                    )}
 
                     {!isMini && habitViewCommunity ? (
                       <View
@@ -379,13 +486,24 @@ export function StreakMemorySheet({
                               <Text style={[styles.communityPublishHint, { color: theme.colors.textMuted }]}>
                                 {habitViewCommunity.posted
                                   ? "Turn off to remove this moment from the Community feed. You won’t be able to post it again."
-                                  : habitViewCommunity.available
-                                    ? "Share this moment to the Community feed. Squad visibility uses Public / Solo above."
-                                    : "Sign in with cloud sync to share this moment to Community."}
+                                  : habitViewCommunity.pendingPublish
+                                    ? "Publishing to Community…"
+                                    : habitViewCommunity.needsPhotoForCommunity
+                                      ? "Community posts need a photo. This moment has no photo, so it can’t be shared to the feed."
+                                      : habitViewCommunity.available
+                                        ? "Share this moment to the Community feed. Squad visibility uses Public / Solo above."
+                                        : "Sign in with cloud sync to share this moment to Community."}
                               </Text>
                             </View>
+                            {habitViewCommunity.pendingPublish && !habitViewCommunity.posted ? (
+                              <ActivityIndicator
+                                size="small"
+                                color={theme.colors.indigo[500]}
+                                style={styles.communityPublishSpinner}
+                              />
+                            ) : null}
                             <Switch
-                              value={habitViewCommunity.posted}
+                              value={communitySwitchOn}
                               onValueChange={(v) => {
                                 void habitViewCommunity.onChange(v);
                               }}
@@ -481,66 +599,6 @@ export function StreakMemorySheet({
                       </View>
                     </View>
 
-                    {isMini || isHabitCreate ? (
-                      <View
-                        style={[
-                          styles.communityPublishRow,
-                          isMiniCreate && styles.communityPublishRowMini,
-                          {
-                            borderColor: theme.colors.border,
-                            backgroundColor: theme.colors.surface,
-                          },
-                        ]}
-                      >
-                        <View
-                          style={[
-                            styles.communityPublishTopRow,
-                            isMiniCreate && styles.communityPublishTopRowMini,
-                          ]}
-                        >
-                          <Globe
-                            size={isMiniCreate ? 18 : 20}
-                            color={theme.colors.cyan[400]}
-                            style={[styles.communityPublishGlobe, isMiniCreate && styles.communityPublishGlobeMini]}
-                          />
-                          <View style={styles.communityPublishTextCol}>
-                            <Text style={[styles.communityPublishTitle, { color: theme.colors.textPrimary }]}>
-                              Publish to Community
-                            </Text>
-                            <Text
-                              style={[
-                                isMiniCreate ? styles.communityPublishHintMiniBody : styles.communityPublishHint,
-                                { color: theme.colors.textMuted },
-                              ]}
-                            >
-                              {!canPublishCommunity
-                                ? "Sign in with cloud sync to publish to Community."
-                                : isMini
-                                  ? "Leaving this off locks Community for this mission. If you publish, you can remove your win from the feed in details later."
-                                  : !note.trim() && !imageUri
-                                    ? "Add a photo or note first. Public / Solo above is only for your squad; Community is the wider feed."
-                                    : "Optional. Squad visibility uses Public / Solo on the mission screen. You can remove this moment from Community later from this day’s memory."}
-                            </Text>
-                          </View>
-                          <Switch
-                            style={isMiniCreate ? { marginTop: 2 } : undefined}
-                            value={Boolean(publishToCommunity && canPublishCommunity)}
-                            onValueChange={setPublishToCommunity}
-                            disabled={
-                              !canPublishCommunity ||
-                              (isHabitCreate && !note.trim() && !imageUri)
-                            }
-                            trackColor={{
-                              false: theme.colors.border,
-                              true: theme.colors.indigo[600],
-                            }}
-                            thumbColor={theme.colors.white}
-                            ios_backgroundColor={theme.colors.border}
-                          />
-                        </View>
-                      </View>
-                    ) : null}
-
                     <View style={[styles.photoSlotWrap, styles.photoSlotWrapMemory]}>
                       <Pressable
                         onPress={choosePhotoSource}
@@ -591,6 +649,63 @@ export function StreakMemorySheet({
                     <Text style={[styles.counter, styles.counterMemory, { color: theme.colors.textMuted }]}>
                       {note.length}/280
                     </Text>
+
+                    {isMini || isHabitCreate ? (
+                      <View
+                        style={[
+                          styles.communityPublishRow,
+                          isMiniCreate && styles.communityPublishRowMini,
+                          {
+                            borderColor: theme.colors.border,
+                            backgroundColor: theme.colors.surface,
+                          },
+                        ]}
+                      >
+                        <View
+                          style={[
+                            styles.communityPublishTopRow,
+                            isMiniCreate && styles.communityPublishTopRowMini,
+                          ]}
+                        >
+                          <Globe
+                            size={isMiniCreate ? 18 : 20}
+                            color={theme.colors.cyan[400]}
+                            style={[styles.communityPublishGlobe, isMiniCreate && styles.communityPublishGlobeMini]}
+                          />
+                          <View style={styles.communityPublishTextCol}>
+                            <Text style={[styles.communityPublishTitle, { color: theme.colors.textPrimary }]}>
+                              Publish to Community
+                            </Text>
+                            <Text
+                              style={[
+                                isMiniCreate ? styles.communityPublishHintMiniBody : styles.communityPublishHint,
+                                { color: theme.colors.textMuted },
+                              ]}
+                            >
+                              {!canPublishCommunity
+                                ? "Sign in with cloud sync to publish to Community."
+                                : !imageUri
+                                  ? "Community posts need a photo. Add one above to publish — text notes stay on your mission only."
+                                  : isMini
+                                    ? "Leaving this off locks Community for this mission. If you publish, you can remove your win from the feed in details later."
+                                    : "Optional. Squad visibility uses Public / Solo on the mission screen. You can remove this moment from Community later from this day’s memory."}
+                            </Text>
+                          </View>
+                          <Switch
+                            style={isMiniCreate ? { marginTop: 2 } : undefined}
+                            value={Boolean(publishToCommunity && canPublishCommunity)}
+                            onValueChange={setPublishToCommunity}
+                            disabled={submitting || !canPublishCommunity || !imageUri}
+                            trackColor={{
+                              false: theme.colors.border,
+                              true: theme.colors.indigo[600],
+                            }}
+                            thumbColor={theme.colors.white}
+                            ios_backgroundColor={theme.colors.border}
+                          />
+                        </View>
+                      </View>
+                    ) : null}
                   </ScrollView>
 
                   <View
@@ -660,6 +775,27 @@ export function StreakMemorySheet({
                   </View>
                 </View>
               )}
+              {isMemoryCreate && submitting ? (
+                <View
+                  pointerEvents="auto"
+                  style={[
+                    styles.submittingOverlay,
+                    {
+                      backgroundColor: isDark ? "rgba(0, 0, 0, 0.52)" : "rgba(248, 250, 252, 0.94)",
+                    },
+                  ]}
+                >
+                  <ActivityIndicator size="large" color={theme.colors.indigo[500]} />
+                  <Text
+                    style={[
+                      styles.submittingOverlayText,
+                      { color: theme.colors.textPrimary },
+                    ]}
+                  >
+                    {submittingPublishCopy ? "Publishing to Community…" : "Saving…"}
+                  </Text>
+                </View>
+              ) : null}
             </Animated.View>
           </View>
         </KeyboardAvoidingView>
@@ -682,6 +818,21 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     paddingHorizontal: 20,
     paddingTop: 12,
+  },
+  /** Clips the submitting overlay to the sheet’s rounded top corners. */
+  sheetCreateOverflow: { overflow: "hidden" },
+  submittingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 28,
+    gap: 14,
+  },
+  submittingOverlayText: {
+    fontSize: 15,
+    fontWeight: "700",
+    textAlign: "center",
+    letterSpacing: 0.2,
   },
   sheetHeader: {
     flexDirection: "row",
@@ -938,6 +1089,39 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     marginBottom: 14,
   },
+  /** Text-only saved memory: editorial “field note” layout (no photo). */
+  textOnlyMemoryCard: {
+    alignSelf: "stretch",
+    width: "100%",
+    borderRadius: 20,
+    borderWidth: 1,
+    borderLeftWidth: 5,
+    paddingVertical: 22,
+    paddingHorizontal: 20,
+    marginBottom: 14,
+    overflow: "hidden",
+  },
+  textOnlyMemoryWatermark: {
+    position: "absolute",
+    right: 10,
+    top: 8,
+    opacity: 0.2,
+  },
+  textOnlyMemoryKicker: {
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 2,
+    marginBottom: 14,
+  },
+  textOnlyMemoryBody: {
+    fontSize: 18,
+    lineHeight: 28,
+    fontWeight: "600",
+    letterSpacing: 0.15,
+    width: "100%",
+    flexShrink: 1,
+  },
+  communityPublishSpinner: { marginTop: 4, marginRight: 2 },
   viewNoteBox: {
     alignSelf: "stretch",
     width: "100%",
@@ -953,5 +1137,16 @@ const styles = StyleSheet.create({
     width: "100%",
     flexShrink: 1,
   },
+  checkInOnlyCard: {
+    alignSelf: "stretch",
+    width: "100%",
+    borderRadius: 16,
+    borderWidth: 1,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    marginBottom: 14,
+  },
+  checkInOnlyTitle: { fontSize: 16, fontWeight: "800", marginBottom: 8 },
+  checkInOnlyBody: { fontSize: 14, lineHeight: 21, fontWeight: "600" },
   emptyView: { fontSize: 14, fontStyle: "italic", textAlign: "center", paddingVertical: 12 },
 });

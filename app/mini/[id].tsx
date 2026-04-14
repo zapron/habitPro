@@ -357,25 +357,37 @@ export default function MiniMissionDetail() {
         memoryToSave = { ...memory, imageUrl, imageUri: undefined };
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
-        Alert.alert("Photo upload failed", msg);
+        Alert.alert("Photo upload failed", msg, [{ text: "OK" }]);
         throw e;
       }
     }
 
     const completedAt = new Date(timerFrozenAtMs ?? Date.now()).toISOString();
     const wantsPublish = meta?.publishToCommunity === true;
-    const canPublish =
-      wantsPublish && isSupabaseConfigured() && session?.user != null;
+    let canPublish = wantsPublish && isSupabaseConfigured() && session?.user != null;
+    if (canPublish) {
+      const hasImage = Boolean(memoryToSave?.imageUrl || memoryToSave?.imageUri);
+      if (!hasImage) {
+        Alert.alert(
+          "Photo required",
+          "Community posts need a photo. Add a photo and tap Complete with Memory again.",
+          [{ text: "OK" }],
+        );
+        canPublish = false;
+      }
+    }
 
     if (wantsPublish && !isSupabaseConfigured()) {
       Alert.alert(
         "Can’t publish",
         "Cloud sync isn’t configured. Your mission is saved as private.",
+        [{ text: "OK" }],
       );
     } else if (wantsPublish && !session?.user) {
       Alert.alert(
         "Sign in to publish",
         "Sign in to share this win in Community. Your mission is saved as private.",
+        [{ text: "OK" }],
       );
     }
 
@@ -389,20 +401,19 @@ export default function MiniMissionDetail() {
     });
 
     if (canPublish) {
-      void postCommunityWin({
+      const res = await postCommunityWin({
         miniMissionId: mission.id,
         title: mission.title,
         completedAt,
         memoryNote: memoryToSave?.note ?? null,
         memoryImageUrl: memoryToSave?.imageUrl ?? null,
-      }).then((res) => {
-        if (res.ok === true) {
-          setMiniMissionVisibility(mission.id, "public");
-          setMiniMissionCommunityFeedRevoked(mission.id, false);
-        } else {
-          Alert.alert("Couldn’t publish", res.error);
-        }
       });
+      if (res.ok === true) {
+        setMiniMissionVisibility(mission.id, "public");
+        setMiniMissionCommunityFeedRevoked(mission.id, false);
+      } else {
+        Alert.alert("Couldn’t publish", res.error, [{ text: "OK" }]);
+      }
     }
 
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -426,7 +437,7 @@ export default function MiniMissionDetail() {
               void (async () => {
                 const del = await deleteCommunityWin(mission.id);
                 if (del.ok === false) {
-                  Alert.alert("Couldn’t remove", del.error);
+                  Alert.alert("Couldn’t remove", del.error, [{ text: "OK" }]);
                   return;
                 }
                 setMiniMissionVisibility(mission.id, "solo");
@@ -444,6 +455,7 @@ export default function MiniMissionDetail() {
         Alert.alert(
           "Can’t publish to Community",
           "This mission stays private — Community sharing was turned off when you completed it, or you removed it from the feed.",
+          [{ text: "OK" }],
         );
         return;
       }
@@ -451,6 +463,17 @@ export default function MiniMissionDetail() {
         Alert.alert(
           "Sign in required",
           "Sign in to publish to Community wins.",
+          [{ text: "OK" }],
+        );
+        return;
+      }
+      const completionMem = mission.completionMemory;
+      const hasCompletionPhoto = Boolean(completionMem?.imageUrl || completionMem?.imageUri);
+      if (!hasCompletionPhoto) {
+        Alert.alert(
+          "Photo required",
+          "Community posts need a photo. Add one to your completion memory first.",
+          [{ text: "OK" }],
         );
         return;
       }
@@ -464,7 +487,7 @@ export default function MiniMissionDetail() {
           memoryImageUrl: mission.completionMemory?.imageUrl ?? null,
         });
         if (res.ok === false) {
-          Alert.alert("Couldn’t publish", res.error);
+          Alert.alert("Couldn’t publish", res.error, [{ text: "OK" }]);
           lastVisibilityRef.current = null;
           return;
         }

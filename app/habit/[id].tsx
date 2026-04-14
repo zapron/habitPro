@@ -69,7 +69,6 @@ type MissionDialogState =
     | { kind: 'reset' }
     | { kind: 'delete' }
     | { kind: 'leaveGroup' }
-    | { kind: 'removeCheckin'; dateStr: string }
     | { kind: 'blockedReset' }
     | { kind: 'signInRequired' };
 
@@ -82,7 +81,15 @@ function getMilestones(totalDays: number, mode: string): number[] {
 }
 
 function AnimatedDayCell({
-    day, isCompleted, isMilestone, isCurrentMissionDay, locked, canInteract, hasMemory, onPress, onLongPress,
+    day,
+    isCompleted,
+    isMilestone,
+    isCurrentMissionDay,
+    locked,
+    canInteract,
+    hasStreakRecord,
+    hasMomentMedia,
+    onPress,
 }: {
     day: number;
     isCompleted: boolean;
@@ -92,11 +99,11 @@ function AnimatedDayCell({
     /** Not yet unlocked, missed, or mission ended — show lock when incomplete */
     locked: boolean;
     canInteract: boolean;
-    /** Saved photo/note for this check-in */
-    hasMemory: boolean;
+    /** Any streak memory row (rich moment or check-in-only lock). */
+    hasStreakRecord: boolean;
+    /** Photo or note saved for this day (amber dot). */
+    hasMomentMedia: boolean;
     onPress: () => void;
-    /** e.g. remove check-in when a saved moment exists */
-    onLongPress?: () => void;
 }) {
     const { theme } = useTheme();
     const reduceMotion = useReducedMotion();
@@ -150,11 +157,9 @@ function AnimatedDayCell({
         <Animated.View style={{ width: '13%', aspectRatio: 1, marginBottom: 14, transform: [{ scale: animatedScale as any }] }}>
             <TouchableOpacity
                 onPress={handlePress}
-                onLongPress={onLongPress}
-                delayLongPress={380}
                 style={dayButtonStyle}
                 activeOpacity={0.8}
-                disabled={!(canInteract || (isCompleted && hasMemory))}
+                disabled={!(canInteract || (isCompleted && hasStreakRecord))}
             >
                 {isCompleted ? (
                     <Animated.View style={[styles.badgeWrap, isMilestone && { opacity: shimmerOpacity }]}>
@@ -167,7 +172,7 @@ function AnimatedDayCell({
                         ) : (
                             <Sparkles size={9} color={theme.colors.cyan[400]} style={styles.badgeAccent} />
                         )}
-                        {hasMemory ? (
+                        {hasMomentMedia ? (
                             <View style={[styles.memoryDot, { backgroundColor: theme.colors.amber[500], borderColor: theme.colors.surface }]} />
                         ) : null}
                     </Animated.View>
@@ -239,6 +244,8 @@ export default function HabitDetail() {
     const [missionDetailsOpen, setMissionDetailsOpen] = useState(false);
     const [missionDialog, setMissionDialog] = useState<MissionDialogState>({ kind: 'none' });
     const [habitCommunityBusy, setHabitCommunityBusy] = useState(false);
+    /** Keeps the Community Switch visually ON while publish is in flight (controlled `posted` is still false). */
+    const [habitCommunityPublishPending, setHabitCommunityPublishPending] = useState(false);
     /** Avoid Mission not found flash after delete/leave; store clears before navigation finishes. */
     const [pendingExitAfterRemove, setPendingExitAfterRemove] = useState(false);
     const pendingMemoryRef = useRef<{ dateStr: string; day: number; dayIndex: number } | null>(null);
@@ -258,6 +265,12 @@ export default function HabitDetail() {
     const memoryGalleryEntries = useMemo(() => {
         const raw = habit?.streakMemories ?? {};
         return Object.entries(raw)
+            .filter(([, memory]) => {
+                if (memory.checkInOnly) {
+                    return Boolean(memory.note?.trim() || memory.imageUrl || memory.imageUri);
+                }
+                return true;
+            })
             .map(([dateStr, memory]) => ({ dateStr, memory }))
             .sort((a, b) => (a.dateStr < b.dateStr ? 1 : -1));
     }, [habit?.streakMemories]);
@@ -308,6 +321,17 @@ export default function HabitDetail() {
                 }
             }
 
+            const wantsPublish = meta?.publishToCommunity === true && Boolean(memoryToSave);
+            if (wantsPublish && memoryToSave) {
+                const hasImage = Boolean(memoryToSave.imageUrl || memoryToSave.imageUri);
+                if (!hasImage) {
+                    Alert.alert('Photo required', 'Community posts need a photo. Add a photo and save again to publish.', [
+                        { text: 'OK' },
+                    ]);
+                    return;
+                }
+            }
+
             const changed = toggleCompletion(habit.id, ctx.dateStr);
             if (!changed) {
                 showToast(LOCKED_CHECKIN_MSG, 'info', 5000);
@@ -315,16 +339,22 @@ export default function HabitDetail() {
             }
             if (memoryToSave) {
                 setStreakMemory(habit.id, ctx.dateStr, memoryToSave);
+            } else {
+                setStreakMemory(habit.id, ctx.dateStr, {
+                    createdAt: new Date().toISOString(),
+                    checkInOnly: true,
+                });
             }
             const isMilestone = milestones.includes(ctx.day);
             fireCompletionCelebration(ctx.dayIndex, ctx.day, isMilestone);
 
-            const wantsPublish = meta?.publishToCommunity === true && Boolean(memoryToSave);
-            if (wantsPublish && memoryToSave) {
+            const wantsPublishAfterSave = meta?.publishToCommunity === true && Boolean(memoryToSave);
+            if (wantsPublishAfterSave && memoryToSave) {
                 if (!isSupabaseConfigured()) {
                     Alert.alert(
                         'Can’t publish',
                         'Cloud sync isn’t configured. Your moment is saved; Community wasn’t updated.',
+                        [{ text: 'OK' }],
                     );
                     return;
                 }
@@ -332,23 +362,27 @@ export default function HabitDetail() {
                     Alert.alert(
                         'Sign in to publish',
                         'Sign in to share this moment in Community. Your check-in is saved.',
+                        [{ text: 'OK' }],
                     );
                     return;
                 }
                 const winId = habitStreakCommunityWinId(habit.id, ctx.dateStr);
-                void postCommunityWin({
+                const streakAfter = useHabitStore.getState().getHabit(habit.id)?.streak ?? 1;
+                const res = await postCommunityWin({
                     miniMissionId: winId,
-                    title: `${habit.title} · Day ${ctx.day}`,
+                    title: habit.title,
                     completedAt: memoryToSave.createdAt,
                     memoryNote: memoryToSave.note ?? null,
                     memoryImageUrl: memoryToSave.imageUrl ?? null,
-                }).then((res) => {
-                    if (res.ok === true) {
-                        patchStreakMemory(habit.id, ctx.dateStr, { communityPosted: true });
-                    } else {
-                        Alert.alert('Couldn’t publish', res.error);
-                    }
+                    feedSource: "habit_streak",
+                    streakMissionDay: ctx.day,
+                    streakCountAtPost: streakAfter,
                 });
+                if (res.ok === true) {
+                    patchStreakMemory(habit.id, ctx.dateStr, { communityPosted: true });
+                } else {
+                    Alert.alert('Couldn’t publish', res.error, [{ text: 'OK' }]);
+                }
             }
         },
         [
@@ -371,14 +405,24 @@ export default function HabitDetail() {
 
             if (next) {
                 if (mem.communityPosted) return;
+                const hasMemoryImage = Boolean(mem.imageUrl || mem.imageUri);
+                if (!hasMemoryImage) {
+                    Alert.alert(
+                        'Photo required',
+                        'Community posts need a photo. This moment only has text, so it can’t be shared to the feed.',
+                        [{ text: 'OK' }],
+                    );
+                    return;
+                }
                 if (!isSupabaseConfigured()) {
-                    Alert.alert('Can’t publish', 'Cloud sync isn’t configured.');
+                    Alert.alert('Can’t publish', 'Cloud sync isn’t configured.', [{ text: 'OK' }]);
                     return;
                 }
                 if (!session?.user) {
-                    Alert.alert('Sign in to publish', 'Sign in to share this moment in Community.');
+                    Alert.alert('Sign in to publish', 'Sign in to share this moment in Community.', [{ text: 'OK' }]);
                     return;
                 }
+                setHabitCommunityPublishPending(true);
                 setHabitCommunityBusy(true);
                 try {
                     let memForPost = mem;
@@ -399,18 +443,22 @@ export default function HabitDetail() {
                     }
                     const res = await postCommunityWin({
                         miniMissionId: habitStreakCommunityWinId(habit.id, dateStr),
-                        title: `${habit.title} · Day ${day}`,
+                        title: habit.title,
                         completedAt: memForPost.createdAt,
                         memoryNote: memForPost.note ?? null,
                         memoryImageUrl: memForPost.imageUrl ?? null,
+                        feedSource: "habit_streak",
+                        streakMissionDay: day,
+                        streakCountAtPost: habit.streak,
                     });
                     if (res.ok === true) {
                         patchStreakMemory(habit.id, dateStr, { communityPosted: true });
                     } else {
-                        Alert.alert('Couldn’t publish', res.error);
+                        Alert.alert('Couldn’t publish', res.error, [{ text: 'OK' }]);
                     }
                 } finally {
                     setHabitCommunityBusy(false);
+                    setHabitCommunityPublishPending(false);
                 }
                 return;
             }
@@ -430,7 +478,7 @@ export default function HabitDetail() {
                                 try {
                                     const del = await deleteCommunityWin(habitStreakCommunityWinId(habit.id, dateStr));
                                     if (del.ok === false) {
-                                        Alert.alert('Couldn’t remove', del.error);
+                                        Alert.alert('Couldn’t remove', del.error, [{ text: 'OK' }]);
                                         return;
                                     }
                                     patchStreakMemory(habit.id, dateStr, {
@@ -496,14 +544,6 @@ export default function HabitDetail() {
 
     const isManual = mode === 'manual';
     const activeMissionDaySlot = getActiveMissionDaySlot(habit.startDate, now, totalDays);
-
-    const handleDayLongPress = (dayIndex: number, day: number) => {
-        const dateStr = getDayDate(dayIndex);
-        const mem = habit.streakMemories?.[dateStr];
-        const canInteract = activeMissionDaySlot !== null && day === activeMissionDaySlot;
-        if (!mem || !canInteract) return;
-        setMissionDialog({ kind: 'removeCheckin', dateStr });
-    };
 
     const handleDayPress = (dayIndex: number, day: number) => {
         const dateStr = getDayDate(dayIndex);
@@ -582,18 +622,26 @@ export default function HabitDetail() {
                 habitPublishAvailable={isSupabaseConfigured() && session?.user != null}
                 habitViewCommunity={
                     memoryUi?.kind === 'view'
-                        ? {
-                              posted:
-                                  (habit.streakMemories?.[memoryUi.dateStr]?.communityPosted ??
-                                      memoryUi.memory.communityPosted) === true,
-                              revoked:
-                                  (habit.streakMemories?.[memoryUi.dateStr]?.communityFeedRevoked ??
-                                      memoryUi.memory.communityFeedRevoked) === true,
-                              available: isSupabaseConfigured() && session?.user != null,
-                              busy: habitCommunityBusy,
-                              onChange: (v) =>
-                                  void handleHabitMemoryCommunityChange(v, memoryUi.dateStr, memoryUi.day),
-                          }
+                        ? (() => {
+                              const viewMem =
+                                  habit.streakMemories?.[memoryUi.dateStr] ?? memoryUi.memory;
+                              const hasMemoryImage = Boolean(viewMem?.imageUrl || viewMem?.imageUri);
+                              const cloudOk = isSupabaseConfigured() && session?.user != null;
+                              return {
+                                  posted:
+                                      (habit.streakMemories?.[memoryUi.dateStr]?.communityPosted ??
+                                          memoryUi.memory.communityPosted) === true,
+                                  revoked:
+                                      (habit.streakMemories?.[memoryUi.dateStr]?.communityFeedRevoked ??
+                                          memoryUi.memory.communityFeedRevoked) === true,
+                                  available: cloudOk && hasMemoryImage,
+                                  needsPhotoForCommunity: cloudOk && !hasMemoryImage,
+                                  busy: habitCommunityBusy,
+                                  pendingPublish: habitCommunityPublishPending,
+                                  onChange: (v) =>
+                                      void handleHabitMemoryCommunityChange(v, memoryUi.dateStr, memoryUi.day),
+                              };
+                          })()
                         : undefined
                 }
                 onClose={() => {
@@ -783,7 +831,14 @@ export default function HabitDetail() {
                         const canInteract = activeMissionDaySlot !== null && day === activeMissionDaySlot;
                         const locked = !isCompleted && !canInteract;
                         const isCurrentMissionDay = canInteract && !isCompleted;
-                        const hasMemory = Boolean(habit.streakMemories?.[dateStr]);
+                        const streakMem = habit.streakMemories?.[dateStr];
+                        const hasStreakRecord = Boolean(streakMem);
+                        const hasMomentMedia = Boolean(
+                            streakMem &&
+                                ((streakMem.note ?? '').trim().length > 0 ||
+                                    streakMem.imageUrl ||
+                                    streakMem.imageUri),
+                        );
 
                         return (
                             <AnimatedDayCell
@@ -794,13 +849,9 @@ export default function HabitDetail() {
                                 isCurrentMissionDay={isCurrentMissionDay}
                                 locked={locked}
                                 canInteract={canInteract}
-                                hasMemory={hasMemory}
+                                hasStreakRecord={hasStreakRecord}
+                                hasMomentMedia={hasMomentMedia}
                                 onPress={() => handleDayPress(index, day)}
-                                onLongPress={
-                                    isCompleted && hasMemory && canInteract
-                                        ? () => handleDayLongPress(index, day)
-                                        : undefined
-                                }
                             />
                         );
                     })}
@@ -825,13 +876,11 @@ export default function HabitDetail() {
                           ? 'Delete Mission'
                           : missionDialog.kind === 'leaveGroup'
                             ? 'Leave group mission?'
-                            : missionDialog.kind === 'removeCheckin'
-                              ? 'Remove check-in?'
-                              : missionDialog.kind === 'blockedReset'
-                                ? 'Cannot reset'
-                                : missionDialog.kind === 'signInRequired'
-                                  ? 'Sign in required'
-                                  : ''
+                            : missionDialog.kind === 'blockedReset'
+                              ? 'Cannot reset'
+                              : missionDialog.kind === 'signInRequired'
+                                ? 'Sign in required'
+                                : ''
                 }
                 message={
                     missionDialog.kind === 'blockedReset'
@@ -840,13 +889,11 @@ export default function HabitDetail() {
                           ? 'To leave the squad and remove this group mission, sign in with your account.'
                           : missionDialog.kind === 'leaveGroup'
                             ? 'You’ll be removed from the squad and this mission will disappear from your list. This can’t be undone.'
-                            : missionDialog.kind === 'removeCheckin'
-                              ? 'This deletes your saved moment for this day.'
-                              : missionDialog.kind === 'reset'
-                                ? 'Restart this mission from day 1?'
-                                : missionDialog.kind === 'delete'
-                                  ? 'Give up on this mission?'
-                                  : undefined
+                            : missionDialog.kind === 'reset'
+                              ? 'Restart this mission from day 1?'
+                              : missionDialog.kind === 'delete'
+                                ? 'Give up on this mission?'
+                                : undefined
                 }
                 actions={
                     missionDialog.kind === 'blockedReset' || missionDialog.kind === 'signInRequired'
@@ -913,24 +960,7 @@ export default function HabitDetail() {
                                         },
                                     },
                                 ]
-                              : missionDialog.kind === 'removeCheckin'
-                                ? [
-                                      { label: 'Cancel', variant: 'secondary', onPress: () => setMissionDialog({ kind: 'none' }) },
-                                      {
-                                          label: 'Remove',
-                                          variant: 'danger',
-                                          onPress: () => {
-                                              const ds =
-                                                  missionDialog.kind === 'removeCheckin' ? missionDialog.dateStr : '';
-                                              setMissionDialog({ kind: 'none' });
-                                              if (ds) {
-                                                  toggleCompletion(habit.id, ds);
-                                                  showToast('Check-in removed', 'success');
-                                              }
-                                          },
-                                      },
-                                  ]
-                                : [{ label: 'OK', onPress: () => setMissionDialog({ kind: 'none' }) }]
+                              : [{ label: 'OK', onPress: () => setMissionDialog({ kind: 'none' }) }]
                 }
             />
         </Screen>
