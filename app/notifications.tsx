@@ -63,8 +63,11 @@ function notificationTitle(type: string, payload?: Record<string, unknown>): str
       return "Squad nudge";
     case "challenge_squad_checkin":
       return "Squad streak";
-    case "community_win_cheer":
+    case "community_win_cheer": {
+      const fs = payload?.feed_source;
+      if (fs === "habit_streak") return "Love for your streak";
       return "Cheer on your win";
+    }
     default:
       return type;
   }
@@ -100,7 +103,11 @@ function notificationSubtitle(n: NotificationRow): string | null {
         parsed.from_username && parsed.from_username !== "someone"
           ? `@${parsed.from_username.toLowerCase()}`
           : "Someone";
-      return `${who} cheered “${parsed.mini_mission_title}” · Tap for Community`;
+      const title = parsed.mini_mission_title;
+      if (parsed.feed_source === "habit_streak") {
+        return `${who} cheered your streak moment on “${title}” · Tap for Community`;
+      }
+      return `${who} cheered “${title}” · Tap for Community`;
     }
     case "streak_window_reminder": {
       const title = typeof p.habit_title === "string" ? p.habit_title : "Mission";

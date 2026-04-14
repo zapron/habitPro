@@ -26,6 +26,10 @@ export type CommunityWinCheerPayload = {
   from_user_id: string;
   from_username: string;
   mini_mission_title: string;
+  /** habit_streak when the win is a main-mission streak moment */
+  feed_source?: "mini" | "habit_streak";
+  streak_mission_day?: number | null;
+  streak_count_at_post?: number | null;
   created_at?: string;
 };
 
@@ -48,6 +52,8 @@ export function parseCommunityWinCheerPayload(
       ? raw.mini_mission_title
       : "Mini mission";
   if (!win_id || !cheer_id || !from_user_id) return null;
+  const feedSource =
+    raw.feed_source === "habit_streak" ? "habit_streak" : raw.feed_source === "mini" ? "mini" : undefined;
   return {
     schema: NOTIFICATION_SCHEMA,
     kind: "community_win_cheer",
@@ -56,6 +62,9 @@ export function parseCommunityWinCheerPayload(
     from_user_id,
     from_username,
     mini_mission_title,
+    ...(feedSource ? { feed_source: feedSource } : {}),
+    ...(typeof raw.streak_mission_day === "number" ? { streak_mission_day: raw.streak_mission_day } : {}),
+    ...(typeof raw.streak_count_at_post === "number" ? { streak_count_at_post: raw.streak_count_at_post } : {}),
     ...(typeof raw.created_at === "string" ? { created_at: raw.created_at } : {}),
   };
 }

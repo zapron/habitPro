@@ -95,6 +95,15 @@ function buildMessage(
         typeof payload.mini_mission_title === "string"
           ? payload.mini_mission_title
           : "your win";
+      const feedSource =
+        typeof payload.feed_source === "string" ? payload.feed_source : "mini";
+      if (feedSource === "habit_streak") {
+        return {
+          title: "Love for your streak",
+          body: `${who} cheered your streak on “${title}”`,
+          data,
+        };
+      }
       return {
         title: "Cheer on your win",
         body: `${who} cheered “${title}”`,
