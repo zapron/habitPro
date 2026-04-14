@@ -16,6 +16,7 @@ import { View,
   LayoutChangeEvent,
   Switch,
   ActivityIndicator,
+  Alert,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
@@ -33,7 +34,11 @@ import { subscribeSyncFailure, subscribeSyncSuccess } from '../../src/lib/syncQu
 import type { MissionVisibility } from '../../src/types/habit';
 import { ConfettiBurst } from '../../src/components/ConfettiBurst';
 import { StreakBanner } from '../../src/components/StreakBanner';
-import { getActiveMissionDaySlot, isHabitCalendarDateToggleable } from '../../src/utils/missionDaySlots';
+import {
+  calendarDateForMissionDayIndex,
+  getActiveMissionDaySlot,
+  isHabitCalendarDateToggleable,
+} from '../../src/utils/missionDaySlots';
 import { isMissionGridFull } from '../../src/utils/habitDerived';
 import { shouldShowMainMissionTimer } from '../../src/utils/mainMissionUi';
 import { StreakMemorySheet } from '../../src/components/StreakMemorySheet';
@@ -49,6 +54,12 @@ import {
 import { useAuth } from '../../src/context/AuthContext';
 import { isSupabaseConfigured } from '../../src/lib/env';
 import { leaveChallengeGroup, refreshCohortPeerHabits } from '../../src/lib/groupChallengesApi';
+import {
+  postCommunityWin,
+  deleteCommunityWin,
+  deleteAllCommunityWinsForHabit,
+  habitStreakCommunityWinId,
+} from '../../src/lib/communityWinsApi';
 
 const LOCKED_CHECKIN_MSG =
     'You can only check in for the current mission day. Each day unlocks 24 hours after the mission started (day 2 after the first 24 hours, and so on).';
@@ -181,6 +192,7 @@ export default function HabitDetail() {
     const habit = useHabitStore((state) => (habitId ? state.getHabit(habitId) : undefined));
     const toggleCompletion = useHabitStore((state) => state.toggleCompletion);
     const setStreakMemory = useHabitStore((state) => state.setStreakMemory);
+    const patchStreakMemory = useHabitStore((state) => state.patchStreakMemory);
     const resetHabit = useHabitStore((state) => state.resetHabit);
     const deleteHabit = useHabitStore((state) => state.deleteHabit);
     const setHabitVisibility = useHabitStore((state) => state.setHabitVisibility);
@@ -226,6 +238,7 @@ export default function HabitDetail() {
     const [groupSheetOpen, setGroupSheetOpen] = useState(false);
     const [missionDetailsOpen, setMissionDetailsOpen] = useState(false);
     const [missionDialog, setMissionDialog] = useState<MissionDialogState>({ kind: 'none' });
+    const [habitCommunityBusy, setHabitCommunityBusy] = useState(false);
     /** Avoid Mission not found flash after delete/leave; store clears before navigation finishes. */
     const [pendingExitAfterRemove, setPendingExitAfterRemove] = useState(false);
     const pendingMemoryRef = useRef<{ dateStr: string; day: number; dayIndex: number } | null>(null);
@@ -271,7 +284,7 @@ export default function HabitDetail() {
     );
 
     const handleMemoryCommit = useCallback(
-        async (memory: StreakMemory | null) => {
+        async (memory: StreakMemory | null, meta?: { publishToCommunity?: boolean }) => {
             const ctx = pendingMemoryRef.current;
             if (!ctx || !habit) return;
 
@@ -305,8 +318,135 @@ export default function HabitDetail() {
             }
             const isMilestone = milestones.includes(ctx.day);
             fireCompletionCelebration(ctx.dayIndex, ctx.day, isMilestone);
+
+            const wantsPublish = meta?.publishToCommunity === true && Boolean(memoryToSave);
+            if (wantsPublish && memoryToSave) {
+                if (!isSupabaseConfigured()) {
+                    Alert.alert(
+                        'Can’t publish',
+                        'Cloud sync isn’t configured. Your moment is saved; Community wasn’t updated.',
+                    );
+                    return;
+                }
+                if (!session?.user) {
+                    Alert.alert(
+                        'Sign in to publish',
+                        'Sign in to share this moment in Community. Your check-in is saved.',
+                    );
+                    return;
+                }
+                const winId = habitStreakCommunityWinId(habit.id, ctx.dateStr);
+                void postCommunityWin({
+                    miniMissionId: winId,
+                    title: `${habit.title} · Day ${ctx.day}`,
+                    completedAt: memoryToSave.createdAt,
+                    memoryNote: memoryToSave.note ?? null,
+                    memoryImageUrl: memoryToSave.imageUrl ?? null,
+                }).then((res) => {
+                    if (res.ok === true) {
+                        patchStreakMemory(habit.id, ctx.dateStr, { communityPosted: true });
+                    } else {
+                        Alert.alert('Couldn’t publish', res.error);
+                    }
+                });
+            }
         },
-        [habit, toggleCompletion, setStreakMemory, milestones, fireCompletionCelebration, showToast],
+        [
+            habit,
+            session?.user,
+            toggleCompletion,
+            setStreakMemory,
+            patchStreakMemory,
+            milestones,
+            fireCompletionCelebration,
+            showToast,
+        ],
+    );
+
+    const handleHabitMemoryCommunityChange = useCallback(
+        async (next: boolean, dateStr: string, day: number) => {
+            if (!habitId || !habit) return;
+            const mem = habit.streakMemories?.[dateStr];
+            if (!mem || mem.communityFeedRevoked) return;
+
+            if (next) {
+                if (mem.communityPosted) return;
+                if (!isSupabaseConfigured()) {
+                    Alert.alert('Can’t publish', 'Cloud sync isn’t configured.');
+                    return;
+                }
+                if (!session?.user) {
+                    Alert.alert('Sign in to publish', 'Sign in to share this moment in Community.');
+                    return;
+                }
+                setHabitCommunityBusy(true);
+                try {
+                    let memForPost = mem;
+                    if (canUseStreakMemoryUpload() && shouldUploadLocalStreakImage(mem.imageUri)) {
+                        try {
+                            const imageUrl = await uploadHabitStreakMemoryImage({
+                                habitId: habit.id,
+                                dateStr,
+                                localUri: mem.imageUri!,
+                            });
+                            memForPost = { ...mem, imageUrl, imageUri: undefined };
+                            patchStreakMemory(habit.id, dateStr, { imageUrl, imageUri: undefined });
+                        } catch (e) {
+                            const msg = e instanceof Error ? e.message : String(e);
+                            showToast(msg, 'error');
+                            return;
+                        }
+                    }
+                    const res = await postCommunityWin({
+                        miniMissionId: habitStreakCommunityWinId(habit.id, dateStr),
+                        title: `${habit.title} · Day ${day}`,
+                        completedAt: memForPost.createdAt,
+                        memoryNote: memForPost.note ?? null,
+                        memoryImageUrl: memForPost.imageUrl ?? null,
+                    });
+                    if (res.ok === true) {
+                        patchStreakMemory(habit.id, dateStr, { communityPosted: true });
+                    } else {
+                        Alert.alert('Couldn’t publish', res.error);
+                    }
+                } finally {
+                    setHabitCommunityBusy(false);
+                }
+                return;
+            }
+
+            if (!mem.communityPosted) return;
+            Alert.alert(
+                'Remove from Community?',
+                'This removes this moment from the feed. You won’t be able to share this check-in to Community again.',
+                [
+                    { text: 'Cancel', style: 'cancel' },
+                    {
+                        text: 'Remove',
+                        style: 'destructive',
+                        onPress: () => {
+                            void (async () => {
+                                setHabitCommunityBusy(true);
+                                try {
+                                    const del = await deleteCommunityWin(habitStreakCommunityWinId(habit.id, dateStr));
+                                    if (del.ok === false) {
+                                        Alert.alert('Couldn’t remove', del.error);
+                                        return;
+                                    }
+                                    patchStreakMemory(habit.id, dateStr, {
+                                        communityPosted: false,
+                                        communityFeedRevoked: true,
+                                    });
+                                } finally {
+                                    setHabitCommunityBusy(false);
+                                }
+                            })();
+                        },
+                    },
+                ],
+            );
+        },
+        [habit, habitId, session?.user, patchStreakMemory, showToast],
     );
 
     if (!habit) {
@@ -352,11 +492,7 @@ export default function HabitDetail() {
 
     const days = Array.from({ length: totalDays }, (_, i) => i + 1);
 
-    const getDayDate = (dayIndex: number) => {
-        const start = new Date(habit.startDate);
-        start.setDate(start.getDate() + dayIndex);
-        return start.toISOString().split('T')[0];
-    };
+    const getDayDate = (dayIndex: number) => calendarDateForMissionDayIndex(habit.startDate, dayIndex);
 
     const isManual = mode === 'manual';
     const activeMissionDaySlot = getActiveMissionDaySlot(habit.startDate, now, totalDays);
@@ -436,9 +572,30 @@ export default function HabitDetail() {
             <StreakMemorySheet
                 visible={memoryUi !== null}
                 mode={memoryUi?.kind === 'view' ? 'view' : 'create'}
-                viewMemory={memoryUi?.kind === 'view' ? memoryUi.memory : undefined}
+                viewMemory={
+                    memoryUi?.kind === 'view'
+                        ? (habit.streakMemories?.[memoryUi.dateStr] ?? memoryUi.memory)
+                        : undefined
+                }
                 missionTitle={habit.title}
                 dayLabel={memoryUi ? String(memoryUi.day) : '1'}
+                habitPublishAvailable={isSupabaseConfigured() && session?.user != null}
+                habitViewCommunity={
+                    memoryUi?.kind === 'view'
+                        ? {
+                              posted:
+                                  (habit.streakMemories?.[memoryUi.dateStr]?.communityPosted ??
+                                      memoryUi.memory.communityPosted) === true,
+                              revoked:
+                                  (habit.streakMemories?.[memoryUi.dateStr]?.communityFeedRevoked ??
+                                      memoryUi.memory.communityFeedRevoked) === true,
+                              available: isSupabaseConfigured() && session?.user != null,
+                              busy: habitCommunityBusy,
+                              onChange: (v) =>
+                                  void handleHabitMemoryCommunityChange(v, memoryUi.dateStr, memoryUi.day),
+                          }
+                        : undefined
+                }
                 onClose={() => {
                     pendingMemoryRef.current = null;
                     setMemoryUi(null);
@@ -569,14 +726,14 @@ export default function HabitDetail() {
                             <>
                                 <Text style={[styles.visibilityTitle, { color: theme.colors.textPrimary }]}>Public</Text>
                                 <Text style={[styles.visibilityHint, { color: theme.colors.textMuted }]}>
-                                    Users in your group mission can see your streak memory. Turn off to keep it solo.
+                                    Squad on this mission can see your streak memories. Community is separate — choose per moment when you save or open a day.
                                 </Text>
                             </>
                         ) : (
                             <>
                                 <Text style={[styles.visibilityTitle, { color: theme.colors.textPrimary }]}>Solo</Text>
                                 <Text style={[styles.visibilityHint, { color: theme.colors.textMuted }]}>
-                                    Only you can see your streak memory. Turn on to share with your group mission.
+                                    Streak memories stay private to you on the mission. You can still share individual moments to Community if you want.
                                 </Text>
                             </>
                         )}
@@ -719,10 +876,13 @@ export default function HabitDetail() {
                                       onPress: () => {
                                           setMissionDialog({ kind: 'none' });
                                           setPendingExitAfterRemove(true);
-                                          deleteHabit(habit.id);
-                                          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                                          showToast('Mission deleted', 'success');
-                                          router.back();
+                                          void (async () => {
+                                              await deleteAllCommunityWinsForHabit(habit);
+                                              deleteHabit(habit.id);
+                                              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                                              showToast('Mission deleted', 'success');
+                                              router.back();
+                                          })();
                                       },
                                   },
                               ]
@@ -742,6 +902,7 @@ export default function HabitDetail() {
                                                     showToast(error.message, 'error');
                                                     return;
                                                 }
+                                                await deleteAllCommunityWinsForHabit(habit);
                                                 setPendingExitAfterRemove(true);
                                                 deleteHabit(habit.id);
                                                 await refreshCohortPeerHabits().catch(() => {});
