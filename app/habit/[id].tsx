@@ -45,6 +45,7 @@ import { StreakMemorySheet } from '../../src/components/StreakMemorySheet';
 import { StreakMemoryGallery } from '../../src/components/StreakMemoryGallery';
 import { GroupChallengeSheet } from '../../src/components/GroupChallengeSheet';
 import { MissionDetailsSheet } from '../../src/components/MissionDetailsSheet';
+import { PlusBadge } from "../../src/components/PlusBadge";
 import type { StreakMemory } from '../../src/types/habit';
 import {
     canUseStreakMemoryUpload,
@@ -772,9 +773,12 @@ export default function HabitDetail() {
                     <View style={styles.visibilityTextCol}>
                         {(habit.visibility ?? 'solo') === 'public' ? (
                             <>
-                                <Text style={[styles.visibilityTitle, { color: theme.colors.textPrimary }]}>Public</Text>
+                                <View style={styles.visibilityTitleRow}>
+                                    <Text style={[styles.visibilityTitle, { color: theme.colors.textPrimary }]}>Public</Text>
+                                    <PlusBadge />
+                                </View>
                                 <Text style={[styles.visibilityHint, { color: theme.colors.textMuted }]}>
-                                    Squad on this mission can see your streak memories. Community is separate — choose per moment when you save or open a day.
+                                    Visible to your squad on this mission (Habit Plus). Community is separate — choose per moment when you save or open a day.
                                 </Text>
                             </>
                         ) : (
@@ -994,6 +998,7 @@ const styles = StyleSheet.create({
     title: { fontWeight: '800', marginBottom: 12 },
     visibilityRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingHorizontal: 14, borderWidth: 1, marginBottom: 20 },
     visibilityTextCol: { flex: 1 },
+    visibilityTitleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
     visibilityTitle: { fontWeight: '700', fontSize: 14 },
     visibilityHint: { fontSize: 11, marginTop: 3, lineHeight: 15 },
     progressCard: { padding: 20, marginBottom: 28, borderWidth: 1 },

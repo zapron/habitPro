@@ -11,6 +11,7 @@ import { useTheme } from '../context/ThemeContext';
 import { Habit } from '../types/habit';
 import { needsMainMissionOutcome } from '../utils/mainMissionUi';
 import { ProgressRing } from './ProgressRing';
+import { PlusBadge } from "./PlusBadge";
 
 interface HabitCardProps {
     item: Habit;
@@ -72,6 +73,7 @@ export const HabitCard = memo(({ item }: HabitCardProps) => {
                         >
                             <Swords size={10} color={theme.colors.indigo[400]} />
                             <Text style={[styles.challengePillText, { color: theme.colors.indigo[400] }]}>GROUP MISSION</Text>
+                            <PlusBadge />
                         </View>
                     )}
                     {item.missionReport === 'accomplished' && (

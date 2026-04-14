@@ -17,6 +17,7 @@ import { Screen } from "../src/components/Screen";
 import { useTheme } from "../src/context/ThemeContext";
 import { useHabitStore } from "../src/store/habitStore";
 import type { HabitMode, MissionVisibility } from "../src/types/habit";
+import { PlusBadge } from "../src/components/PlusBadge";
 
 export default function CreateHabit() {
   const router = useRouter();
@@ -244,8 +245,18 @@ export default function CreateHabit() {
             activeOpacity={0.85}
           >
             <Globe size={20} color={visibility === "public" ? theme.colors.cyan[400] : theme.colors.textMuted} />
-            <Text style={[styles.modeLabel, { color: visibility === "public" ? theme.colors.textPrimary : theme.colors.textSecondary }]}>Public</Text>
-            <Text style={[styles.modeHint, { color: theme.colors.textMuted }]}>Visible to others later</Text>
+            <View style={styles.publicLabelRow}>
+              <Text
+                style={[
+                  styles.modeLabel,
+                  { color: visibility === "public" ? theme.colors.textPrimary : theme.colors.textSecondary },
+                ]}
+              >
+                Public
+              </Text>
+              <PlusBadge />
+            </View>
+            <Text style={[styles.modeHint, { color: theme.colors.textMuted }]}>Visible to others (Habit Plus)</Text>
           </TouchableOpacity>
         </View>
 
@@ -288,6 +299,7 @@ const styles = StyleSheet.create({
   textArea: { height: 110 },
   modeRow: { flexDirection: "row", gap: 10, marginBottom: 20 },
   modeCard: { flex: 1, alignItems: "center", paddingVertical: 16, borderRadius: 14, borderWidth: 1, gap: 6 },
+  publicLabelRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   modeLabel: { fontWeight: "700", fontSize: 14 },
   modeHint: { fontSize: 11 },
   daysCard: { borderWidth: 1, marginBottom: 16, padding: 14, gap: 12 },

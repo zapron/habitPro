@@ -33,6 +33,7 @@ import { SquadActivitySection } from "../../src/components/SquadActivitySection"
 import { useTheme } from "../../src/context/ThemeContext";
 import { useToast } from "../../src/context/ToastContext";
 import { useAuth } from "../../src/context/AuthContext";
+import { usePremium } from "../../src/context/PremiumContext";
 import { useHabitStore } from "../../src/store/habitStore";
 import {
   listChallengeActivity,
@@ -42,7 +43,6 @@ import {
 } from "../../src/lib/challengeCohort";
 import {
   getChallengeGroup,
-  getMyProfileIsPremium,
   getProfileLabelsForIds,
   leaveChallengeGroup,
   listChallengeMembers,
@@ -51,6 +51,7 @@ import {
 } from "../../src/lib/groupChallengesApi";
 import { isSupabaseConfigured } from "../../src/lib/env";
 import { deleteAllCommunityWinsForHabit } from "../../src/lib/communityWinsApi";
+import { PlusBadge } from "../../src/components/PlusBadge";
 import type {
   ChallengeActivityRow,
   ChallengeGroupRow,
@@ -94,6 +95,7 @@ export default function ChallengeDetailScreen() {
   const { theme, isDark } = useTheme();
   const { showToast } = useToast();
   const { session } = useAuth();
+  const { isPremium } = usePremium();
   const myUserId = session?.user?.id ?? null;
 
   const habits = useHabitStore((s) => s.habits);
@@ -111,7 +113,6 @@ export default function ChallengeDetailScreen() {
   const [cohortNow, setCohortNow] = useState(() => Date.now());
   const [leaveBusy, setLeaveBusy] = useState(false);
   const [leaveDialogOpen, setLeaveDialogOpen] = useState(false);
-  const [isPremium, setIsPremium] = useState(false);
   const [customNoteToUserId, setCustomNoteToUserId] = useState<string | null>(null);
 
   const focusOnceRef = useRef(false);
@@ -121,14 +122,12 @@ export default function ChallengeDetailScreen() {
     const silent = opts?.silent ?? false;
     if (!silent) setLoading(true);
     try {
-      const [g, members, activity, nudges, premium] = await Promise.all([
+      const [g, members, activity, nudges] = await Promise.all([
         getChallengeGroup(challengeId),
         listChallengeMembers(challengeId),
         listChallengeActivity(challengeId).catch(() => [] as ChallengeActivityRow[]),
         listRecentNudges(challengeId).catch(() => [] as ChallengeNudgeRow[]),
-        getMyProfileIsPremium(),
       ]);
-      setIsPremium(premium);
       setGroup(g);
       const ids = members.map((m) => m.user_id);
       setMemberIdsOrdered(ids);
@@ -347,7 +346,7 @@ export default function ChallengeDetailScreen() {
   const onOpenCustomNote = useCallback(
     (toUserId: string) => {
       if (!isPremium) {
-        showToast("Custom notes are a Habit Pro+ feature.", "info");
+        showToast("Custom notes are a Habit Plus feature.", "info");
         return;
       }
       setCustomNoteToUserId(toUserId);
@@ -461,6 +460,15 @@ export default function ChallengeDetailScreen() {
             {memberIdsOrdered.length} participant{memberIdsOrdered.length === 1 ? "" : "s"} ·{" "}
             {group?.creator_timezone ?? "—"}
           </Text>
+
+          {!isPremium ? (
+            <View style={styles.plusGateRow}>
+              <PlusBadge label="HABIT PLUS" />
+              <Text style={[styles.plusGateText, { color: theme.colors.textMuted }]}>
+                Squad features are part of Habit Plus.
+              </Text>
+            </View>
+          ) : null}
 
           {missionDescription ? (
             <Text
@@ -606,6 +614,8 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   metaLine: { fontSize: 13, fontWeight: "600", marginBottom: 12 },
+  plusGateRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 14 },
+  plusGateText: { fontSize: 12, fontWeight: "700" },
   missionDescription: {
     fontSize: 15,
     lineHeight: 24,

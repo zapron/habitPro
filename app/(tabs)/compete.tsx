@@ -46,6 +46,7 @@ import {
   refreshCohortPeerHabits,
 } from "../../src/lib/groupChallengesApi";
 import { subscribeSyncSuccess } from "../../src/lib/syncQueue";
+import { PlusBadge } from "../../src/components/PlusBadge";
 
 const INVITE_ACCEPT_TIMEOUT_MS = 45_000;
 
@@ -568,17 +569,20 @@ export default function CompeteScreen() {
             accessibilityRole="button"
             accessibilityLabel={`Group invites, ${pendingInviteCount} pending`}
           >
-            <Text
-              style={[
-                styles.challengesSubText,
-                {
-                  color:
-                    challengesSubTab === "invites" ? theme.colors.indigo[400] : theme.colors.textSecondary,
-                },
-              ]}
-            >
-              Invites ({pendingInviteCount})
-            </Text>
+            <View style={styles.invitesLabelRow}>
+              <Text
+                style={[
+                  styles.challengesSubText,
+                  {
+                    color:
+                      challengesSubTab === "invites" ? theme.colors.indigo[400] : theme.colors.textSecondary,
+                  },
+                ]}
+              >
+                Invites ({pendingInviteCount})
+              </Text>
+              <PlusBadge />
+            </View>
           </TouchableOpacity>
         </View>
       ) : null}
@@ -916,6 +920,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
     marginBottom: 10,
   },
+  invitesLabelRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   challengesSubPill: {
     flex: 1,
     borderRadius: 12,

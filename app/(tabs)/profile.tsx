@@ -18,6 +18,7 @@ import { Settings, Zap, Globe, User, Target, Flame, LogOut } from "lucide-react-
 import { Screen } from "../../src/components/Screen";
 import { useTheme } from "../../src/context/ThemeContext";
 import { useAuth } from "../../src/context/AuthContext";
+import { usePremium } from "../../src/context/PremiumContext";
 import { useHabitStore } from "../../src/store/habitStore";
 import { isSupabaseConfigured } from "../../src/lib/env";
 import { useAppVersion } from "../../src/context/AppVersionContext";
@@ -45,6 +46,7 @@ import { ProfileWeeklyPulse } from "../../src/components/profile/ProfileWeeklyPu
 import { ProfileActivityChart } from "../../src/components/profile/ProfileActivityChart";
 import { ProfileMiniWeekTrend } from "../../src/components/profile/ProfileMiniWeekTrend";
 import { ProfileStatChips } from "../../src/components/profile/ProfileStatChips";
+import { PlusBadge } from "../../src/components/PlusBadge";
 
 type HubSheetState =
   | null
@@ -300,6 +302,7 @@ export default function ProfileScreen() {
   const { theme, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const { session, signOut } = useAuth();
+  const { isPremium } = usePremium();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [hubSheet, setHubSheet] = useState<HubSheetState>(null);
   const xp = useHabitStore((s) => s.xp);
@@ -465,7 +468,10 @@ export default function ProfileScreen() {
 
       <View style={styles.headerRow}>
         <View>
-          <Text style={[styles.title, { color: theme.colors.textPrimary, fontSize: theme.typography.h1 }]}>Profile</Text>
+          <View style={styles.profileTitleRow}>
+            <Text style={[styles.title, { color: theme.colors.textPrimary, fontSize: theme.typography.h1 }]}>Profile</Text>
+            {!isPremium ? <PlusBadge label="HABIT PLUS" /> : null}
+          </View>
           <Text style={[styles.subtitle, { color: theme.colors.textSecondary, fontSize: theme.typography.caption }]}>
             Your progress at a glance
           </Text>
@@ -519,8 +525,36 @@ export default function ProfileScreen() {
             ) : showAccount && session?.user ? (
               <UsernameSetupFields compact />
             ) : null}
+            {isPremium ? (
+              <View style={styles.plusActiveRow}>
+                <PlusBadge label="HABIT PLUS" />
+                <Text style={[styles.plusActiveText, { color: theme.colors.textMuted }]}>Active</Text>
+              </View>
+            ) : null}
           </View>
         </View>
+
+        {!isPremium ? (
+          <TouchableOpacity
+            style={[
+              styles.plusCard,
+              { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, ...theme.shadow.card },
+            ]}
+            activeOpacity={0.88}
+            onPress={() => Alert.alert("Habit Plus", "Premium paywall is coming next. This is the entry point for it.")}
+            accessibilityRole="button"
+            accessibilityLabel="View Habit Plus"
+          >
+            <View style={styles.plusCardTop}>
+              <PlusBadge label="HABIT PLUS" size="md" />
+              <Text style={[styles.plusCardTitle, { color: theme.colors.textPrimary }]}>Unlock social features</Text>
+            </View>
+            <Text style={[styles.plusCardBody, { color: theme.colors.textSecondary }]}>
+              Group missions, invites, squad nudges, and Community posting are part of Habit Plus.
+            </Text>
+            <Text style={[styles.plusCardCta, { color: theme.colors.indigo[400] }]}>View Habit Plus</Text>
+          </TouchableOpacity>
+        ) : null}
 
         <Text style={[styles.sectionLabel, { color: theme.colors.textMuted }]}>INSIGHTS</Text>
 
@@ -726,6 +760,7 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
     marginBottom: 20,
   },
+  profileTitleRow: { flexDirection: "row", alignItems: "center", gap: 10, flexWrap: "wrap" },
   title: { fontWeight: "800", marginBottom: 4 },
   subtitle: {},
   gearBtn: {
@@ -760,6 +795,18 @@ const styles = StyleSheet.create({
   xpBig: { fontSize: 17, fontWeight: "800" },
   totalXp: { fontSize: 13 },
   handle: { fontSize: 15, fontWeight: "800", marginTop: 4 },
+  plusActiveRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 2 },
+  plusActiveText: { fontSize: 12, fontWeight: "800", letterSpacing: 0.1 },
+  plusCard: {
+    borderRadius: 18,
+    borderWidth: 1,
+    padding: 16,
+    marginBottom: 22,
+  },
+  plusCardTop: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 10 },
+  plusCardTitle: { fontSize: 16, fontWeight: "900", letterSpacing: -0.2, flex: 1, minWidth: 0 },
+  plusCardBody: { fontSize: 13, lineHeight: 19, fontWeight: "600", marginBottom: 10 },
+  plusCardCta: { fontSize: 13, fontWeight: "900" },
   sectionLabel: {
     fontSize: 11,
     fontWeight: "800",

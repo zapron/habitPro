@@ -8,6 +8,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Screen } from "../../src/components/Screen";
 import { CommunityWinsFeed } from "../../src/components/CommunityWinsFeed";
 import { useTheme } from "../../src/context/ThemeContext";
+import { PlusBadge } from "../../src/components/PlusBadge";
 
 export default function CommunityScreen() {
   const { theme, isDark } = useTheme();
@@ -18,6 +19,12 @@ export default function CommunityScreen() {
     <Screen>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={theme.colors.background} />
       <Text style={[styles.title, { color: theme.colors.textPrimary, fontSize: theme.typography.h1 }]}>Community</Text>
+      <View style={styles.plusRow}>
+        <PlusBadge label="HABIT PLUS" />
+        <Text style={[styles.plusHint, { color: theme.colors.textMuted, fontSize: theme.typography.micro }]}>
+          Social mode: post, cheer, and get seen.
+        </Text>
+      </View>
       <Text style={[styles.subtitle, { color: theme.colors.textSecondary, fontSize: theme.typography.caption }]}>
         Cheer public mini wins and get seen. Post yours when you finish a public mini.
       </Text>
@@ -30,6 +37,8 @@ export default function CommunityScreen() {
 
 const styles = StyleSheet.create({
   title: { fontWeight: "900", letterSpacing: -0.4, marginBottom: 6 },
+  plusRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 10 },
+  plusHint: { fontWeight: "700" },
   subtitle: { lineHeight: 18, marginBottom: 14 },
   feedWrap: { flex: 1, minHeight: 200 },
 });

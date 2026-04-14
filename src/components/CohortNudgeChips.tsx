@@ -47,7 +47,7 @@ type Props = {
   memberId: string;
   nudgeBusyKey: string | null;
   onPress: (kind: PresetChallengeNudgeKind) => void;
-  /** Habit Pro+ — custom one-time note per squadmate. */
+  /** Habit Plus — custom one-time note per squadmate. */
   isPremium: boolean;
   /** True after viewer already sent a custom note to this member in this challenge. */
   customNoteAlreadySent: boolean;
@@ -157,7 +157,7 @@ export function CohortNudgeChips({
               {customNoteAlreadySent ? "Note sent" : "Note"}
             </Text>
             {!isPremium ? (
-              <Text style={[styles.proBadge, { color: customIcon }]}>Pro+</Text>
+              <Text style={[styles.proBadge, { color: customIcon }]}>Plus</Text>
             ) : null}
           </>
         )}

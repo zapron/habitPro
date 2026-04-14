@@ -29,6 +29,7 @@ import type { ProfileSearchRow } from "../types/groupChallenge";
 import { Button } from "./Button";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { useToast } from "../context/ToastContext";
+import { PlusBadge } from "./PlusBadge";
 
 type Props = {
   visible: boolean;
@@ -176,7 +177,10 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
       <View style={styles.backdrop}>
         <View style={[styles.sheet, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
           <View style={styles.sheetHead}>
-            <Text style={[styles.sheetTitle, { color: theme.colors.textPrimary }]}>Group mission</Text>
+            <View style={styles.titleRow}>
+              <Text style={[styles.sheetTitle, { color: theme.colors.textPrimary }]}>Group mission</Text>
+              <PlusBadge label="HABIT PLUS" />
+            </View>
             <TouchableOpacity
               onPress={onClose}
               style={[styles.closeBtn, { borderColor: theme.colors.border, backgroundColor: theme.colors.surfaceElevated }]}
@@ -318,7 +322,8 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     marginBottom: 14,
   },
-  sheetTitle: { fontSize: 18, fontWeight: "800" },
+  titleRow: { flexDirection: "row", alignItems: "center", gap: 10, flex: 1, minWidth: 0 },
+  sheetTitle: { fontSize: 18, fontWeight: "800", flex: 1, minWidth: 0 },
   closeBtn: {
     width: 40,
     height: 40,

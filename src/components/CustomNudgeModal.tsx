@@ -70,7 +70,7 @@ export function CustomNudgeModal({ visible, onRequestClose, recipientLabel, busy
           >
             <Text style={[styles.title, { color: theme.colors.textPrimary }]}>Custom note</Text>
             <Text style={[styles.sub, { color: theme.colors.textMuted }]}>
-              One message to {recipientLabel} in this squad (Habit Pro+). You can only send this once per
+              One message to {recipientLabel} in this squad (Habit Plus). You can only send this once per
               person.
             </Text>
             <TextInput
