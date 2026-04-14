@@ -389,20 +389,20 @@ export default function MiniMissionDetail() {
     });
 
     if (canPublish) {
-      const res = await postCommunityWin({
+      void postCommunityWin({
         miniMissionId: mission.id,
         title: mission.title,
         completedAt,
         memoryNote: memoryToSave?.note ?? null,
         memoryImageUrl: memoryToSave?.imageUrl ?? null,
+      }).then((res) => {
+        if (res.ok === true) {
+          setMiniMissionVisibility(mission.id, "public");
+          setMiniMissionCommunityFeedRevoked(mission.id, false);
+        } else {
+          Alert.alert("Couldn’t publish", res.error);
+        }
       });
-      if (res.ok === true) {
-        setMiniMissionVisibility(mission.id, "public");
-        setMiniMissionCommunityFeedRevoked(mission.id, false);
-      } else {
-        Alert.alert("Couldn’t publish", res.error);
-        // Solo + not locked so they can retry from mission details.
-      }
     }
 
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -510,9 +510,13 @@ export default function MiniMissionDetail() {
           text: "Delete",
           style: "destructive",
           onPress: () => {
+            const id = mission.id;
             setPendingExitAfterRemove(true);
-            deleteMiniMission(mission.id);
-            router.replace("/mini");
+            void (async () => {
+              await deleteCommunityWin(id);
+              deleteMiniMission(id);
+              router.replace("/mini");
+            })();
           },
         },
       ],

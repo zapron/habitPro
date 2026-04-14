@@ -43,6 +43,7 @@ import {
   type ProfileLabel,
 } from "../../src/lib/groupChallengesApi";
 import { isSupabaseConfigured } from "../../src/lib/env";
+import { deleteAllCommunityWinsForHabit } from "../../src/lib/communityWinsApi";
 import type {
   ChallengeActivityRow,
   ChallengeGroupRow,
@@ -229,11 +230,13 @@ export default function ChallengeDetailScreen() {
       setLeaveBusy(true);
       try {
         const habitId = myHabit.id;
+        const habitSnapshot = myHabit;
         const { error } = await leaveChallengeGroup(challengeId);
         if (error) {
           showToast(error.message, "error");
           return;
         }
+        await deleteAllCommunityWinsForHabit(habitSnapshot);
         deleteHabit(habitId);
         await refreshCohortPeerHabits().catch(() => {});
         showToast("Left group mission", "success");
