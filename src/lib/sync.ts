@@ -7,6 +7,10 @@ import type {
   StreakMemory,
 } from "../types/habit";
 import { getDerivedState } from "../utils/habitDerived";
+import {
+  canonicalizeMissionDateKeys,
+  canonicalizeStreakMemoryKeys,
+} from "../utils/missionCalendarKeys";
 import { getSupabase } from "./supabase";
 
 type RemoteSnapshot = Pick<HabitStore, "habits" | "miniMissions" | "xp" | "username"> & {
@@ -41,6 +45,12 @@ function habitFromRow(row: {
     row.visibility === "public" || row.visibility === "solo"
       ? row.visibility
       : "solo";
+  const tdRow = row.total_days ?? 21;
+  const rawCompleted = Array.isArray(row.completed_dates)
+    ? row.completed_dates.filter((x): x is string => typeof x === "string")
+    : [];
+  const completedDatesMigrated = canonicalizeMissionDateKeys(row.start_date, rawCompleted, tdRow);
+
   const storedStreak = typeof row.streak === "number" && Number.isFinite(row.streak) ? row.streak : 0;
   const missionReport = parseMissionReport(row.mission_report);
   const missionReportAt =
@@ -48,8 +58,8 @@ function habitFromRow(row: {
 
   let effectiveReport = missionReport;
   const pre = getDerivedState(
-    row.completed_dates ?? [],
-    row.total_days ?? 21,
+    completedDatesMigrated,
+    tdRow,
     missionReport,
   );
   if (!effectiveReport && row.is_completed && pre.gridFull) {
@@ -57,8 +67,8 @@ function habitFromRow(row: {
   }
 
   const d = getDerivedState(
-    row.completed_dates ?? [],
-    row.total_days ?? 21,
+    completedDatesMigrated,
+    tdRow,
     effectiveReport,
   );
   /** Prefer derived streak; max with stored column when present (reconcile cohort / older rows). */
@@ -68,10 +78,13 @@ function habitFromRow(row: {
     status = "failed";
   }
   const rawMem = row.streak_memories;
-  const streakMemories =
+  const streakMemoriesRaw =
     rawMem && typeof rawMem === "object" && !Array.isArray(rawMem)
-      ? (rawMem as Habit["streakMemories"])
+      ? (rawMem as Record<string, unknown>)
       : undefined;
+  const streakMemoriesMigrated = canonicalizeStreakMemoryKeys(row.start_date, streakMemoriesRaw, tdRow);
+  const streakMemories =
+    streakMemoriesMigrated === undefined ? undefined : (streakMemoriesMigrated as Habit["streakMemories"]);
   return {
     ownerUserId: row.user_id,
     id: row.id,

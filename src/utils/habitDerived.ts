@@ -8,14 +8,14 @@ import type { MissionReport } from "../types/habit";
 const normalizeCompletedDates = (dates: string[]) =>
   [...new Set(dates)].sort((a, b) => a.localeCompare(b));
 
-/** YYYY-MM-DD in UTC — must match mission grid + sync (`calendarDateForMissionDayIndex` / `toISOString().split("T")[0]`). */
+/** YYYY-MM-DD keys from `missionCalendarKeys` / mission grid (IANA calendar days, aligned with streak reminders). */
 function utcCalendarKey(d: Date): string {
   return d.toISOString().split("T")[0];
 }
 
 /**
  * Current consecutive streak ending on the latest UTC calendar day or the day before.
- * Uses UTC dates only so this matches stored `completed_dates` (see missionDaySlots).
+ * Uses UTC “today/yesterday” for streak length; grid keys still come from mission calendar helpers.
  * Local-calendar logic previously mismatched those strings and showed 0 on cohort / after sync.
  */
 export function getConsecutiveStreak(sortedDates: string[]): number {
