@@ -1,5 +1,5 @@
 import Constants from "expo-constants";
-import { Platform } from "react-native";
+import { AppState, type AppStateStatus, Platform } from "react-native";
 import { getSupabase } from "./supabase";
 import { getOrCreateDeviceInstallId } from "./deviceInstallId";
 
@@ -85,6 +85,19 @@ export async function clearPushTokenForCurrentUser(userId: string): Promise<void
   if (error && __DEV__) {
     console.warn("[push] delete push_tokens failed", error.message);
   }
+}
+
+/**
+ * Re-sync timezone (and push token) when the app returns to foreground so `profiles.timezone`
+ * matches the device after travel or TZ changes — required for streak reminder date keys.
+ */
+export function subscribePushAndTimezoneOnAppActive(userId: string): () => void {
+  const sub = AppState.addEventListener("change", (next: AppStateStatus) => {
+    if (next !== "active") return;
+    void syncProfileTimezone(userId);
+    void registerPushTokenForCurrentUser(userId);
+  });
+  return () => sub.remove();
 }
 
 /** Stores IANA timezone so streak reminders use the same calendar labels as the mission grid (24h slots from start_date). */

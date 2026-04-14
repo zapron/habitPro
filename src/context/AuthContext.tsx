@@ -26,6 +26,7 @@ import { hydrateStoreAfterAuth } from "../lib/sync";
 import {
   clearPushTokenForCurrentUser,
   registerPushTokenForCurrentUser,
+  subscribePushAndTimezoneOnAppActive,
   syncProfileTimezone,
 } from "../lib/pushTokens";
 
@@ -178,6 +179,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await syncProfileTimezone(uid);
       await registerPushTokenForCurrentUser(uid);
     })();
+    const unsub = subscribePushAndTimezoneOnAppActive(uid);
+    return () => unsub();
   }, [session?.user?.id, syncReady, supabaseConfigured]);
 
   const signIn = useCallback(async (email: string, password: string) => {
