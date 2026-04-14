@@ -6,6 +6,7 @@ import {
   StyleSheet,
   StatusBar,
   Animated,
+  Easing,
   RefreshControl,
   ScrollView,
 } from "react-native";
@@ -73,6 +74,45 @@ export default function Home() {
   const [miniNow, setMiniNow] = useState(() => Date.now());
   const [missionNow, setMissionNow] = useState(() => Date.now());
   const showAccount = isSupabaseConfigured();
+
+  const bellScale = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    if (reduceMotion) {
+      bellScale.setValue(1);
+      return;
+    }
+    if (unreadNotifCount <= 0) {
+      bellScale.setValue(1);
+      return;
+    }
+
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(bellScale, {
+          toValue: 1.18,
+          duration: 120,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }),
+        Animated.timing(bellScale, {
+          toValue: 0.96,
+          duration: 110,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }),
+        Animated.timing(bellScale, {
+          toValue: 1,
+          duration: 140,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }),
+        Animated.delay(2400),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [unreadNotifCount, reduceMotion, bellScale]);
 
   const listBottomPad = Math.max(insets.bottom, 12) + 56;
 
@@ -237,16 +277,18 @@ export default function Home() {
           <View style={styles.headerRightCluster}>
             {showAccount && session?.user ? (
               <View style={styles.bellWrap}>
-                <TouchableOpacity
-                  onPress={() => router.push("/notifications")}
-                  style={[styles.headerIconBtn, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}
-                  activeOpacity={0.85}
-                  accessibilityLabel={
-                    unreadNotifCount > 0 ? `Notifications, ${unreadNotifCount} unread` : "Notifications"
-                  }
-                >
-                  <Bell size={18} color={theme.colors.textPrimary} />
-                </TouchableOpacity>
+                <Animated.View style={{ transform: [{ scale: unreadNotifCount > 0 ? bellScale : 1 }] }}>
+                  <TouchableOpacity
+                    onPress={() => router.push("/notifications")}
+                    style={[styles.headerIconBtn, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}
+                    activeOpacity={0.85}
+                    accessibilityLabel={
+                      unreadNotifCount > 0 ? `Notifications, ${unreadNotifCount} unread` : "Notifications"
+                    }
+                  >
+                    <Bell size={20} color={theme.colors.textPrimary} />
+                  </TouchableOpacity>
+                </Animated.View>
                 {unreadNotifCount > 0 ? (
                   <View style={[styles.notifBadge, { borderColor: theme.colors.background, backgroundColor: theme.colors.red[500] }]} />
                 ) : null}
@@ -485,23 +527,23 @@ const styles = StyleSheet.create({
     borderWidth: 2,
   },
   headerIconBtn: {
-    width: 40,
-    height: 40,
+    width: 42,
+    height: 42,
     borderRadius: 9999,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
   },
   headerBadge: {
-    width: 44,
-    height: 44,
+    width: 46,
+    height: 46,
     borderRadius: 9999,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
     flexShrink: 0,
   },
-  levelNumber: { fontSize: 18, fontWeight: "800", lineHeight: 20 },
+  levelNumber: { fontSize: 19, fontWeight: "800", lineHeight: 21 },
   levelLabel: { fontSize: 9, fontWeight: "800", letterSpacing: 1 },
   commandRow: { flexDirection: "row", gap: 10, marginBottom: SECTION_GAP },
   commandCard: { flex: 1, paddingVertical: 14, paddingHorizontal: 14, position: "relative", overflow: "hidden", borderWidth: 1 },
