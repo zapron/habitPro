@@ -44,6 +44,16 @@ type StreakMemorySheetProps = {
   ) => void | Promise<void>;
   /** When variant is mini, whether Community publish is allowed (signed in + Supabase). */
   miniPublishAvailable?: boolean;
+  /** When variant is habit, whether Community publish is allowed (signed in + Supabase). */
+  habitPublishAvailable?: boolean;
+  /** view + habit: Community status and toggle (remove is one-way; parent shows confirm). */
+  habitViewCommunity?: {
+    posted: boolean;
+    revoked: boolean;
+    available: boolean;
+    busy?: boolean;
+    onChange: (next: boolean) => void | Promise<void>;
+  };
   /** view only */
   viewMemory?: StreakMemory | null;
 };
@@ -57,11 +67,15 @@ export function StreakMemorySheet({
   onClose,
   onCommit,
   miniPublishAvailable,
+  habitPublishAvailable,
+  habitViewCommunity,
   viewMemory,
 }: StreakMemorySheetProps) {
   const isMini = variant === "mini";
   const isView = mode === "view";
-  const canPublishCommunity = isMini && miniPublishAvailable === true;
+  const canPublishCommunity =
+    (isMini && miniPublishAvailable === true) ||
+    (!isMini && habitPublishAvailable === true);
   const { theme, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const { height: windowH } = useWindowDimensions();
@@ -190,9 +204,11 @@ export function StreakMemorySheet({
       );
       return;
     }
-    const meta = isMini
-      ? { publishToCommunity: publishToCommunity && canPublishCommunity }
-      : undefined;
+    const enableCommunityMeta =
+      publishToCommunity &&
+      canPublishCommunity &&
+      (isMini || Boolean(note.trim() || imageUri));
+    const meta = enableCommunityMeta ? { publishToCommunity: true } : undefined;
     setSubmitting(true);
     try {
       await Promise.resolve(onCommit?.(memory, meta));
@@ -202,7 +218,17 @@ export function StreakMemorySheet({
     } finally {
       setSubmitting(false);
     }
-  }, [isView, isMini, note, imageUri, onCommit, onClose, publishToCommunity, canPublishCommunity, submitting]);
+  }, [
+    isView,
+    isMini,
+    note,
+    imageUri,
+    onCommit,
+    onClose,
+    publishToCommunity,
+    canPublishCommunity,
+    submitting,
+  ]);
 
   const maxSheetView = Math.min(windowH * 0.88, 560);
   const isMemoryCreate = !isView;
@@ -323,6 +349,62 @@ export function StreakMemorySheet({
                         {isMini ? "No photo or note saved for this mission." : "No details saved for this day."}
                       </Text>
                     ) : null}
+
+                    {!isMini && habitViewCommunity ? (
+                      <View
+                        style={[
+                          styles.communityPublishRow,
+                          {
+                            borderColor: theme.colors.border,
+                            backgroundColor: theme.colors.surface,
+                            marginTop: 14,
+                          },
+                        ]}
+                      >
+                        {habitViewCommunity.revoked ? (
+                          <Text style={[styles.communityViewRevokedText, { color: theme.colors.textMuted }]}>
+                            Removed from Community. This moment can’t be shared to the feed again.
+                          </Text>
+                        ) : (
+                          <View style={styles.communityPublishTopRow}>
+                            <Globe
+                              size={20}
+                              color={theme.colors.cyan[400]}
+                              style={styles.communityPublishGlobe}
+                            />
+                            <View style={styles.communityPublishTextCol}>
+                              <Text style={[styles.communityPublishTitle, { color: theme.colors.textPrimary }]}>
+                                Community
+                              </Text>
+                              <Text style={[styles.communityPublishHint, { color: theme.colors.textMuted }]}>
+                                {habitViewCommunity.posted
+                                  ? "Turn off to remove this moment from the Community feed. You won’t be able to post it again."
+                                  : habitViewCommunity.available
+                                    ? "Share this moment to the Community feed. Squad visibility uses Public / Solo above."
+                                    : "Sign in with cloud sync to share this moment to Community."}
+                              </Text>
+                            </View>
+                            <Switch
+                              value={habitViewCommunity.posted}
+                              onValueChange={(v) => {
+                                void habitViewCommunity.onChange(v);
+                              }}
+                              disabled={
+                                habitViewCommunity.busy ||
+                                habitViewCommunity.revoked ||
+                                (!habitViewCommunity.posted && !habitViewCommunity.available)
+                              }
+                              trackColor={{
+                                false: theme.colors.border,
+                                true: theme.colors.indigo[600],
+                              }}
+                              thumbColor={theme.colors.white}
+                              ios_backgroundColor={theme.colors.border}
+                            />
+                          </View>
+                        )}
+                      </View>
+                    ) : null}
                   </ScrollView>
                 </>
               ) : (
@@ -399,7 +481,7 @@ export function StreakMemorySheet({
                       </View>
                     </View>
 
-                    {isMini ? (
+                    {isMini || isHabitCreate ? (
                       <View
                         style={[
                           styles.communityPublishRow,
@@ -431,16 +513,23 @@ export function StreakMemorySheet({
                                 { color: theme.colors.textMuted },
                               ]}
                             >
-                              {canPublishCommunity
-                                ? "Leaving this off locks Community for this mission. If you publish, you can remove your win from the feed in details later."
-                                : "Sign in with cloud sync to publish to Community."}
+                              {!canPublishCommunity
+                                ? "Sign in with cloud sync to publish to Community."
+                                : isMini
+                                  ? "Leaving this off locks Community for this mission. If you publish, you can remove your win from the feed in details later."
+                                  : !note.trim() && !imageUri
+                                    ? "Add a photo or note first. Public / Solo above is only for your squad; Community is the wider feed."
+                                    : "Optional. Squad visibility uses Public / Solo on the mission screen. You can remove this moment from Community later from this day’s memory."}
                             </Text>
                           </View>
                           <Switch
                             style={isMiniCreate ? { marginTop: 2 } : undefined}
                             value={Boolean(publishToCommunity && canPublishCommunity)}
                             onValueChange={setPublishToCommunity}
-                            disabled={!canPublishCommunity}
+                            disabled={
+                              !canPublishCommunity ||
+                              (isHabitCreate && !note.trim() && !imageUri)
+                            }
                             trackColor={{
                               false: theme.colors.border,
                               true: theme.colors.indigo[600],
@@ -581,7 +670,11 @@ export function StreakMemorySheet({
 
 const styles = StyleSheet.create({
   backdrop: { flex: 1, justifyContent: "flex-end" },
-  kav: { flex: 1, justifyContent: "flex-end" },
+  /**
+   * Do not use flex:1 here — a full-screen KAV sits above the backdrop Pressable and can
+   * swallow taps (Android): dismiss / back navigation feels “stuck”. Only wrap the sheet width.
+   */
+  kav: { width: "100%", justifyContent: "flex-end" },
   sheetPress: { width: "100%" },
   sheet: {
     borderTopLeftRadius: 24,
@@ -768,6 +861,7 @@ const styles = StyleSheet.create({
   communityPublishHint: { fontSize: 11, marginTop: 4, lineHeight: 16 },
   /** Shorter line height for mini row when description is shown under the title. */
   communityPublishHintMiniBody: { fontSize: 11, marginTop: 4, lineHeight: 15 },
+  communityViewRevokedText: { fontSize: 12, lineHeight: 17 },
   actions: {
     flexDirection: "row",
     gap: 10,

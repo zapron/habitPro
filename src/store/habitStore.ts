@@ -201,6 +201,23 @@ export const useHabitStore = create<HabitStore>()(
         }));
         requestRemoteSync({ immediate: false });
       },
+      patchStreakMemory: (id, date, patch) => {
+        set((state) => ({
+          habits: state.habits.map((habit) => {
+            if (habit.id !== id) return habit;
+            const prev = habit.streakMemories?.[date];
+            if (!prev) return habit;
+            return {
+              ...habit,
+              streakMemories: {
+                ...(habit.streakMemories ?? {}),
+                [date]: { ...prev, ...patch },
+              },
+            };
+          }),
+        }));
+        requestRemoteSync({ immediate: false });
+      },
       deleteHabit: (id) => {
         set((state) => ({
           habits: state.habits.filter((h) => h.id !== id),

@@ -14,6 +14,10 @@ export interface StreakMemory {
   /** Supabase Storage public URL after upload (synced for cohort / other devices). */
   imageUrl?: string;
   createdAt: string;
+  /** This check-in was shared to the Community wins feed (habit streak moments). */
+  communityPosted?: boolean;
+  /** User removed this moment from Community; cannot publish this memory again. */
+  communityFeedRevoked?: boolean;
 }
 
 export interface Habit {
@@ -95,6 +99,8 @@ export type HabitStore = {
   addHabit: (input: AddHabitInput) => string;
   toggleCompletion: (id: string, date: string) => boolean;
   setStreakMemory: (id: string, date: string, memory: StreakMemory | null) => void;
+  /** Merge into an existing streak memory (e.g. Community flags); no-op if no memory for date. */
+  patchStreakMemory: (id: string, date: string, patch: Partial<StreakMemory>) => void;
   deleteHabit: (id: string) => void;
   /** No-op (returns false) when the habit is linked to a group mission — avoids cohort desync. */
   resetHabit: (id: string) => boolean;

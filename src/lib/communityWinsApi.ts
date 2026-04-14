@@ -1,5 +1,13 @@
 import { getSupabase } from "./supabase";
 
+/**
+ * Synthetic `mini_mission_id` for habit streak-memory wins so we reuse `community_wins`
+ * without a schema migration (stable per user + habit + calendar day).
+ */
+export function habitStreakCommunityWinId(habitId: string, memoryDateStr: string): string {
+  return `habitwin:${habitId}:${memoryDateStr}`;
+}
+
 export type CommunityWinRow = {
   id: string;
   user_id: string;
@@ -69,6 +77,25 @@ export async function deleteCommunityWin(
 
   if (error) return { ok: false, error: error.message };
   return { ok: true };
+}
+
+/**
+ * Best-effort: delete Community wins for this habit’s streak keys (`habitwin:…`).
+ * Uses streak memory dates plus completed dates so orphaned rows are still removed.
+ * Does not throw; callers should proceed with local habit delete even if some calls fail.
+ */
+export async function deleteAllCommunityWinsForHabit(habit: {
+  id: string;
+  streakMemories?: Record<string, unknown>;
+  completedDates: string[];
+}): Promise<void> {
+  const dates = new Set<string>([
+    ...Object.keys(habit.streakMemories ?? {}),
+    ...habit.completedDates,
+  ]);
+  for (const dateStr of dates) {
+    await deleteCommunityWin(habitStreakCommunityWinId(habit.id, dateStr));
+  }
 }
 
 /** Default page size for Community feed (fetches pageSize+1 to detect hasMore). */
