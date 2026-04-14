@@ -22,22 +22,22 @@ const NUDGE_SPECS: {
     kind: "cheer",
     label: "Cheer",
     Icon: Heart,
-    bgLight: "rgba(99, 102, 241, 0.14)",
-    bgDark: "rgba(129, 140, 248, 0.18)",
+    bgLight: "rgba(99, 102, 241, 0.08)",
+    bgDark: "rgba(129, 140, 248, 0.1)",
   },
   {
     kind: "ping",
     label: "What's up",
     suffixGlyph: "?!",
-    bgLight: "rgba(8, 145, 178, 0.12)",
-    bgDark: "rgba(34, 211, 238, 0.14)",
+    bgLight: "rgba(8, 145, 178, 0.06)",
+    bgDark: "rgba(34, 211, 238, 0.09)",
   },
   {
     kind: "fire",
     label: "Fire",
     Icon: Flame,
-    bgLight: "rgba(217, 119, 6, 0.14)",
-    bgDark: "rgba(251, 191, 36, 0.16)",
+    bgLight: "rgba(217, 119, 6, 0.08)",
+    bgDark: "rgba(251, 191, 36, 0.1)",
   },
 ];
 
@@ -78,6 +78,18 @@ export function CohortNudgeChips({ theme, isDark, memberId, nudgeBusyKey, onPres
               styles.chip,
               {
                 backgroundColor: bg,
+                borderColor:
+                  kind === "cheer"
+                    ? isDark
+                      ? "rgba(129, 140, 248, 0.22)"
+                      : "rgba(99, 102, 241, 0.2)"
+                    : kind === "ping"
+                      ? isDark
+                        ? "rgba(34, 211, 238, 0.22)"
+                        : "rgba(6, 182, 212, 0.22)"
+                      : isDark
+                        ? "rgba(251, 191, 36, 0.22)"
+                        : "rgba(217, 119, 6, 0.22)",
                 opacity: busyGlobal && !busy ? 0.45 : pressed ? 0.92 : 1,
                 transform: [{ scale: pressed ? 0.98 : 1 }],
               },
@@ -90,9 +102,9 @@ export function CohortNudgeChips({ theme, isDark, memberId, nudgeBusyKey, onPres
                 {glyph ? (
                   <Text style={[styles.glyph, { color: iconColor }]}>{glyph}</Text>
                 ) : Icon ? (
-                  <Icon size={theme.icon.md} color={iconColor} strokeWidth={2.4} />
+                  <Icon size={theme.icon.sm} color={iconColor} strokeWidth={2.2} />
                 ) : null}
-                <Text style={[styles.chipLabel, { color: theme.colors.textPrimary }]}>{label}</Text>
+                <Text style={[styles.chipLabel, { color: theme.colors.textSecondary }]}>{label}</Text>
                 {suffixGlyph ? (
                   <Text style={[styles.glyph, { color: iconColor }]}>{suffixGlyph}</Text>
                 ) : null}
@@ -106,31 +118,32 @@ export function CohortNudgeChips({ theme, isDark, memberId, nudgeBusyKey, onPres
 }
 
 const styles = StyleSheet.create({
-  scroll: { marginHorizontal: -4, marginTop: 12 },
+  scroll: { marginHorizontal: -4, marginTop: 8 },
   scrollContent: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: 6,
     paddingHorizontal: 4,
-    paddingVertical: 2,
+    paddingVertical: 0,
   },
   chip: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 9999,
-    minHeight: 40,
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    minHeight: 30,
   },
   glyph: {
-    fontSize: 17,
-    fontWeight: "900",
-    letterSpacing: -0.5,
-  },
-  chipLabel: {
     fontSize: 13,
     fontWeight: "800",
-    letterSpacing: 0.2,
+    letterSpacing: -0.3,
+  },
+  chipLabel: {
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: 0.15,
   },
 });
