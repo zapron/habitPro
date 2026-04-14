@@ -15,6 +15,7 @@ import {
 import * as Haptics from "expo-haptics";
 import { ChevronDown, ChevronUp, Sparkles, ThumbsUp } from "lucide-react-native";
 import type { CommunityWinFeedItem } from "../lib/communityWinsApi";
+import { buildStreakCelebrationKicker } from "../lib/communityStreakFeedCopy";
 import { formatCompletedAt, formatRelativeTime } from "../lib/communityWinFeedFormat";
 import type { AppTheme } from "../styles/theme";
 
@@ -112,6 +113,27 @@ export function CommunityWinFeedPost({
   const handle = win.username ? `@${win.username}` : "Someone";
   const isFeed = variant === "feed";
   const hasNote = Boolean((win.memory_note ?? "").trim());
+  /** Older rows used synthetic id before feed_source existed */
+  const legacyHabitStreak =
+    win.feed_source === "mini" && win.mini_mission_id.startsWith("habitwin:");
+  const isHabitStreak = win.feed_source === "habit_streak" || legacyHabitStreak;
+  const legacyMissionTitle = win.title.replace(/\s*·\s*Day\s+\d+\s*$/i, "").trim();
+  const streakKicker =
+    win.feed_source === "habit_streak" &&
+    typeof win.streak_mission_day === "number" &&
+    typeof win.streak_count_at_post === "number"
+      ? buildStreakCelebrationKicker({
+          displayName: handle,
+          missionTitle: win.title,
+          missionDay: win.streak_mission_day,
+          streakCount: win.streak_count_at_post,
+        })
+      : legacyHabitStreak
+        ? {
+            line1: `${handle} shared a streak moment 🔥`,
+            missionLine: legacyMissionTitle.length > 0 ? legacyMissionTitle : win.title,
+          }
+        : null;
 
   const lastTapRef = useRef(0);
   const lightboxTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -240,6 +262,26 @@ export function CommunityWinFeedPost({
     <View style={wrapStyle}>
       {imageBlock}
 
+      {streakKicker ? (
+        <View
+          style={[
+            styles.streakBanner,
+            {
+              borderLeftColor: theme.colors.amber[500],
+              backgroundColor: isDark ? "rgba(245, 158, 11, 0.12)" : "rgba(234, 88, 12, 0.09)",
+            },
+            isFeed ? styles.padHFeed : styles.padCardInner,
+          ]}
+          accessibilityRole="text"
+          accessibilityLabel={`${streakKicker.line1}. ${streakKicker.missionLine}`}
+        >
+          <Text style={[styles.streakLine1, { color: theme.colors.textPrimary }]}>{streakKicker.line1}</Text>
+          <Text style={[styles.streakMission, { color: theme.colors.amber[500] }]} numberOfLines={2}>
+            {streakKicker.missionLine}
+          </Text>
+        </View>
+      ) : null}
+
       <View
         style={[
           styles.metaBlock,
@@ -339,7 +381,9 @@ export function CommunityWinFeedPost({
 
         {!hasNote && !expanded ? (
           <Text style={[styles.captionHint, { color: theme.colors.textMuted }]} numberOfLines={2}>
-            From a public mini mission — open View More for completion time and any caption.
+            {isHabitStreak
+              ? "Streak moment from a main mission — open View More for time and caption."
+              : "From a public mini mission — open View More for completion time and any caption."}
           </Text>
         ) : null}
 
@@ -403,6 +447,25 @@ const styles = StyleSheet.create({
   photoPlaceholder: {
     alignItems: "center",
     justifyContent: "center",
+  },
+  streakBanner: {
+    paddingVertical: 12,
+    borderLeftWidth: 4,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "rgba(245, 158, 11, 0.25)",
+  },
+  streakLine1: {
+    fontSize: 15,
+    fontWeight: "800",
+    lineHeight: 21,
+    letterSpacing: -0.2,
+  },
+  streakMission: {
+    fontSize: 13,
+    fontWeight: "700",
+    marginTop: 4,
+    lineHeight: 18,
+    letterSpacing: 0.1,
   },
   metaBlock: {
     paddingTop: 14,

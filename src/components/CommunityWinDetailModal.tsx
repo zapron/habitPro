@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { X } from "lucide-react-native";
 import { useTheme } from "../context/ThemeContext";
 import type { CommunityWinFeedItem } from "../lib/communityWinsApi";
+import { buildStreakCelebrationKicker } from "../lib/communityStreakFeedCopy";
 
 function formatRelativeTime(iso: string): string {
   const t = new Date(iso).getTime();
@@ -54,6 +55,17 @@ export function CommunityWinDetailModal({ visible, win, onClose, onPressImage }:
   if (!win) return null;
 
   const handle = win.username ? `@${win.username}` : "Someone";
+  const streakKicker =
+    win.feed_source === "habit_streak" &&
+    typeof win.streak_mission_day === "number" &&
+    typeof win.streak_count_at_post === "number"
+      ? buildStreakCelebrationKicker({
+          displayName: handle,
+          missionTitle: win.title,
+          missionDay: win.streak_mission_day,
+          streakCount: win.streak_count_at_post,
+        })
+      : null;
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
@@ -102,6 +114,22 @@ export function CommunityWinDetailModal({ visible, win, onClose, onPressImage }:
             showsVerticalScrollIndicator
             nestedScrollEnabled
           >
+            {streakKicker ? (
+              <View
+                style={[
+                  styles.streakBanner,
+                  {
+                    borderLeftColor: theme.colors.amber[500],
+                    backgroundColor: isDark ? "rgba(245, 158, 11, 0.12)" : "rgba(234, 88, 12, 0.09)",
+                  },
+                ]}
+              >
+                <Text style={[styles.streakLine1, { color: theme.colors.textPrimary }]}>{streakKicker.line1}</Text>
+                <Text style={[styles.streakMission, { color: theme.colors.amber[500] }]} numberOfLines={2}>
+                  {streakKicker.missionLine}
+                </Text>
+              </View>
+            ) : null}
             <Text style={[styles.title, { color: theme.colors.textPrimary }]}>{win.title}</Text>
 
             {win.memory_image_url ? (
@@ -174,6 +202,15 @@ const styles = StyleSheet.create({
   },
   scroll: { flexGrow: 0 },
   scrollContent: { paddingBottom: 20 },
+  streakBanner: {
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderLeftWidth: 4,
+    borderRadius: 12,
+    marginBottom: 14,
+  },
+  streakLine1: { fontSize: 15, fontWeight: "800", lineHeight: 21 },
+  streakMission: { fontSize: 13, fontWeight: "700", marginTop: 4, lineHeight: 18 },
   title: { fontSize: 20, fontWeight: "800", marginBottom: 14, lineHeight: 26 },
   heroImg: {
     width: "100%",
