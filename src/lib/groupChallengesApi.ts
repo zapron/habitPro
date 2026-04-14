@@ -161,6 +161,19 @@ export async function getProfileUsernamesForIds(userIds: string[]): Promise<Reco
 export type ProfileLabel = { username: string; displayName: string | null };
 
 /** Usernames + optional display names for challenge participant cards. */
+/** `profiles.is_premium` — set server-side (billing / admin). Used for squad custom note gate. */
+export async function getMyProfileIsPremium(): Promise<boolean> {
+  const supabase = getSupabase();
+  if (!supabase) return false;
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return false;
+  const { data, error } = await supabase.from("profiles").select("is_premium").eq("id", user.id).maybeSingle();
+  if (error || !data) return false;
+  return Boolean((data as { is_premium?: boolean }).is_premium);
+}
+
 export async function getProfileLabelsForIds(userIds: string[]): Promise<Record<string, ProfileLabel>> {
   const uniq = [...new Set(userIds)].filter(Boolean);
   if (uniq.length === 0) return {};

@@ -43,7 +43,10 @@ export type ProfileSearchRow = {
   display_name: string | null;
 };
 
-export type ChallengeNudgeKind = "cheer" | "ping" | "fire" | "congrats";
+export type ChallengeNudgeKind = "cheer" | "ping" | "fire" | "congrats" | "custom_note";
+
+/** Preset nudges sent via direct insert; `custom_note` uses `rpc_send_challenge_custom_nudge`. */
+export type PresetChallengeNudgeKind = Exclude<ChallengeNudgeKind, "custom_note">;
 
 export type ChallengeNudgeRow = {
   id: string;
@@ -51,6 +54,8 @@ export type ChallengeNudgeRow = {
   from_user_id: string;
   to_user_id: string;
   kind: ChallengeNudgeKind;
+  /** Set when `kind === "custom_note"`. */
+  message: string | null;
   created_at: string;
 };
 

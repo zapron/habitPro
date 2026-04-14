@@ -2,8 +2,8 @@ import type { Habit } from "../types/habit";
 import type {
   ChallengeActivityKind,
   ChallengeActivityRow,
-  ChallengeNudgeKind,
   ChallengeNudgeRow,
+  PresetChallengeNudgeKind,
 } from "../types/groupChallenge";
 import { getSupabase } from "./supabase";
 
@@ -73,7 +73,7 @@ export async function tryRecordChallengeMilestones(
 export async function sendChallengeNudge(
   challengeId: string,
   toUserId: string,
-  kind: ChallengeNudgeKind,
+  kind: PresetChallengeNudgeKind,
 ): Promise<{ error: Error | null }> {
   const supabase = getSupabase();
   if (!supabase) return { error: new Error("Supabase not configured") };
@@ -124,6 +124,49 @@ export async function sendChallengeNudge(
   return { error: null };
 }
 
+/** Premium: one custom message per squad member (per challenge) — enforced server-side. */
+export async function sendChallengeCustomNudge(
+  challengeId: string,
+  toUserId: string,
+  message: string,
+): Promise<{ error: Error | null }> {
+  const supabase = getSupabase();
+  if (!supabase) return { error: new Error("Supabase not configured") };
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: new Error("Not signed in") };
+  if (user.id === toUserId) return { error: new Error("Cannot nudge yourself") };
+
+  const trimmed = message.trim();
+  if (trimmed.length < 1 || trimmed.length > 200) {
+    return { error: new Error("Message must be 1–200 characters.") };
+  }
+
+  const { error } = await supabase.rpc("rpc_send_challenge_custom_nudge", {
+    p_challenge_id: challengeId,
+    p_to_user_id: toUserId,
+    p_message: trimmed,
+  });
+
+  if (error) {
+    const raw = String(error.message ?? "");
+    const low = raw.toLowerCase();
+    if (low.includes("premium_required")) {
+      return { error: new Error("Custom notes are a Habit Pro+ feature.") };
+    }
+    if (low.includes("custom_note_already_sent")) {
+      return { error: new Error("You already sent a custom note to this person in this squad.") };
+    }
+    if (low.includes("invalid_message_length")) {
+      return { error: new Error("Message must be 1–200 characters.") };
+    }
+    return { error: new Error(raw || "Could not send note.") };
+  }
+
+  return { error: null };
+}
+
 export async function listRecentNudges(
   challengeId: string,
   limit = 24,
@@ -132,7 +175,7 @@ export async function listRecentNudges(
   if (!supabase) return [];
   const { data, error } = await supabase
     .from("challenge_nudges")
-    .select("id, challenge_id, from_user_id, to_user_id, kind, created_at")
+    .select("id, challenge_id, from_user_id, to_user_id, kind, message, created_at")
     .eq("challenge_id", challengeId)
     .order("created_at", { ascending: false })
     .limit(limit);
