@@ -47,8 +47,9 @@ type Props = {
   memberId: string;
   nudgeBusyKey: string | null;
   onPress: (kind: PresetChallengeNudgeKind) => void;
-  /** Habit Plus — custom one-time note per squadmate. */
-  isPremium: boolean;
+  /** When true, preset + custom nudges are locked (Habit Plus). */
+  plusLocked: boolean;
+  onPlusLocked?: () => void;
   /** True after viewer already sent a custom note to this member in this challenge. */
   customNoteAlreadySent: boolean;
   onCustomNotePress: () => void;
@@ -60,14 +61,14 @@ export function CohortNudgeChips({
   memberId,
   nudgeBusyKey,
   onPress,
-  isPremium,
+  plusLocked,
+  onPlusLocked,
   customNoteAlreadySent,
   onCustomNotePress,
 }: Props) {
   const busyGlobal = nudgeBusyKey !== null;
 
   const customBusy = nudgeBusyKey === `${memberId}-custom_note`;
-  const customDisabled = busyGlobal || customNoteAlreadySent;
   const customBg = isDark ? "rgba(167, 139, 250, 0.1)" : "rgba(124, 58, 237, 0.06)";
   const customBorder = isDark ? "rgba(167, 139, 250, 0.28)" : "rgba(124, 58, 237, 0.22)";
   const customIcon = isDark ? "#c4b5fd" : "#7c3aed";
@@ -81,6 +82,7 @@ export function CohortNudgeChips({
     >
       {NUDGE_SPECS.map(({ kind, label, Icon, glyph, suffixGlyph, bgLight, bgDark }) => {
         const busy = nudgeBusyKey === `${memberId}-${kind}`;
+        const presetLocked = plusLocked;
         const bg = isDark ? bgDark : bgLight;
         const iconColor =
           kind === "cheer"
@@ -93,7 +95,13 @@ export function CohortNudgeChips({
           <Pressable
             key={kind}
             disabled={busyGlobal}
-            onPress={() => onPress(kind)}
+            onPress={() => {
+              if (presetLocked) {
+                onPlusLocked?.();
+                return;
+              }
+              onPress(kind);
+            }}
             style={({ pressed }) => [
               styles.chip,
               {
@@ -110,7 +118,7 @@ export function CohortNudgeChips({
                       : isDark
                         ? "rgba(251, 191, 36, 0.22)"
                         : "rgba(217, 119, 6, 0.22)",
-                opacity: busyGlobal && !busy ? 0.45 : pressed ? 0.92 : 1,
+                opacity: presetLocked ? 0.55 : busyGlobal && !busy ? 0.45 : pressed ? 0.92 : 1,
                 transform: [{ scale: pressed ? 0.98 : 1 }],
               },
             ]}
@@ -135,16 +143,22 @@ export function CohortNudgeChips({
       })}
 
       <Pressable
-        disabled={customDisabled}
-        onPress={onCustomNotePress}
+        disabled={busyGlobal || customNoteAlreadySent}
+        onPress={() => {
+          if (plusLocked) {
+            onPlusLocked?.();
+            return;
+          }
+          onCustomNotePress();
+        }}
         style={({ pressed }) => [
           styles.chip,
           styles.customChip,
           {
             backgroundColor: customBg,
             borderColor: customBorder,
-            opacity: customDisabled ? 0.5 : pressed ? 0.92 : 1,
-            transform: [{ scale: pressed && !customDisabled ? 0.98 : 1 }],
+            opacity: plusLocked || customNoteAlreadySent ? 0.55 : busyGlobal ? 0.5 : pressed ? 0.92 : 1,
+            transform: [{ scale: pressed && !busyGlobal && !customNoteAlreadySent ? 0.98 : 1 }],
           },
         ]}
       >
@@ -156,9 +170,7 @@ export function CohortNudgeChips({
             <Text style={[styles.chipLabel, { color: theme.colors.textSecondary }]}>
               {customNoteAlreadySent ? "Note sent" : "Note"}
             </Text>
-            {!isPremium ? (
-              <Text style={[styles.proBadge, { color: customIcon }]}>Plus</Text>
-            ) : null}
+            {plusLocked ? <Text style={[styles.proBadge, { color: customIcon }]}>Plus</Text> : null}
           </>
         )}
       </Pressable>

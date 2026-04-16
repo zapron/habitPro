@@ -37,6 +37,8 @@ import type { ChallengeEnrollment } from "../../src/types/challenge";
 import type { Habit, MiniMission } from "../../src/types/habit";
 import type { ChallengeGroupRow, ChallengeInviteRow } from "../../src/types/groupChallenge";
 import { useAuth } from "../../src/context/AuthContext";
+import { usePremium } from "../../src/context/PremiumContext";
+import { usePlusUpsell } from "../../src/context/PlusUpsellContext";
 import { isSupabaseConfigured } from "../../src/lib/env";
 import {
   acceptInviteAndJoin,
@@ -241,6 +243,9 @@ export default function CompeteScreen() {
     focusInvites?: string;
   }>();
   const { session } = useAuth();
+  const { isPremium, loading: premiumLoading } = usePremium();
+  const { openUpsell } = usePlusUpsell();
+  const inviteAcceptLocked = !isPremium || premiumLoading;
   const [segment, setSegment] = useState<CompeteSegment>("challenges");
   const [challengesSubTab, setChallengesSubTab] = useState<ChallengesSubTab>("missions");
   const [groupInvites, setGroupInvites] = useState<ChallengeInviteRow[]>([]);
@@ -744,6 +749,11 @@ export default function CompeteScreen() {
                       <Text style={[styles.inviteHint, { color: theme.colors.textSecondary }]}>
                         Accept to add a matching mission and join everyone on this mission.
                       </Text>
+                      {inviteAcceptLocked ? (
+                        <Text style={[styles.invitePlusHint, { color: theme.colors.textMuted }]}>
+                          Joining group missions is Habit Plus — tap Accept to learn more.
+                        </Text>
+                      ) : null}
                       <View style={styles.inviteActions}>
                         <TouchableOpacity
                           style={[styles.declineBtn, { borderColor: theme.colors.border }]}
@@ -753,7 +763,14 @@ export default function CompeteScreen() {
                           <Text style={{ color: theme.colors.textMuted, fontWeight: "700" }}>Decline</Text>
                         </TouchableOpacity>
                         <TouchableOpacity
-                          style={[styles.acceptBtn, { backgroundColor: theme.colors.indigo[600], ...theme.shadow.glow }]}
+                          style={[
+                            styles.acceptBtn,
+                            {
+                              backgroundColor: theme.colors.indigo[600],
+                              ...theme.shadow.glow,
+                              opacity: inviteAcceptLocked ? 0.55 : 1,
+                            },
+                          ]}
                           onPress={() => void handleAcceptGroupInvite(inv)}
                           disabled={inviteBusy === inv.id}
                         >
@@ -1050,6 +1067,7 @@ const styles = StyleSheet.create({
   winTitle: { flex: 1, fontWeight: "700", fontSize: 15 },
   winDate: { fontSize: 12, fontWeight: "600" },
   inviteHint: { fontSize: 12, lineHeight: 17, fontWeight: "500", marginTop: 8, marginBottom: 12 },
+  invitePlusHint: { fontSize: 11, lineHeight: 16, fontWeight: "600", marginTop: -6, marginBottom: 10, fontStyle: "italic" },
   inviteSyncHint: { fontSize: 11, lineHeight: 16, marginTop: 8, fontStyle: "italic" },
   inviteGroupStreaksBtn: {
     flexDirection: "row",

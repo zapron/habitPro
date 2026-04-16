@@ -25,6 +25,8 @@ import {
 } from "../lib/groupChallengesApi";
 import { useHabitStore } from "../store/habitStore";
 import { useAuth } from "../context/AuthContext";
+import { usePremium } from "../context/PremiumContext";
+import { usePlusUpsell } from "../context/PlusUpsellContext";
 import type { ProfileSearchRow } from "../types/groupChallenge";
 import { Button } from "./Button";
 import { ConfirmDialog } from "./ConfirmDialog";
@@ -42,6 +44,9 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
   const { showToast } = useToast();
   const router = useRouter();
   const { session } = useAuth();
+  const { isPremium, loading: premiumLoading } = usePremium();
+  const { openUpsell } = usePlusUpsell();
+  const plusOk = isPremium && !premiumLoading;
   const setHabitChallengeMeta = useHabitStore((s) => s.setHabitChallengeMeta);
   const myUsername = useHabitStore((s) => s.username);
 
@@ -117,6 +122,10 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
 
   const handleCreateGroup = useCallback(async () => {
     if (!configured || !signedIn) return;
+    if (!plusOk) {
+      openUpsell("group_mission");
+      return;
+    }
     setCreating(true);
     try {
       const { group, error } = await createGroupChallengeFromHabit(habit);
@@ -132,10 +141,14 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
     } finally {
       setCreating(false);
     }
-  }, [configured, signedIn, habit, setHabitChallengeMeta, showToast]);
+  }, [configured, signedIn, habit, setHabitChallengeMeta, showToast, plusOk, openUpsell]);
 
   const handleInvite = useCallback(
     async (userId: string) => {
+      if (!plusOk) {
+        openUpsell("group_mission");
+        return;
+      }
       const gid = habit.challengeGroupId;
       if (!gid) {
         showToast("Start a group mission from this habit, then invite friends.", "info");
@@ -202,6 +215,7 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
               <Button title="Open group mission" onPress={openChallenge} />
               <Text style={[styles.sectionLabel, { color: theme.colors.textMuted }]}>Invite someone</Text>
               <TextInput
+                editable={plusOk}
                 value={query}
                 onChangeText={setQuery}
                 placeholder="Search by username"
@@ -244,8 +258,8 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
                     return (
                       <TouchableOpacity
                         style={[styles.row, { borderColor: theme.colors.border, opacity: blocked ? 0.75 : 1 }]}
-                        onPress={() => void handleInvite(item.id)}
-                        disabled={invitingId === item.id || blocked}
+                        onPress={() => (plusOk ? void handleInvite(item.id) : openUpsell("group_mission"))}
+                        disabled={!plusOk ? false : invitingId === item.id || blocked}
                       >
                         <View style={{ flex: 1 }}>
                           <Text style={{ color: theme.colors.textPrimary, fontWeight: "700" }}>
@@ -274,7 +288,22 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
                 Create a shared group mission from this habit. You stay on this mission; invitees get a matching one when
                 they accept.
               </Text>
-              <Button title={creating ? "Creating…" : "Start group mission"} onPress={() => void handleCreateGroup()} disabled={creating} />
+              <Button
+                title={creating ? "Creating…" : "Start group mission"}
+                onPress={() => {
+                  if (!plusOk) {
+                    openUpsell("group_mission");
+                    return;
+                  }
+                  void handleCreateGroup();
+                }}
+                disabled={creating}
+              />
+              {!plusOk ? (
+                <Text style={{ color: theme.colors.textMuted, fontSize: 12, marginTop: 10, lineHeight: 17 }}>
+                  Group missions and invites are Habit Plus.
+                </Text>
+              ) : null}
             </>
           )}
         </View>

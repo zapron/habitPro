@@ -34,6 +34,7 @@ import { useTheme } from "../../src/context/ThemeContext";
 import { useToast } from "../../src/context/ToastContext";
 import { useAuth } from "../../src/context/AuthContext";
 import { usePremium } from "../../src/context/PremiumContext";
+import { usePlusUpsell } from "../../src/context/PlusUpsellContext";
 import { useHabitStore } from "../../src/store/habitStore";
 import {
   listChallengeActivity,
@@ -95,7 +96,9 @@ export default function ChallengeDetailScreen() {
   const { theme, isDark } = useTheme();
   const { showToast } = useToast();
   const { session } = useAuth();
-  const { isPremium } = usePremium();
+  const { isPremium, loading: premiumLoading } = usePremium();
+  const { openUpsell } = usePlusUpsell();
+  const socialLocked = !isPremium || premiumLoading;
   const myUserId = session?.user?.id ?? null;
 
   const habits = useHabitStore((s) => s.habits);
@@ -168,6 +171,10 @@ export default function ChallengeDetailScreen() {
   const onSendNudge = useCallback(
     async (toUserId: string, kind: PresetChallengeNudgeKind) => {
       if (!challengeId || !myUserId || toUserId === myUserId) return;
+      if (socialLocked) {
+        openUpsell("squad_nudge");
+        return;
+      }
       const viewerHabit = habits.find((h) => h.challengeGroupId === challengeId);
       if (
         viewerHabit &&
@@ -189,12 +196,16 @@ export default function ChallengeDetailScreen() {
         setNudgeBusyKey(null);
       }
     },
-    [challengeId, myUserId, load, habits, showToast],
+    [challengeId, myUserId, load, habits, showToast, socialLocked, openUpsell],
   );
 
   const onCongrats = useCallback(
     async (actorUserId: string) => {
       if (!challengeId || !myUserId || actorUserId === myUserId) return;
+      if (socialLocked) {
+        openUpsell("squad_nudge");
+        return;
+      }
       const viewerHabit = habits.find((h) => h.challengeGroupId === challengeId);
       if (
         viewerHabit &&
@@ -216,7 +227,7 @@ export default function ChallengeDetailScreen() {
         setNudgeBusyKey(null);
       }
     },
-    [challengeId, myUserId, load, habits, showToast],
+    [challengeId, myUserId, load, habits, showToast, socialLocked, openUpsell],
   );
 
   const myHabit = useMemo(
@@ -345,13 +356,13 @@ export default function ChallengeDetailScreen() {
 
   const onOpenCustomNote = useCallback(
     (toUserId: string) => {
-      if (!isPremium) {
-        showToast("Custom notes are a Habit Plus feature.", "info");
+      if (socialLocked) {
+        openUpsell("squad_nudge");
         return;
       }
       setCustomNoteToUserId(toUserId);
     },
-    [isPremium, showToast],
+    [socialLocked, openUpsell],
   );
 
   const onSubmitCustomNote = useCallback(
@@ -553,7 +564,8 @@ export default function ChallengeDetailScreen() {
                       memberId={memberId}
                       nudgeBusyKey={nudgeBusyKey}
                       onPress={(kind) => void onSendNudge(memberId, kind)}
-                      isPremium={isPremium}
+                      plusLocked={socialLocked}
+                      onPlusLocked={() => openUpsell("squad_nudge")}
                       customNoteAlreadySent={customNoteSentToUserIds.has(memberId)}
                       onCustomNotePress={() => onOpenCustomNote(memberId)}
                     />
