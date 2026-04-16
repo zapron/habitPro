@@ -6,7 +6,7 @@ alter table public.streak_reminder_log
 alter table public.streak_reminder_log drop constraint if exists streak_reminder_log_reminder_kind_check;
 
 alter table public.streak_reminder_log
-  add constraint streak_reminder_log_reminder_kind_check check (reminder_kind in ('slot_open', 'slot_closing'));
+  add constraint streak_reminder_log_reminder_kind_check check (reminder_kind in ('slot_open', 'slot_closing', 'debug_10m'));
 
 alter table public.streak_reminder_log drop constraint if exists streak_reminder_log_pkey;
 
