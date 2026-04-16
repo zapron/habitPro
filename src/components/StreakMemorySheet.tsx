@@ -46,6 +46,8 @@ type StreakMemorySheetProps = {
   miniPublishAvailable?: boolean;
   /** When variant is habit, whether Community publish is allowed (signed in + Supabase). */
   habitPublishAvailable?: boolean;
+  /** When false, Community publish/toggle is locked (e.g. Habit Plus). Default true (unset). */
+  plusCommunityOk?: boolean;
   /** view + habit: Community status and toggle (remove is one-way; parent shows confirm). */
   habitViewCommunity?: {
     posted: boolean;
@@ -53,6 +55,8 @@ type StreakMemorySheetProps = {
     available: boolean;
     /** Signed in + cloud, but this memory has no photo — Community can’t be enabled. */
     needsPhotoForCommunity?: boolean;
+    /** Signed in + photo, but viewer does not have Habit Plus. */
+    plusRequired?: boolean;
     busy?: boolean;
     /** True while publish is in flight; keeps the Switch ON until `posted` updates. */
     pendingPublish?: boolean;
@@ -72,14 +76,16 @@ export function StreakMemorySheet({
   onCommit,
   miniPublishAvailable,
   habitPublishAvailable,
+  plusCommunityOk,
   habitViewCommunity,
   viewMemory,
 }: StreakMemorySheetProps) {
   const isMini = variant === "mini";
   const isView = mode === "view";
+  const plusOk = plusCommunityOk !== false;
   const canPublishCommunity =
-    (isMini && miniPublishAvailable === true) ||
-    (!isMini && habitPublishAvailable === true);
+    plusOk &&
+    ((isMini && miniPublishAvailable === true) || (!isMini && habitPublishAvailable === true));
   const { theme, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const { height: windowH } = useWindowDimensions();
@@ -490,9 +496,11 @@ export function StreakMemorySheet({
                                     ? "Publishing to Community…"
                                     : habitViewCommunity.needsPhotoForCommunity
                                       ? "Community posts need a photo. This moment has no photo, so it can’t be shared to the feed."
-                                      : habitViewCommunity.available
-                                        ? "Share this moment to the Community feed. Squad visibility uses Public / Solo above."
-                                        : "Sign in with cloud sync to share this moment to Community."}
+                                      : habitViewCommunity.plusRequired
+                                        ? "Publishing to Community is Habit Plus."
+                                        : habitViewCommunity.available
+                                          ? "Share this moment to the Community feed. Squad visibility uses Public / Solo above."
+                                          : "Sign in with cloud sync to share this moment to Community."}
                               </Text>
                             </View>
                             {habitViewCommunity.pendingPublish && !habitViewCommunity.posted ? (
@@ -682,13 +690,15 @@ export function StreakMemorySheet({
                                 { color: theme.colors.textMuted },
                               ]}
                             >
-                              {!canPublishCommunity
-                                ? "Sign in with cloud sync to publish to Community."
-                                : !imageUri
-                                  ? "Community posts need a photo. Add one above to publish — text notes stay on your mission only."
-                                  : isMini
-                                    ? "Leaving this off locks Community for this mission. If you publish, you can remove your win from the feed in details later."
-                                    : "Optional. Squad visibility uses Public / Solo on the mission screen. You can remove this moment from Community later from this day’s memory."}
+                              {!plusOk
+                                ? "Publishing to Community is Habit Plus."
+                                : !canPublishCommunity
+                                  ? "Sign in with cloud sync to publish to Community."
+                                  : !imageUri
+                                    ? "Community posts need a photo. Add one above to publish — text notes stay on your mission only."
+                                    : isMini
+                                      ? "Leaving this off locks Community for this mission. If you publish, you can remove your win from the feed in details later."
+                                      : "Optional. Squad visibility uses Public / Solo on the mission screen. You can remove this moment from Community later from this day’s memory."}
                             </Text>
                           </View>
                           <Switch

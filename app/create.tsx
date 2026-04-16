@@ -18,11 +18,16 @@ import { useTheme } from "../src/context/ThemeContext";
 import { useHabitStore } from "../src/store/habitStore";
 import type { HabitMode, MissionVisibility } from "../src/types/habit";
 import { PlusBadge } from "../src/components/PlusBadge";
+import { usePremium } from "../src/context/PremiumContext";
+import { usePlusUpsell } from "../src/context/PlusUpsellContext";
 
 export default function CreateHabit() {
   const router = useRouter();
   const { theme, isDark } = useTheme();
   const addHabit = useHabitStore((state) => state.addHabit);
+  const { isPremium, loading: premiumLoading } = usePremium();
+  const { openUpsell } = usePlusUpsell();
+  const plusOk = isPremium && !premiumLoading;
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -38,6 +43,10 @@ export default function CreateHabit() {
   const handleCreate = () => {
     if (!title.trim()) {
       Alert.alert("Error", "Please enter a mission title.");
+      return;
+    }
+    if (visibility === "public" && !plusOk) {
+      openUpsell("visibility");
       return;
     }
     if (mode === "manual") {
@@ -240,8 +249,15 @@ export default function CreateHabit() {
               styles.modeCard,
               { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
               visibility === "public" && { borderColor: theme.colors.cyan[400], backgroundColor: theme.colors.surfaceElevated },
+              !plusOk && { opacity: 0.72 },
             ]}
-            onPress={() => setVisibility("public")}
+            onPress={() => {
+              if (!plusOk) {
+                openUpsell("visibility");
+                return;
+              }
+              setVisibility("public");
+            }}
             activeOpacity={0.85}
           >
             <Globe size={20} color={visibility === "public" ? theme.colors.cyan[400] : theme.colors.textMuted} />

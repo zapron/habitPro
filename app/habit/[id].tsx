@@ -53,6 +53,8 @@ import {
     uploadHabitStreakMemoryImage,
 } from '../../src/lib/streakMemoryStorage';
 import { useAuth } from '../../src/context/AuthContext';
+import { usePremium } from '../../src/context/PremiumContext';
+import { usePlusUpsell } from '../../src/context/PlusUpsellContext';
 import { isSupabaseConfigured } from '../../src/lib/env';
 import { leaveChallengeGroup, refreshCohortPeerHabits } from '../../src/lib/groupChallengesApi';
 import {
@@ -193,6 +195,9 @@ export default function HabitDetail() {
     const { theme, isDark } = useTheme();
     const { showToast } = useToast();
     const { session } = useAuth();
+    const { isPremium, loading: premiumLoading } = usePremium();
+    const { openUpsell } = usePlusUpsell();
+    const socialLocked = !isPremium || premiumLoading;
     const habitId = Array.isArray(id) ? id[0] : id;
 
     const habit = useHabitStore((state) => (habitId ? state.getHabit(habitId) : undefined));
@@ -331,6 +336,10 @@ export default function HabitDetail() {
                     ]);
                     return;
                 }
+                if (socialLocked) {
+                    openUpsell('community_publish');
+                    return;
+                }
             }
 
             const changed = toggleCompletion(habit.id, ctx.dateStr);
@@ -395,6 +404,8 @@ export default function HabitDetail() {
             milestones,
             fireCompletionCelebration,
             showToast,
+            socialLocked,
+            openUpsell,
         ],
     );
 
@@ -405,6 +416,10 @@ export default function HabitDetail() {
             if (!mem || mem.communityFeedRevoked) return;
 
             if (next) {
+                if (socialLocked) {
+                    openUpsell('community_publish');
+                    return;
+                }
                 if (mem.communityPosted) return;
                 const hasMemoryImage = Boolean(mem.imageUrl || mem.imageUri);
                 if (!hasMemoryImage) {
@@ -495,7 +510,7 @@ export default function HabitDetail() {
                 ],
             );
         },
-        [habit, habitId, session?.user, patchStreakMemory, showToast],
+        [habit, habitId, session?.user, patchStreakMemory, showToast, socialLocked, openUpsell],
     );
 
     if (!habit) {
@@ -621,6 +636,7 @@ export default function HabitDetail() {
                 missionTitle={habit.title}
                 dayLabel={memoryUi ? String(memoryUi.day) : '1'}
                 habitPublishAvailable={isSupabaseConfigured() && session?.user != null}
+                plusCommunityOk={!socialLocked}
                 habitViewCommunity={
                     memoryUi?.kind === 'view'
                         ? (() => {
@@ -628,6 +644,7 @@ export default function HabitDetail() {
                                   habit.streakMemories?.[memoryUi.dateStr] ?? memoryUi.memory;
                               const hasMemoryImage = Boolean(viewMem?.imageUrl || viewMem?.imageUri);
                               const cloudOk = isSupabaseConfigured() && session?.user != null;
+                              const plusOk = !socialLocked;
                               return {
                                   posted:
                                       (habit.streakMemories?.[memoryUi.dateStr]?.communityPosted ??
@@ -635,8 +652,9 @@ export default function HabitDetail() {
                                   revoked:
                                       (habit.streakMemories?.[memoryUi.dateStr]?.communityFeedRevoked ??
                                           memoryUi.memory.communityFeedRevoked) === true,
-                                  available: cloudOk && hasMemoryImage,
+                                  available: cloudOk && hasMemoryImage && plusOk,
                                   needsPhotoForCommunity: cloudOk && !hasMemoryImage,
+                                  plusRequired: cloudOk && hasMemoryImage && !plusOk,
                                   busy: habitCommunityBusy,
                                   pendingPublish: habitCommunityPublishPending,
                                   onChange: (v) =>
@@ -796,6 +814,10 @@ export default function HabitDetail() {
                             const next = v ? 'public' : 'solo';
                             const prev = habit.visibility ?? 'solo';
                             if (prev === next) return;
+                            if (next === 'public' && socialLocked) {
+                                openUpsell('visibility');
+                                return;
+                            }
                             lastVisibilityRef.current = { id: habit.id, prev };
                             setHabitVisibility(habit.id, next);
                         }}

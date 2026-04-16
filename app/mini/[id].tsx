@@ -47,6 +47,8 @@ import {
   subscribeSyncSuccess,
 } from "../../src/lib/syncQueue";
 import { useAuth } from "../../src/context/AuthContext";
+import { usePremium } from "../../src/context/PremiumContext";
+import { usePlusUpsell } from "../../src/context/PlusUpsellContext";
 import { isSupabaseConfigured } from "../../src/lib/env";
 import { MiniVisibilityRow } from "../../src/components/MiniVisibilityRow";
 import {
@@ -127,6 +129,9 @@ export default function MiniMissionDetail() {
   const { theme, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const { session } = useAuth();
+  const { isPremium, loading: premiumLoading } = usePremium();
+  const { openUpsell } = usePlusUpsell();
+  const socialLocked = !isPremium || premiumLoading;
   const missionId = Array.isArray(id) ? id[0] : id;
   const scrollBottomPad = Math.max(insets.bottom, 16) + 16;
 
@@ -364,7 +369,11 @@ export default function MiniMissionDetail() {
 
     const completedAt = new Date(timerFrozenAtMs ?? Date.now()).toISOString();
     const wantsPublish = meta?.publishToCommunity === true;
-    let canPublish = wantsPublish && isSupabaseConfigured() && session?.user != null;
+    let canPublish =
+      wantsPublish && isSupabaseConfigured() && session?.user != null && !socialLocked;
+    if (wantsPublish && socialLocked) {
+      openUpsell("community_publish");
+    }
     if (canPublish) {
       const hasImage = Boolean(memoryToSave?.imageUrl || memoryToSave?.imageUri);
       if (!hasImage) {
@@ -560,6 +569,7 @@ export default function MiniMissionDetail() {
         }}
         onCommit={handleCompleteCommit}
         miniPublishAvailable={isSupabaseConfigured() && !!session?.user}
+        plusCommunityOk={!socialLocked}
       />
       <StatusBar
         barStyle={isDark ? "light-content" : "dark-content"}
