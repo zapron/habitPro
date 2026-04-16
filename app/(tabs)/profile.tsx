@@ -19,6 +19,7 @@ import { Screen } from "../../src/components/Screen";
 import { useTheme } from "../../src/context/ThemeContext";
 import { useAuth } from "../../src/context/AuthContext";
 import { usePremium } from "../../src/context/PremiumContext";
+import { usePlusUpsell } from "../../src/context/PlusUpsellContext";
 import { useHabitStore } from "../../src/store/habitStore";
 import { isSupabaseConfigured } from "../../src/lib/env";
 import { useAppVersion } from "../../src/context/AppVersionContext";
@@ -303,6 +304,7 @@ export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const { session, signOut } = useAuth();
   const { isPremium } = usePremium();
+  const { openUpsell } = usePlusUpsell();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [hubSheet, setHubSheet] = useState<HubSheetState>(null);
   const xp = useHabitStore((s) => s.xp);
@@ -541,7 +543,7 @@ export default function ProfileScreen() {
               { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, ...theme.shadow.card },
             ]}
             activeOpacity={0.88}
-            onPress={() => Alert.alert("Habit Plus", "Premium paywall is coming next. This is the entry point for it.")}
+            onPress={() => openUpsell("profile")}
             accessibilityRole="button"
             accessibilityLabel="View Habit Plus"
           >

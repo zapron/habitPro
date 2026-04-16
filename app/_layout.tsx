@@ -12,6 +12,7 @@ import { ThemeProvider } from "../src/context/ThemeContext";
 import { ToastProvider } from "../src/context/ToastContext";
 import { AuthProvider, useAuth } from "../src/context/AuthContext";
 import { PremiumProvider } from "../src/context/PremiumContext";
+import { PlusUpsellProvider } from "../src/context/PlusUpsellContext";
 import { AppVersionProvider, useAppVersion } from "../src/context/AppVersionContext";
 import { ForceUpdateModal } from "../src/components/ForceUpdateModal";
 import { SplashGate } from "../src/components/SplashGate";
@@ -227,11 +228,13 @@ export default function Layout() {
       <ToastProvider>
         <AuthProvider>
           <PremiumProvider>
-            <AppVersionProvider>
-              <SplashGate>
-                <RootLayoutNav />
-              </SplashGate>
-            </AppVersionProvider>
+            <PlusUpsellProvider>
+              <AppVersionProvider>
+                <SplashGate>
+                  <RootLayoutNav />
+                </SplashGate>
+              </AppVersionProvider>
+            </PlusUpsellProvider>
           </PremiumProvider>
         </AuthProvider>
       </ToastProvider>
