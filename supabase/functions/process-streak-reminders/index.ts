@@ -209,10 +209,27 @@ Deno.serve(async (req) => {
       continue;
     }
 
-    // Normal mode: day 2+ only
-    if (slot < 2) continue;
+    // Normal mode:
+    // - Day 1: only a "closing" reminder in the last hour (if not marked).
+    // - Day 2+: "open" (first hour) + "closing" (last hour).
 
-    if (nowMs >= slotStartMs && nowMs < slotStartMs + MS_REMINDER_WINDOW) {
+    if (slot === 1) {
+      if (nowMs >= slotEndMs - MS_REMINDER_WINDOW && nowMs < slotEndMs) {
+        const ok = await insertStreakReminderIfEligible(
+          supabase,
+          h,
+          expectedDateKey,
+          expectedDateKey,
+          dates,
+          "slot_closing",
+          "closing",
+        );
+        if (ok) inserted++;
+      }
+      continue;
+    }
+
+    if (slot >= 2 && nowMs >= slotStartMs && nowMs < slotStartMs + MS_REMINDER_WINDOW) {
       const ok = await insertStreakReminderIfEligible(
         supabase,
         h,
@@ -225,7 +242,7 @@ Deno.serve(async (req) => {
       if (ok) inserted++;
     }
 
-    if (nowMs >= slotEndMs - MS_REMINDER_WINDOW && nowMs < slotEndMs) {
+    if (slot >= 2 && nowMs >= slotEndMs - MS_REMINDER_WINDOW && nowMs < slotEndMs) {
       const ok = await insertStreakReminderIfEligible(
         supabase,
         h,
