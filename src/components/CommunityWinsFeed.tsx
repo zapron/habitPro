@@ -33,13 +33,22 @@ type Props = {
   contentPaddingBottom?: number;
   /** `feed` = full-width photo, edge-to-edge; `cards` = bordered cards. */
   variant?: "feed" | "cards";
+  /** When false, cheering is disabled (e.g. non–Habit Plus browse mode). Default true. */
+  canCheer?: boolean;
+  /** Called when the viewer tries to cheer while `canCheer` is false. */
+  onCheerBlocked?: () => void;
 };
 
 type ListRow =
   | { kind: "post"; win: CommunityWinFeedItem }
   | { kind: "skeleton"; id: string };
 
-export function CommunityWinsFeed({ contentPaddingBottom = 24, variant = "feed" }: Props) {
+export function CommunityWinsFeed({
+  contentPaddingBottom = 24,
+  variant = "feed",
+  canCheer = true,
+  onCheerBlocked,
+}: Props) {
   const { theme, isDark } = useTheme();
   const { session } = useAuth();
   const reduceMotion = useReducedMotion();
@@ -125,6 +134,10 @@ export function CommunityWinsFeed({ contentPaddingBottom = 24, variant = "feed" 
   const handleCheer = useCallback(
     async (win: CommunityWinFeedItem): Promise<boolean> => {
       if (!session?.user) return false;
+      if (!canCheer) {
+        onCheerBlocked?.();
+        return false;
+      }
       const res = await toggleCheer(win.id, win.viewerHasCheered);
       if (!res.ok) return false;
       setItems((prev) =>
@@ -140,7 +153,7 @@ export function CommunityWinsFeed({ contentPaddingBottom = 24, variant = "feed" 
       );
       return true;
     },
-    [session?.user],
+    [session?.user, canCheer, onCheerBlocked],
   );
 
   const renderItem: ListRenderItem<ListRow> = useCallback(
@@ -161,10 +174,12 @@ export function CommunityWinsFeed({ contentPaddingBottom = 24, variant = "feed" 
           onToggleExpanded={() => toggleExpanded(win.id)}
           onOpenLightbox={(uri) => setLightboxUri(uri)}
           onCheer={handleCheer}
+          canCheer={canCheer}
+          onCheerBlocked={onCheerBlocked}
         />
       );
     },
-    [session?.user?.id, theme, isDark, variant, expandedById, toggleExpanded, handleCheer, reduceMotion],
+    [session?.user?.id, theme, isDark, variant, expandedById, toggleExpanded, handleCheer, reduceMotion, canCheer, onCheerBlocked],
   );
 
   if (!isSupabaseConfigured()) {

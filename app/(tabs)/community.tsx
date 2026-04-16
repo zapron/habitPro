@@ -3,17 +3,23 @@ import {
   StatusBar,
   StyleSheet,
   View,
+  TouchableOpacity,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Screen } from "../../src/components/Screen";
 import { CommunityWinsFeed } from "../../src/components/CommunityWinsFeed";
 import { useTheme } from "../../src/context/ThemeContext";
 import { PlusBadge } from "../../src/components/PlusBadge";
+import { usePremium } from "../../src/context/PremiumContext";
+import { usePlusUpsell } from "../../src/context/PlusUpsellContext";
 
 export default function CommunityScreen() {
   const { theme, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const bottomPad = Math.max(insets.bottom, 16) + 8;
+  const { isPremium, loading: premiumLoading } = usePremium();
+  const { openUpsell } = usePlusUpsell();
+  const socialLocked = !isPremium || premiumLoading;
 
   return (
     <Screen>
@@ -28,8 +34,33 @@ export default function CommunityScreen() {
       <Text style={[styles.subtitle, { color: theme.colors.textSecondary, fontSize: theme.typography.caption }]}>
         Cheer public mini wins and get seen. Post yours when you finish a public mini.
       </Text>
+      {socialLocked ? (
+        <TouchableOpacity
+          style={[
+            styles.upsellBanner,
+            {
+              backgroundColor: isDark ? "rgba(99, 102, 241, 0.14)" : "rgba(79, 70, 229, 0.08)",
+              borderColor: isDark ? "rgba(129, 140, 248, 0.35)" : "rgba(79, 70, 229, 0.25)",
+            },
+          ]}
+          onPress={() => openUpsell("community")}
+          activeOpacity={0.88}
+          accessibilityRole="button"
+          accessibilityLabel="Browse Community. Cheering and posting are Habit Plus. Tap to learn more."
+        >
+          <Text style={[styles.upsellBannerTitle, { color: theme.colors.textPrimary }]}>You’re browsing Community</Text>
+          <Text style={[styles.upsellBannerBody, { color: theme.colors.textSecondary }]}>
+            Cheering and posting wins are Habit Plus. Tap to see what’s included.
+          </Text>
+        </TouchableOpacity>
+      ) : null}
       <View style={styles.feedWrap}>
-        <CommunityWinsFeed contentPaddingBottom={bottomPad} variant="feed" />
+        <CommunityWinsFeed
+          contentPaddingBottom={bottomPad}
+          variant="feed"
+          canCheer={!socialLocked}
+          onCheerBlocked={() => openUpsell("community")}
+        />
       </View>
     </Screen>
   );
@@ -40,5 +71,14 @@ const styles = StyleSheet.create({
   plusRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 10 },
   plusHint: { fontWeight: "700" },
   subtitle: { lineHeight: 18, marginBottom: 14 },
+  upsellBanner: {
+    borderWidth: 1,
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    marginBottom: 12,
+  },
+  upsellBannerTitle: { fontWeight: "800", fontSize: 14, marginBottom: 4 },
+  upsellBannerBody: { fontSize: 12, lineHeight: 17, fontWeight: "600" },
   feedWrap: { flex: 1, minHeight: 200 },
 });

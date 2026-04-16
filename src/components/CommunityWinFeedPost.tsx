@@ -37,6 +37,10 @@ type Props = {
   onOpenLightbox: (uri: string) => void;
   /** Returns whether the cheer API succeeded (optimistic list update in parent). */
   onCheer: (win: CommunityWinFeedItem) => Promise<boolean>;
+  /** When false, cheering others' wins is off (browse-only). Default true. */
+  canCheer?: boolean;
+  /** Optional; parent may already handle via `onCheer`. Used for accessibility copy. */
+  onCheerBlocked?: () => void;
 };
 
 function CheerBurstOverlay({
@@ -108,6 +112,8 @@ export function CommunityWinFeedPost({
   onToggleExpanded,
   onOpenLightbox,
   onCheer,
+  canCheer = true,
+  onCheerBlocked,
 }: Props) {
   const isOwn = sessionUserId === win.user_id;
   const handle = win.username ? `@${win.username}` : "Someone";
@@ -196,6 +202,10 @@ export function CommunityWinFeedPost({
         clearLightboxTimer();
         lastTapRef.current = 0;
         if (!isOwn) {
+          if (!canCheer) {
+            onCheerBlocked?.();
+            return;
+          }
           if (!reduceMotion) setBurstKey((k) => k + 1);
           void runCheer();
         } else if (!reduceMotion) {
@@ -206,7 +216,7 @@ export function CommunityWinFeedPost({
 
       if (uri) scheduleLightbox(uri);
     },
-    [clearLightboxTimer, scheduleLightbox, isOwn, reduceMotion, runCheer],
+    [clearLightboxTimer, scheduleLightbox, isOwn, reduceMotion, runCheer, canCheer, onCheerBlocked],
   );
 
   const imgStyle = isFeed
@@ -233,7 +243,11 @@ export function CommunityWinFeedPost({
     <Pressable
       onPress={() => onImageAreaPress(win.memory_image_url)}
       accessibilityRole="imagebutton"
-      accessibilityLabel="Photo: double-tap to cheer, tap to view full screen"
+      accessibilityLabel={
+        !isOwn && !canCheer
+          ? "Photo: tap to view full screen. Cheering is Habit Plus."
+          : "Photo: double-tap to cheer, tap to view full screen"
+      }
     >
       <View style={styles.photoTouchWrap}>
         <Image
@@ -250,7 +264,9 @@ export function CommunityWinFeedPost({
       onPress={() => onImageAreaPress(null)}
       disabled={isOwn}
       accessibilityRole="button"
-      accessibilityLabel={isOwn ? "No photo on your win" : "Double-tap to cheer"}
+      accessibilityLabel={
+        isOwn ? "No photo on your win" : !canCheer ? "No photo. Cheering is Habit Plus." : "Double-tap to cheer"
+      }
     >
       <View style={[styles.photoTouchWrap, styles.photoPlaceholder, imgStyle, { backgroundColor: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)" }]}>
         <Sparkles size={36} color={theme.colors.textMuted} strokeWidth={1.8} />
@@ -333,6 +349,8 @@ export function CommunityWinFeedPost({
             </Text>
             {isOwn ? (
               <Text style={[styles.ownHint, { color: theme.colors.textMuted }]}>Your win</Text>
+            ) : !canCheer ? (
+              <Text style={[styles.plusCheerHint, { color: theme.colors.textMuted }]}>Plus</Text>
             ) : null}
           </View>
           <Text style={[styles.timeInline, { color: theme.colors.textMuted }]}>
@@ -538,4 +556,5 @@ const styles = StyleSheet.create({
     minWidth: 14,
   },
   ownHint: { fontSize: 12, fontWeight: "600" },
+  plusCheerHint: { fontSize: 10, fontWeight: "900", letterSpacing: 0.4 },
 });
