@@ -1,4 +1,10 @@
-import React, { createContext, useCallback, useContext, useMemo, useState } from "react";
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useMemo,
+  useState,
+} from "react";
 import { Modal, Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Text } from "../components/AppText";
@@ -18,7 +24,7 @@ export type PlusUpsellReason =
   | "profile";
 
 type PlusUpsellContextValue = {
-  /** Open the Habit Plus upsell. Treat unknown loading as non‑Plus at call sites. */
+  /** Open the HabitPro Community upsell. Treat unknown loading as non‑Community at call sites. */
   openUpsell: (reason?: PlusUpsellReason) => void;
   closeUpsell: () => void;
 };
@@ -33,7 +39,11 @@ const BULLETS = [
   "Publish streak moments and mini wins to Community",
 ];
 
-export function PlusUpsellProvider({ children }: { children: React.ReactNode }) {
+export function PlusUpsellProvider({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   const { theme, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const [visible, setVisible] = useState(false);
@@ -46,24 +56,27 @@ export function PlusUpsellProvider({ children }: { children: React.ReactNode }) 
 
   const closeUpsell = useCallback(() => setVisible(false), []);
 
-  const value = useMemo(() => ({ openUpsell, closeUpsell }), [openUpsell, closeUpsell]);
+  const value = useMemo(
+    () => ({ openUpsell, closeUpsell }),
+    [openUpsell, closeUpsell],
+  );
 
   const headline =
     reason === "community"
-      ? "Community is part of Habit Plus"
+      ? "Community is part of HabitPro Community"
       : reason === "visibility"
-        ? "Public squad visibility is Habit Plus"
+        ? "Public squad visibility is HabitPro Community"
         : reason === "community_publish"
-          ? "Publishing to Community is Habit Plus"
+          ? "Publishing to Community is HabitPro Community"
           : reason === "group_mission"
-            ? "Group missions are Habit Plus"
+            ? "Group missions are HabitPro Community"
             : reason === "invite_accept"
-              ? "Joining group missions is Habit Plus"
+              ? "Joining group missions is HabitPro Community"
               : reason === "squad_nudge"
-                ? "Squad nudges are Habit Plus"
+                ? "Squad nudges are HabitPro Community"
                 : reason === "profile"
-                  ? "Habit Plus"
-                  : "Unlock Habit Plus";
+                  ? "HabitPro Community"
+                  : "Unlock HabitPro Community";
 
   return (
     <BillingProvider>
@@ -105,7 +118,9 @@ function BillingUpsellModal({
 }) {
   const { theme } = useTheme();
   const { configured, ready, purchaseCommunity, restore } = useBilling();
-  const [busy, setBusy] = useState<null | "monthly" | "annual" | "restore">(null);
+  const [busy, setBusy] = useState<null | "monthly" | "annual" | "restore">(
+    null,
+  );
 
   if (!visible) return null;
 
@@ -129,7 +144,14 @@ function BillingUpsellModal({
   return (
     <View style={styles.root}>
       <Pressable
-        style={[styles.backdrop, { backgroundColor: isDark ? "rgba(0,0,0,0.55)" : "rgba(15,23,42,0.45)" }]}
+        style={[
+          styles.backdrop,
+          {
+            backgroundColor: isDark
+              ? "rgba(0,0,0,0.55)"
+              : "rgba(15,23,42,0.45)",
+          },
+        ]}
         onPress={onClose}
         accessibilityRole="button"
         accessibilityLabel="Dismiss"
@@ -147,31 +169,52 @@ function BillingUpsellModal({
         ]}
       >
         <View style={styles.titleRow}>
-          <PlusBadge label="HABIT PLUS" size="md" />
+          <PlusBadge label="HABITPRO COMMUNITY" size="md" />
         </View>
-        <Text style={[styles.title, { color: theme.colors.textPrimary, fontSize: theme.typography.h3 }]}>
+        <Text
+          style={[
+            styles.title,
+            { color: theme.colors.textPrimary, fontSize: theme.typography.h3 },
+          ]}
+        >
           {headline}
         </Text>
         <Text style={[styles.sub, { color: theme.colors.textSecondary }]}>
-          Solo habits stay free. Social mode (post, cheer, squads, and invites) is included with Habit Plus.
+          Solo habits stay free. Social mode (post, cheer, squads, and invites)
+          is included with HabitPro Community.
         </Text>
         <View style={styles.list}>
           {BULLETS.map((line) => (
             <View key={line} style={styles.bulletRow}>
-              <Text style={[styles.bulletDot, { color: theme.colors.indigo[400] }]}>{"\u2022"}</Text>
-              <Text style={[styles.bulletText, { color: theme.colors.textSecondary }]}>{line}</Text>
+              <Text
+                style={[styles.bulletDot, { color: theme.colors.indigo[400] }]}
+              >
+                {"\u2022"}
+              </Text>
+              <Text
+                style={[
+                  styles.bulletText,
+                  { color: theme.colors.textSecondary },
+                ]}
+              >
+                {line}
+              </Text>
             </View>
           ))}
         </View>
 
         <Button
-          title={busy === "monthly" ? "Starting trial…" : "7-day trial — then Monthly"}
+          title={
+            busy === "monthly" ? "Starting trial…" : "7 day trial then Monthly"
+          }
           onPress={() => void run("monthly")}
           disabled={!canBuy}
           style={{ marginTop: 8, opacity: canBuy ? 1 : 0.65 }}
         />
         <Button
-          title={busy === "annual" ? "Starting trial…" : "7-day trial — then Yearly"}
+          title={
+            busy === "annual" ? "Starting trial…" : "7 day trial then Yearly"
+          }
           onPress={() => void run("annual")}
           disabled={!canBuy}
           style={{ marginTop: 10, opacity: canBuy ? 1 : 0.65 }}
@@ -181,9 +224,17 @@ function BillingUpsellModal({
           variant="secondary"
           onPress={() => void run("restore")}
           disabled={!configured || !ready || busy !== null}
-          style={{ marginTop: 10, opacity: configured && ready && busy === null ? 1 : 0.65 }}
+          style={{
+            marginTop: 10,
+            opacity: configured && ready && busy === null ? 1 : 0.65,
+          }}
         />
-        <Button title="Not now" variant="secondary" onPress={onClose} style={{ marginTop: 10 }} />
+        <Button
+          title="Not now"
+          variant="secondary"
+          onPress={onClose}
+          style={{ marginTop: 10 }}
+        />
       </View>
     </View>
   );
@@ -191,7 +242,8 @@ function BillingUpsellModal({
 
 export function usePlusUpsell(): PlusUpsellContextValue {
   const v = useContext(PlusUpsellContext);
-  if (!v) throw new Error("usePlusUpsell must be used within PlusUpsellProvider");
+  if (!v)
+    throw new Error("usePlusUpsell must be used within PlusUpsellProvider");
   return v;
 }
 
@@ -216,6 +268,12 @@ const styles = StyleSheet.create({
   sub: { fontSize: 14, lineHeight: 20, marginBottom: 14, fontWeight: "500" },
   list: { gap: 8, marginBottom: 4 },
   bulletRow: { flexDirection: "row", alignItems: "flex-start", gap: 8 },
-  bulletDot: { fontSize: 14, fontWeight: "900", marginTop: 1, width: 14, textAlign: "center" },
+  bulletDot: {
+    fontSize: 14,
+    fontWeight: "900",
+    marginTop: 1,
+    width: 14,
+    textAlign: "center",
+  },
   bulletText: { flex: 1, fontSize: 13, lineHeight: 19, fontWeight: "600" },
 });

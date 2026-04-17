@@ -26,7 +26,7 @@ export default function CommunityScreen() {
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={theme.colors.background} />
       <Text style={[styles.title, { color: theme.colors.textPrimary, fontSize: theme.typography.h1 }]}>Community</Text>
       <View style={styles.plusRow}>
-        <PlusBadge label="HABIT PLUS" />
+        <PlusBadge label="HABITPRO COMMUNITY" />
         <Text style={[styles.plusHint, { color: theme.colors.textMuted, fontSize: theme.typography.micro }]}>
           Social mode: post, cheer, and get seen.
         </Text>
@@ -46,11 +46,11 @@ export default function CommunityScreen() {
           onPress={() => openUpsell("community")}
           activeOpacity={0.88}
           accessibilityRole="button"
-          accessibilityLabel="Browse Community. Cheering and posting are Habit Plus. Tap to learn more."
+          accessibilityLabel="Browse Community. Cheering and posting are HabitPro Community. Tap to learn more."
         >
           <Text style={[styles.upsellBannerTitle, { color: theme.colors.textPrimary }]}>You’re browsing Community</Text>
           <Text style={[styles.upsellBannerBody, { color: theme.colors.textSecondary }]}>
-            Cheering and posting wins are Habit Plus. Tap to see what’s included.
+            Cheering and posting wins are HabitPro Community. Tap to see what’s included.
           </Text>
         </TouchableOpacity>
       ) : null}

@@ -474,9 +474,9 @@ export default function ChallengeDetailScreen() {
 
           {!isPremium ? (
             <View style={styles.plusGateRow}>
-              <PlusBadge label="HABIT PLUS" />
+              <PlusBadge label="HABITPRO COMMUNITY" />
               <Text style={[styles.plusGateText, { color: theme.colors.textMuted }]}>
-                Squad features are part of Habit Plus.
+                Squad features are part of HabitPro Community.
               </Text>
             </View>
           ) : null}

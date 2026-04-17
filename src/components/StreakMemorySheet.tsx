@@ -46,7 +46,7 @@ type StreakMemorySheetProps = {
   miniPublishAvailable?: boolean;
   /** When variant is habit, whether Community publish is allowed (signed in + Supabase). */
   habitPublishAvailable?: boolean;
-  /** When false, Community publish/toggle is locked (e.g. Habit Plus). Default true (unset). */
+  /** When false, Community publish/toggle is locked (e.g. HabitPro Community). Default true (unset). */
   plusCommunityOk?: boolean;
   /** view + habit: Community status and toggle (remove is one-way; parent shows confirm). */
   habitViewCommunity?: {
@@ -55,7 +55,7 @@ type StreakMemorySheetProps = {
     available: boolean;
     /** Signed in + cloud, but this memory has no photo — Community can’t be enabled. */
     needsPhotoForCommunity?: boolean;
-    /** Signed in + photo, but viewer does not have Habit Plus. */
+    /** Signed in + photo, but viewer does not have HabitPro Community. */
     plusRequired?: boolean;
     busy?: boolean;
     /** True while publish is in flight; keeps the Switch ON until `posted` updates. */
@@ -497,7 +497,7 @@ export function StreakMemorySheet({
                                     : habitViewCommunity.needsPhotoForCommunity
                                       ? "Community posts need a photo. This moment has no photo, so it can’t be shared to the feed."
                                       : habitViewCommunity.plusRequired
-                                        ? "Publishing to Community is Habit Plus."
+                                        ? "Publishing to Community is HabitPro Community."
                                         : habitViewCommunity.available
                                           ? "Share this moment to the Community feed. Squad visibility uses Public / Solo above."
                                           : "Sign in with cloud sync to share this moment to Community."}
@@ -691,7 +691,7 @@ export function StreakMemorySheet({
                               ]}
                             >
                               {!plusOk
-                                ? "Publishing to Community is Habit Plus."
+                                ? "Publishing to Community is HabitPro Community."
                                 : !canPublishCommunity
                                   ? "Sign in with cloud sync to publish to Community."
                                   : !imageUri

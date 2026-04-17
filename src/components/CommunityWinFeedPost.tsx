@@ -245,7 +245,7 @@ export function CommunityWinFeedPost({
       accessibilityRole="imagebutton"
       accessibilityLabel={
         !isOwn && !canCheer
-          ? "Photo: tap to view full screen. Cheering is Habit Plus."
+          ? "Photo: tap to view full screen. Cheering is HabitPro Community."
           : "Photo: double-tap to cheer, tap to view full screen"
       }
     >
@@ -265,7 +265,7 @@ export function CommunityWinFeedPost({
       disabled={isOwn}
       accessibilityRole="button"
       accessibilityLabel={
-        isOwn ? "No photo on your win" : !canCheer ? "No photo. Cheering is Habit Plus." : "Double-tap to cheer"
+        isOwn ? "No photo on your win" : !canCheer ? "No photo. Cheering is HabitPro Community." : "Double-tap to cheer"
       }
     >
       <View style={[styles.photoTouchWrap, styles.photoPlaceholder, imgStyle, { backgroundColor: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)" }]}>

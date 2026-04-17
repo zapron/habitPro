@@ -4,7 +4,7 @@ import { isSupabaseConfigured } from "../lib/env";
 import { getMyProfileIsPremium } from "../lib/groupChallengesApi";
 
 type PremiumContextValue = {
-  /** Habit Plus entitlement for the current user. */
+  /** HabitPro Community entitlement for the current user. */
   isPremium: boolean;
   /** True while fetching the flag for a signed-in user. */
   loading: boolean;

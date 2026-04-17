@@ -47,7 +47,7 @@ type Props = {
   memberId: string;
   nudgeBusyKey: string | null;
   onPress: (kind: PresetChallengeNudgeKind) => void;
-  /** When true, preset + custom nudges are locked (Habit Plus). */
+  /** When true, preset + custom nudges are locked (HabitPro Community). */
   plusLocked: boolean;
   onPlusLocked?: () => void;
   /** True after viewer already sent a custom note to this member in this challenge. */

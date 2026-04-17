@@ -796,7 +796,7 @@ export default function HabitDetail() {
                                     <PlusBadge />
                                 </View>
                                 <Text style={[styles.visibilityHint, { color: theme.colors.textMuted }]}>
-                                    Visible to your squad on this mission (Habit Plus). Community is separate: choose per moment when you save or open a day.
+                                    Visible to your squad on this mission (HabitPro Community). Community is separate: choose per moment when you save or open a day.
                                 </Text>
                             </>
                         ) : (

@@ -86,14 +86,16 @@ function InviteMissionHeader({
   meta,
   theme,
   isDark,
+  onPress,
 }: {
   meta: InviteCardMeta | undefined;
   theme: ReturnType<typeof useTheme>["theme"];
   isDark: boolean;
+  onPress?: () => void;
 }) {
   const name = meta?.challengeName ?? "Group mission";
   const pill = meta?.pillLabel ?? "Group";
-  return (
+  const header = (
     <>
       <View style={styles.inviteTitleRow}>
         <Text style={[styles.inviteChallengeName, { color: theme.colors.textPrimary }]} numberOfLines={2}>
@@ -126,6 +128,19 @@ function InviteMissionHeader({
         </Text>
       ) : null}
     </>
+  );
+
+  if (!onPress) return header;
+
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      activeOpacity={0.9}
+      accessibilityRole="button"
+      accessibilityLabel={`Open mission: ${name}`}
+    >
+      {header}
+    </TouchableOpacity>
   );
 }
 
@@ -721,20 +736,6 @@ export default function CompeteScreen() {
                         Open this mission from Home once your device has finished syncing.
                       </Text>
                     ) : null}
-                    {inv.status === "accepted" && canOpenMission ? (
-                      <TouchableOpacity
-                        style={styles.inviteOpenRow}
-                        onPress={() => router.push(`/habit/${linkedHabitId}`)}
-                        activeOpacity={0.88}
-                        accessibilityRole="button"
-                        accessibilityLabel={`Open mission: ${missionTitle}`}
-                      >
-                        <Text style={[styles.inviteOpenCue, { color: theme.colors.indigo[400] }]}>
-                          Open mission details
-                        </Text>
-                        <ChevronRight size={18} color={theme.colors.indigo[400]} />
-                      </TouchableOpacity>
-                    ) : null}
                   </>
                 );
 
@@ -751,7 +752,7 @@ export default function CompeteScreen() {
                       </Text>
                       {inviteAcceptLocked ? (
                         <Text style={[styles.invitePlusHint, { color: theme.colors.textMuted }]}>
-                          Joining group missions is Habit Plus. Tap Accept to learn more.
+                          Joining group missions is HabitPro Community. Tap Accept to learn more.
                         </Text>
                       ) : null}
                       <View style={styles.inviteActions}>
@@ -788,7 +789,12 @@ export default function CompeteScreen() {
                 if (inv.status === "accepted" && canOpenMission) {
                   return (
                     <View key={inv.id} style={cardStyle}>
-                      <InviteMissionHeader meta={meta} theme={theme} isDark={isDark} />
+                      <InviteMissionHeader
+                        meta={meta}
+                        theme={theme}
+                        isDark={isDark}
+                        onPress={() => router.push(`/habit/${linkedHabitId}`)}
+                      />
                       {resolvedBlock}
                     </View>
                   );
@@ -1081,13 +1087,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   inviteGroupStreaksBtnText: { fontSize: 14, fontWeight: "700" },
-  inviteOpenRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    marginTop: 10,
-  },
-  inviteOpenCue: { fontSize: 12, fontWeight: "700" },
   inviteActions: { flexDirection: "row", gap: 10, alignItems: "center" },
   declineBtn: {
     flex: 1,

@@ -33,7 +33,7 @@ type Props = {
   contentPaddingBottom?: number;
   /** `feed` = full-width photo, edge-to-edge; `cards` = bordered cards. */
   variant?: "feed" | "cards";
-  /** When false, cheering is disabled (e.g. non–Habit Plus browse mode). Default true. */
+  /** When false, cheering is disabled (e.g. non–HabitPro Community browse mode). Default true. */
   canCheer?: boolean;
   /** Called when the viewer tries to cheer while `canCheer` is false. */
   onCheerBlocked?: () => void;

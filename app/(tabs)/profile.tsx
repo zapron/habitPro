@@ -472,7 +472,7 @@ export default function ProfileScreen() {
         <View>
           <View style={styles.profileTitleRow}>
             <Text style={[styles.title, { color: theme.colors.textPrimary, fontSize: theme.typography.h1 }]}>Profile</Text>
-            {!isPremium ? <PlusBadge label="HABIT PLUS" /> : null}
+            {!isPremium ? <PlusBadge label="HABITPRO COMMUNITY" /> : null}
           </View>
           <Text style={[styles.subtitle, { color: theme.colors.textSecondary, fontSize: theme.typography.caption }]}>
             Your progress at a glance
@@ -529,7 +529,7 @@ export default function ProfileScreen() {
             ) : null}
             {isPremium ? (
               <View style={styles.plusActiveRow}>
-                <PlusBadge label="HABIT PLUS" />
+                <PlusBadge label="HABITPRO COMMUNITY" />
                 <Text style={[styles.plusActiveText, { color: theme.colors.textMuted }]}>Active</Text>
               </View>
             ) : null}
@@ -545,16 +545,16 @@ export default function ProfileScreen() {
             activeOpacity={0.88}
             onPress={() => openUpsell("profile")}
             accessibilityRole="button"
-            accessibilityLabel="View Habit Plus"
+            accessibilityLabel="View HabitPro Community"
           >
             <View style={styles.plusCardTop}>
-              <PlusBadge label="HABIT PLUS" size="md" />
+              <PlusBadge label="HABITPRO COMMUNITY" size="md" />
               <Text style={[styles.plusCardTitle, { color: theme.colors.textPrimary }]}>Unlock social features</Text>
             </View>
             <Text style={[styles.plusCardBody, { color: theme.colors.textSecondary }]}>
-              Group missions, invites, squad nudges, and Community posting are part of Habit Plus.
+              Group missions, invites, squad nudges, and Community posting are part of HabitPro Community.
             </Text>
-            <Text style={[styles.plusCardCta, { color: theme.colors.indigo[400] }]}>View Habit Plus</Text>
+            <Text style={[styles.plusCardCta, { color: theme.colors.indigo[400] }]}>View HabitPro Community</Text>
           </TouchableOpacity>
         ) : null}
 

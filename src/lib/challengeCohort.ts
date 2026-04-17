@@ -153,7 +153,7 @@ export async function sendChallengeCustomNudge(
     const raw = String(error.message ?? "");
     const low = raw.toLowerCase();
     if (low.includes("premium_required")) {
-      return { error: new Error("Custom notes are a Habit Plus feature.") };
+      return { error: new Error("Custom notes are a HabitPro Community feature.") };
     }
     if (low.includes("custom_note_already_sent")) {
       return { error: new Error("You already sent a custom note to this person in this squad.") };

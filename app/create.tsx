@@ -272,7 +272,7 @@ export default function CreateHabit() {
               </Text>
               <PlusBadge />
             </View>
-            <Text style={[styles.modeHint, { color: theme.colors.textMuted }]}>Visible to others (Habit Plus)</Text>
+            <Text style={[styles.modeHint, { color: theme.colors.textMuted }]}>Visible to others (HabitPro Community)</Text>
           </TouchableOpacity>
         </View>
 
