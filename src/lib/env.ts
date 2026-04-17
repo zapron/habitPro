@@ -44,6 +44,26 @@ export function isSupabaseConfigured(): boolean {
   }
 }
 
+export function getRevenueCatConfig(): { androidApiKey: string; iosApiKey: string } {
+  const extra = getManifestExtra();
+  const androidApiKey = String(
+    process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY ??
+      extra?.revenuecatAndroidApiKey ??
+      "",
+  ).trim();
+  const iosApiKey = String(
+    process.env.EXPO_PUBLIC_REVENUECAT_IOS_API_KEY ??
+      extra?.revenuecatIosApiKey ??
+      "",
+  ).trim();
+  return { androidApiKey, iosApiKey };
+}
+
+export function isRevenueCatConfigured(): boolean {
+  const { androidApiKey, iosApiKey } = getRevenueCatConfig();
+  return Boolean(androidApiKey || iosApiKey);
+}
+
 /** Dev-only hint when env looks wrong (does not log secrets). */
 export function logSupabaseEnvHint(): void {
   if (!__DEV__) return;
@@ -51,5 +71,14 @@ export function logSupabaseEnvHint(): void {
   if (url && anonKey) return;
   console.warn(
     "[habitPro] Supabase env missing in bundle. Set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY in .env, restart with: npx expo start -c",
+  );
+}
+
+export function logRevenueCatEnvHint(): void {
+  if (!__DEV__) return;
+  const { androidApiKey, iosApiKey } = getRevenueCatConfig();
+  if (androidApiKey || iosApiKey) return;
+  console.warn(
+    "[habitPro] RevenueCat env missing in bundle. Set EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY / EXPO_PUBLIC_REVENUECAT_IOS_API_KEY in .env, restart with: npx expo start -c",
   );
 }

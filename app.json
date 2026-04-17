@@ -27,7 +27,8 @@
         "foregroundImage": "./assets/swirling-gradient-flame-logo.png",
         "backgroundColor": "#000000"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "permissions": ["com.android.vending.BILLING"]
     },
     "web": {
       "favicon": "./assets/swirling-gradient-flame-logo.png"
