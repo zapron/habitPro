@@ -5,6 +5,7 @@ import { Text } from "../components/AppText";
 import { Button } from "../components/Button";
 import { PlusBadge } from "../components/PlusBadge";
 import { useTheme } from "./ThemeContext";
+import { BillingProvider, useBilling } from "./BillingContext";
 
 export type PlusUpsellReason =
   | "generic"
@@ -66,7 +67,7 @@ export function PlusUpsellProvider({ children }: { children: React.ReactNode }) 
 
   return (
     <PlusUpsellContext.Provider value={value}>
-      {children}
+      <BillingProvider>{children}</BillingProvider>
       <Modal
         visible={visible}
         transparent
@@ -75,48 +76,114 @@ export function PlusUpsellProvider({ children }: { children: React.ReactNode }) 
         statusBarTranslucent
         accessibilityViewIsModal
       >
-        <View style={styles.root}>
-          <Pressable
-            style={[styles.backdrop, { backgroundColor: isDark ? "rgba(0,0,0,0.55)" : "rgba(15,23,42,0.45)" }]}
-            onPress={closeUpsell}
-            accessibilityRole="button"
-            accessibilityLabel="Dismiss"
-          />
-          <View
-            style={[
-              styles.sheet,
-              {
-                backgroundColor: theme.colors.surface,
-                borderColor: theme.colors.border,
-                borderRadius: theme.radius.lg,
-                ...theme.shadow.card,
-                marginBottom: Math.max(insets.bottom, 16),
-              },
-            ]}
-          >
-            <View style={styles.titleRow}>
-              <PlusBadge label="HABIT PLUS" size="md" />
-            </View>
-            <Text style={[styles.title, { color: theme.colors.textPrimary, fontSize: theme.typography.h3 }]}>
-              {headline}
-            </Text>
-            <Text style={[styles.sub, { color: theme.colors.textSecondary }]}>
-              Solo habits stay free. Social mode — post, cheer, squads, and invites — is included with Habit Plus.
-            </Text>
-            <View style={styles.list}>
-              {BULLETS.map((line) => (
-                <View key={line} style={styles.bulletRow}>
-                  <Text style={[styles.bulletDot, { color: theme.colors.indigo[400] }]}>{"\u2022"}</Text>
-                  <Text style={[styles.bulletText, { color: theme.colors.textSecondary }]}>{line}</Text>
-                </View>
-              ))}
-            </View>
-            <Button title="Coming soon" onPress={closeUpsell} style={{ marginTop: 8 }} />
-            <Button title="Not now" variant="secondary" onPress={closeUpsell} style={{ marginTop: 10 }} />
-          </View>
-        </View>
+        <BillingUpsellModal
+          visible={visible}
+          onClose={closeUpsell}
+          headline={headline}
+          isDark={isDark}
+          insetsBottom={insets.bottom}
+        />
       </Modal>
     </PlusUpsellContext.Provider>
+  );
+}
+
+function BillingUpsellModal({
+  visible,
+  onClose,
+  headline,
+  isDark,
+  insetsBottom,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  headline: string;
+  isDark: boolean;
+  insetsBottom: number;
+}) {
+  const { theme } = useTheme();
+  const { configured, ready, purchaseCommunity, restore } = useBilling();
+  const [busy, setBusy] = useState<null | "monthly" | "annual" | "restore">(null);
+
+  if (!visible) return null;
+
+  const canBuy = configured && ready && busy === null;
+
+  const run = async (kind: "monthly" | "annual" | "restore") => {
+    setBusy(kind);
+    try {
+      if (kind === "restore") {
+        await restore();
+        onClose();
+        return;
+      }
+      const res = await purchaseCommunity(kind);
+      if (!res.cancelled) onClose();
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <View style={styles.root}>
+      <Pressable
+        style={[styles.backdrop, { backgroundColor: isDark ? "rgba(0,0,0,0.55)" : "rgba(15,23,42,0.45)" }]}
+        onPress={onClose}
+        accessibilityRole="button"
+        accessibilityLabel="Dismiss"
+      />
+      <View
+        style={[
+          styles.sheet,
+          {
+            backgroundColor: theme.colors.surface,
+            borderColor: theme.colors.border,
+            borderRadius: theme.radius.lg,
+            ...theme.shadow.card,
+            marginBottom: Math.max(insetsBottom, 16),
+          },
+        ]}
+      >
+        <View style={styles.titleRow}>
+          <PlusBadge label="HABIT PLUS" size="md" />
+        </View>
+        <Text style={[styles.title, { color: theme.colors.textPrimary, fontSize: theme.typography.h3 }]}>
+          {headline}
+        </Text>
+        <Text style={[styles.sub, { color: theme.colors.textSecondary }]}>
+          Solo habits stay free. Social mode (post, cheer, squads, and invites) is included with Habit Plus.
+        </Text>
+        <View style={styles.list}>
+          {BULLETS.map((line) => (
+            <View key={line} style={styles.bulletRow}>
+              <Text style={[styles.bulletDot, { color: theme.colors.indigo[400] }]}>{"\u2022"}</Text>
+              <Text style={[styles.bulletText, { color: theme.colors.textSecondary }]}>{line}</Text>
+            </View>
+          ))}
+        </View>
+
+        <Button
+          title={busy === "monthly" ? "Starting trial…" : "Start 7-day trial (Monthly)"}
+          onPress={() => void run("monthly")}
+          disabled={!canBuy}
+          style={{ marginTop: 8, opacity: canBuy ? 1 : 0.65 }}
+        />
+        <Button
+          title={busy === "annual" ? "Starting trial…" : "Start 7-day trial (Yearly)"}
+          onPress={() => void run("annual")}
+          disabled={!canBuy}
+          style={{ marginTop: 10, opacity: canBuy ? 1 : 0.65 }}
+        />
+        <Button
+          title={busy === "restore" ? "Restoring…" : "Restore purchases"}
+          variant="secondary"
+          onPress={() => void run("restore")}
+          disabled={!configured || !ready || busy !== null}
+          style={{ marginTop: 10, opacity: configured && ready && busy === null ? 1 : 0.65 }}
+        />
+        <Button title="Not now" variant="secondary" onPress={onClose} style={{ marginTop: 10 }} />
+      </View>
+    </View>
   );
 }
 
