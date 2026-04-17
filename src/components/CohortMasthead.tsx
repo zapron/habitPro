@@ -5,7 +5,7 @@ import { Trophy } from "lucide-react-native";
 import { useReducedMotion } from "../hooks/useReducedMotion";
 import type { AppTheme } from "../styles/theme";
 
-/** Rich streak-board headline — copy matches `challenge/[id]` cohort logic. */
+/** Rich streak-board headline. Copy matches `challenge/[id]` cohort logic. */
 export type CohortMastheadModel =
   | { kind: "sync_prompt" }
   | { kind: "most_days"; leaderName: string; daysChecked: number }
@@ -20,92 +20,37 @@ type Props = {
 
 export function CohortMasthead({ theme, model, isDark = false }: Props) {
   const reduceMotion = useReducedMotion();
-  const entranceScale = useRef(new Animated.Value(1)).current;
-  const entranceY = useRef(new Animated.Value(0)).current;
-  const trophyRock = useRef(new Animated.Value(0)).current;
-  const haloOpacity = useRef(new Animated.Value(0.22)).current;
+  const shimmer = useRef(new Animated.Value(0)).current;
 
   const textProps = Platform.OS === "android" ? { includeFontPadding: false as const } : {};
 
   useEffect(() => {
-    if (reduceMotion) {
-      entranceScale.setValue(1);
-      entranceY.setValue(0);
-      return;
-    }
-    entranceScale.setValue(0.92);
-    entranceY.setValue(12);
-    Animated.parallel([
-      Animated.spring(entranceScale, {
+    if (reduceMotion) return;
+    const loop = Animated.loop(
+      Animated.timing(shimmer, {
         toValue: 1,
-        friction: 6,
-        tension: 88,
+        duration: 3000,
+        easing: Easing.linear,
         useNativeDriver: true,
       }),
-      Animated.timing(entranceY, {
-        toValue: 0,
-        duration: 420,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, [model, reduceMotion, entranceScale, entranceY]);
-
-  useEffect(() => {
-    if (reduceMotion) return;
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(trophyRock, {
-          toValue: 1,
-          duration: 2600,
-          easing: Easing.inOut(Easing.sin),
-          useNativeDriver: true,
-        }),
-        Animated.timing(trophyRock, {
-          toValue: -1,
-          duration: 2600,
-          easing: Easing.inOut(Easing.sin),
-          useNativeDriver: true,
-        }),
-      ]),
     );
     loop.start();
     return () => loop.stop();
-  }, [reduceMotion, trophyRock]);
+  }, [reduceMotion, shimmer]);
 
-  useEffect(() => {
-    if (reduceMotion) return;
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(haloOpacity, {
-          toValue: 0.32,
-          duration: 2200,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true,
-        }),
-        Animated.timing(haloOpacity, {
-          toValue: 0.18,
-          duration: 2200,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true,
-        }),
-      ]),
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [reduceMotion, haloOpacity]);
-
-  const trophyRotate = trophyRock.interpolate({
-    inputRange: [-1, 1],
-    outputRange: ["-8deg", "8deg"],
+  const shimmerTranslate = shimmer.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-56, 260],
   });
+
+  const bandColor = isDark ? "rgba(255, 255, 255, 0.1)" : "rgba(255, 255, 255, 0.48)";
 
   const iconBg = isDark ? "rgba(251, 191, 36, 0.1)" : "rgba(251, 191, 36, 0.16)";
   const iconBorder = isDark ? "rgba(251, 191, 36, 0.28)" : "rgba(217, 119, 6, 0.38)";
 
   const base = theme.colors.textSecondary;
   const nameColor = theme.colors.textPrimary;
-  const streakAccent = theme.colors.cyan[400];
+  const streakAccent = theme.colors.indigo[400];
 
   const body = (() => {
     switch (model.kind) {
@@ -131,7 +76,7 @@ export function CohortMasthead({ theme, model, isDark = false }: Props) {
             <Text style={{ color: nameColor, fontWeight: "700" }}>{model.leadersCount}</Text>
             <Text> tied with a </Text>
             <Text style={{ color: streakAccent, fontWeight: "800" }}>{model.streakDays}-day streak</Text>
-            <Text> — who pulls ahead?</Text>
+            <Text>, who pulls ahead?</Text>
           </Text>
         );
       case "leader":
@@ -157,37 +102,39 @@ export function CohortMasthead({ theme, model, isDark = false }: Props) {
         },
       ]}
     >
-      <Animated.View style={{ transform: [{ translateY: entranceY }] }}>
-        <Animated.View style={{ transform: [{ scale: entranceScale }] }}>
-          <View style={styles.inner}>
-            <Animated.View
-              pointerEvents="none"
-              style={[
-                styles.halo,
-                {
-                  borderColor: theme.colors.indigo[400],
-                  opacity: reduceMotion ? 0.22 : haloOpacity,
-                },
-              ]}
-            />
-            <View style={styles.row}>
-              <Animated.View
-                style={[
-                  styles.iconBadge,
-                  {
-                    backgroundColor: iconBg,
-                    borderColor: iconBorder,
-                    transform: [{ rotate: reduceMotion ? "0deg" : trophyRotate }],
-                  },
-                ]}
-              >
-                <Trophy size={20} color={theme.colors.amber[500]} strokeWidth={2.1} />
-              </Animated.View>
+      <View style={styles.inner}>
+        <View style={styles.row}>
+          <View
+            style={[
+              styles.iconBadge,
+              {
+                backgroundColor: iconBg,
+                borderColor: iconBorder,
+              },
+            ]}
+          >
+            <Trophy size={20} color={theme.colors.amber[500]} strokeWidth={2.1} />
+          </View>
+
+          <View style={styles.textColumn}>
+            <View style={styles.textShimmerInner}>
               {body}
+              {!reduceMotion ? (
+                <Animated.View
+                  pointerEvents="none"
+                  style={[
+                    styles.shimmerBand,
+                    {
+                      backgroundColor: bandColor,
+                      transform: [{ translateX: shimmerTranslate }],
+                    },
+                  ]}
+                />
+              ) : null}
             </View>
           </View>
-        </Animated.View>
-      </Animated.View>
+        </View>
+      </View>
     </View>
   );
 }
@@ -202,20 +149,31 @@ const styles = StyleSheet.create({
   inner: {
     paddingVertical: 12,
     paddingHorizontal: 18,
-    overflow: "hidden",
-    position: "relative",
-  },
-  halo: {
-    ...StyleSheet.absoluteFillObject,
-    margin: -1,
-    borderRadius: 19,
-    borderWidth: 1,
   },
   row: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    zIndex: 1,
+  },
+  textColumn: {
+    flex: 1,
+    minWidth: 0,
+  },
+  textShimmerInner: {
+    position: "relative",
+    overflow: "hidden",
+    borderRadius: 10,
+    paddingVertical: 2,
+    paddingHorizontal: 2,
+  },
+  shimmerBand: {
+    position: "absolute",
+    top: 2,
+    bottom: 2,
+    width: 40,
+    left: 0,
+    borderRadius: 8,
+    opacity: 0.62,
   },
   iconBadge: {
     width: 44,

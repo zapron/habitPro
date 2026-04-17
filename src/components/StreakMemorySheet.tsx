@@ -419,7 +419,7 @@ export function StreakMemorySheet({
                           Check-in only
                         </Text>
                         <Text style={[styles.checkInOnlyBody, { color: theme.colors.textSecondary }]}>
-                          You used Just mark done — no photo or note was saved. This day is locked like other check-ins and
+                          You used Just mark done: no photo or note was saved. This day is locked like other check-ins and
                           can’t be changed from here.
                         </Text>
                       </View>
@@ -573,7 +573,7 @@ export function StreakMemorySheet({
                     {isHabitCreate ? (
                       <Text style={[styles.hint, styles.hintMemory, { color: theme.colors.textMuted }]}>
                         Add a photo or a line you’ll love reading later, or tap Just mark done to check in without a memory.
-                        Closing this sheet without choosing an action cancels — your day stays unchecked.
+                        Closing this sheet without choosing an action cancels. Your day stays unchecked.
                       </Text>
                     ) : null}
 
@@ -638,8 +638,8 @@ export function StreakMemorySheet({
                       onChangeText={setNote}
                       placeholder={
                         isMini
-                          ? "A quick note — how it went, mood, what you shipped…"
-                          : "A quick note — PR, mood, who you were with…"
+                          ? "A quick note: how it went, mood, what you shipped…"
+                          : "A quick note: PR, mood, who you were with…"
                       }
                       placeholderTextColor={theme.colors.textMuted}
                       multiline
@@ -695,7 +695,7 @@ export function StreakMemorySheet({
                                 : !canPublishCommunity
                                   ? "Sign in with cloud sync to publish to Community."
                                   : !imageUri
-                                    ? "Community posts need a photo. Add one above to publish — text notes stay on your mission only."
+                                    ? "Community posts need a photo. Add one above to publish. Text notes stay on your mission only."
                                     : isMini
                                       ? "Leaving this off locks Community for this mission. If you publish, you can remove your win from the feed in details later."
                                       : "Optional. Squad visibility uses Public / Solo on the mission screen. You can remove this moment from Community later from this day’s memory."}

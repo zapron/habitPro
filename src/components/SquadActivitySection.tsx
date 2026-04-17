@@ -1,12 +1,15 @@
 import { Text } from "./AppText";
+import { useEffect, useRef, useState } from "react";
 import {
-  useState } from "react";
-import { ActivityIndicator,
+  ActivityIndicator,
+  Animated,
+  Easing,
   Platform,
   Pressable,
   StyleSheet,
   View,
 } from "react-native";
+import { useReducedMotion } from "../hooks/useReducedMotion";
 import { ChevronDown, Flame, Heart, MessageSquare, Sparkles, Flag, Users } from "lucide-react-native";
 import type { AppTheme } from "../styles/theme";
 import type {
@@ -15,6 +18,56 @@ import type {
   ChallengeNudgeRow,
 } from "../types/groupChallenge";
 import type { ProfileLabel } from "../lib/groupChallengesApi";
+
+/** Calm header: indigo “Squad” + neutral “activity”, with a slow horizontal shimmer (no text motion). */
+function SquadActivityTitle({ theme, isDark }: { theme: AppTheme; isDark: boolean }) {
+  const reduceMotion = useReducedMotion();
+  const shimmer = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (reduceMotion) return;
+    const loop = Animated.loop(
+      Animated.timing(shimmer, {
+        toValue: 1,
+        duration: 3000,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      }),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [reduceMotion, shimmer]);
+
+  const shimmerTranslate = shimmer.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-52, 200],
+  });
+
+  const bandColor = isDark ? "rgba(255, 255, 255, 0.11)" : "rgba(255, 255, 255, 0.5)";
+
+  return (
+    <View style={styles.brandTitleOuter}>
+      <View style={styles.brandTitleInner}>
+        <View style={styles.brandTitleRow}>
+          <Text style={[styles.heroBrandStrong, { color: theme.colors.indigo[400] }]}>Squad</Text>
+          <Text style={[styles.heroBrandRest, { color: theme.colors.textPrimary }]}> activity</Text>
+        </View>
+        {!reduceMotion ? (
+          <Animated.View
+            pointerEvents="none"
+            style={[
+              styles.titleShimmerBand,
+              {
+                backgroundColor: bandColor,
+                transform: [{ translateX: shimmerTranslate }],
+              },
+            ]}
+          />
+        ) : null}
+      </View>
+    </View>
+  );
+}
 
 function participantDisplayName(label: ProfileLabel | undefined): string {
   if (label?.displayName) return label.displayName;
@@ -74,7 +127,7 @@ function NudgeActivityLine({
     case "ping":
       return (
         <Text style={[styles.nudgeLine, { color: base }]} numberOfLines={3} {...textProps}>
-          <Text style={{ color: base }}>{from} nudged {to} — </Text>
+          <Text style={{ color: base }}>{from} nudged {to}: </Text>
           <Text style={{ color: theme.colors.cyan[400], fontWeight: accentWeight }}>where are you?</Text>
         </Text>
       );
@@ -102,7 +155,7 @@ function NudgeActivityLine({
           <Text style={{ color: theme.colors.indigo[400], fontWeight: accentWeight }}>a note</Text>
           <Text style={{ color: base }}> to {to}</Text>
           {m.length > 0 ? (
-            <Text style={{ color: base }}>{` — “${m}”`}</Text>
+            <Text style={{ color: base }}>{`: “${m}”`}</Text>
           ) : null}
         </Text>
       );
@@ -198,10 +251,15 @@ export function SquadActivitySection({
             <Users size={theme.icon.md} color={theme.colors.indigo[400]} strokeWidth={2.2} />
           </View>
           <View style={styles.headerText}>
-            <Text style={[styles.heroLabel, { color: theme.colors.textPrimary }]}>Squad activity</Text>
-            <Text style={[styles.heroSub, { color: theme.colors.textMuted }]} numberOfLines={expanded ? 2 : 1}>
-              {expanded ? "Milestones and cheers from your group" : `${summaryLine} · Tap to expand`}
-            </Text>
+            <SquadActivityTitle theme={theme} isDark={isDark} />
+            <View style={styles.heroSubColumn}>
+              <Text style={[styles.heroSub, { color: theme.colors.textMuted }]} numberOfLines={1}>
+                {summaryLine}
+              </Text>
+              <Text style={[styles.heroSubHint, { color: theme.colors.textMuted }]} numberOfLines={1}>
+                {expanded ? "Milestones and cheers from your group" : "Tap to expand"}
+              </Text>
+            </View>
           </View>
           <ChevronDown
             size={theme.icon.lg}
@@ -359,16 +417,55 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   headerText: { flex: 1, minWidth: 0 },
-  heroLabel: {
+  brandTitleOuter: {
+    alignSelf: "flex-start",
+    maxWidth: "100%",
+  },
+  brandTitleInner: {
+    position: "relative",
+    overflow: "hidden",
+    borderRadius: 10,
+    paddingVertical: 3,
+    paddingHorizontal: 2,
+  },
+  brandTitleRow: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    flexWrap: "nowrap",
+  },
+  titleShimmerBand: {
+    position: "absolute",
+    top: 2,
+    bottom: 2,
+    width: 36,
+    left: 0,
+    borderRadius: 8,
+    opacity: 0.65,
+  },
+  heroBrandStrong: {
     fontSize: 17,
-    fontWeight: "900",
-    letterSpacing: -0.3,
+    fontWeight: "800",
+    letterSpacing: -0.35,
+  },
+  heroBrandRest: {
+    fontSize: 17,
+    fontWeight: "600",
+    letterSpacing: -0.2,
+  },
+  heroSubColumn: {
+    marginTop: 4,
+    gap: 2,
   },
   heroSub: {
     fontSize: 12,
     fontWeight: "600",
-    marginTop: 2,
+    letterSpacing: 0.15,
+  },
+  heroSubHint: {
+    fontSize: 11,
+    fontWeight: "600",
     letterSpacing: 0.2,
+    opacity: 0.92,
   },
   subsectionHeader: {
     flexDirection: "row",

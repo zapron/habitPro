@@ -23,12 +23,12 @@ function getWarnCopy(mission: MiniMission): { title: string; body: string } {
   if (reserveMaxed) {
     return {
       title: "One minute left",
-      body: `Just 1 minute left — try to complete "${mission.title}" and get XP.`,
+      body: `Just 1 minute left. Try to complete "${mission.title}" and get XP.`,
     };
   }
   return {
     title: "Mini mission ending soon",
-    body: `Your mini mission is about to end — pack some reserve fuel for "${mission.title}".`,
+    body: `Your mini mission is about to end. Pack some reserve fuel for "${mission.title}".`,
   };
 }
 

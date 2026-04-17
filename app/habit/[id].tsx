@@ -753,7 +753,7 @@ export default function HabitDetail() {
                                 <Text style={[styles.missionReportTitle, { color: theme.colors.textPrimary }]}>Mission review</Text>
                                 <Text style={[styles.missionReportHint, { color: theme.colors.textSecondary, marginBottom: 14 }]}>
                                     {isMissionGridFull(habit)
-                                        ? 'Every check-in day is marked. That does not have to mean success for you — do you consider this mission complete?'
+                                        ? 'Every check-in day is marked. That does not have to mean success for you. Do you consider this mission complete?'
                                         : 'The mission window has ended with at least one day unchecked. Do you still consider this mission complete for you?'}
                                 </Text>
                                 <View style={styles.missionReportActions}>
@@ -796,7 +796,7 @@ export default function HabitDetail() {
                                     <PlusBadge />
                                 </View>
                                 <Text style={[styles.visibilityHint, { color: theme.colors.textMuted }]}>
-                                    Visible to your squad on this mission (Habit Plus). Community is separate — choose per moment when you save or open a day.
+                                    Visible to your squad on this mission (Habit Plus). Community is separate: choose per moment when you save or open a day.
                                 </Text>
                             </>
                         ) : (
@@ -910,7 +910,7 @@ export default function HabitDetail() {
                 }
                 message={
                     missionDialog.kind === 'blockedReset'
-                        ? 'Group missions use one shared timeline for the squad. Restarting your run here would break the challenge—finish this mission or work with your group.'
+                        ? 'Group missions use one shared timeline for the squad. Restarting your run here would break the challenge. Finish this mission or work with your group.'
                         : missionDialog.kind === 'signInRequired'
                           ? 'To leave the squad and remove this group mission, sign in with your account.'
                           : missionDialog.kind === 'leaveGroup'

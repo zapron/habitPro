@@ -60,7 +60,7 @@ export function ProfileWeeklyPulse({
         <View style={[styles.meterFill, { width: `${Math.round(fraction * 100)}%`, backgroundColor: fill }]} />
       </View>
       <Text style={[styles.nextHint, { color: theme.colors.textMuted }]}>
-        {weeklyScore >= 120 ? "Top tier — stay consistent." : `Next: ${nextTierName}`}
+        {weeklyScore >= 120 ? "Top tier. Stay consistent." : `Next: ${nextTierName}`}
       </Text>
 
       <View style={[styles.statsRow, { borderTopColor: theme.colors.border }]}>

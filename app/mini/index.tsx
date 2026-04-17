@@ -300,7 +300,7 @@ export default function MiniMissionsScreen() {
       <View style={styles.header}>
         <Text style={[styles.eyebrow, { color: theme.colors.cyan[400], fontSize: theme.typography.micro }]}>MINI MISSIONS</Text>
         <Text style={[styles.title, { color: theme.colors.textPrimary, fontSize: theme.typography.h2 }]}>Mini missions</Text>
-        <Text style={[styles.subtitle, { color: theme.colors.textSecondary, fontSize: theme.typography.caption }]}>Time is fuel—pack it, burn it, and finish the mission.</Text>
+        <Text style={[styles.subtitle, { color: theme.colors.textSecondary, fontSize: theme.typography.caption }]}>Time is fuel. Pack it, burn it, and finish the mission.</Text>
       </View>
 
       <View

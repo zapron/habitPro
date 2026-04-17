@@ -137,7 +137,7 @@ function buildMessage(
       if (phase === "closing") {
         return {
           title: "Almost time’s up",
-          body: `You have almost an hour left — complete your streak for “${habitTitle}”.`,
+          body: `You have almost an hour left. Complete your streak for “${habitTitle}”.`,
           data,
         };
       }

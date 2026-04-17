@@ -72,7 +72,7 @@ export async function createGroupChallengeFromHabit(
     .from("challenge_groups")
     .insert({
       creator_id: user.id,
-      title: titleOverride ?? `${habit.title} — group mission`,
+      title: titleOverride ?? `${habit.title} · group mission`,
       habit_template: habitTemplate,
       creator_timezone: creatorTz,
       start_date: startDate,
@@ -485,6 +485,20 @@ export async function markNotificationRead(id: string): Promise<void> {
   const supabase = getSupabase();
   if (!supabase) return;
   await supabase.from("notifications").update({ read_at: new Date().toISOString() }).eq("id", id);
+}
+
+export async function markAllNotificationsRead(): Promise<void> {
+  const supabase = getSupabase();
+  if (!supabase) return;
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return;
+  await supabase
+    .from("notifications")
+    .update({ read_at: new Date().toISOString() })
+    .eq("user_id", user.id)
+    .is("read_at", null);
 }
 
 /** Re-fetch cohort peer habits from Supabase (e.g. after challenge screen focus). */

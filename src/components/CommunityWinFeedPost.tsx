@@ -400,8 +400,8 @@ export function CommunityWinFeedPost({
         {!hasNote && !expanded ? (
           <Text style={[styles.captionHint, { color: theme.colors.textMuted }]} numberOfLines={2}>
             {isHabitStreak
-              ? "Streak moment from a main mission — open View More for time and caption."
-              : "From a public mini mission — open View More for completion time and any caption."}
+              ? "Streak moment from a main mission. Open View More for time and caption."
+              : "From a public mini mission. Open View More for completion time and any caption."}
           </Text>
         ) : null}
 

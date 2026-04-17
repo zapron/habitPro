@@ -66,7 +66,7 @@ export function SyncToast() {
           },
         ]}
       >
-        Couldn't sync to the server. Check your connection — your changes are saved on this device.
+        Couldn't sync to the server. Check your connection. Your changes are saved on this device.
       </Text>
     </View>
   );

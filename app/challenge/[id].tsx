@@ -374,7 +374,7 @@ export default function ChallengeDetailScreen() {
         !viewerHabit.isCompleted &&
         isHabitMissionWindowClosed(viewerHabit, Date.now())
       ) {
-        showToast("Mission window ended — nudges are disabled.", "info");
+        showToast("Mission window ended. Nudges are disabled.", "info");
         return;
       }
       setNudgeBusyKey(`${customNoteToUserId}-custom_note`);
@@ -469,7 +469,7 @@ export default function ChallengeDetailScreen() {
 
           <Text style={[styles.metaLine, { color: theme.colors.textMuted }]}>
             {memberIdsOrdered.length} participant{memberIdsOrdered.length === 1 ? "" : "s"} ·{" "}
-            {group?.creator_timezone ?? "—"}
+            {group?.creator_timezone ?? "-"}
           </Text>
 
           {!isPremium ? (
@@ -541,7 +541,7 @@ export default function ChallengeDetailScreen() {
                     {habit ? (
                       <CohortStreakPill streak={habit.streak} isDark={isDark} />
                     ) : (
-                      <Text style={[styles.streakPlaceholder, { color: theme.colors.textMuted }]}>—</Text>
+                      <Text style={[styles.streakPlaceholder, { color: theme.colors.textMuted }]}>-</Text>
                     )}
                   </View>
 

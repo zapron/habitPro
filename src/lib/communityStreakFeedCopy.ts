@@ -6,7 +6,7 @@
 export type StreakFeedKicker = {
   /** Main celebratory line (often includes fire emoji) */
   line1: string;
-  /** Mission name — shown as secondary line */
+  /** Mission name; shown as secondary line */
   missionLine: string;
 };
 
@@ -16,7 +16,7 @@ function missionName(title: string): string {
 }
 
 /**
- * @param displayName — @handle or "Someone" (no @ prefix required)
+ * @param displayName @handle or "Someone" (no @ prefix required)
  */
 export function buildStreakCelebrationKicker(opts: {
   displayName: string;
@@ -32,7 +32,7 @@ export function buildStreakCelebrationKicker(opts: {
   // First day of the mission + first day of a streak
   if (md === 1 && sc === 1) {
     return {
-      line1: `${name} started the journey — first check-in 🔥`,
+      line1: `${name} started the journey: first check-in 🔥`,
       missionLine: m,
     };
   }
@@ -40,14 +40,14 @@ export function buildStreakCelebrationKicker(opts: {
   // Same calendar milestone: e.g. 3-day streak and this post is day 3
   if (sc >= 2 && md === sc && md === 3) {
     return {
-      line1: `3-day streak — day 3 on the mission 🔥`,
+      line1: `3-day streak, day 3 on the mission 🔥`,
       missionLine: m,
     };
   }
 
   if (sc >= 2 && md === sc && md > 3) {
     return {
-      line1: `${sc}-day streak — day ${md} locked in 🔥`,
+      line1: `${sc}-day streak, day ${md} locked in 🔥`,
       missionLine: m,
     };
   }

@@ -15,7 +15,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import { ArrowLeft } from "lucide-react-native";
 import { Screen } from "../src/components/Screen";
 import { useTheme } from "../src/context/ThemeContext";
-import { listNotifications, markNotificationRead } from "../src/lib/groupChallengesApi";
+import { listNotifications, markAllNotificationsRead, markNotificationRead } from "../src/lib/groupChallengesApi";
 import { parseCommunityWinCheerPayload } from "../src/lib/notificationPayloads";
 import type { ChallengeNudgeKind, NotificationRow } from "../src/types/groupChallenge";
 
@@ -125,7 +125,7 @@ function notificationSubtitle(n: NotificationRow): string | null {
         return `You have 24 hours to finish today’s habit for “${title}” · Tap to open`;
       }
       if (phase === "closing") {
-        return `You have almost an hour left — complete your streak for “${title}” · Tap to open`;
+        return `You have almost an hour left. Complete your streak for “${title}” · Tap to open`;
       }
       return `About 1 hour left to mark today for “${title}” · Tap to open`;
     }
@@ -139,6 +139,7 @@ export default function NotificationsScreen() {
   const { theme, isDark } = useTheme();
   const [items, setItems] = useState<NotificationRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [markingAll, setMarkingAll] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -208,6 +209,20 @@ export default function NotificationsScreen() {
     }
   };
 
+  const hasUnread = items.some((n) => !n.read_at);
+
+  const onMarkAllRead = async () => {
+    if (!hasUnread || markingAll) return;
+    setMarkingAll(true);
+    try {
+      await markAllNotificationsRead();
+      const nowIso = new Date().toISOString();
+      setItems((prev) => prev.map((n) => (n.read_at ? n : { ...n, read_at: nowIso })));
+    } finally {
+      setMarkingAll(false);
+    }
+  };
+
   return (
     <Screen>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={theme.colors.background} />
@@ -220,6 +235,24 @@ export default function NotificationsScreen() {
           <ArrowLeft size={theme.icon.xl} color={theme.colors.textPrimary} />
         </TouchableOpacity>
         <Text style={[styles.title, { color: theme.colors.textPrimary, fontSize: theme.typography.h1 }]}>Notifications</Text>
+        <TouchableOpacity
+          style={[
+            styles.markAllBtn,
+            {
+              borderColor: theme.colors.border,
+              backgroundColor: theme.colors.surface,
+              opacity: !hasUnread || markingAll ? 0.55 : 1,
+            },
+          ]}
+          onPress={() => void onMarkAllRead()}
+          disabled={!hasUnread || markingAll}
+          accessibilityRole="button"
+          accessibilityLabel={markingAll ? "Marking all notifications read" : "Mark all notifications read"}
+        >
+          <Text style={[styles.markAllText, { color: theme.colors.indigo[400] }]}>
+            {markingAll ? "Marking…" : "Mark all read"}
+          </Text>
+        </TouchableOpacity>
       </View>
 
       {loading ? (
@@ -276,6 +309,8 @@ const styles = StyleSheet.create({
   header: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 16 },
   iconButton: { padding: 8, borderRadius: 9999, borderWidth: 1 },
   title: { fontWeight: "800", flex: 1 },
+  markAllBtn: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 9999, borderWidth: 1 },
+  markAllText: { fontWeight: "800", fontSize: 12, letterSpacing: 0.2 },
   row: { borderRadius: 12, borderWidth: 1, padding: 14, marginBottom: 10 },
   rowInner: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
   unreadDot: { width: 10, height: 10, borderRadius: 9999, marginTop: 5 },

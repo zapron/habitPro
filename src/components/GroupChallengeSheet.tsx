@@ -137,7 +137,7 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
         challengeGroupId: group.id,
         challengeCreatorTimezone: group.creator_timezone,
       });
-      showToast("Group mission ready — invite your squad", "success");
+      showToast("Group mission ready. Invite your squad.", "success");
     } finally {
       setCreating(false);
     }
@@ -169,7 +169,7 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
         }
         const m = await listChallengeInviteeStatusesForChallenge(gid);
         setInviteeStatusById(m);
-        showToast("Invite sent — they’ll see it under Compete and in notifications.", "success");
+        showToast("Invite sent. They’ll see it under Compete and in notifications.", "success");
       } finally {
         setInvitingId(null);
       }

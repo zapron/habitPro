@@ -751,7 +751,7 @@ export default function CompeteScreen() {
                       </Text>
                       {inviteAcceptLocked ? (
                         <Text style={[styles.invitePlusHint, { color: theme.colors.textMuted }]}>
-                          Joining group missions is Habit Plus — tap Accept to learn more.
+                          Joining group missions is Habit Plus. Tap Accept to learn more.
                         </Text>
                       ) : null}
                       <View style={styles.inviteActions}>
@@ -812,7 +812,7 @@ export default function CompeteScreen() {
               >
                 <Text style={[styles.emptyTitle, { color: theme.colors.textPrimary }]}>No active challenges</Text>
                 <Text style={[styles.emptyBody, { color: theme.colors.textSecondary }]}>
-                  Pick a challenge below — up to two at a time. Progress uses your habit + mini mission data on this device.
+                  Pick a challenge below. Up to two at a time. Progress uses your habit + mini mission data on this device.
                 </Text>
               </View>
             ) : (

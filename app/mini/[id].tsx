@@ -305,7 +305,7 @@ export default function MiniMissionDetail() {
       await clearMiniMissionNotifications(mission.id);
       await fireImmediateNotification(
         "⏰ Mission failed",
-        `"${mission.title}" — timer hit zero. Open the app to dismiss or cancel.`,
+        `"${mission.title}" timer hit zero. Open the app to dismiss or cancel.`,
       );
     })();
   }, [isTimerUp, mission]);
@@ -463,7 +463,7 @@ export default function MiniMissionDetail() {
       if (mission.communityFeedRevoked) {
         Alert.alert(
           "Can’t publish to Community",
-          "This mission stays private — Community sharing was turned off when you completed it, or you removed it from the feed.",
+          "This mission stays private. Community sharing was turned off when you completed it, or you removed it from the feed.",
           [{ text: "OK" }],
         );
         return;
@@ -642,7 +642,7 @@ export default function MiniMissionDetail() {
           {mission.status === "completed"
             ? "Completed"
             : isTimerUp
-              ? "Timer depleted — no reserve fuel after zero. Cancel this mission or go back."
+              ? "Timer depleted. No reserve fuel after zero. Cancel this mission or go back."
               : mission.status === "in_progress"
                 ? completeSheetOpen
                   ? "Timer paused while you save your moment."
@@ -935,7 +935,8 @@ export default function MiniMissionDetail() {
                   },
                 ]}
               >
-                — {QUOTES[quoteIdx].author}
+                {" · "}
+                {QUOTES[quoteIdx].author}
               </Text>
             </Animated.View>
             {/* Pagination dots */}
