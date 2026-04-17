@@ -66,25 +66,27 @@ export function PlusUpsellProvider({ children }: { children: React.ReactNode }) 
                   : "Unlock Habit Plus";
 
   return (
-    <PlusUpsellContext.Provider value={value}>
-      <BillingProvider>{children}</BillingProvider>
-      <Modal
-        visible={visible}
-        transparent
-        animationType="fade"
-        onRequestClose={closeUpsell}
-        statusBarTranslucent
-        accessibilityViewIsModal
-      >
-        <BillingUpsellModal
+    <BillingProvider>
+      <PlusUpsellContext.Provider value={value}>
+        {children}
+        <Modal
           visible={visible}
-          onClose={closeUpsell}
-          headline={headline}
-          isDark={isDark}
-          insetsBottom={insets.bottom}
-        />
-      </Modal>
-    </PlusUpsellContext.Provider>
+          transparent
+          animationType="fade"
+          onRequestClose={closeUpsell}
+          statusBarTranslucent
+          accessibilityViewIsModal
+        >
+          <BillingUpsellModal
+            visible={visible}
+            onClose={closeUpsell}
+            headline={headline}
+            isDark={isDark}
+            insetsBottom={insets.bottom}
+          />
+        </Modal>
+      </PlusUpsellContext.Provider>
+    </BillingProvider>
   );
 }
 
@@ -163,13 +165,13 @@ function BillingUpsellModal({
         </View>
 
         <Button
-          title={busy === "monthly" ? "Starting trial…" : "Start 7-day trial (Monthly)"}
+          title={busy === "monthly" ? "Starting trial…" : "7-day trial — then Monthly"}
           onPress={() => void run("monthly")}
           disabled={!canBuy}
           style={{ marginTop: 8, opacity: canBuy ? 1 : 0.65 }}
         />
         <Button
-          title={busy === "annual" ? "Starting trial…" : "Start 7-day trial (Yearly)"}
+          title={busy === "annual" ? "Starting trial…" : "7-day trial — then Yearly"}
           onPress={() => void run("annual")}
           disabled={!canBuy}
           style={{ marginTop: 10, opacity: canBuy ? 1 : 0.65 }}
