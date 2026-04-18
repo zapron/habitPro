@@ -4,57 +4,55 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
-  } from "react";
-import { StyleSheet,
-  View,
-} from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+} from "react";
+import { Platform, StyleSheet, View } from "react-native";
 import { useTheme } from "./ThemeContext";
+import { useToastBottomPadding } from "../hooks/useToastBottomPadding";
 
 export type ToastVariant = "success" | "error" | "info";
 
 type ToastPayload = { message: string; variant: ToastVariant };
 
-type ToastContextValue = {
+export type ToastContextValue = {
   showToast: (message: string, variant?: ToastVariant, durationMs?: number) => void;
 };
 
-const ToastContext = createContext<ToastContextValue | null>(null);
+type ToastInternalContextValue = ToastContextValue & {
+  payload: ToastPayload | null;
+};
+
+const ToastContext = createContext<ToastInternalContextValue | null>(null);
 
 const DEFAULT_MS = 2800;
 const LONG_MS = 4200;
 
-function ToastBanner({ payload }: { payload: ToastPayload }) {
+function ToastBanner({
+  payload,
+  paddingBottom,
+}: {
+  payload: ToastPayload;
+  paddingBottom: number;
+}) {
   const { theme, isDark } = useTheme();
-  const insets = useSafeAreaInsets();
 
-  const bg =
-    payload.variant === "success"
-      ? isDark
-        ? "rgba(34, 197, 94, 0.2)"
-        : "rgba(34, 197, 94, 0.14)"
-      : payload.variant === "error"
-        ? isDark
-          ? "rgba(239, 68, 68, 0.18)"
-          : "rgba(239, 68, 68, 0.12)"
-        : theme.colors.surfaceElevated;
-
-  const border =
-    payload.variant === "success"
-      ? "rgba(34, 197, 94, 0.45)"
-      : payload.variant === "error"
-        ? "rgba(239, 68, 68, 0.45)"
-        : theme.colors.border;
+  const slab = isDark ? "rgba(38, 38, 40, 0.96)" : "rgba(33, 33, 33, 0.92)";
 
   const textColor =
     payload.variant === "success"
-      ? theme.colors.green[500]
+      ? isDark
+        ? theme.colors.green[400]
+        : "#bbf7d0"
       : payload.variant === "error"
-        ? theme.colors.red[500]
-        : theme.colors.textPrimary;
+        ? isDark
+          ? theme.colors.red[400]
+          : "#fecaca"
+        : isDark
+          ? theme.colors.textPrimary
+          : "#fafafa";
 
   return (
     <View
@@ -62,7 +60,7 @@ function ToastBanner({ payload }: { payload: ToastPayload }) {
       style={[
         styles.wrap,
         {
-          paddingTop: Math.max(insets.top, 12),
+          paddingBottom,
           paddingHorizontal: theme.spacing.md,
         },
       ]}
@@ -72,9 +70,16 @@ function ToastBanner({ payload }: { payload: ToastPayload }) {
           styles.text,
           {
             color: textColor,
-            backgroundColor: bg,
-            borderColor: border,
-            borderRadius: theme.radius.md,
+            backgroundColor: slab,
+            borderColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.12)",
+            ...(Platform.OS === "android"
+              ? { elevation: 6 }
+              : {
+                  shadowColor: "#000",
+                  shadowOffset: { width: 0, height: 2 },
+                  shadowOpacity: 0.22,
+                  shadowRadius: 4,
+                }),
           },
         ]}
       >
@@ -82,6 +87,17 @@ function ToastBanner({ payload }: { payload: ToastPayload }) {
       </Text>
     </View>
   );
+}
+
+/**
+ * Renders the active toast pill. Must live under the Expo Router so
+ * {@link useToastBottomPadding} can detect (tabs) vs full-screen routes.
+ */
+export function ToastHost() {
+  const ctx = useContext(ToastContext);
+  const paddingBottom = useToastBottomPadding();
+  if (!ctx?.payload) return null;
+  return <ToastBanner payload={ctx.payload} paddingBottom={paddingBottom} />;
 }
 
 export function ToastProvider({ children }: { children: ReactNode }) {
@@ -108,12 +124,12 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     [],
   );
 
-  return (
-    <ToastContext.Provider value={{ showToast }}>
-      {children}
-      {payload ? <ToastBanner payload={payload} /> : null}
-    </ToastContext.Provider>
+  const value = useMemo(
+    () => ({ showToast, payload } satisfies ToastInternalContextValue),
+    [showToast, payload],
   );
+
+  return <ToastContext.Provider value={value}>{children}</ToastContext.Provider>;
 }
 
 export function useToast(): ToastContextValue {
@@ -121,7 +137,7 @@ export function useToast(): ToastContextValue {
   if (!ctx) {
     throw new Error("useToast must be used within ToastProvider");
   }
-  return ctx;
+  return { showToast: ctx.showToast };
 }
 
 const styles = StyleSheet.create({
@@ -129,15 +145,19 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: 0,
     right: 0,
-    top: 0,
+    bottom: 0,
     zIndex: 9998,
+    alignItems: "center",
   },
   text: {
-    paddingVertical: 12,
+    maxWidth: "92%",
+    paddingVertical: 8,
     paddingHorizontal: 14,
-    borderWidth: 1,
-    fontSize: 13,
-    fontWeight: "600",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 999,
+    fontSize: 12,
+    fontWeight: "500",
+    textAlign: "center",
     overflow: "hidden",
   },
 });

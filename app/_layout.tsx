@@ -9,7 +9,7 @@ import { Stack, usePathname, useRouter } from "expo-router";
 
 WebBrowser.maybeCompleteAuthSession();
 import { ThemeProvider } from "../src/context/ThemeContext";
-import { ToastProvider } from "../src/context/ToastContext";
+import { ToastHost, ToastProvider } from "../src/context/ToastContext";
 import { AuthProvider, useAuth } from "../src/context/AuthContext";
 import { PremiumProvider } from "../src/context/PremiumContext";
 import { PlusUpsellProvider } from "../src/context/PlusUpsellContext";
@@ -206,6 +206,7 @@ function RootLayoutNav() {
     <View style={{ flex: 1 }}>
       <SyncManager />
       <Stack screenOptions={{ headerShown: false }} />
+      <ToastHost />
       <SyncToast />
       <ForceUpdateModal visible={needsForceUpdate} downloadUrl={downloadUrl} message={forceMessage} />
     </View>

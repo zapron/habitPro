@@ -1,12 +1,7 @@
 import { Text } from "./AppText";
-import {
-  useEffect,
-  useRef,
-  useState } from "react";
-import { StyleSheet,
-  View,
-} from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useEffect, useRef, useState } from "react";
+import { Platform, StyleSheet, View } from "react-native";
+import { useToastBottomPadding } from "../hooks/useToastBottomPadding";
 import { useTheme } from "../context/ThemeContext";
 import { subscribeSyncFailure } from "../lib/syncQueue";
 
@@ -16,8 +11,8 @@ const TOAST_COOLDOWN_MS = 45_000;
 
 /** Bottom banner when remote sync fails (local data is still on device). */
 export function SyncToast() {
-  const { theme } = useTheme();
-  const insets = useSafeAreaInsets();
+  const { theme, isDark } = useTheme();
+  const paddingBottom = useToastBottomPadding();
   const [visible, setVisible] = useState(false);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastToastAt = useRef(0);
@@ -50,7 +45,7 @@ export function SyncToast() {
       style={[
         styles.wrap,
         {
-          paddingBottom: Math.max(insets.bottom, 12),
+          paddingBottom,
           paddingHorizontal: theme.spacing.md,
         },
       ]}
@@ -59,10 +54,17 @@ export function SyncToast() {
         style={[
           styles.text,
           {
-            color: theme.colors.textPrimary,
-            backgroundColor: theme.colors.surfaceElevated,
-            borderColor: theme.colors.border,
-            borderRadius: theme.radius.md,
+            color: isDark ? theme.colors.textPrimary : "#fafafa",
+            backgroundColor: isDark ? "rgba(38, 38, 40, 0.96)" : "rgba(33, 33, 33, 0.92)",
+            borderColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.12)",
+            ...(Platform.OS === "android"
+              ? { elevation: 6 }
+              : {
+                  shadowColor: "#000",
+                  shadowOffset: { width: 0, height: 2 },
+                  shadowOpacity: 0.22,
+                  shadowRadius: 4,
+                }),
           },
         ]}
       >
@@ -79,13 +81,17 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     zIndex: 9999,
+    alignItems: "center",
   },
   text: {
-    paddingVertical: 12,
+    maxWidth: "92%",
+    paddingVertical: 8,
     paddingHorizontal: 14,
-    borderWidth: 1,
-    fontSize: 13,
-    fontWeight: "600",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 999,
+    fontSize: 12,
+    fontWeight: "500",
+    textAlign: "center",
     overflow: "hidden",
   },
 });

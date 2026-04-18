@@ -1,10 +1,13 @@
 import { Tabs } from "expo-router";
 import { Home, Swords, User, Users } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import {
+  TAB_BAR_BOTTOM_GAP,
+  TAB_BAR_ROW_HEIGHT,
+  tabBarOuterHeight,
+} from "../../src/constants/tabBar";
 import { useTheme } from "../../src/context/ThemeContext";
 
-const TAB_BAR_ROW_HEIGHT = 49;
-const TAB_BAR_BOTTOM_GAP = 14;
 const TAB_BAR_TOP_PAD = 8;
 
 export default function TabLayout() {
@@ -12,7 +15,7 @@ export default function TabLayout() {
   const insets = useSafeAreaInsets();
 
   const paddingBottom = insets.bottom + TAB_BAR_BOTTOM_GAP;
-  const tabBarHeight = TAB_BAR_ROW_HEIGHT + insets.bottom + TAB_BAR_BOTTOM_GAP;
+  const tabBarHeight = tabBarOuterHeight(insets.bottom);
 
   return (
     <Tabs
