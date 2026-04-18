@@ -1,0 +1,51 @@
+# EAS Build upload rules (used INSTEAD of .gitignore when this file exists).
+# See https://docs.expo.dev/build-reference/easignore/
+#
+# Same as .gitignore except we do NOT ignore /android so your prebuilt
+# android/ tree (e.g. app/src/main/assets/adi-registration.properties)
+# is uploaded for cloud builds.
+
+# dependencies
+node_modules/
+
+# Expo
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+
+# Native
+.kotlin/
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# Metro
+.metro-health-check*
+
+# debug
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# macOS
+.DS_Store
+*.pem
+
+# local env files
+.env
+.env*.local
+
+# Firebase Admin / service account keys (never commit)
+**/firebase-adminsdk*.json
+**/*-firebase-adminsdk*.json
+
+# typescript
+*.tsbuildinfo
+
+# generated native folders — keep /ios ignored for smaller Android uploads;
+# omit /android here so EAS includes android/ (Play verification snippet, etc.)
+/ios
