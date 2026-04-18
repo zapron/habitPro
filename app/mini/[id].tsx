@@ -34,6 +34,7 @@ import * as Haptics from "expo-haptics";
 import { fireImmediateNotification } from "../../src/utils/notifications";
 import { clearMiniMissionNotifications } from "../../src/utils/miniMissionNotifications";
 import { Screen } from "../../src/components/Screen";
+import { ConfirmDialog } from "../../src/components/ConfirmDialog";
 import { Button } from "../../src/components/Button";
 import { StreakMemorySheet } from "../../src/components/StreakMemorySheet";
 import { MiniMissionFireProgressBar } from "../../src/components/MiniMissionFireProgressBar";
@@ -164,6 +165,7 @@ export default function MiniMissionDetail() {
   const [timerFrozenAtMs, setTimerFrozenAtMs] = useState<number | null>(null);
   /** Avoid not-found flash after delete; mission is removed before navigation finishes. */
   const [pendingExitAfterRemove, setPendingExitAfterRemove] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   useEffect(() => {
     const unsubFail = subscribeSyncFailure(() => {
@@ -319,6 +321,18 @@ export default function MiniMissionDetail() {
       new Date(mission.startedAt).getTime();
     return Math.max(0, plannedMs - actualMs);
   }, [mission, totalMinutes]);
+
+  const confirmDeleteMiniMission = useCallback(() => {
+    if (!mission) return;
+    setDeleteDialogOpen(false);
+    const id = mission.id;
+    setPendingExitAfterRemove(true);
+    void (async () => {
+      await deleteCommunityWin(id);
+      deleteMiniMission(id);
+      router.replace("/mini");
+    })();
+  }, [mission, router, deleteMiniMission]);
 
   if (!mission) {
     return (
@@ -532,31 +546,18 @@ export default function MiniMissionDetail() {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
   };
 
-  const handleDelete = () => {
-    Alert.alert(
-      "Delete Mini Mission",
-      "Delete this mini mission permanently?",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: () => {
-            const id = mission.id;
-            setPendingExitAfterRemove(true);
-            void (async () => {
-              await deleteCommunityWin(id);
-              deleteMiniMission(id);
-              router.replace("/mini");
-            })();
-          },
-        },
-      ],
-    );
-  };
-
   return (
     <Screen>
+      <ConfirmDialog
+        visible={deleteDialogOpen}
+        onRequestClose={() => setDeleteDialogOpen(false)}
+        title="Delete Mini Mission"
+        message="Delete this mini mission permanently?"
+        actions={[
+          { label: "Cancel", variant: "secondary", onPress: () => setDeleteDialogOpen(false) },
+          { label: "Delete", variant: "danger", onPress: confirmDeleteMiniMission },
+        ]}
+      />
       <StreakMemorySheet
         visible={completeSheetOpen}
         variant="mini"
@@ -596,7 +597,7 @@ export default function MiniMissionDetail() {
               borderColor: theme.colors.border,
             },
           ]}
-          onPress={handleDelete}
+          onPress={() => setDeleteDialogOpen(true)}
         >
           <Trash2 size={theme.icon.md} color={theme.colors.red[500]} />
         </TouchableOpacity>
