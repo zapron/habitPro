@@ -1,4 +1,10 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Text } from "../../src/components/AppText";
 import {
   View,
@@ -14,7 +20,15 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
 import { FlashList } from "@shopify/flash-list";
-import { Trophy, Bolt, Target, Plus, ChevronRight, Zap, Bell } from "lucide-react-native";
+import {
+  Trophy,
+  Bolt,
+  Target,
+  Plus,
+  ChevronRight,
+  Zap,
+  Bell,
+} from "lucide-react-native";
 import { useHabitStore } from "../../src/store/habitStore";
 import { useAuth } from "../../src/context/AuthContext";
 import { isSupabaseConfigured } from "../../src/lib/env";
@@ -50,7 +64,13 @@ function ListSkeleton({ theme }: { theme: AppTheme }) {
       {[0, 1, 2].map((i) => (
         <View
           key={i}
-          style={[skeletonStyles.bar, { borderColor: theme.colors.border, backgroundColor: theme.colors.surface }]}
+          style={[
+            skeletonStyles.bar,
+            {
+              borderColor: theme.colors.border,
+              backgroundColor: theme.colors.surface,
+            },
+          ]}
         />
       ))}
     </View>
@@ -66,9 +86,15 @@ export default function Home() {
   const habits = useHabitStore((state) => state.habits);
   const miniMissions = useHabitStore((state) => state.miniMissions);
   const xp = useHabitStore((state) => state.xp);
-  const [activeTab, setActiveTab] = useState<"missions" | "reports">("missions");
-  const [reportsSegment, setReportsSegment] = useState<"pending" | "accomplished" | "failed">("pending");
-  const [storeHydrated, setStoreHydrated] = useState(() => useHabitStore.persist.hasHydrated());
+  const [activeTab, setActiveTab] = useState<"missions" | "reports">(
+    "missions",
+  );
+  const [reportsSegment, setReportsSegment] = useState<
+    "pending" | "accomplished" | "failed"
+  >("pending");
+  const [storeHydrated, setStoreHydrated] = useState(() =>
+    useHabitStore.persist.hasHydrated(),
+  );
   const [unreadNotifCount, setUnreadNotifCount] = useState(0);
   const [notifRefreshBusy, setNotifRefreshBusy] = useState(false);
   const [miniNow, setMiniNow] = useState(() => Date.now());
@@ -134,13 +160,26 @@ export default function Home() {
   }, [habits, activeTab, reportsSegment, missionNow]);
 
   const stats = useMemo(() => {
-    const missionsCount = habits.filter((h) => isMainMissionPlayableOnHome(h, missionNow)).length;
-    const pending = habits.filter((h) => needsMainMissionOutcome(h, missionNow)).length;
-    const accomplished = habits.filter((h) => h.missionReport === "accomplished").length;
+    const missionsCount = habits.filter((h) =>
+      isMainMissionPlayableOnHome(h, missionNow),
+    ).length;
+    const pending = habits.filter((h) =>
+      needsMainMissionOutcome(h, missionNow),
+    ).length;
+    const accomplished = habits.filter(
+      (h) => h.missionReport === "accomplished",
+    ).length;
     const failed = habits.filter((h) => h.missionReport === "failed").length;
     const reportsCount = pending + accomplished + failed;
     const openMissionCount = missionsCount;
-    return { missionsCount, reportsCount, openMissionCount, pending, accomplished, failed };
+    return {
+      missionsCount,
+      reportsCount,
+      openMissionCount,
+      pending,
+      accomplished,
+      failed,
+    };
   }, [habits, missionNow]);
 
   const hasActiveMiniCountdown = useMemo(
@@ -179,7 +218,9 @@ export default function Home() {
   }, [miniMissions, miniNow]);
 
   const miniCount =
-    miniMissionStats.live > 0 ? miniMissionStats.live : miniMissionStats.waiting;
+    miniMissionStats.live > 0
+      ? miniMissionStats.live
+      : miniMissionStats.waiting;
 
   const greetingText = useMemo(() => getGreeting(), []);
 
@@ -193,13 +234,24 @@ export default function Home() {
       return;
     }
     Animated.parallel([
-      Animated.timing(headerOpacity, { toValue: 1, duration: 600, useNativeDriver: true }),
-      Animated.spring(headerSlide, { toValue: 0, tension: 50, friction: 10, useNativeDriver: true }),
+      Animated.timing(headerOpacity, {
+        toValue: 1,
+        duration: 600,
+        useNativeDriver: true,
+      }),
+      Animated.spring(headerSlide, {
+        toValue: 0,
+        tension: 50,
+        friction: 10,
+        useNativeDriver: true,
+      }),
     ]).start();
   }, [headerOpacity, headerSlide, reduceMotion]);
 
   useEffect(() => {
-    const unsub = useHabitStore.persist.onFinishHydration(() => setStoreHydrated(true));
+    const unsub = useHabitStore.persist.onFinishHydration(() =>
+      setStoreHydrated(true),
+    );
     if (useHabitStore.persist.hasHydrated()) setStoreHydrated(true);
     return unsub;
   }, []);
@@ -257,246 +309,479 @@ export default function Home() {
 
   return (
     <Screen>
-      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={theme.colors.background} />
+      <StatusBar
+        barStyle={isDark ? "light-content" : "dark-content"}
+        backgroundColor={theme.colors.background}
+      />
 
       <View style={styles.rootCol}>
-      <Animated.View
-        style={[styles.header, { opacity: headerOpacity, transform: [{ translateY: headerSlide }] }]}
-      >
-        <Text style={[styles.headerEyebrow, { color: theme.colors.cyan[400] }]}>MISSION CONTROL</Text>
-        <View style={styles.headerGreetingRow}>
+        <Animated.View
+          style={[
+            styles.header,
+            {
+              opacity: headerOpacity,
+              transform: [{ translateY: headerSlide }],
+            },
+          ]}
+        >
           <Text
-            style={[
-              styles.headerTitle,
-              { color: theme.colors.textPrimary, letterSpacing: theme.letterSpacing.tight },
-            ]}
-            numberOfLines={2}
+            style={[styles.headerEyebrow, { color: theme.colors.cyan[400] }]}
           >
-            {greetingText}
+            MISSION CONTROL
           </Text>
-          <View style={styles.headerRightCluster}>
-            {showAccount && session?.user ? (
-              <View style={styles.bellWrap}>
-                <Animated.View style={{ transform: [{ scale: unreadNotifCount > 0 ? bellScale : 1 }] }}>
-                  <TouchableOpacity
-                    onPress={() => router.push("/notifications")}
-                    style={[styles.headerIconBtn, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}
-                    activeOpacity={0.85}
-                    accessibilityLabel={
-                      unreadNotifCount > 0 ? `Notifications, ${unreadNotifCount} unread` : "Notifications"
-                    }
+          <View style={styles.headerGreetingRow}>
+            <Text
+              style={[
+                styles.headerTitle,
+                {
+                  color: theme.colors.textPrimary,
+                  letterSpacing: theme.letterSpacing.tight,
+                },
+              ]}
+              numberOfLines={2}
+            >
+              {greetingText}
+            </Text>
+            <View style={styles.headerRightCluster}>
+              {showAccount && session?.user ? (
+                <View style={styles.bellWrap}>
+                  <Animated.View
+                    style={{
+                      transform: [
+                        { scale: unreadNotifCount > 0 ? bellScale : 1 },
+                      ],
+                    }}
                   >
-                    <Bell size={20} color={theme.colors.textPrimary} />
-                  </TouchableOpacity>
-                </Animated.View>
-                {unreadNotifCount > 0 ? (
-                  <View style={[styles.notifBadge, { borderColor: theme.colors.background, backgroundColor: theme.colors.red[500] }]} />
-                ) : null}
+                    <TouchableOpacity
+                      onPress={() => router.push("/notifications")}
+                      style={[
+                        styles.headerIconBtn,
+                        {
+                          backgroundColor: theme.colors.surface,
+                          borderColor: theme.colors.border,
+                        },
+                      ]}
+                      activeOpacity={0.85}
+                      accessibilityLabel={
+                        unreadNotifCount > 0
+                          ? `Notifications, ${unreadNotifCount} unread`
+                          : "Notifications"
+                      }
+                    >
+                      <Bell size={20} color={theme.colors.textPrimary} />
+                    </TouchableOpacity>
+                  </Animated.View>
+                  {unreadNotifCount > 0 ? (
+                    <View
+                      style={[
+                        styles.notifBadge,
+                        {
+                          borderColor: theme.colors.background,
+                          backgroundColor: theme.colors.red[500],
+                        },
+                      ]}
+                    />
+                  ) : null}
+                </View>
+              ) : null}
+              <View
+                style={[
+                  styles.headerBadge,
+                  {
+                    backgroundColor: theme.colors.surface,
+                    borderColor: theme.colors.border,
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.levelNumber,
+                    { color: theme.colors.yellow[400] },
+                  ]}
+                >
+                  {level}
+                </Text>
+                <Text
+                  style={[styles.levelLabel, { color: theme.colors.textMuted }]}
+                >
+                  LVL
+                </Text>
               </View>
-            ) : null}
-            <View style={[styles.headerBadge, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
-              <Text style={[styles.levelNumber, { color: theme.colors.yellow[400] }]}>{level}</Text>
-              <Text style={[styles.levelLabel, { color: theme.colors.textMuted }]}>LVL</Text>
             </View>
           </View>
-        </View>
-      </Animated.View>
+        </Animated.View>
 
-      <View style={[styles.xpBar, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, borderRadius: theme.radius.md }]}>
-        <View style={styles.xpInfo}>
-          <View style={styles.xpLeft}>
-            <Zap size={12} color={theme.colors.yellow[400]} fill={theme.colors.yellow[400]} />
-            <Text style={[styles.xpLabel, { color: theme.colors.textSecondary }]}>Level {level}</Text>
+        <View
+          style={[
+            styles.xpBar,
+            {
+              backgroundColor: theme.colors.surface,
+              borderColor: theme.colors.border,
+              borderRadius: theme.radius.md,
+            },
+          ]}
+        >
+          <View style={styles.xpInfo}>
+            <View style={styles.xpLeft}>
+              <Zap
+                size={12}
+                color={theme.colors.yellow[400]}
+                fill={theme.colors.yellow[400]}
+              />
+              <Text
+                style={[styles.xpLabel, { color: theme.colors.textSecondary }]}
+              >
+                Level {level}
+              </Text>
+            </View>
+            <Text style={[styles.xpValue, { color: theme.colors.textMuted }]}>
+              {xpInLevel} / 100 XP
+            </Text>
           </View>
-          <Text style={[styles.xpValue, { color: theme.colors.textMuted }]}>
-            {xpInLevel} / 100 XP
-          </Text>
-        </View>
-        <View style={[styles.xpTrack, { backgroundColor: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)" }]}>
           <View
             style={[
-              styles.xpFill,
+              styles.xpTrack,
               {
-                width: `${Math.max(xpProgress * 100, 2)}%`,
-                backgroundColor: theme.colors.yellow[400],
+                backgroundColor: isDark
+                  ? "rgba(255,255,255,0.06)"
+                  : "rgba(0,0,0,0.06)",
               },
             ]}
-          />
-        </View>
-      </View>
-
-      <View style={styles.commandRow}>
-        <TouchableOpacity
-          style={[styles.commandCard, { backgroundColor: theme.colors.surface, borderColor: isDark ? "rgba(34, 211, 238, 0.3)" : "rgba(6, 182, 212, 0.25)", borderRadius: theme.radius.lg }]}
-          activeOpacity={0.85}
-          onPress={() => router.push("/create")}
-        >
-          <View style={styles.commandTopRow}>
-            <View style={styles.commandIconMain}>
-              {stats.openMissionCount > 0 ? (
-                <AnimatedFire size={theme.icon.sm} color={theme.colors.cyan[400]} />
-              ) : (
-                <Target size={theme.icon.md} color={theme.colors.cyan[400]} />
-              )}
-            </View>
-            {stats.openMissionCount > 0 && (
-              <Text style={[styles.countMain, { color: theme.colors.cyan[400] }]}>{stats.openMissionCount}</Text>
-            )}
-          </View>
-          <Text style={[styles.commandTitle, { color: theme.colors.textPrimary }]}>New Mission</Text>
-          <Text style={[styles.commandHint, { color: theme.colors.textMuted }]}>21-day or custom</Text>
-          <View style={[styles.commandCta, { backgroundColor: theme.colors.indigo[600], ...theme.shadow.glow }]}>
-            <Plus size={theme.icon.sm} color="#fff" strokeWidth={3} />
-          </View>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.commandCard, { backgroundColor: theme.colors.surface, borderColor: isDark ? "rgba(245, 158, 11, 0.3)" : "rgba(217, 119, 6, 0.25)", borderRadius: theme.radius.lg }]}
-          activeOpacity={0.85}
-          onPress={() => router.push("/mini")}
-        >
-          <View style={styles.commandTopRow}>
-            <View style={styles.commandIconMini}>
-              {miniCount > 0 ? (
-                <AnimatedFire size={theme.icon.sm} color={theme.colors.amber[500]} />
-              ) : (
-                <Bolt size={theme.icon.md} color={theme.colors.yellow[400]} />
-              )}
-            </View>
-            {miniCount > 0 && (
-              <Text style={[styles.countMini, { color: theme.colors.amber[500] }]}>{miniCount}</Text>
-            )}
-          </View>
-          <Text style={[styles.commandTitle, { color: theme.colors.textPrimary }]}>Mini Missions</Text>
-          <Text style={[styles.commandHint, { color: theme.colors.textMuted }]}>
-            {miniMissionStats.live > 0 ? "live now" : "waiting"}
-          </Text>
-          <View style={[styles.commandCtaMini, { borderColor: isDark ? "rgba(245, 158, 11, 0.3)" : "rgba(217, 119, 6, 0.25)" }]}>
-            <ChevronRight size={theme.icon.sm} color={theme.colors.amber[500]} strokeWidth={3} />
-          </View>
-        </TouchableOpacity>
-      </View>
-
-      <Text style={[styles.missionsLabel, { color: theme.colors.textMuted }]}>YOUR MISSIONS</Text>
-
-      <View style={[styles.tabContainer, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
-        <TouchableOpacity
-          style={[
-            styles.tab,
-            activeTab === "missions" && [styles.tabSelected, { backgroundColor: theme.colors.indigo[600], ...theme.shadow.glow }],
-          ]}
-          onPress={() => setActiveTab("missions")}
-          activeOpacity={0.8}
-        >
-          <Text style={[styles.tabText, { color: theme.colors.textSecondary }, activeTab === "missions" && styles.activeTabText]}>
-            Missions{stats.missionsCount > 0 ? ` (${stats.missionsCount})` : ""}
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[
-            styles.tab,
-            activeTab === "reports" && [styles.tabSelected, { backgroundColor: theme.colors.indigo[600], ...theme.shadow.glow }],
-          ]}
-          onPress={() => setActiveTab("reports")}
-          activeOpacity={0.8}
-        >
-          <Text style={[styles.tabText, { color: theme.colors.textSecondary }, activeTab === "reports" && styles.activeTabText]}>
-            Reports{stats.reportsCount > 0 ? ` (${stats.reportsCount})` : ""}
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      {activeTab === "reports" ? (
-        <View style={[styles.reportSegRow, { borderColor: theme.colors.border }]}>
-          {(
-            [
-              ["pending", "Pending", stats.pending] as const,
-              ["accomplished", "Accomplished", stats.accomplished] as const,
-              ["failed", "Failed", stats.failed] as const,
-            ] as const
-          ).map(([key, label, count]) => (
-            <TouchableOpacity
-              key={key}
-              style={[
-                styles.reportSegBtn,
-                reportsSegment === key && { backgroundColor: theme.colors.indigo[600], ...theme.shadow.glow },
-              ]}
-              onPress={() => setReportsSegment(key)}
-              activeOpacity={0.85}
-            >
-              <Text
-                style={[
-                  styles.reportSegText,
-                  { color: theme.colors.textSecondary },
-                  reportsSegment === key && styles.activeTabText,
-                ]}
-                numberOfLines={1}
-              >
-                {label}
-                {count > 0 ? ` (${count})` : ""}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      ) : null}
-
-      <View style={styles.listWrap}>
-        {!storeHydrated ? (
-          <ListSkeleton theme={theme} />
-        ) : filteredHabits.length === 0 ? (
-          <ScrollView
-            style={styles.emptyScroll}
-            contentContainerStyle={styles.emptyScrollContent}
-            refreshControl={showAccount && session?.user ? notifRefreshControl : undefined}
-            showsVerticalScrollIndicator={false}
           >
-            <View style={styles.emptyStateInner}>
-              <View style={[styles.emptyIconContainer, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
-                <Trophy size={50} color={theme.colors.slate[500]} />
+            <View
+              style={[
+                styles.xpFill,
+                {
+                  width: `${Math.max(xpProgress * 100, 2)}%`,
+                  backgroundColor: theme.colors.yellow[400],
+                },
+              ]}
+            />
+          </View>
+        </View>
+
+        <View style={styles.commandRow}>
+          <TouchableOpacity
+            style={[
+              styles.commandCard,
+              {
+                backgroundColor: theme.colors.surface,
+                borderColor: isDark
+                  ? "rgba(34, 211, 238, 0.3)"
+                  : "rgba(6, 182, 212, 0.25)",
+                borderRadius: theme.radius.lg,
+              },
+            ]}
+            activeOpacity={0.85}
+            onPress={() => router.push("/create")}
+          >
+            <View style={styles.commandTopRow}>
+              <View style={styles.commandIconMain}>
+                {stats.openMissionCount > 0 ? (
+                  <AnimatedFire
+                    size={theme.icon.sm}
+                    color={theme.colors.cyan[400]}
+                  />
+                ) : (
+                  <Target size={theme.icon.md} color={theme.colors.cyan[400]} />
+                )}
               </View>
-              <Text style={[styles.emptyTitle, { color: theme.colors.textPrimary, fontSize: theme.typography.h3 }]}>
-                {activeTab === "missions"
-                  ? habits.length === 0
-                    ? "No missions yet"
-                    : "Nothing in Missions"
-                  : reportsSegment === "pending"
-                    ? "Nothing pending"
-                    : reportsSegment === "accomplished"
-                      ? "No accomplished missions"
-                      : "No failed missions"}
-              </Text>
-              <Text style={[styles.emptyDescription, { color: theme.colors.textSecondary }]}>
-                {activeTab === "missions"
-                  ? habits.length === 0
-                    ? "Start your first mission and keep momentum daily."
-                    : "Active missions you can still check in on appear here. When the timer ends or the grid is full, move to Reports."
-                  : reportsSegment === "pending"
-                    ? "When the mission window ends or every day is checked in, open Reports → Pending to confirm if the mission is complete for you."
-                    : reportsSegment === "accomplished"
-                      ? "Missions you mark as complete in the review step are listed here."
-                      : "Missions you mark as not completed appear here."}
-              </Text>
-              {activeTab === "missions" && habits.length === 0 && (
-                <View style={styles.emptyActions}>
-                  <Button title="Start a Mission" onPress={() => router.push("/create")} style={styles.emptyButton} />
-                  <TouchableOpacity onPress={() => router.push("/mini")} style={styles.emptySecondary} activeOpacity={0.85}>
-                    <Text style={[styles.emptySecondaryText, { color: theme.colors.amber[500] }]}>Browse mini missions</Text>
-                  </TouchableOpacity>
-                </View>
+              {stats.openMissionCount > 0 && (
+                <Text
+                  style={[styles.countMain, { color: theme.colors.cyan[400] }]}
+                >
+                  {stats.openMissionCount}
+                </Text>
               )}
             </View>
-          </ScrollView>
-        ) : (
-          <FlashList
-            data={filteredHabits}
-            renderItem={({ item }) => <HabitCard item={item} />}
-            contentContainerStyle={[styles.listContent, { paddingBottom: listBottomPad }]}
-            showsVerticalScrollIndicator={false}
-            keyExtractor={(item) => item.id}
-            refreshControl={showAccount && session?.user ? notifRefreshControl : undefined}
-          />
-        )}
-      </View>
+            <Text
+              style={[styles.commandTitle, { color: theme.colors.textPrimary }]}
+            >
+              Main Mission
+            </Text>
+            <Text
+              style={[styles.commandHint, { color: theme.colors.textMuted }]}
+            >
+              21-day or custom
+            </Text>
+            <View
+              style={[
+                styles.commandCta,
+                {
+                  backgroundColor: theme.colors.indigo[600],
+                  ...theme.shadow.glow,
+                },
+              ]}
+            >
+              <Plus size={theme.icon.sm} color="#fff" strokeWidth={3} />
+            </View>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.commandCard,
+              {
+                backgroundColor: theme.colors.surface,
+                borderColor: isDark
+                  ? "rgba(245, 158, 11, 0.3)"
+                  : "rgba(217, 119, 6, 0.25)",
+                borderRadius: theme.radius.lg,
+              },
+            ]}
+            activeOpacity={0.85}
+            onPress={() => router.push("/mini")}
+          >
+            <View style={styles.commandTopRow}>
+              <View style={styles.commandIconMini}>
+                {miniCount > 0 ? (
+                  <AnimatedFire
+                    size={theme.icon.sm}
+                    color={theme.colors.amber[500]}
+                  />
+                ) : (
+                  <Bolt size={theme.icon.md} color={theme.colors.yellow[400]} />
+                )}
+              </View>
+              {miniCount > 0 && (
+                <Text
+                  style={[styles.countMini, { color: theme.colors.amber[500] }]}
+                >
+                  {miniCount}
+                </Text>
+              )}
+            </View>
+            <Text
+              style={[styles.commandTitle, { color: theme.colors.textPrimary }]}
+            >
+              Mini Missions
+            </Text>
+            <Text
+              style={[styles.commandHint, { color: theme.colors.textMuted }]}
+            >
+              {miniMissionStats.live > 0 ? "live now" : "waiting"}
+            </Text>
+            <View
+              style={[
+                styles.commandCtaMini,
+                {
+                  borderColor: isDark
+                    ? "rgba(245, 158, 11, 0.3)"
+                    : "rgba(217, 119, 6, 0.25)",
+                },
+              ]}
+            >
+              <ChevronRight
+                size={theme.icon.sm}
+                color={theme.colors.amber[500]}
+                strokeWidth={3}
+              />
+            </View>
+          </TouchableOpacity>
+        </View>
+
+        <Text style={[styles.missionsLabel, { color: theme.colors.textMuted }]}>
+          YOUR MISSIONS
+        </Text>
+
+        <View
+          style={[
+            styles.tabContainer,
+            {
+              backgroundColor: theme.colors.surface,
+              borderColor: theme.colors.border,
+            },
+          ]}
+        >
+          <TouchableOpacity
+            style={[
+              styles.tab,
+              activeTab === "missions" && [
+                styles.tabSelected,
+                {
+                  backgroundColor: theme.colors.indigo[600],
+                  ...theme.shadow.glow,
+                },
+              ],
+            ]}
+            onPress={() => setActiveTab("missions")}
+            activeOpacity={0.8}
+          >
+            <Text
+              style={[
+                styles.tabText,
+                { color: theme.colors.textSecondary },
+                activeTab === "missions" && styles.activeTabText,
+              ]}
+            >
+              Missions
+              {stats.missionsCount > 0 ? ` (${stats.missionsCount})` : ""}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.tab,
+              activeTab === "reports" && [
+                styles.tabSelected,
+                {
+                  backgroundColor: theme.colors.indigo[600],
+                  ...theme.shadow.glow,
+                },
+              ],
+            ]}
+            onPress={() => setActiveTab("reports")}
+            activeOpacity={0.8}
+          >
+            <Text
+              style={[
+                styles.tabText,
+                { color: theme.colors.textSecondary },
+                activeTab === "reports" && styles.activeTabText,
+              ]}
+            >
+              Reports{stats.reportsCount > 0 ? ` (${stats.reportsCount})` : ""}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {activeTab === "reports" ? (
+          <View
+            style={[styles.reportSegRow, { borderColor: theme.colors.border }]}
+          >
+            {(
+              [
+                ["pending", "Pending", stats.pending] as const,
+                ["accomplished", "Accomplished", stats.accomplished] as const,
+                ["failed", "Failed", stats.failed] as const,
+              ] as const
+            ).map(([key, label, count]) => (
+              <TouchableOpacity
+                key={key}
+                style={[
+                  styles.reportSegBtn,
+                  reportsSegment === key && {
+                    backgroundColor: theme.colors.indigo[600],
+                    ...theme.shadow.glow,
+                  },
+                ]}
+                onPress={() => setReportsSegment(key)}
+                activeOpacity={0.85}
+              >
+                <Text
+                  style={[
+                    styles.reportSegText,
+                    { color: theme.colors.textSecondary },
+                    reportsSegment === key && styles.activeTabText,
+                  ]}
+                  numberOfLines={1}
+                >
+                  {label}
+                  {count > 0 ? ` (${count})` : ""}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        ) : null}
+
+        <View style={styles.listWrap}>
+          {!storeHydrated ? (
+            <ListSkeleton theme={theme} />
+          ) : filteredHabits.length === 0 ? (
+            <ScrollView
+              style={styles.emptyScroll}
+              contentContainerStyle={styles.emptyScrollContent}
+              refreshControl={
+                showAccount && session?.user ? notifRefreshControl : undefined
+              }
+              showsVerticalScrollIndicator={false}
+            >
+              <View style={styles.emptyStateInner}>
+                <View
+                  style={[
+                    styles.emptyIconContainer,
+                    {
+                      backgroundColor: theme.colors.surface,
+                      borderColor: theme.colors.border,
+                    },
+                  ]}
+                >
+                  <Trophy size={50} color={theme.colors.slate[500]} />
+                </View>
+                <Text
+                  style={[
+                    styles.emptyTitle,
+                    {
+                      color: theme.colors.textPrimary,
+                      fontSize: theme.typography.h3,
+                    },
+                  ]}
+                >
+                  {activeTab === "missions"
+                    ? habits.length === 0
+                      ? "No missions yet"
+                      : "Nothing in Missions"
+                    : reportsSegment === "pending"
+                      ? "Nothing pending"
+                      : reportsSegment === "accomplished"
+                        ? "No accomplished missions"
+                        : "No failed missions"}
+                </Text>
+                <Text
+                  style={[
+                    styles.emptyDescription,
+                    { color: theme.colors.textSecondary },
+                  ]}
+                >
+                  {activeTab === "missions"
+                    ? habits.length === 0
+                      ? "Start your first mission and keep momentum daily."
+                      : "Active missions you can still check in on appear here. When the timer ends or the grid is full, move to Reports."
+                    : reportsSegment === "pending"
+                      ? "When the mission window ends or every day is checked in, open Reports → Pending to confirm if the mission is complete for you."
+                      : reportsSegment === "accomplished"
+                        ? "Missions you mark as complete in the review step are listed here."
+                        : "Missions you mark as not completed appear here."}
+                </Text>
+                {activeTab === "missions" && habits.length === 0 && (
+                  <View style={styles.emptyActions}>
+                    <Button
+                      title="Start a Mission"
+                      onPress={() => router.push("/create")}
+                      style={styles.emptyButton}
+                    />
+                    <TouchableOpacity
+                      onPress={() => router.push("/mini")}
+                      style={styles.emptySecondary}
+                      activeOpacity={0.85}
+                    >
+                      <Text
+                        style={[
+                          styles.emptySecondaryText,
+                          { color: theme.colors.amber[500] },
+                        ]}
+                      >
+                        Browse mini missions
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </View>
+            </ScrollView>
+          ) : (
+            <FlashList
+              data={filteredHabits}
+              renderItem={({ item }) => <HabitCard item={item} />}
+              contentContainerStyle={[
+                styles.listContent,
+                { paddingBottom: listBottomPad },
+              ]}
+              showsVerticalScrollIndicator={false}
+              keyExtractor={(item) => item.id}
+              refreshControl={
+                showAccount && session?.user ? notifRefreshControl : undefined
+              }
+            />
+          )}
+        </View>
       </View>
     </Screen>
   );
@@ -513,9 +798,20 @@ const styles = StyleSheet.create({
     marginTop: 2,
     minHeight: 44,
   },
-  headerRightCluster: { flexDirection: "row", alignItems: "center", gap: 8, flexShrink: 0 },
+  headerRightCluster: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flexShrink: 0,
+  },
   headerEyebrow: { fontSize: 10, fontWeight: "700", letterSpacing: 1.25 },
-  headerTitle: { flex: 1, minWidth: 0, fontSize: 20, fontWeight: "800", lineHeight: 24 },
+  headerTitle: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 20,
+    fontWeight: "800",
+    lineHeight: 24,
+  },
   bellWrap: { position: "relative" },
   notifBadge: {
     position: "absolute",
@@ -546,19 +842,83 @@ const styles = StyleSheet.create({
   levelNumber: { fontSize: 19, fontWeight: "800", lineHeight: 21 },
   levelLabel: { fontSize: 9, fontWeight: "800", letterSpacing: 1 },
   commandRow: { flexDirection: "row", gap: 10, marginBottom: SECTION_GAP },
-  commandCard: { flex: 1, paddingVertical: 14, paddingHorizontal: 14, position: "relative", overflow: "hidden", borderWidth: 1 },
-  commandTopRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 },
-  commandIconMain: { width: 36, height: 36, borderRadius: 9999, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(34, 211, 238, 0.12)" },
-  commandIconMini: { width: 36, height: 36, borderRadius: 9999, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(251, 191, 36, 0.14)" },
+  commandCard: {
+    flex: 1,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    position: "relative",
+    overflow: "hidden",
+    borderWidth: 1,
+  },
+  commandTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 10,
+  },
+  commandIconMain: {
+    width: 36,
+    height: 36,
+    borderRadius: 9999,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(34, 211, 238, 0.12)",
+  },
+  commandIconMini: {
+    width: 36,
+    height: 36,
+    borderRadius: 9999,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(251, 191, 36, 0.14)",
+  },
   countMain: { fontSize: 20, fontWeight: "800" },
   countMini: { fontSize: 20, fontWeight: "800" },
   commandTitle: { fontWeight: "700", fontSize: 15, marginBottom: 2 },
   commandHint: { fontSize: 11 },
-  commandCta: { position: "absolute", bottom: 12, right: 12, width: 28, height: 28, borderRadius: 9999, alignItems: "center", justifyContent: "center" },
-  commandCtaMini: { position: "absolute", bottom: 12, right: 12, width: 28, height: 28, borderRadius: 9999, backgroundColor: "rgba(245, 158, 11, 0.15)", borderWidth: 1, alignItems: "center", justifyContent: "center" },
-  missionsLabel: { fontSize: 11, fontWeight: "800", letterSpacing: 1.2, marginBottom: 6 },
-  tabContainer: { flexDirection: "row", borderRadius: 14, padding: 4, marginBottom: 10, borderWidth: 1 },
-  tab: { flex: 1, paddingVertical: 10, alignItems: "center", borderRadius: 10, minHeight: 42, justifyContent: "center" },
+  commandCta: {
+    position: "absolute",
+    bottom: 12,
+    right: 12,
+    width: 28,
+    height: 28,
+    borderRadius: 9999,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  commandCtaMini: {
+    position: "absolute",
+    bottom: 12,
+    right: 12,
+    width: 28,
+    height: 28,
+    borderRadius: 9999,
+    backgroundColor: "rgba(245, 158, 11, 0.15)",
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  missionsLabel: {
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 1.2,
+    marginBottom: 6,
+  },
+  tabContainer: {
+    flexDirection: "row",
+    borderRadius: 14,
+    padding: 4,
+    marginBottom: 10,
+    borderWidth: 1,
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: "center",
+    borderRadius: 10,
+    minHeight: 42,
+    justifyContent: "center",
+  },
   tabSelected: { paddingVertical: 11 },
   tabText: { fontWeight: "700" },
   activeTabText: { color: "#ffffff" },
@@ -583,17 +943,44 @@ const styles = StyleSheet.create({
   listWrap: { flex: 1, minHeight: 0 },
   listContent: { paddingBottom: 40 },
   emptyScroll: { flex: 1 },
-  emptyScrollContent: { flexGrow: 1, justifyContent: "center", alignItems: "center", paddingVertical: 24 },
+  emptyScrollContent: {
+    flexGrow: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingVertical: 24,
+  },
   emptyStateInner: { alignItems: "center", width: "100%" },
-  emptyIconContainer: { width: 94, height: 94, borderRadius: 9999, alignItems: "center", justifyContent: "center", borderWidth: 1, marginBottom: 16 },
+  emptyIconContainer: {
+    width: 94,
+    height: 94,
+    borderRadius: 9999,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    marginBottom: 16,
+  },
   emptyTitle: { fontWeight: "700", marginBottom: 8 },
-  emptyDescription: { textAlign: "center", marginBottom: 20, paddingHorizontal: 24 },
+  emptyDescription: {
+    textAlign: "center",
+    marginBottom: 20,
+    paddingHorizontal: 24,
+  },
   emptyActions: { width: "100%", maxWidth: 320, alignItems: "center" },
   emptyButton: { width: "100%" },
   emptySecondary: { marginTop: 4, paddingVertical: 10, paddingHorizontal: 12 },
   emptySecondaryText: { fontSize: 14, fontWeight: "700" },
-  xpBar: { paddingHorizontal: 12, paddingVertical: 6, marginBottom: 8, borderWidth: 1 },
-  xpInfo: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 4 },
+  xpBar: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    marginBottom: 8,
+    borderWidth: 1,
+  },
+  xpInfo: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 4,
+  },
   xpLeft: { flexDirection: "row", alignItems: "center", gap: 4 },
   xpLabel: { fontSize: 12, fontWeight: "700" },
   xpValue: { fontSize: 11, fontWeight: "600" },
