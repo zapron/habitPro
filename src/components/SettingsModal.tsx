@@ -11,6 +11,7 @@ import { X, Monitor, Sun, Moon, type LucideIcon } from 'lucide-react-native';
 import { useTheme, type ThemePreference } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { isSupabaseConfigured } from '../lib/env';
+import { useBilling } from "../context/BillingContext";
 import { useHabitStore } from '../store/habitStore';
 import { UsernameSetupFields } from './UsernameSetupFields';
 
@@ -28,6 +29,7 @@ interface SettingsModalProps {
 export function SettingsModal({ visible, onClose }: SettingsModalProps) {
     const { theme, isDark, preference, setPreference } = useTheme();
     const { session } = useAuth();
+    const { configured: billingConfigured, ready: billingReady, isExpoGo, openManageSubscriptions } = useBilling();
     const showAccount = isSupabaseConfigured();
     const username = useHabitStore((s) => s.username);
 
@@ -61,6 +63,28 @@ export function SettingsModal({ visible, onClose }: SettingsModalProps) {
                             {!username ? <UsernameSetupFields /> : null}
                         </>
                     )}
+
+                    <Text style={[styles.sectionLabel, { color: theme.colors.textMuted, marginTop: 14 }]}>SUBSCRIPTION</Text>
+                    <TouchableOpacity
+                        style={[
+                            styles.rowBtn,
+                            {
+                                borderColor: theme.colors.border,
+                                backgroundColor: theme.colors.surfaceElevated,
+                                opacity: billingConfigured && billingReady && !isExpoGo ? 1 : 0.65,
+                            },
+                        ]}
+                        onPress={() => void openManageSubscriptions()}
+                        activeOpacity={0.85}
+                        disabled={!billingConfigured || !billingReady || isExpoGo}
+                        accessibilityRole="button"
+                        accessibilityLabel="Manage subscription"
+                    >
+                        <Text style={[styles.rowBtnText, { color: theme.colors.textPrimary }]}>Manage subscription</Text>
+                        <Text style={[styles.rowBtnHint, { color: theme.colors.textMuted }]}>
+                            Open Google Play subscriptions
+                        </Text>
+                    </TouchableOpacity>
 
                     <Text style={[styles.sectionLabel, { color: theme.colors.textMuted, marginTop: 14 }]}>THEME</Text>
 
@@ -178,5 +202,20 @@ const styles = StyleSheet.create({
     themeChipLabel: {
         fontSize: 11,
         fontWeight: '700',
+    },
+    rowBtn: {
+        borderWidth: 1,
+        borderRadius: 14,
+        paddingVertical: 12,
+        paddingHorizontal: 14,
+        gap: 2,
+    },
+    rowBtnText: {
+        fontSize: 14,
+        fontWeight: "800",
+    },
+    rowBtnHint: {
+        fontSize: 12,
+        fontWeight: "600",
     },
 });

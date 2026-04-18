@@ -547,10 +547,8 @@ export default function ProfileScreen() {
             accessibilityRole="button"
             accessibilityLabel="View HabitPro Community"
           >
-            <View style={styles.plusCardTop}>
-              <PlusBadge label="HABITPRO COMMUNITY" size="md" />
-              <Text style={[styles.plusCardTitle, { color: theme.colors.textPrimary }]}>Unlock social features</Text>
-            </View>
+            <PlusBadge label="HABITPRO COMMUNITY" size="md" />
+            <Text style={[styles.plusCardTitle, { color: theme.colors.textPrimary }]}>Unlock social features</Text>
             <Text style={[styles.plusCardBody, { color: theme.colors.textSecondary }]}>
               Group missions, invites, squad nudges, and Community posting are part of HabitPro Community.
             </Text>
@@ -805,8 +803,7 @@ const styles = StyleSheet.create({
     padding: 16,
     marginBottom: 22,
   },
-  plusCardTop: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 10 },
-  plusCardTitle: { fontSize: 16, fontWeight: "900", letterSpacing: -0.2, flex: 1, minWidth: 0 },
+  plusCardTitle: { fontSize: 16, fontWeight: "900", letterSpacing: -0.2, marginTop: 10 },
   plusCardBody: { fontSize: 13, lineHeight: 19, fontWeight: "600", marginBottom: 10 },
   plusCardCta: { fontSize: 13, fontWeight: "900" },
   sectionLabel: {

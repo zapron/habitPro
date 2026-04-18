@@ -5,13 +5,14 @@ import React, {
   useMemo,
   useState,
 } from "react";
-import { Modal, Pressable, StyleSheet, View } from "react-native";
+import { Linking, Modal, Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Text } from "../components/AppText";
 import { Button } from "../components/Button";
 import { PlusBadge } from "../components/PlusBadge";
 import { useTheme } from "./ThemeContext";
 import { BillingProvider, useBilling } from "./BillingContext";
+import { useToast } from "./ToastContext";
 
 export type PlusUpsellReason =
   | "generic"
@@ -117,7 +118,8 @@ function BillingUpsellModal({
   insetsBottom: number;
 }) {
   const { theme } = useTheme();
-  const { configured, ready, purchaseCommunity, restore } = useBilling();
+  const { configured, ready, isExpoGo, purchaseCommunity, restore } = useBilling();
+  const { showToast } = useToast();
   const [busy, setBusy] = useState<null | "monthly" | "annual" | "restore">(
     null,
   );
@@ -131,14 +133,28 @@ function BillingUpsellModal({
     try {
       if (kind === "restore") {
         await restore();
+        showToast("Restored purchases.", "success");
         onClose();
         return;
       }
       const res = await purchaseCommunity(kind);
-      if (!res.cancelled) onClose();
+      if (!res.cancelled) {
+        showToast("Trial started. Welcome to HabitPro Community.", "success");
+        onClose();
+      }
     } finally {
       setBusy(null);
     }
+  };
+
+  const onOpenPrivacy = async () => {
+    // Replace with your real URL when ready.
+    await Linking.openURL("https://example.com/privacy");
+  };
+
+  const onOpenTerms = async () => {
+    // Replace with your real URL when ready.
+    await Linking.openURL("https://example.com/terms");
   };
 
   return (
@@ -203,6 +219,20 @@ function BillingUpsellModal({
           ))}
         </View>
 
+        <Text style={[styles.disclaimer, { color: theme.colors.textMuted }]}>
+          7-day free trial, then ₹99/month or ₹999/year. Cancel anytime in Google Play.
+        </Text>
+
+        {!configured ? (
+          <Text style={[styles.disclaimerHint, { color: theme.colors.textMuted }]}>
+            Billing isn’t configured yet on this build. Add your RevenueCat API key to enable purchases.
+          </Text>
+        ) : isExpoGo ? (
+          <Text style={[styles.disclaimerHint, { color: theme.colors.textMuted }]}>
+            Billing is available in a dev build / Play install (not Expo Go).
+          </Text>
+        ) : null}
+
         <Button
           title={
             busy === "monthly" ? "Starting trial…" : "7 day trial then Monthly"
@@ -229,6 +259,17 @@ function BillingUpsellModal({
             opacity: configured && ready && busy === null ? 1 : 0.65,
           }}
         />
+
+        <View style={styles.linkRow}>
+          <Pressable onPress={() => void onOpenTerms()} accessibilityRole="link">
+            <Text style={[styles.link, { color: theme.colors.indigo[400] }]}>Terms</Text>
+          </Pressable>
+          <Text style={[styles.linkSep, { color: theme.colors.textMuted }]}>·</Text>
+          <Pressable onPress={() => void onOpenPrivacy()} accessibilityRole="link">
+            <Text style={[styles.link, { color: theme.colors.indigo[400] }]}>Privacy</Text>
+          </Pressable>
+        </View>
+
         <Button
           title="Not now"
           variant="secondary"
@@ -276,4 +317,9 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   bulletText: { flex: 1, fontSize: 13, lineHeight: 19, fontWeight: "600" },
+  disclaimer: { fontSize: 11, lineHeight: 16, fontWeight: "700", marginTop: 10 },
+  disclaimerHint: { fontSize: 11, lineHeight: 16, fontWeight: "700", marginTop: 6, opacity: 0.9 },
+  linkRow: { flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 8, marginTop: 10 },
+  link: { fontSize: 12, fontWeight: "800" },
+  linkSep: { fontSize: 12, fontWeight: "800" },
 });

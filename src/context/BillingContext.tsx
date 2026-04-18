@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { Platform } from "react-native";
+import { Linking, Platform } from "react-native";
 import Constants from "expo-constants";
 import Purchases, { type CustomerInfo, LOG_LEVEL } from "react-native-purchases";
 import { getRevenueCatConfig, logRevenueCatEnvHint } from "../lib/env";
@@ -12,6 +12,8 @@ type BillingContextValue = {
   configured: boolean;
   /** True once Purchases.configure has been called (or we intentionally skipped). */
   ready: boolean;
+  /** True when running in Expo Go (native billing not available). */
+  isExpoGo: boolean;
   /** Most recent CustomerInfo fetched from the SDK. */
   customerInfo: CustomerInfo | null;
   /** True when the entitlement is active in current CustomerInfo. */
@@ -19,6 +21,8 @@ type BillingContextValue = {
   refresh: () => Promise<void>;
   purchaseCommunity: (plan: PlanId) => Promise<{ cancelled: boolean }>;
   restore: () => Promise<void>;
+  /** Open OS subscription management. */
+  openManageSubscriptions: () => Promise<void>;
 };
 
 const BillingContext = createContext<BillingContextValue | null>(null);
@@ -46,6 +50,7 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
   const [ready, setReady] = useState(false);
   const [customerInfo, setCustomerInfo] = useState<CustomerInfo | null>(null);
   const configuredRef = useRef(false);
+  const isExpoGo = shouldSkipNativePurchases();
 
   const { androidApiKey, iosApiKey } = getRevenueCatConfig();
   const apiKey = Platform.OS === "android" ? androidApiKey : iosApiKey;
@@ -63,7 +68,7 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    if (shouldSkipNativePurchases()) {
+    if (isExpoGo) {
       // In Expo Go we intentionally no-op; keep app usable.
       setReady(true);
       return;
@@ -81,7 +86,7 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
   }, [apiKey, configured]);
 
   useEffect(() => {
-    if (!ready || !configured || shouldSkipNativePurchases()) return;
+    if (!ready || !configured || isExpoGo) return;
     const uid = session?.user?.id ?? null;
     let cancelled = false;
 
@@ -108,19 +113,19 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
   }, [configured, ready, session?.user?.id]);
 
   const refresh = async () => {
-    if (!ready || !configured || shouldSkipNativePurchases()) return;
+    if (!ready || !configured || isExpoGo) return;
     const info = await Purchases.getCustomerInfo();
     setCustomerInfo(info);
   };
 
   const restore = async () => {
-    if (!ready || !configured || shouldSkipNativePurchases()) return;
+    if (!ready || !configured || isExpoGo) return;
     const info = await Purchases.restorePurchases();
     setCustomerInfo(info);
   };
 
   const purchaseCommunity = async (plan: PlanId) => {
-    if (!ready || !configured || shouldSkipNativePurchases()) {
+    if (!ready || !configured || isExpoGo) {
       return { cancelled: true };
     }
 
@@ -150,17 +155,35 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
 
   const hasCommunityAccess = Boolean(customerInfo?.entitlements?.active?.[ENTITLEMENT_ID]);
 
+  const openManageSubscriptions = async () => {
+    // Prefer RevenueCat helper if available; otherwise fall back to store URLs.
+    const anyPurchases = Purchases as unknown as { showManageSubscriptions?: () => Promise<void> | void };
+    if (typeof anyPurchases.showManageSubscriptions === "function" && !isExpoGo) {
+      await anyPurchases.showManageSubscriptions();
+      return;
+    }
+    if (Platform.OS === "android") {
+      await Linking.openURL("https://play.google.com/store/account/subscriptions");
+      return;
+    }
+    if (Platform.OS === "ios") {
+      await Linking.openURL("https://apps.apple.com/account/subscriptions");
+    }
+  };
+
   const value = useMemo<BillingContextValue>(
     () => ({
       configured,
       ready,
+      isExpoGo,
       customerInfo,
       hasCommunityAccess,
       refresh,
       purchaseCommunity,
       restore,
+      openManageSubscriptions,
     }),
-    [configured, ready, customerInfo, hasCommunityAccess],
+    [configured, ready, isExpoGo, customerInfo, hasCommunityAccess],
   );
 
   return <BillingContext.Provider value={value}>{children}</BillingContext.Provider>;
