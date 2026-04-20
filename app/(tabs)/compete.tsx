@@ -260,7 +260,10 @@ export default function CompeteScreen() {
   const { session } = useAuth();
   const { isPremium, loading: premiumLoading } = usePremium();
   const { openUpsell } = usePlusUpsell();
-  const inviteAcceptLocked = !isPremium || premiumLoading;
+  /** True while we do not know premium yet — do not run accept API or open paywall. */
+  const inviteAcceptPremiumUnknown = premiumLoading;
+  /** Non-premium users see Accept → paywall instead of API (avoids RLS errors on accept). */
+  const inviteNeedsCommunityForAccept = !isPremium && !premiumLoading;
   const [segment, setSegment] = useState<CompeteSegment>("challenges");
   const [challengesSubTab, setChallengesSubTab] = useState<ChallengesSubTab>("missions");
   const [groupInvites, setGroupInvites] = useState<ChallengeInviteRow[]>([]);
@@ -350,6 +353,11 @@ export default function CompeteScreen() {
   }, [highlightInviteId, highlightChallengeId]);
 
   const handleAcceptGroupInvite = async (invite: ChallengeInviteRow) => {
+    if (inviteAcceptPremiumUnknown) return;
+    if (inviteNeedsCommunityForAccept) {
+      openUpsell("invite_accept");
+      return;
+    }
     setInviteBusy(invite.id);
     try {
       const group = await getChallengeGroup(invite.challenge_id);
@@ -601,7 +609,7 @@ export default function CompeteScreen() {
               >
                 Invites ({pendingInviteCount})
               </Text>
-              <PlusBadge />
+              {!isPremium ? <PlusBadge withFlame /> : null}
             </View>
           </TouchableOpacity>
         </View>
@@ -750,9 +758,9 @@ export default function CompeteScreen() {
                       <Text style={[styles.inviteHint, { color: theme.colors.textSecondary }]}>
                         Accept to add a matching mission and join everyone on this mission.
                       </Text>
-                      {inviteAcceptLocked ? (
+                      {inviteNeedsCommunityForAccept ? (
                         <Text style={[styles.invitePlusHint, { color: theme.colors.textMuted }]}>
-                          Joining group missions is HabitPro Community. Tap Accept to learn more.
+                          Group missions need Community. Tap Accept to start your trial or subscribe.
                         </Text>
                       ) : null}
                       <View style={styles.inviteActions}>
@@ -769,11 +777,10 @@ export default function CompeteScreen() {
                             {
                               backgroundColor: theme.colors.indigo[600],
                               ...theme.shadow.glow,
-                              opacity: inviteAcceptLocked ? 0.55 : 1,
                             },
                           ]}
                           onPress={() => void handleAcceptGroupInvite(inv)}
-                          disabled={inviteBusy === inv.id}
+                          disabled={inviteAcceptPremiumUnknown || inviteBusy === inv.id}
                         >
                           {inviteBusy === inv.id ? (
                             <ActivityIndicator color={theme.colors.white} />
