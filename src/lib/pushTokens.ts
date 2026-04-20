@@ -4,11 +4,11 @@ import { getSupabase } from "./supabase";
 import { getOrCreateDeviceInstallId } from "./deviceInstallId";
 
 /**
- * Expo Go on Android (SDK 53+): remote push is not supported; skip registration.
- * Dev client / production builds: register normally. iOS: same code path when you add credentials.
+ * Expo Go: do not dynamically import `expo-notifications` (Android push limits + iOS
+ * missing `PushNotificationIOS` in Go). Dev client / store builds register normally.
  */
 export function shouldSkipRemotePushRegistration(): boolean {
-  return Constants.appOwnership === "expo" && Platform.OS === "android";
+  return Constants.appOwnership === "expo";
 }
 
 async function getNotificationsModule(): Promise<

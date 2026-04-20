@@ -11,7 +11,7 @@ import { Text } from "../components/AppText";
 import { Button } from "../components/Button";
 import { PlusBadge } from "../components/PlusBadge";
 import { useTheme } from "./ThemeContext";
-import { BillingProvider, useBilling } from "./BillingContext";
+import { useBilling } from "./BillingContext";
 import { useToast } from "./ToastContext";
 
 export type PlusUpsellReason =
@@ -80,27 +80,25 @@ export function PlusUpsellProvider({
                   : "Unlock HabitPro Community";
 
   return (
-    <BillingProvider>
-      <PlusUpsellContext.Provider value={value}>
-        {children}
-        <Modal
+    <PlusUpsellContext.Provider value={value}>
+      {children}
+      <Modal
+        visible={visible}
+        transparent
+        animationType="fade"
+        onRequestClose={closeUpsell}
+        statusBarTranslucent
+        accessibilityViewIsModal
+      >
+        <BillingUpsellModal
           visible={visible}
-          transparent
-          animationType="fade"
-          onRequestClose={closeUpsell}
-          statusBarTranslucent
-          accessibilityViewIsModal
-        >
-          <BillingUpsellModal
-            visible={visible}
-            onClose={closeUpsell}
-            headline={headline}
-            isDark={isDark}
-            insetsBottom={insets.bottom}
-          />
-        </Modal>
-      </PlusUpsellContext.Provider>
-    </BillingProvider>
+          onClose={closeUpsell}
+          headline={headline}
+          isDark={isDark}
+          insetsBottom={insets.bottom}
+        />
+      </Modal>
+    </PlusUpsellContext.Provider>
   );
 }
 
@@ -141,6 +139,8 @@ function BillingUpsellModal({
       if (!res.cancelled) {
         showToast("Trial started. Welcome to HabitPro Community.", "success");
         onClose();
+      } else if (res.purchaseFailed) {
+        showToast("Purchase did not complete.", "error");
       }
     } finally {
       setBusy(null);
@@ -185,7 +185,7 @@ function BillingUpsellModal({
         ]}
       >
         <View style={styles.titleRow}>
-          <PlusBadge label="HABITPRO COMMUNITY" size="md" />
+          <PlusBadge withFlame size="md" />
         </View>
         <Text
           style={[

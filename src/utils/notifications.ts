@@ -6,12 +6,12 @@ const DEFAULT_REMOTE_CHANNEL_ID = "default";
 const CHANNEL_ID = "timer-alerts";
 
 /**
- * Expo Go on Android (SDK 53+) removed remote push; loading expo-notifications
- * still runs push registration and throws + can cause spurious "Network request failed".
- * Skip importing the module entirely in that environment.
+ * Expo Go: avoid loading `expo-notifications` — Android (SDK 53+) broke remote push, and
+ * iOS Expo Go can throw when the native module graph touches `PushNotificationIOS`.
+ * Use a dev client / production build for real notification behavior.
  */
 function shouldSkipNotificationsModule(): boolean {
-  return Constants.appOwnership === "expo" && Platform.OS === "android";
+  return Constants.appOwnership === "expo";
 }
 
 type NotificationsModule = typeof import("expo-notifications");

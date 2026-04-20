@@ -19,7 +19,9 @@ type BillingContextValue = {
   /** True when the entitlement is active in current CustomerInfo. */
   hasCommunityAccess: boolean;
   refresh: () => Promise<void>;
-  purchaseCommunity: (plan: PlanId) => Promise<{ cancelled: boolean }>;
+  purchaseCommunity: (
+    plan: PlanId,
+  ) => Promise<{ cancelled: boolean; purchaseFailed?: boolean }>;
   restore: () => Promise<void>;
   /** Open OS subscription management. */
   openManageSubscriptions: () => Promise<void>;
@@ -143,13 +145,15 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
     } catch (e: unknown) {
       // RevenueCat throws a typed error; keep this generic to avoid coupling on versions.
       const msg = e instanceof Error ? e.message : String(e);
-      const cancelled =
+      const userDismissed =
         typeof msg === "string" &&
         (msg.toLowerCase().includes("cancel") || msg.toLowerCase().includes("user cancelled"));
-      if (__DEV__ && !cancelled) {
+      // Any throw is a non-purchase: do not report cancelled:false (that showed a false "trial started"
+      // toast for Test Store "failed purchase" and other errors whose message omits "cancel").
+      if (__DEV__ && !userDismissed) {
         console.warn("[habitPro] purchase failed:", msg);
       }
-      return { cancelled };
+      return { cancelled: true, purchaseFailed: !userDismissed };
     }
   };
 

@@ -11,6 +11,7 @@ WebBrowser.maybeCompleteAuthSession();
 import { ThemeProvider } from "../src/context/ThemeContext";
 import { ToastHost, ToastProvider } from "../src/context/ToastContext";
 import { AuthProvider, useAuth } from "../src/context/AuthContext";
+import { BillingProvider } from "../src/context/BillingContext";
 import { PremiumProvider } from "../src/context/PremiumContext";
 import { PlusUpsellProvider } from "../src/context/PlusUpsellContext";
 import { AppVersionProvider, useAppVersion } from "../src/context/AppVersionContext";
@@ -127,8 +128,7 @@ function RootLayoutNav() {
 
     (async () => {
       const Constants = (await import("expo-constants")).default;
-      const { Platform } = await import("react-native");
-      if (Constants.appOwnership === "expo" && Platform.OS === "android") return;
+      if (Constants.appOwnership === "expo") return;
       const Notifications = await import("expo-notifications");
       if (cancelled) return;
 
@@ -228,15 +228,17 @@ export default function Layout() {
     <ThemeProvider>
       <ToastProvider>
         <AuthProvider>
-          <PremiumProvider>
-            <PlusUpsellProvider>
-              <AppVersionProvider>
-                <SplashGate>
-                  <RootLayoutNav />
-                </SplashGate>
-              </AppVersionProvider>
-            </PlusUpsellProvider>
-          </PremiumProvider>
+          <BillingProvider>
+            <PremiumProvider>
+              <PlusUpsellProvider>
+                <AppVersionProvider>
+                  <SplashGate>
+                    <RootLayoutNav />
+                  </SplashGate>
+                </AppVersionProvider>
+              </PlusUpsellProvider>
+            </PremiumProvider>
+          </BillingProvider>
         </AuthProvider>
       </ToastProvider>
     </ThemeProvider>
