@@ -192,7 +192,7 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
           <View style={styles.sheetHead}>
             <View style={styles.titleRow}>
               <Text style={[styles.sheetTitle, { color: theme.colors.textPrimary }]}>Group mission</Text>
-              <PlusBadge label="HABITPRO COMMUNITY" />
+              <PlusBadge withFlame />
             </View>
             <TouchableOpacity
               onPress={onClose}

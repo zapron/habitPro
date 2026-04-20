@@ -73,7 +73,7 @@ export const HabitCard = memo(({ item }: HabitCardProps) => {
                         >
                             <Swords size={10} color={theme.colors.indigo[400]} />
                             <Text style={[styles.challengePillText, { color: theme.colors.indigo[400] }]}>GROUP MISSION</Text>
-                            <PlusBadge />
+                            <PlusBadge withFlame />
                         </View>
                     )}
                     {item.missionReport === 'accomplished' && (

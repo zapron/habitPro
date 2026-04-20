@@ -26,7 +26,7 @@ export default function CommunityScreen() {
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={theme.colors.background} />
       <Text style={[styles.title, { color: theme.colors.textPrimary, fontSize: theme.typography.h1 }]}>Community</Text>
       <View style={styles.plusRow}>
-        <PlusBadge label="HABITPRO COMMUNITY" />
+        <PlusBadge withFlame />
         <Text style={[styles.plusHint, { color: theme.colors.textMuted, fontSize: theme.typography.micro }]}>
           Social mode: post, cheer, and get seen.
         </Text>

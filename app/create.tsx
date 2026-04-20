@@ -494,7 +494,7 @@ export default function CreateHabit() {
               >
                 Public
               </Text>
-              <PlusBadge />
+              <PlusBadge withFlame />
             </View>
             <Text style={[styles.modeHint, { color: theme.colors.textMuted }]}>
               Visible to others (HabitPro Community)

@@ -793,7 +793,7 @@ export default function HabitDetail() {
                             <>
                                 <View style={styles.visibilityTitleRow}>
                                     <Text style={[styles.visibilityTitle, { color: theme.colors.textPrimary }]}>Public</Text>
-                                    <PlusBadge />
+                                    <PlusBadge withFlame />
                                 </View>
                                 <Text style={[styles.visibilityHint, { color: theme.colors.textMuted }]}>
                                     Visible to your squad on this mission (HabitPro Community). Community is separate: choose per moment when you save or open a day.

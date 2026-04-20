@@ -472,7 +472,7 @@ export default function ProfileScreen() {
         <View>
           <View style={styles.profileTitleRow}>
             <Text style={[styles.title, { color: theme.colors.textPrimary, fontSize: theme.typography.h1 }]}>Profile</Text>
-            {!isPremium ? <PlusBadge label="HABITPRO COMMUNITY" /> : null}
+            {!isPremium ? <PlusBadge withFlame /> : null}
           </View>
           <Text style={[styles.subtitle, { color: theme.colors.textSecondary, fontSize: theme.typography.caption }]}>
             Your progress at a glance
@@ -529,7 +529,7 @@ export default function ProfileScreen() {
             ) : null}
             {isPremium ? (
               <View style={styles.plusActiveRow}>
-                <PlusBadge label="HABITPRO COMMUNITY" />
+                <PlusBadge withFlame />
                 <Text style={[styles.plusActiveText, { color: theme.colors.textMuted }]}>Active</Text>
               </View>
             ) : null}
@@ -547,7 +547,7 @@ export default function ProfileScreen() {
             accessibilityRole="button"
             accessibilityLabel="View HabitPro Community"
           >
-            <PlusBadge label="HABITPRO COMMUNITY" size="md" />
+            <PlusBadge withFlame size="md" />
             <Text style={[styles.plusCardTitle, { color: theme.colors.textPrimary }]}>Unlock social features</Text>
             <Text style={[styles.plusCardBody, { color: theme.colors.textSecondary }]}>
               Group missions, invites, squad nudges, and Community posting are part of HabitPro Community.
