@@ -497,7 +497,7 @@ export default function CreateHabit() {
               <PlusBadge withFlame />
             </View>
             <Text style={[styles.modeHint, { color: theme.colors.textMuted }]}>
-              Visible to others (HabitPro Community)
+              Visible to your squad
             </Text>
           </TouchableOpacity>
         </View>

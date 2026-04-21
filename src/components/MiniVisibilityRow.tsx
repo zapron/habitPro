@@ -8,9 +8,8 @@ import { Globe, User } from "lucide-react-native";
 import type { AppTheme } from "../styles/theme";
 import type { MissionVisibility } from "../types/habit";
 
-const PUBLIC_HINT =
-  "Users in your group mission can see your streak memory. Turn off to keep it solo.";
-const SOLO_HINT = "Only you can see your streak memory. Turn on to share with your group mission.";
+const PUBLIC_HINT = "Visible to your squad on this mission.";
+const SOLO_HINT = "Private to you on this mission.";
 
 type Props = {
   theme: AppTheme;

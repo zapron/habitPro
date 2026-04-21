@@ -56,7 +56,11 @@ import { useAuth } from '../../src/context/AuthContext';
 import { usePremium } from '../../src/context/PremiumContext';
 import { usePlusUpsell } from '../../src/context/PlusUpsellContext';
 import { isSupabaseConfigured } from '../../src/lib/env';
-import { leaveChallengeGroup, refreshCohortPeerHabits } from '../../src/lib/groupChallengesApi';
+import {
+  leaveChallengeGroup,
+  listChallengeInviteeStatusesForChallenge,
+  refreshCohortPeerHabits,
+} from '../../src/lib/groupChallengesApi';
 import {
   postCommunityWin,
   deleteCommunityWin,
@@ -246,6 +250,7 @@ export default function HabitDetail() {
         | { kind: 'view'; memory: StreakMemory; dateStr: string; day: number }
         | null;
     const [memoryUi, setMemoryUi] = useState<MemoryUiState>(null);
+    const [acceptedGroupMemberCount, setAcceptedGroupMemberCount] = useState<number>(0);
     const [groupSheetOpen, setGroupSheetOpen] = useState(false);
     const [missionDetailsOpen, setMissionDetailsOpen] = useState(false);
     const [missionDialog, setMissionDialog] = useState<MissionDialogState>({ kind: 'none' });
@@ -513,6 +518,34 @@ export default function HabitDetail() {
         [habit, habitId, session?.user, patchStreakMemory, showToast, socialLocked, openUpsell],
     );
 
+    const configured = isSupabaseConfigured();
+    const signedIn = Boolean(session?.user);
+
+    useEffect(() => {
+        if (!habit?.challengeGroupId || !configured || !signedIn) {
+            setAcceptedGroupMemberCount(0);
+            return;
+        }
+        if (!memoryUi || memoryUi.kind !== 'create') {
+            setAcceptedGroupMemberCount(0);
+            return;
+        }
+        let cancelled = false;
+        void listChallengeInviteeStatusesForChallenge(habit.challengeGroupId)
+            .then((m) => {
+                if (cancelled) return;
+                const acceptedInvites = Object.values(m ?? {}).filter((s) => s === 'accepted').length;
+                // Count includes the creator/owner + accepted invitees.
+                setAcceptedGroupMemberCount(1 + acceptedInvites);
+            })
+            .catch(() => {
+                if (!cancelled) setAcceptedGroupMemberCount(0);
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [habit?.challengeGroupId, configured, signedIn, memoryUi]);
+
     if (!habit) {
         return (
             <Screen>
@@ -531,6 +564,7 @@ export default function HabitDetail() {
     }
 
     const isGroupMission = Boolean(habit.challengeGroupId);
+    const showSquadShare = isGroupMission && acceptedGroupMemberCount >= 2 && configured && signedIn;
 
     const handleReset = () => {
         if (isGroupMission) {
@@ -635,15 +669,30 @@ export default function HabitDetail() {
                 }
                 missionTitle={habit.title}
                 dayLabel={memoryUi ? String(memoryUi.day) : '1'}
-                habitPublishAvailable={isSupabaseConfigured() && session?.user != null}
+                habitPublishAvailable={configured && session?.user != null}
                 plusCommunityOk={!socialLocked}
+                squadShare={{
+                    show: showSquadShare,
+                    visibility: habit.visibility ?? 'solo',
+                    onToggle: (nextPublic) => {
+                        const next = nextPublic ? 'public' : 'solo';
+                        const prev = habit.visibility ?? 'solo';
+                        if (prev === next) return;
+                        if (next === 'public' && socialLocked) {
+                            openUpsell('visibility');
+                            return;
+                        }
+                        lastVisibilityRef.current = { id: habit.id, prev };
+                        setHabitVisibility(habit.id, next);
+                    },
+                }}
                 habitViewCommunity={
                     memoryUi?.kind === 'view'
                         ? (() => {
                               const viewMem =
                                   habit.streakMemories?.[memoryUi.dateStr] ?? memoryUi.memory;
                               const hasMemoryImage = Boolean(viewMem?.imageUrl || viewMem?.imageUri);
-                              const cloudOk = isSupabaseConfigured() && session?.user != null;
+                              const cloudOk = configured && session?.user != null;
                               const plusOk = !socialLocked;
                               return {
                                   posted:
@@ -796,14 +845,14 @@ export default function HabitDetail() {
                                     <PlusBadge withFlame />
                                 </View>
                                 <Text style={[styles.visibilityHint, { color: theme.colors.textMuted }]}>
-                                    Visible to your squad on this mission (HabitPro Community). Community is separate: choose per moment when you save or open a day.
+                                    Visible to your squad on this mission.
                                 </Text>
                             </>
                         ) : (
                             <>
                                 <Text style={[styles.visibilityTitle, { color: theme.colors.textPrimary }]}>Solo</Text>
                                 <Text style={[styles.visibilityHint, { color: theme.colors.textMuted }]}>
-                                    Streak memories stay private to you on the mission. You can still share individual moments to Community if you want.
+                                    Private to you on this mission.
                                 </Text>
                             </>
                         )}

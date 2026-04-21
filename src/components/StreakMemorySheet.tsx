@@ -23,7 +23,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as ImagePicker from "expo-image-picker";
-import { Flag, Globe, ImageIcon, Lock, Quote, X } from "lucide-react-native";
+import { Flag, Globe, ImageIcon, Lock, Quote, Users, X } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import { useTheme } from "../context/ThemeContext";
 import type { StreakMemory } from "../types/habit";
@@ -64,6 +64,12 @@ type StreakMemorySheetProps = {
   };
   /** view only */
   viewMemory?: StreakMemory | null;
+  /** create only (habit): in-context mission visibility toggle for squad/cohort sharing */
+  squadShare?: {
+    show: boolean;
+    visibility: "solo" | "public";
+    onToggle: (nextPublic: boolean) => void | Promise<void>;
+  };
 };
 
 export function StreakMemorySheet({
@@ -79,6 +85,7 @@ export function StreakMemorySheet({
   plusCommunityOk,
   habitViewCommunity,
   viewMemory,
+  squadShare,
 }: StreakMemorySheetProps) {
   const isMini = variant === "mini";
   const isView = mode === "view";
@@ -562,7 +569,7 @@ export function StreakMemorySheet({
                         { color: theme.colors.textPrimary, fontSize: theme.typography.h2 },
                       ]}
                     >
-                      {isMini ? "Record this Memory" : "Seal this win"}
+                      Record this memory
                     </Text>
                     <Text
                       style={[styles.sub, isMemoryCreate && styles.subMemory, { color: theme.colors.textSecondary }]}
@@ -658,6 +665,56 @@ export function StreakMemorySheet({
                       {note.length}/280
                     </Text>
 
+                    {!isMini && squadShare?.show ? (
+                      <View
+                        style={[
+                          styles.communityPublishRow,
+                          isMiniCreate && styles.communityPublishRowMini,
+                          {
+                            borderColor: theme.colors.border,
+                            backgroundColor: theme.colors.surface,
+                          },
+                        ]}
+                      >
+                        <View
+                          style={[
+                            styles.communityPublishTopRow,
+                            isMiniCreate && styles.communityPublishTopRowMini,
+                          ]}
+                        >
+                          <Users
+                            size={20}
+                            color={theme.colors.cyan[400]}
+                            style={styles.communityPublishGlobe}
+                          />
+                          <View style={styles.communityPublishTextCol}>
+                            <Text style={[styles.communityPublishTitle, { color: theme.colors.textPrimary }]}>
+                              Share streaks with squad
+                            </Text>
+                            <Text style={[styles.communityPublishHint, { color: theme.colors.textMuted }]}>
+                              {(squadShare.visibility ?? "solo") === "public"
+                                ? "On — visible to your squad."
+                                : "Off — only you can see this mission."}{" "}
+                              <Text style={{ color: theme.colors.textMuted }}>
+                                (Applies to all days)
+                              </Text>
+                            </Text>
+                          </View>
+                          <Switch
+                            value={(squadShare.visibility ?? "solo") === "public"}
+                            onValueChange={(v) => void squadShare.onToggle(Boolean(v))}
+                            disabled={submitting}
+                            trackColor={{
+                              false: theme.colors.border,
+                              true: theme.colors.indigo[600],
+                            }}
+                            thumbColor={theme.colors.white}
+                            ios_backgroundColor={theme.colors.border}
+                          />
+                        </View>
+                      </View>
+                    ) : null}
+
                     {isMini || isHabitCreate ? (
                       <View
                         style={[
@@ -695,7 +752,14 @@ export function StreakMemorySheet({
                                 : !canPublishCommunity
                                   ? "Sign in with cloud sync to publish to Community."
                                   : !imageUri
-                                    ? "Community posts need a photo. Add one above to publish. Text notes stay on your mission only."
+                                    ? (
+                                        <>
+                                          <Text style={{ color: theme.colors.indigo[400], fontWeight: "700" }}>
+                                            Photo required
+                                          </Text>
+                                          <Text>{" "}to publish. Notes stay on your mission.</Text>
+                                        </>
+                                      )
                                     : isMini
                                       ? "Leaving this off locks Community for this mission. If you publish, you can remove your win from the feed in details later."
                                       : "Optional. Squad visibility uses Public / Solo on the mission screen. You can remove this moment from Community later from this day’s memory."}
