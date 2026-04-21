@@ -49,3 +49,11 @@ yarn-error.*
 # generated native folders — keep /ios ignored for smaller Android uploads;
 # omit /android here so EAS includes android/ (Play verification snippet, etc.)
 /ios
+
+# Android build artifacts (can be huge, never needed for EAS cloud builds)
+android/.gradle/
+android/build/
+android/app/build/
+android/app/.cxx/
+android/app/.externalNativeBuild/
+android/app/.kotlin/
