@@ -1,3 +1,4 @@
+/// <reference path="../deno-ambient.d.ts" />
 /**
  * Supabase Edge Function: RevenueCat webhook → update profiles.is_premium (+ expiry).
  *
@@ -12,6 +13,7 @@
  */
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
+// @ts-expect-error Deno resolves https:// imports; workspace TypeScript does not.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 
 const ENTITLEMENT_ID = "habitpro_community";

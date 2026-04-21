@@ -1,3 +1,4 @@
+/// <reference path="../deno-ambient.d.ts" />
 /**
  * Scheduled Edge Function: mission streak reminders (rolling 24h from `start_date`, same as
  * `src/utils/missionCalendarKeys.ts`). From **mission day 2 onward** only:
@@ -11,6 +12,7 @@
  */
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
+// @ts-expect-error Deno resolves https:// imports; workspace TypeScript does not.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { missionDayDateKey } from "../_shared/missionCalendarKeys.ts";
 

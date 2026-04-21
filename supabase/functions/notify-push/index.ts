@@ -1,3 +1,4 @@
+/// <reference path="../deno-ambient.d.ts" />
 /**
  * Supabase Edge Function: send Expo push when a row is inserted into public.notifications.
  * Trigger: Database Webhook (INSERT on notifications) with header x-notify-secret.
@@ -6,6 +7,7 @@
  */
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
+// @ts-expect-error Deno resolves https:// imports; workspace TypeScript does not.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 
 const EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
