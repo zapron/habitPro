@@ -124,6 +124,16 @@ function RootLayoutNav() {
         }
         return;
       }
+
+      if (type === "mini_mission") {
+        const missionId = typeof data.missionId === "string" ? data.missionId : "";
+        if (missionId) {
+          router.push(`/mini/${missionId}`);
+        } else {
+          router.push("/(tabs)/home");
+        }
+        return;
+      }
     };
 
     (async () => {

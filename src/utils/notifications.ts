@@ -39,7 +39,6 @@ export async function setupNotifications() {
 
   Notifications.setNotificationHandler({
     handleNotification: async () => ({
-      shouldShowAlert: true,
       shouldPlaySound: true,
       shouldSetBadge: false,
       shouldShowBanner: true,
@@ -126,5 +125,21 @@ export async function cancelNotification(id: string | null) {
     await Notifications.cancelScheduledNotificationAsync(id);
   } catch {
     // Already fired or unavailable
+  }
+}
+
+export type ScheduledNotificationInfo = {
+  identifier: string;
+  content: { data?: Record<string, unknown> };
+};
+
+export async function listScheduledNotifications(): Promise<ScheduledNotificationInfo[]> {
+  const Notifications = await getNotifications();
+  if (!Notifications) return [];
+  try {
+    const list = await Notifications.getAllScheduledNotificationsAsync();
+    return (list ?? []) as unknown as ScheduledNotificationInfo[];
+  } catch {
+    return [];
   }
 }

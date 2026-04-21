@@ -1,6 +1,10 @@
 import { MAX_RESERVE_FUEL_MINUTES } from "../constants/miniMission";
 import type { MiniMission } from "../types/habit";
-import { cancelNotification, scheduleTimerNotification } from "./notifications";
+import {
+  cancelNotification,
+  listScheduledNotifications,
+  scheduleTimerNotification,
+} from "./notifications";
 
 /** Min total mission length (estimated + reserve) to show the T−1 minute heads-up. */
 const MIN_TOTAL_MINUTES_FOR_WARN = 2;
@@ -9,6 +13,12 @@ const MIN_TOTAL_MINUTES_FOR_WARN = 2;
 const lastEndMsByMission = new Map<string, number>();
 const warnIdByMission = new Map<string, string | null>();
 const failIdByMission = new Map<string, string | null>();
+
+type MiniMissionNotifKind = "mini_warn" | "mini_fail";
+
+function isMiniMissionNotifKind(x: unknown): x is MiniMissionNotifKind {
+  return x === "mini_warn" || x === "mini_fail";
+}
 
 function getMissionEndMs(mission: MiniMission): number | null {
   if (mission.status !== "in_progress" || !mission.startedAt) return null;
@@ -39,6 +49,91 @@ function getWarnCopy(mission: MiniMission): { title: string; body: string } {
 export async function syncMiniMissionNotifications(missions: MiniMission[]) {
   const active = missions.filter((m) => m.status === "in_progress" && m.startedAt);
   const activeIds = new Set(active.map((m) => m.id));
+  const nowMs = Date.now();
+
+  // If the app was killed, our in-memory maps are empty and we can’t cancel old scheduled ids.
+  // Reconcile by scanning OS scheduled notifications and cancelling mini-mission entries
+  // that no longer match store state (or are already expired).
+  const scheduled = await listScheduledNotifications();
+  const activeById = new Map(active.map((m) => [m.id, m] as const));
+  const scheduledMini = scheduled
+    .map((n) => {
+      const data = n.content?.data;
+      const kind = data?.kind;
+      const missionId = data?.missionId;
+      const endMs = data?.endMs;
+      const type = data?.type;
+      return {
+        id: n.identifier,
+        type,
+        kind,
+        missionId,
+        endMs,
+      };
+    })
+    .filter((n) => n.type === "mini_mission" && isMiniMissionNotifKind(n.kind));
+
+  const endMsByActiveMission = new Map<string, number>();
+  for (const m of active) {
+    const e = getMissionEndMs(m);
+    if (e != null) endMsByActiveMission.set(m.id, e);
+  }
+
+  const keptWarnIdByMission = new Map<string, string>();
+  const keptFailIdByMission = new Map<string, string>();
+
+  for (const n of scheduledMini) {
+    const missionId = typeof n.missionId === "string" ? n.missionId : "";
+    const expectedEndMs = endMsByActiveMission.get(missionId);
+    const storedEndMs = typeof n.endMs === "number" ? n.endMs : null;
+    const mission = activeById.get(missionId);
+
+    const shouldCancel =
+      !missionId ||
+      expectedEndMs == null ||
+      expectedEndMs <= nowMs + 1000 ||
+      storedEndMs == null ||
+      storedEndMs !== expectedEndMs;
+
+    if (shouldCancel || !mission) {
+      await cancelNotification(n.id);
+      continue;
+    }
+
+    const secondsUntilEnd = Math.floor((expectedEndMs - nowMs) / 1000);
+    if (secondsUntilEnd <= 1) {
+      await cancelNotification(n.id);
+      continue;
+    }
+
+    const totalMinutes = mission.estimatedMinutes + (mission.extendedMinutes ?? 0);
+    const needsWarn = totalMinutes > MIN_TOTAL_MINUTES_FOR_WARN && secondsUntilEnd > 60;
+
+    if (n.kind === "mini_warn" && !needsWarn) {
+      await cancelNotification(n.id);
+      continue;
+    }
+
+    if (n.kind === "mini_warn") {
+      const existing = keptWarnIdByMission.get(missionId);
+      if (existing) {
+        await cancelNotification(n.id);
+      } else {
+        keptWarnIdByMission.set(missionId, n.id);
+      }
+      continue;
+    }
+
+    if (n.kind === "mini_fail") {
+      const existing = keptFailIdByMission.get(missionId);
+      if (existing) {
+        await cancelNotification(n.id);
+      } else {
+        keptFailIdByMission.set(missionId, n.id);
+      }
+      continue;
+    }
+  }
 
   for (const missionId of [...lastEndMsByMission.keys()]) {
     if (!activeIds.has(missionId)) {
@@ -54,7 +149,7 @@ export async function syncMiniMissionNotifications(missions: MiniMission[]) {
     const endMs = getMissionEndMs(mission);
     if (endMs == null) continue;
 
-    const secondsUntilEnd = Math.floor((endMs - Date.now()) / 1000);
+    const secondsUntilEnd = Math.floor((endMs - nowMs) / 1000);
 
     if (secondsUntilEnd <= 1) {
       await cancelNotification(warnIdByMission.get(mission.id) ?? null);
@@ -67,6 +162,19 @@ export async function syncMiniMissionNotifications(missions: MiniMission[]) {
 
     const totalMinutes = mission.estimatedMinutes + (mission.extendedMinutes ?? 0);
     const needsWarn = totalMinutes > MIN_TOTAL_MINUTES_FOR_WARN && secondsUntilEnd > 60;
+
+    // Seed ids from OS schedule (after app restart) so we don't double-schedule.
+    const keptFailId = keptFailIdByMission.get(mission.id);
+    if (keptFailId) {
+      failIdByMission.set(mission.id, keptFailId);
+      lastEndMsByMission.set(mission.id, endMs);
+      const keptWarnId = keptWarnIdByMission.get(mission.id);
+      if (needsWarn && keptWarnId) {
+        warnIdByMission.set(mission.id, keptWarnId);
+      } else {
+        warnIdByMission.delete(mission.id);
+      }
+    }
 
     const prevEnd = lastEndMsByMission.get(mission.id);
     const warnId = warnIdByMission.get(mission.id);
@@ -85,7 +193,12 @@ export async function syncMiniMissionNotifications(missions: MiniMission[]) {
       if (warnSeconds >= 1) {
         const { title, body } = getWarnCopy(mission);
         newWarnId = await scheduleTimerNotification(title, body, warnSeconds, {
-          data: { kind: "mini_warn", missionId: mission.id },
+          data: {
+            type: "mini_mission",
+            kind: "mini_warn",
+            missionId: mission.id,
+            endMs,
+          },
         });
       }
     }
@@ -93,7 +206,12 @@ export async function syncMiniMissionNotifications(missions: MiniMission[]) {
     const failTitle = "Mini failed";
     const failBody = `Your mini mission failed. Retry "${mission.title}" and try to win again.`;
     const newFailId = await scheduleTimerNotification(failTitle, failBody, secondsUntilEnd, {
-      data: { kind: "mini_fail", missionId: mission.id },
+      data: {
+        type: "mini_mission",
+        kind: "mini_fail",
+        missionId: mission.id,
+        endMs,
+      },
     });
 
     if (!newFailId) {
