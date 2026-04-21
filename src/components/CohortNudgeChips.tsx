@@ -50,8 +50,8 @@ type Props = {
   /** When true, preset + custom nudges are locked (HabitPro Community). */
   plusLocked: boolean;
   onPlusLocked?: () => void;
-  /** True after viewer already sent a custom note to this member in this challenge. */
-  customNoteAlreadySent: boolean;
+  /** True after viewer already sent a custom note to this member today (UTC) in this challenge. */
+  customNoteSentToday: boolean;
   onCustomNotePress: () => void;
 };
 
@@ -63,7 +63,7 @@ export function CohortNudgeChips({
   onPress,
   plusLocked,
   onPlusLocked,
-  customNoteAlreadySent,
+  customNoteSentToday,
   onCustomNotePress,
 }: Props) {
   const busyGlobal = nudgeBusyKey !== null;
@@ -143,7 +143,7 @@ export function CohortNudgeChips({
       })}
 
       <Pressable
-        disabled={busyGlobal || customNoteAlreadySent}
+        disabled={busyGlobal || customNoteSentToday}
         onPress={() => {
           if (plusLocked) {
             onPlusLocked?.();
@@ -157,8 +157,8 @@ export function CohortNudgeChips({
           {
             backgroundColor: customBg,
             borderColor: customBorder,
-            opacity: plusLocked || customNoteAlreadySent ? 0.55 : busyGlobal ? 0.5 : pressed ? 0.92 : 1,
-            transform: [{ scale: pressed && !busyGlobal && !customNoteAlreadySent ? 0.98 : 1 }],
+            opacity: plusLocked || customNoteSentToday ? 0.55 : busyGlobal ? 0.5 : pressed ? 0.92 : 1,
+            transform: [{ scale: pressed && !busyGlobal && !customNoteSentToday ? 0.98 : 1 }],
           },
         ]}
       >
@@ -168,7 +168,7 @@ export function CohortNudgeChips({
           <>
             <MessageSquare size={theme.icon.sm} color={customIcon} strokeWidth={2.2} />
             <Text style={[styles.chipLabel, { color: theme.colors.textSecondary }]}>
-              {customNoteAlreadySent ? "Note sent" : "Note"}
+              {customNoteSentToday ? "Note sent" : "Note"}
             </Text>
             {plusLocked ? <Text style={[styles.proBadge, { color: customIcon }]}>Plus</Text> : null}
           </>

@@ -124,7 +124,7 @@ export async function sendChallengeNudge(
   return { error: null };
 }
 
-/** Premium: one custom message per squad member (per challenge) — enforced server-side. */
+/** Premium: one custom note per squad member per 24h (UTC day) — enforced server-side. */
 export async function sendChallengeCustomNudge(
   challengeId: string,
   toUserId: string,
@@ -155,8 +155,8 @@ export async function sendChallengeCustomNudge(
     if (low.includes("premium_required")) {
       return { error: new Error("Custom notes are a HabitPro Community feature.") };
     }
-    if (low.includes("custom_note_already_sent")) {
-      return { error: new Error("You already sent a custom note to this person in this squad.") };
+    if (low.includes("custom_note_daily_limit") || low.includes("custom_note_already_sent")) {
+      return { error: new Error("You can send one note per person every 24 hours.") };
     }
     if (low.includes("invalid_message_length")) {
       return { error: new Error("Message must be 1–200 characters.") };

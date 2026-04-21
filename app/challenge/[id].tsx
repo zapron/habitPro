@@ -343,11 +343,17 @@ export default function ChallengeDetailScreen() {
     return { kind: "leader", leaderName: top.name, streakDays: maxS };
   }, [memberIdsOrdered, profileLabels, habitForMember]);
 
-  const customNoteSentToUserIds = useMemo(() => {
+  const customNoteSentTodayToUserIds = useMemo(() => {
     if (!myUserId) return new Set<string>();
     const s = new Set<string>();
+    const todayUtc = new Date().toISOString().slice(0, 10);
     for (const n of feedNudges) {
-      if (n.from_user_id === myUserId && n.kind === "custom_note") {
+      if (
+        n.from_user_id === myUserId &&
+        n.kind === "custom_note" &&
+        typeof n.created_at === "string" &&
+        n.created_at.slice(0, 10) === todayUtc
+      ) {
         s.add(n.to_user_id);
       }
     }
@@ -566,7 +572,7 @@ export default function ChallengeDetailScreen() {
                       onPress={(kind) => void onSendNudge(memberId, kind)}
                       plusLocked={socialLocked}
                       onPlusLocked={() => openUpsell("squad_nudge")}
-                      customNoteAlreadySent={customNoteSentToUserIds.has(memberId)}
+                      customNoteSentToday={customNoteSentTodayToUserIds.has(memberId)}
                       onCustomNotePress={() => onOpenCustomNote(memberId)}
                     />
                   ) : null}
