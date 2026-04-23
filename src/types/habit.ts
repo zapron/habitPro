@@ -52,6 +52,11 @@ export interface Habit {
   challengeCreatorTimezone?: string | null;
   /** Calendar dates repaired via Streak Repair (treated like completed for streak computation). */
   repairedDates?: string[];
+
+  /** When true, use a user-picked daily reminder time for this mission. */
+  reminderEnabled?: boolean;
+  /** Local time (HH:MM 24h) in the user's timezone for reminders. */
+  reminderTimeLocal?: string | null;
 }
 
 export type MiniMissionStatus =

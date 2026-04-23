@@ -48,6 +48,11 @@ const migrateHabit = (h: any): Habit => {
         : undefined,
     challengeGroupId: h.challengeGroupId ?? null,
     challengeCreatorTimezone: h.challengeCreatorTimezone ?? null,
+    reminderEnabled: typeof h.reminderEnabled === "boolean" ? h.reminderEnabled : false,
+    reminderTimeLocal:
+      typeof h.reminderTimeLocal === "string" || h.reminderTimeLocal === null
+        ? h.reminderTimeLocal
+        : null,
     missionReport,
     missionReportAt:
       typeof h.missionReportAt === "string" ? h.missionReportAt : undefined,
