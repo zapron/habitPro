@@ -11,7 +11,7 @@ import { useTheme } from '../context/ThemeContext';
 import { Habit } from '../types/habit';
 import { needsMainMissionOutcome } from '../utils/mainMissionUi';
 import { ProgressRing } from './ProgressRing';
-import { PlusBadge } from "./PlusBadge";
+import * as Haptics from 'expo-haptics';
 
 interface HabitCardProps {
     item: Habit;
@@ -40,81 +40,34 @@ export const HabitCard = memo(({ item }: HabitCardProps) => {
                     ...theme.shadow.card,
                 },
             ]}
-            activeOpacity={0.9}
-            onPress={() => router.push(`/habit/${item.id}`)}
+            activeOpacity={0.7}
+            onPress={() => {
+                void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                router.push(`/habit/${item.id}`);
+            }}
         >
             <View style={styles.cardContent}>
                 <View style={styles.pillRow}>
-                    <View style={[styles.modePill, isManual && styles.modePillManual]}>
-                        {isManual ? (
-                            <Gamepad2 size={10} color={theme.colors.amber[500]} />
-                        ) : (
-                            <Plane size={10} color={theme.colors.cyan[400]} />
-                        )}
-                        <Text style={[styles.modePillText, { color: theme.colors.cyan[400] }, isManual && { color: theme.colors.amber[500] }]}>
-                            {isManual ? `MANUAL · ${totalDays}D` : 'AUTOPILOT'}
-                        </Text>
-                    </View>
+                    {isManual ? (
+                        <Gamepad2 size={14} color={theme.colors.amber[500]} />
+                    ) : (
+                        <Plane size={14} color={theme.colors.cyan[400]} />
+                    )}
                     {(item.visibility ?? 'solo') === 'public' && (
-                        <View style={[styles.publicPill, { borderColor: theme.colors.cyan[400] + '44', backgroundColor: theme.colors.cyan[400] + '14' }]}>
-                            <Globe size={10} color={theme.colors.cyan[400]} />
-                            <Text style={[styles.publicPillText, { color: theme.colors.cyan[400] }]}>PUBLIC</Text>
-                        </View>
+                        <Globe size={14} color={theme.colors.cyan[400]} />
                     )}
                     {Boolean(item.challengeGroupId) && (
-                        <View
-                            style={[
-                                styles.challengePill,
-                                {
-                                    borderColor: theme.colors.indigo[400] + '55',
-                                    backgroundColor: theme.colors.indigo[500] + '18',
-                                },
-                            ]}
-                        >
-                            <Swords size={10} color={theme.colors.indigo[400]} />
-                            <Text style={[styles.challengePillText, { color: theme.colors.indigo[400] }]}>GROUP MISSION</Text>
-                            <PlusBadge withFlame />
-                        </View>
+                        <Swords size={14} color={theme.colors.indigo[400]} />
                     )}
                     {item.missionReport === 'accomplished' && (
-                        <View
-                            style={[
-                                styles.reportPill,
-                                {
-                                    borderColor: theme.colors.green[500] + '55',
-                                    backgroundColor: theme.colors.green[500] + '18',
-                                },
-                            ]}
-                        >
-                            <Text style={[styles.reportPillText, { color: theme.colors.green[500] }]}>ACCOMPLISHED</Text>
-                        </View>
+                        <Text style={[styles.reportPillText, { color: theme.colors.green[500] }]}>ACCOMPLISHED</Text>
                     )}
                     {item.missionReport === 'failed' && (
-                        <View
-                            style={[
-                                styles.reportPill,
-                                {
-                                    borderColor: theme.colors.red[500] + '55',
-                                    backgroundColor: 'rgba(239, 68, 68, 0.14)',
-                                },
-                            ]}
-                        >
-                            <Text style={[styles.reportPillText, { color: theme.colors.red[500] }]}>FAILED</Text>
-                        </View>
+                        <Text style={[styles.reportPillText, { color: theme.colors.red[500] }]}>FAILED</Text>
                     )}
-                    {needsReport ? (
-                        <View
-                            style={[
-                                styles.reportPill,
-                                {
-                                    borderColor: theme.colors.amber[500] + '55',
-                                    backgroundColor: 'rgba(245, 158, 11, 0.14)',
-                                },
-                            ]}
-                        >
-                            <Text style={[styles.reportPillText, { color: theme.colors.amber[500] }]}>REVIEW DUE</Text>
-                        </View>
-                    ) : null}
+                    {needsReport && (
+                        <Text style={[styles.reportPillText, { color: theme.colors.amber[500] }]}>REVIEW DUE</Text>
+                    )}
                 </View>
 
                 <Text style={[styles.cardTitle, { color: theme.colors.textPrimary, fontSize: theme.typography.h3 }]}>{item.title}</Text>
@@ -124,43 +77,7 @@ export const HabitCard = memo(({ item }: HabitCardProps) => {
                     </Text>
                 ) : null}
 
-                {!missionWon && (
-                    <View style={styles.progressBarBg}>
-                        <View
-                            style={{
-                                height: '100%',
-                                width: `${campaignProgress * 100}%`,
-                                minWidth: campaignProgress > 0 ? 4 : 0,
-                                backgroundColor: isManual
-                                    ? theme.colors.amber[500]
-                                    : item.streak > 0
-                                        ? theme.colors.amber[500]
-                                        : theme.colors.cyan[500],
-                                borderRadius: 2,
-                            }}
-                        />
-                    </View>
-                )}
-
                 <View style={styles.cardStats}>
-                    <View style={styles.statIcon}>
-                        {missionWon ? (
-                            <TreePine size={16} color={theme.colors.green[500]} />
-                        ) : item.streak >= 14 ? (
-                            <View style={styles.flameStack}>
-                                <Flame size={14} color="#f59e0b" fill="#fde68a" />
-                                <Flame size={10} color="#ef4444" fill="#fca5a5" style={{ position: 'absolute', left: 6, top: -2 }} />
-                            </View>
-                        ) : item.streak >= 7 ? (
-                            <View style={styles.flameStack}>
-                                <Flame size={14} color="#f59e0b" fill="#fde68a" />
-                            </View>
-                        ) : item.streak > 0 ? (
-                            <Flame size={14} color="#f59e0b" fill="#fde68a" />
-                        ) : (
-                            <Flame size={14} color={theme.colors.textMuted} />
-                        )}
-                    </View>
                     <Text
                         style={[
                             styles.cardStreak,
@@ -181,15 +98,10 @@ export const HabitCard = memo(({ item }: HabitCardProps) => {
                             ? 'Completed!'
                             : needsReport
                               ? 'Confirm mission outcome'
-                              : item.streak > 0
-                                ? `${item.streak} day streak`
-                                : 'Start a streak'}
+                              : `${Math.round(campaignProgress * 100)}% Complete`}
                     </Text>
                     {!missionWon && (
                         <>
-                            <Text style={[styles.cardProgress, { color: theme.colors.textMuted }]}>
-                                {Math.round(campaignProgress * 100)}%
-                            </Text>
                             {item.challengeGroupId ? (
                                 <TouchableOpacity
                                     onPress={() => router.push(`/challenge/${item.challengeGroupId}`)}
@@ -217,14 +129,21 @@ export const HabitCard = memo(({ item }: HabitCardProps) => {
 
             <ProgressRing
                 progress={missionWon ? 1 : streakProgress}
-                size={52}
+                size={56}
                 strokeWidth={3}
                 color={isManual ? theme.colors.amber[500] : missionWon ? theme.colors.green[500] : theme.colors.indigo[500]}
             >
                 {missionWon ? (
                     <Check size={20} color={theme.colors.green[500]} strokeWidth={3} />
                 ) : (
-                    <Text style={[styles.progressText, { color: theme.colors.textPrimary }]}>{item.streak}</Text>
+                    <View style={styles.ringInner}>
+                        {item.streak > 0 ? (
+                           <Flame size={14} color="#f59e0b" fill="#fde68a" style={{ marginBottom: -2 }} />
+                        ) : (
+                           <Flame size={14} color={theme.colors.textMuted} style={{ marginBottom: -2 }} />
+                        )}
+                        <Text style={[styles.progressText, { color: theme.colors.textPrimary, fontSize: 13 }]}>{item.streak}</Text>
+                    </View>
                 )}
             </ProgressRing>
         </TouchableOpacity>
@@ -241,63 +160,18 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     cardContent: { flex: 1 },
-    pillRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6, marginBottom: 6 },
-    modePill: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        alignSelf: 'flex-start',
-        gap: 4,
-        paddingVertical: 2,
-        paddingHorizontal: 8,
-        borderRadius: 9999,
-        backgroundColor: 'rgba(34, 211, 238, 0.1)',
-    },
-    modePillManual: { backgroundColor: 'rgba(245, 158, 11, 0.1)' },
-    publicPill: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        alignSelf: 'flex-start',
-        gap: 4,
-        paddingVertical: 2,
-        paddingHorizontal: 8,
-        borderRadius: 9999,
-        borderWidth: 1,
-    },
-    publicPillText: { fontSize: 9, fontWeight: '800', letterSpacing: 0.8 },
-    challengePill: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        alignSelf: 'flex-start',
-        gap: 4,
-        paddingVertical: 2,
-        paddingHorizontal: 8,
-        borderRadius: 9999,
-        borderWidth: 1,
-    },
-    challengePillText: { fontSize: 9, fontWeight: '800', letterSpacing: 0.8 },
-    reportPill: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        alignSelf: 'flex-start',
-        gap: 4,
-        paddingVertical: 2,
-        paddingHorizontal: 8,
-        borderRadius: 9999,
-        borderWidth: 1,
-    },
-    reportPillText: { fontSize: 9, fontWeight: '800', letterSpacing: 0.8 },
-    modePillText: { fontSize: 9, fontWeight: '800', letterSpacing: 0.8 },
-    cardTitle: { fontWeight: '700', marginBottom: 4 },
+    pillRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 10, marginBottom: 8 },
+    reportPillText: { fontSize: 10, fontWeight: '800', letterSpacing: 0.8 },
+    ringInner: { alignItems: 'center', justifyContent: 'center', paddingTop: 2 },
+    cardTitle: { fontWeight: '800', marginBottom: 4, flexShrink: 1 },
     cardDescription: { fontSize: 14 },
     cardStats: { flexDirection: 'row', alignItems: 'center', marginTop: 10 },
-    statIcon: { marginRight: 6 },
-    cardStreak: { fontWeight: '700', fontSize: 12, marginRight: 12, flexShrink: 1 },
+    cardStreak: { fontWeight: '600', fontSize: 12 },
     cardProgress: { flexShrink: 0 },
     groupStreakPill: {
         flexDirection: 'row',
         alignItems: 'center',
         alignSelf: 'center',
-        gap: 4,
         paddingVertical: 4,
         paddingHorizontal: 8,
         borderRadius: 9999,

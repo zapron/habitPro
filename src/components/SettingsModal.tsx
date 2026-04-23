@@ -7,6 +7,7 @@ import {
   StyleSheet,
   Pressable,
 } from "react-native";
+import { BlurView } from 'expo-blur';
 import { X, Monitor, Sun, Moon, type LucideIcon } from 'lucide-react-native';
 import { useTheme, type ThemePreference } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
@@ -41,7 +42,8 @@ export function SettingsModal({ visible, onClose }: SettingsModalProps) {
             onRequestClose={onClose}
             statusBarTranslucent
         >
-            <Pressable style={styles.backdrop} onPress={onClose}>
+            <BlurView intensity={30} tint={isDark ? "dark" : "light"} style={StyleSheet.absoluteFill} />
+            <Pressable style={[styles.backdrop, { backgroundColor: isDark ? 'rgba(0,0,0,0.4)' : 'rgba(0,0,0,0.2)' }]} onPress={onClose}>
                 <Pressable style={[styles.sheet, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]} onPress={(e) => e.stopPropagation()}>
                     {/* Handle bar */}
                     <View style={[styles.handle, { backgroundColor: theme.colors.textMuted }]} />
@@ -136,7 +138,6 @@ const styles = StyleSheet.create({
     backdrop: {
         flex: 1,
         justifyContent: 'flex-end',
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
     },
     sheet: {
         borderTopLeftRadius: 24,

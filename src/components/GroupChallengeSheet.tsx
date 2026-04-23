@@ -12,6 +12,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { BlurView } from 'expo-blur';
 import { useRouter } from "expo-router";
 import { X } from "lucide-react-native";
 import type { Habit } from "../types/habit";
@@ -187,7 +188,8 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
   return (
     <>
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <View style={styles.backdrop}>
+      <BlurView intensity={30} tint={theme.colors.background === '#ffffff' ? "light" : "dark"} style={StyleSheet.absoluteFill} />
+      <View style={[styles.backdrop, { backgroundColor: theme.colors.background === '#ffffff' ? 'rgba(0,0,0,0.2)' : 'rgba(0,0,0,0.4)' }]}>
         <View style={[styles.sheet, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
           <View style={styles.sheetHead}>
             <View style={styles.titleRow}>
@@ -334,7 +336,6 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
     justifyContent: "flex-end",
   },
   sheet: {

@@ -19,6 +19,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
+import { LinearGradient } from "expo-linear-gradient";
 import { FlashList } from "@shopify/flash-list";
 import {
   Trophy,
@@ -100,45 +101,39 @@ export default function Home() {
   const [miniNow, setMiniNow] = useState(() => Date.now());
   const [missionNow, setMissionNow] = useState(() => Date.now());
   const showAccount = isSupabaseConfigured();
-
   const bellScale = useRef(new Animated.Value(1)).current;
+  const emptyIconScale = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     if (reduceMotion) {
       bellScale.setValue(1);
       return;
     }
-    if (unreadNotifCount <= 0) {
-      bellScale.setValue(1);
-      return;
+    if (unreadNotifCount > 0) {
+      const loop = Animated.loop(
+        Animated.sequence([
+          Animated.timing(bellScale, { toValue: 1.18, duration: 120, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+          Animated.timing(bellScale, { toValue: 0.96, duration: 110, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+          Animated.timing(bellScale, { toValue: 1, duration: 140, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+          Animated.delay(2400),
+        ]),
+      );
+      loop.start();
+      return () => loop.stop();
     }
+  }, [unreadNotifCount, reduceMotion, bellScale]);
 
+  useEffect(() => {
+    if (reduceMotion) return;
     const loop = Animated.loop(
       Animated.sequence([
-        Animated.timing(bellScale, {
-          toValue: 1.18,
-          duration: 120,
-          easing: Easing.out(Easing.cubic),
-          useNativeDriver: true,
-        }),
-        Animated.timing(bellScale, {
-          toValue: 0.96,
-          duration: 110,
-          easing: Easing.out(Easing.cubic),
-          useNativeDriver: true,
-        }),
-        Animated.timing(bellScale, {
-          toValue: 1,
-          duration: 140,
-          easing: Easing.out(Easing.cubic),
-          useNativeDriver: true,
-        }),
-        Animated.delay(2400),
-      ]),
+        Animated.timing(emptyIconScale, { toValue: 1.05, duration: 2000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(emptyIconScale, { toValue: 1, duration: 2000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+      ])
     );
     loop.start();
     return () => loop.stop();
-  }, [unreadNotifCount, reduceMotion, bellScale]);
+  }, [reduceMotion, emptyIconScale]);
 
   const listBottomPad = Math.max(insets.bottom, 12) + 56;
 
@@ -448,139 +443,52 @@ export default function Home() {
               },
             ]}
           >
-            <View
+            <LinearGradient
+              colors={["#f97316", "#fde047"]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
               style={[
                 styles.xpFill,
                 {
                   width: `${Math.max(xpProgress * 100, 2)}%`,
-                  backgroundColor: theme.colors.yellow[400],
                 },
               ]}
             />
           </View>
         </View>
 
-        <View style={styles.commandRow}>
-          <TouchableOpacity
-            style={[
-              styles.commandCard,
-              {
-                backgroundColor: theme.colors.surface,
-                borderColor: isDark
-                  ? "rgba(34, 211, 238, 0.3)"
-                  : "rgba(6, 182, 212, 0.25)",
-                borderRadius: theme.radius.lg,
-              },
-            ]}
-            activeOpacity={0.85}
-            onPress={() => router.push("/create")}
-          >
-            <View style={styles.commandTopRow}>
-              <View style={styles.commandIconMain}>
-                {stats.openMissionCount > 0 ? (
-                  <AnimatedFire
-                    size={theme.icon.sm}
-                    color={theme.colors.cyan[400]}
-                  />
-                ) : (
-                  <Target size={theme.icon.md} color={theme.colors.cyan[400]} />
-                )}
-              </View>
-              {stats.openMissionCount > 0 && (
-                <Text
-                  style={[styles.countMain, { color: theme.colors.cyan[400] }]}
-                >
-                  {stats.openMissionCount}
-                </Text>
+        <TouchableOpacity
+          style={[
+            styles.miniBanner,
+            {
+              backgroundColor: theme.colors.surface,
+              borderColor: isDark ? "rgba(245, 158, 11, 0.3)" : "rgba(217, 119, 6, 0.25)",
+              borderRadius: theme.radius.lg,
+            },
+          ]}
+          activeOpacity={0.85}
+          onPress={() => router.push("/mini")}
+        >
+          <View style={styles.miniBannerLeft}>
+            <View style={styles.commandIconMini}>
+              {miniCount > 0 ? (
+                <AnimatedFire size={theme.icon.sm} color={theme.colors.amber[500]} />
+              ) : (
+                <Bolt size={18} color={theme.colors.yellow[400]} />
               )}
             </View>
-            <Text
-              style={[styles.commandTitle, { color: theme.colors.textPrimary }]}
-            >
-              Main Mission
-            </Text>
-            <Text
-              style={[styles.commandHint, { color: theme.colors.textMuted }]}
-            >
-              21-day or custom
-            </Text>
-            <View
-              style={[
-                styles.commandCta,
-                {
-                  backgroundColor: theme.colors.indigo[600],
-                  ...theme.shadow.glow,
-                },
-              ]}
-            >
-              <Plus size={theme.icon.sm} color="#fff" strokeWidth={3} />
+            <View style={{ marginLeft: 10 }}>
+              <Text style={{ color: theme.colors.textPrimary, fontWeight: "700", fontSize: 15 }}>Mini Missions</Text>
+              <Text style={{ color: theme.colors.textMuted, fontSize: 11 }}>
+                {miniMissionStats.live > 0 ? `${miniMissionStats.live} live now` : "Browse side-quests"}
+              </Text>
             </View>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[
-              styles.commandCard,
-              {
-                backgroundColor: theme.colors.surface,
-                borderColor: isDark
-                  ? "rgba(245, 158, 11, 0.3)"
-                  : "rgba(217, 119, 6, 0.25)",
-                borderRadius: theme.radius.lg,
-              },
-            ]}
-            activeOpacity={0.85}
-            onPress={() => router.push("/mini")}
-          >
-            <View style={styles.commandTopRow}>
-              <View style={styles.commandIconMini}>
-                {miniCount > 0 ? (
-                  <AnimatedFire
-                    size={theme.icon.sm}
-                    color={theme.colors.amber[500]}
-                  />
-                ) : (
-                  <Bolt size={theme.icon.md} color={theme.colors.yellow[400]} />
-                )}
-              </View>
-              {miniCount > 0 && (
-                <Text
-                  style={[styles.countMini, { color: theme.colors.amber[500] }]}
-                >
-                  {miniCount}
-                </Text>
-              )}
-            </View>
-            <Text
-              style={[styles.commandTitle, { color: theme.colors.textPrimary }]}
-            >
-              Mini Missions
-            </Text>
-            <Text
-              style={[styles.commandHint, { color: theme.colors.textMuted }]}
-            >
-              {miniMissionStats.live > 0 ? "live now" : "waiting"}
-            </Text>
-            <View
-              style={[
-                styles.commandCtaMini,
-                {
-                  borderColor: isDark
-                    ? "rgba(245, 158, 11, 0.3)"
-                    : "rgba(217, 119, 6, 0.25)",
-                },
-              ]}
-            >
-              <ChevronRight
-                size={theme.icon.sm}
-                color={theme.colors.amber[500]}
-                strokeWidth={3}
-              />
-            </View>
-          </TouchableOpacity>
-        </View>
+          </View>
+          <ChevronRight size={20} color={theme.colors.textMuted} />
+        </TouchableOpacity>
 
         <Text style={[styles.missionsLabel, { color: theme.colors.textMuted }]}>
-          YOUR MISSIONS
+          MAIN MISSIONS
         </Text>
 
         <View
@@ -613,7 +521,7 @@ export default function Home() {
                 activeTab === "missions" && styles.activeTabText,
               ]}
             >
-              Missions
+              Main Missions
               {stats.missionsCount > 0 ? ` (${stats.missionsCount})` : ""}
             </Text>
           </TouchableOpacity>
@@ -695,17 +603,18 @@ export default function Home() {
               showsVerticalScrollIndicator={false}
             >
               <View style={styles.emptyStateInner}>
-                <View
+                <Animated.View
                   style={[
                     styles.emptyIconContainer,
                     {
                       backgroundColor: theme.colors.surface,
                       borderColor: theme.colors.border,
+                      transform: [{ scale: emptyIconScale }],
                     },
                   ]}
                 >
                   <Trophy size={50} color={theme.colors.slate[500]} />
-                </View>
+                </Animated.View>
                 <Text
                   style={[
                     styles.emptyTitle,
@@ -783,6 +692,26 @@ export default function Home() {
           )}
         </View>
       </View>
+
+      <Animated.View
+        style={[
+          styles.fab,
+          {
+            backgroundColor: theme.colors.indigo[600],
+            ...theme.shadow.glow,
+            opacity: headerOpacity,
+            transform: [{ translateY: headerSlide }],
+          },
+        ]}
+      >
+        <TouchableOpacity
+          onPress={() => router.push("/create")}
+          activeOpacity={0.8}
+          style={styles.fabInner}
+        >
+          <Plus size={28} color="#fff" strokeWidth={3} />
+        </TouchableOpacity>
+      </Animated.View>
     </Screen>
   );
 }
@@ -841,28 +770,17 @@ const styles = StyleSheet.create({
   },
   levelNumber: { fontSize: 19, fontWeight: "800", lineHeight: 21 },
   levelLabel: { fontSize: 9, fontWeight: "800", letterSpacing: 1 },
-  commandRow: { flexDirection: "row", gap: 10, marginBottom: SECTION_GAP },
-  commandCard: {
-    flex: 1,
-    paddingVertical: 14,
-    paddingHorizontal: 14,
-    position: "relative",
-    overflow: "hidden",
-    borderWidth: 1,
-  },
-  commandTopRow: {
+  miniBanner: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 10,
+    padding: 14,
+    borderWidth: 1,
+    marginBottom: SECTION_GAP,
   },
-  commandIconMain: {
-    width: 36,
-    height: 36,
-    borderRadius: 9999,
+  miniBannerLeft: {
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(34, 211, 238, 0.12)",
   },
   commandIconMini: {
     width: 36,
@@ -872,29 +790,18 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: "rgba(251, 191, 36, 0.14)",
   },
-  countMain: { fontSize: 20, fontWeight: "800" },
-  countMini: { fontSize: 20, fontWeight: "800" },
-  commandTitle: { fontWeight: "700", fontSize: 15, marginBottom: 2 },
-  commandHint: { fontSize: 11 },
-  commandCta: {
+  fab: {
     position: "absolute",
-    bottom: 12,
-    right: 12,
-    width: 28,
-    height: 28,
-    borderRadius: 9999,
-    alignItems: "center",
-    justifyContent: "center",
+    bottom: 30,
+    right: 20,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    elevation: 8,
   },
-  commandCtaMini: {
-    position: "absolute",
-    bottom: 12,
-    right: 12,
-    width: 28,
-    height: 28,
-    borderRadius: 9999,
-    backgroundColor: "rgba(245, 158, 11, 0.15)",
-    borderWidth: 1,
+  fabInner: {
+    width: "100%",
+    height: "100%",
     alignItems: "center",
     justifyContent: "center",
   },
