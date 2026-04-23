@@ -129,10 +129,27 @@ function buildMessage(
       const habitTitle =
         typeof payload.habit_title === "string" ? payload.habit_title : "Your mission";
       const phase = payload.reminder_phase;
+      const minsLeft = typeof payload.minutes_left === "number" ? payload.minutes_left : null;
+      const hm =
+        typeof minsLeft === "number" && Number.isFinite(minsLeft) && minsLeft > 0
+          ? { hh: Math.floor(minsLeft / 60), mm: minsLeft % 60 }
+          : null;
+      const leftStr =
+        hm && hm.hh > 0 ? `${hm.hh}h ${hm.mm}m` : hm ? `${hm.mm}m` : "";
       if (phase === "open") {
         return {
           title: "Streak window is open",
           body: `You have 24 hours to finish today’s habit for “${habitTitle}”.`,
+          data,
+        };
+      }
+      if (phase === "custom") {
+        return {
+          title: "Streak check-in",
+          body:
+            leftStr.length > 0
+              ? `You have ${leftStr} left to mark today for “${habitTitle}”.`
+              : `Time to mark today for “${habitTitle}”.`,
           data,
         };
       }

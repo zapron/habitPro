@@ -29,9 +29,41 @@ type HabitRow = {
   start_date: string;
   total_days: number;
   completed_dates: string[] | null;
+  reminder_enabled?: boolean | null;
+  reminder_time_local?: string | null;
 };
 
-type ReminderKind = "slot_open" | "slot_closing" | "debug_10m";
+type ReminderKind = "slot_open" | "slot_closing" | "custom_time" | "debug_10m";
+
+function parseTimeHHMM(v: unknown): { hh: number; mm: number } | null {
+  if (typeof v !== "string") return null;
+  const s = v.trim();
+  const m = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(s);
+  if (!m) return null;
+  return { hh: Number(m[1]), mm: Number(m[2]) };
+}
+
+function getLocalHHMM(nowMs: number, tz: string): { hh: number; mm: number } | null {
+  try {
+    const parts = new Intl.DateTimeFormat("en-GB", {
+      timeZone: tz,
+      hour12: false,
+      hour: "2-digit",
+      minute: "2-digit",
+    }).formatToParts(new Date(nowMs));
+    const hh = Number(parts.find((p) => p.type === "hour")?.value ?? "");
+    const mm = Number(parts.find((p) => p.type === "minute")?.value ?? "");
+    if (!Number.isFinite(hh) || !Number.isFinite(mm)) return null;
+    if (hh < 0 || hh > 23 || mm < 0 || mm > 59) return null;
+    return { hh, mm };
+  } catch {
+    return null;
+  }
+}
+
+function minutesLeft(nowMs: number, slotEndMs: number): number {
+  return Math.max(0, Math.ceil((slotEndMs - nowMs) / 60_000));
+}
 
 /** Same slot index as `getActiveMissionDaySlot` in `src/utils/missionDaySlots.ts` */
 function getActiveMissionDaySlot(startIso: string, nowMs: number, totalDays: number): number | null {
@@ -57,7 +89,8 @@ async function insertStreakReminderIfEligible(
   reminderDateKey: string,
   dates: string[],
   reminderKind: ReminderKind,
-  reminderPhase: "open" | "closing",
+  reminderPhase: "open" | "closing" | "custom",
+  extraPayload?: Record<string, unknown>,
 ): Promise<boolean> {
   // No reminders if this mission day is already marked in `completed_dates` (same YYYY-MM-DD key as the grid).
   if (dates.includes(reminderDateKey)) return false;
@@ -96,6 +129,7 @@ async function insertStreakReminderIfEligible(
       habit_title: h.title,
       reminder_date: reminderDateKey,
       reminder_phase: reminderPhase,
+      ...(extraPayload ?? {}),
     },
   });
 
@@ -134,7 +168,7 @@ Deno.serve(async (req) => {
 
   const { data: habits, error: hErr } = await supabase
     .from("habits")
-    .select("id, user_id, title, start_date, total_days, completed_dates")
+    .select("id, user_id, title, start_date, total_days, completed_dates, reminder_enabled, reminder_time_local")
     .eq("status", "active")
     .eq("is_completed", false);
 
@@ -212,9 +246,49 @@ Deno.serve(async (req) => {
     }
 
     // Normal mode:
-    // - Day 1: only a "closing" reminder in the last hour (if not marked).
-    // - Day 2+: "open" (first hour) + "closing" (last hour).
+    // If reminder_enabled=true with reminder_time_local, send:
+    // - custom_time at chosen time (slot 1+), plus closing in the last hour.
+    // Else fallback:
+    // - Day 1: only closing
+    // - Day 2+: open + closing
 
+    const reminderEnabled = (h as { reminder_enabled?: boolean | null }).reminder_enabled === true;
+    const reminderTime = parseTimeHHMM((h as { reminder_time_local?: string | null }).reminder_time_local);
+    const hasCustom = reminderEnabled && reminderTime !== null;
+
+    if (hasCustom) {
+      const nowLocal = getLocalHHMM(nowMs, tz);
+      if (nowLocal && nowLocal.hh === reminderTime.hh && nowLocal.mm === reminderTime.mm) {
+        const ok = await insertStreakReminderIfEligible(
+          supabase,
+          h,
+          expectedDateKey,
+          expectedDateKey,
+          dates,
+          "custom_time",
+          "custom",
+          { minutes_left: minutesLeft(nowMs, slotEndMs) },
+        );
+        if (ok) inserted++;
+      }
+
+      if (nowMs >= slotEndMs - MS_REMINDER_WINDOW && nowMs < slotEndMs) {
+        const ok = await insertStreakReminderIfEligible(
+          supabase,
+          h,
+          expectedDateKey,
+          expectedDateKey,
+          dates,
+          "slot_closing",
+          "closing",
+          { minutes_left: minutesLeft(nowMs, slotEndMs) },
+        );
+        if (ok) inserted++;
+      }
+      continue;
+    }
+
+    // Default behavior (no custom time enabled)
     if (slot === 1) {
       if (nowMs >= slotEndMs - MS_REMINDER_WINDOW && nowMs < slotEndMs) {
         const ok = await insertStreakReminderIfEligible(
@@ -225,6 +299,7 @@ Deno.serve(async (req) => {
           dates,
           "slot_closing",
           "closing",
+          { minutes_left: minutesLeft(nowMs, slotEndMs) },
         );
         if (ok) inserted++;
       }
@@ -240,6 +315,7 @@ Deno.serve(async (req) => {
         dates,
         "slot_open",
         "open",
+        { minutes_left: minutesLeft(nowMs, slotEndMs) },
       );
       if (ok) inserted++;
     }
@@ -253,6 +329,7 @@ Deno.serve(async (req) => {
         dates,
         "slot_closing",
         "closing",
+        { minutes_left: minutesLeft(nowMs, slotEndMs) },
       );
       if (ok) inserted++;
     }
