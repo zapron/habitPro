@@ -1,4 +1,4 @@
-import React, { memo } from 'react';
+import React, { memo, useMemo } from 'react';
 import { Text } from "./AppText";
 import {
   View,
@@ -12,6 +12,7 @@ import { Habit } from '../types/habit';
 import { needsMainMissionOutcome } from '../utils/mainMissionUi';
 import { ProgressRing } from './ProgressRing';
 import * as Haptics from 'expo-haptics';
+import { getEligibleStreakRepair } from "../utils/streakRepairEligibility";
 
 interface HabitCardProps {
     item: Habit;
@@ -20,14 +21,16 @@ interface HabitCardProps {
 export const HabitCard = memo(({ item }: HabitCardProps) => {
     const router = useRouter();
     const { theme } = useTheme();
+    const nowMs = Date.now();
     const totalDays = Math.max(1, item.totalDays ?? 21);
-    const needsReport = needsMainMissionOutcome(item, Date.now());
+    const needsReport = needsMainMissionOutcome(item, nowMs);
     const missionWon = item.missionReport === 'accomplished';
     const isManual = (item.mode ?? 'autopilot') === 'manual';
     /** Mission completion: distinct days checked / campaign length */
     const campaignProgress = Math.min(item.completedDates.length / totalDays, 1);
     /** Current consecutive streak as a share of the mission (ring + center number) */
     const streakProgress = Math.min(item.streak / totalDays, 1);
+    const repair = useMemo(() => getEligibleStreakRepair(item, nowMs), [item, nowMs]);
 
     return (
         <TouchableOpacity
@@ -68,6 +71,22 @@ export const HabitCard = memo(({ item }: HabitCardProps) => {
                     {needsReport && (
                         <Text style={[styles.reportPillText, { color: theme.colors.amber[500] }]}>REVIEW DUE</Text>
                     )}
+                    {repair && !missionWon && !needsReport ? (
+                      <TouchableOpacity
+                        onPress={() => {
+                          void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                          router.push({
+                            pathname: `/habit/${item.id}`,
+                            params: { repair: "1", repairDate: repair.dateStr },
+                          });
+                        }}
+                        activeOpacity={0.85}
+                        accessibilityRole="button"
+                        accessibilityLabel="Repair streak"
+                      >
+                        <Text style={[styles.repairCta, { color: theme.colors.amber[500] }]}>REPAIR</Text>
+                      </TouchableOpacity>
+                    ) : null}
                 </View>
 
                 <Text style={[styles.cardTitle, { color: theme.colors.textPrimary, fontSize: theme.typography.h3 }]}>{item.title}</Text>
@@ -162,6 +181,7 @@ const styles = StyleSheet.create({
     cardContent: { flex: 1 },
     pillRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 10, marginBottom: 8 },
     reportPillText: { fontSize: 10, fontWeight: '800', letterSpacing: 0.8 },
+    repairCta: { fontSize: 10, fontWeight: "900", letterSpacing: 0.9 },
     ringInner: { alignItems: 'center', justifyContent: 'center', paddingTop: 2 },
     cardTitle: { fontWeight: '800', marginBottom: 4, flexShrink: 1 },
     cardDescription: { fontSize: 14 },

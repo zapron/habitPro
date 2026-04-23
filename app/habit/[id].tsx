@@ -41,11 +41,13 @@ import {
 } from '../../src/utils/missionDaySlots';
 import { isMissionGridFull } from '../../src/utils/habitDerived';
 import { shouldShowMainMissionTimer } from '../../src/utils/mainMissionUi';
+import { getEligibleStreakRepair } from "../../src/utils/streakRepairEligibility";
 import { StreakMemorySheet } from '../../src/components/StreakMemorySheet';
 import { StreakMemoryGallery } from '../../src/components/StreakMemoryGallery';
 import { GroupChallengeSheet } from '../../src/components/GroupChallengeSheet';
 import { MissionDetailsSheet } from '../../src/components/MissionDetailsSheet';
 import { PlusBadge } from "../../src/components/PlusBadge";
+import { StreakRepairSheet } from "../../src/components/StreakRepairSheet";
 import type { StreakMemory } from '../../src/types/habit';
 import {
     canUseStreakMemoryUpload,
@@ -67,6 +69,7 @@ import {
   deleteAllCommunityWinsForHabit,
   habitStreakCommunityWinId,
 } from '../../src/lib/communityWinsApi';
+import { getMyStreakRepairStatusForDay } from "../../src/lib/streakRepairApi";
 
 const LOCKED_CHECKIN_MSG =
     'You can only check in for the current mission day. Each day unlocks 24 hours after the mission started (day 2 after the first 24 hours, and so on).';
@@ -96,6 +99,7 @@ function AnimatedDayCell({
     canInteract,
     hasStreakRecord,
     hasMomentMedia,
+    repaired,
     onPress,
 }: {
     day: number;
@@ -110,6 +114,8 @@ function AnimatedDayCell({
     hasStreakRecord: boolean;
     /** Photo or note saved for this day (amber dot). */
     hasMomentMedia: boolean;
+    /** This day was restored via Streak Repair. */
+    repaired: boolean;
     onPress: () => void;
 }) {
     const { theme } = useTheme();
@@ -182,6 +188,9 @@ function AnimatedDayCell({
                         {hasMomentMedia ? (
                             <View style={[styles.memoryDot, { backgroundColor: theme.colors.amber[500], borderColor: theme.colors.surface }]} />
                         ) : null}
+                        {repaired ? (
+                          <View style={[styles.repairDot, { backgroundColor: theme.colors.cyan[400], borderColor: theme.colors.surface }]} />
+                        ) : null}
                     </Animated.View>
                 ) : locked ? (
                     <Lock size={15} color={theme.colors.textMuted} />
@@ -195,6 +204,7 @@ function AnimatedDayCell({
 
 export default function HabitDetail() {
     const { id } = useLocalSearchParams<{ id?: string | string[] }>();
+    const { repair, repairDate } = useLocalSearchParams<{ repair?: string; repairDate?: string }>();
     const router = useRouter();
     const { theme, isDark } = useTheme();
     const { showToast } = useToast();
@@ -259,6 +269,41 @@ export default function HabitDetail() {
     const [habitCommunityPublishPending, setHabitCommunityPublishPending] = useState(false);
     /** Avoid Mission not found flash after delete/leave; store clears before navigation finishes. */
     const [pendingExitAfterRemove, setPendingExitAfterRemove] = useState(false);
+
+    const eligibleRepair = useMemo(() => {
+      if (!habit) return null;
+      return getEligibleStreakRepair(habit, now);
+    }, [habit, now]);
+    const [repairSheetOpen, setRepairSheetOpen] = useState(false);
+    const [repairStatus, setRepairStatus] = useState<"pending" | "approved" | "declined" | "applied" | null>(null);
+
+    useEffect(() => {
+      if (repair !== "1") return;
+      if (!eligibleRepair) return;
+      if (typeof repairDate === "string" && repairDate.length > 0 && repairDate !== eligibleRepair.dateStr) {
+        return;
+      }
+      setRepairSheetOpen(true);
+    }, [repair, repairDate, eligibleRepair]);
+
+    useEffect(() => {
+      if (!eligibleRepair || !habit) {
+        setRepairStatus(null);
+        return;
+      }
+      let cancelled = false;
+      void getMyStreakRepairStatusForDay({ habitId: habit.id, dateStr: eligibleRepair.dateStr })
+        .then((res) => {
+          if (cancelled) return;
+          if (res.ok) setRepairStatus(res.status);
+        })
+        .catch(() => {
+          if (!cancelled) setRepairStatus(null);
+        });
+      return () => {
+        cancelled = true;
+      };
+    }, [eligibleRepair?.dateStr, habit?.id]);
     const pendingMemoryRef = useRef<{ dateStr: string; day: number; dayIndex: number } | null>(null);
 
     useEffect(() => {
@@ -878,6 +923,51 @@ export default function HabitDetail() {
 
                 <StreakBanner streak={habit.streak} />
 
+                {eligibleRepair ? (
+                  <View
+                    style={[
+                      styles.repairBanner,
+                      {
+                        borderColor: isDark
+                          ? "rgba(245, 158, 11, 0.35)"
+                          : "rgba(217, 119, 6, 0.25)",
+                        backgroundColor: isDark
+                          ? "rgba(245, 158, 11, 0.10)"
+                          : "rgba(245, 158, 11, 0.08)",
+                      },
+                    ]}
+                  >
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text style={[styles.repairTitle, { color: theme.colors.textPrimary }]}>
+                        {repairStatus === "pending" ? "Repair pending" : "Streak broken"}
+                      </Text>
+                      <Text style={[styles.repairBody, { color: theme.colors.textSecondary }]}>
+                        {repairStatus === "pending"
+                          ? "Your squad has been asked to approve. You’ll be notified when it’s applied."
+                          : `You missed day ${eligibleRepair.missionDayNumber}. Repair within 24h to keep your streak.`}
+                      </Text>
+                      <Text style={[styles.repairCost, { color: theme.colors.amber[500] }]}>
+                        {repairStatus === "pending" ? "Waiting for approvals…" : `Cost: ${eligibleRepair.xpCost} XP`}
+                      </Text>
+                    </View>
+                    <TouchableOpacity
+                      onPress={() => setRepairSheetOpen(true)}
+                      activeOpacity={0.86}
+                      disabled={repairStatus === "pending"}
+                      style={[
+                        styles.repairBtn,
+                        { backgroundColor: repairStatus === "pending" ? theme.colors.border : theme.colors.amber[500] },
+                      ]}
+                      accessibilityRole="button"
+                      accessibilityLabel="Repair streak"
+                    >
+                      <Text style={[styles.repairBtnText, { color: "#111827" }]}>
+                        {repairStatus === "pending" ? "Pending" : "Repair"}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : null}
+
                 <QuoteCard />
 
                 <View style={[styles.progressCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, borderRadius: theme.radius.lg, ...theme.shadow.card }]}>
@@ -891,6 +981,18 @@ export default function HabitDetail() {
                         <View style={[styles.progressBarFill, isManual && { backgroundColor: theme.colors.amber[500] }, { backgroundColor: theme.colors.indigo[500], width: `${(habit.completedDates.length / totalDays) * 100}%` }]} />
                     </View>
                 </View>
+
+                {eligibleRepair && habit ? (
+                  <StreakRepairSheet
+                    visible={repairSheetOpen}
+                    onClose={() => setRepairSheetOpen(false)}
+                    habit={habit}
+                    eligible={eligibleRepair}
+                    onRequested={(info) => {
+                      setRepairStatus(info.status);
+                    }}
+                  />
+                ) : null}
 
                 <Text style={[styles.gridTitle, { color: theme.colors.textPrimary, fontSize: theme.typography.h3 }]}>
                     {isManual ? `${totalDays}-Day Grid` : '21-Day Grid'}
@@ -914,6 +1016,7 @@ export default function HabitDetail() {
                                     streakMem.imageUrl ||
                                     streakMem.imageUri),
                         );
+                        const repaired = Boolean(habit.repairedDates?.includes(dateStr));
 
                         return (
                             <AnimatedDayCell
@@ -926,6 +1029,7 @@ export default function HabitDetail() {
                                 canInteract={canInteract}
                                 hasStreakRecord={hasStreakRecord}
                                 hasMomentMedia={hasMomentMedia}
+                                repaired={repaired}
                                 onPress={() => handleDayPress(index, day)}
                             />
                         );
@@ -1072,6 +1176,21 @@ const styles = StyleSheet.create({
     visibilityTitleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
     visibilityTitle: { fontWeight: '700', fontSize: 14 },
     visibilityHint: { fontSize: 11, marginTop: 3, lineHeight: 15 },
+    repairBanner: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 12,
+        paddingVertical: 12,
+        paddingHorizontal: 14,
+        borderWidth: 1,
+        borderRadius: 16,
+        marginBottom: 14,
+    },
+    repairTitle: { fontSize: 14, fontWeight: "900", marginBottom: 2 },
+    repairBody: { fontSize: 12, lineHeight: 17, fontWeight: "600" },
+    repairCost: { fontSize: 12, fontWeight: "900", marginTop: 6 },
+    repairBtn: { paddingHorizontal: 14, paddingVertical: 10, borderRadius: 14 },
+    repairBtnText: { fontSize: 12, fontWeight: "900" },
     progressCard: { padding: 20, marginBottom: 28, borderWidth: 1 },
     progressHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 14 },
     progressLabel: { fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1 },
@@ -1095,6 +1214,7 @@ const styles = StyleSheet.create({
     completedDayTextMilestone: { color: '#fff7dc' },
     badgeAccent: { position: 'absolute', top: 6, right: 6 },
     memoryDot: { position: 'absolute', bottom: 5, width: 7, height: 7, borderRadius: 4, borderWidth: 1.5 },
+    repairDot: { position: 'absolute', bottom: 5, right: 5, width: 7, height: 7, borderRadius: 4, borderWidth: 1.5 },
     dayButtonPlaceholder: { width: '13%', aspectRatio: 1, marginBottom: 14 },
     missionTimerSlot: {
         padding: 20,

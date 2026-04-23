@@ -50,6 +50,8 @@ export interface Habit {
   challengeGroupId?: string | null;
   /** IANA timezone of the challenge creator; used for which calendar day counts. */
   challengeCreatorTimezone?: string | null;
+  /** Calendar dates repaired via Streak Repair (treated like completed for streak computation). */
+  repairedDates?: string[];
 }
 
 export type MiniMissionStatus =
@@ -103,6 +105,11 @@ export type HabitStore = {
   resetStore: () => void;
   addHabit: (input: AddHabitInput) => string;
   toggleCompletion: (id: string, date: string) => boolean;
+  /**
+   * Apply a server-approved streak repair to local state immediately (without granting completion XP).
+   * Used for squad approvals so UI updates without logout/login.
+   */
+  applyStreakRepairLocally: (input: { habitId: string; dateStr: string; xpCost?: number }) => void;
   setStreakMemory: (id: string, date: string, memory: StreakMemory | null) => void;
   /** Merge into an existing streak memory (e.g. Community flags); no-op if no memory for date. */
   patchStreakMemory: (id: string, date: string, patch: Partial<StreakMemory>) => void;
