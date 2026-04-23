@@ -134,6 +134,20 @@ function RootLayoutNav() {
         }
         return;
       }
+
+      if (type === "streak_repair_request" || type === "streak_repair_result") {
+        const challengeId = typeof data.challenge_id === "string" ? data.challenge_id : "";
+        const repairId = typeof data.repair_id === "string" ? data.repair_id : "";
+        if (challengeId) {
+          router.push({
+            pathname: `/challenge/${challengeId}`,
+            params: repairId ? { repairId } : {},
+          });
+        } else {
+          router.push("/(tabs)/compete");
+        }
+        return;
+      }
     };
 
     (async () => {
@@ -162,6 +176,44 @@ function RootLayoutNav() {
       subscription?.remove();
     };
   }, [session, initializing, router]);
+
+  /**
+   * Realtime: when squad approvals flip a repair to `applied`,
+   * update local mission UI immediately (no logout/login needed).
+   */
+  useEffect(() => {
+    if (!session || initializing) return;
+    const supabase = getSupabase();
+    if (!supabase) return;
+
+    const channel = supabase
+      .channel(`streak_repairs_user_${session.user.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "streak_repairs",
+          filter: `user_id=eq.${session.user.id}`,
+        },
+        (payload) => {
+          const next = payload.new as Record<string, unknown> | null;
+          if (!next) return;
+          const status = typeof next.status === "string" ? next.status : "";
+          if (status !== "applied") return;
+          const habitId = typeof next.habit_id === "string" ? next.habit_id : "";
+          const dateStr = typeof next.date_str === "string" ? next.date_str : "";
+          const xpCost = typeof next.xp_cost === "number" ? next.xp_cost : undefined;
+          if (!habitId || !dateStr) return;
+          useHabitStore.getState().applyStreakRepairLocally({ habitId, dateStr, xpCost });
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [session, initializing]);
 
   useEffect(() => {
     const runSync = () => {

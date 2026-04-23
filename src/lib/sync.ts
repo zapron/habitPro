@@ -17,6 +17,11 @@ type RemoteSnapshot = Pick<HabitStore, "habits" | "miniMissions" | "xp" | "usern
   cohortPeerHabits: Habit[];
 };
 
+type RepairRow = {
+  habit_id: string;
+  date_str: string;
+};
+
 function parseMissionReport(v: unknown): MissionReport | undefined {
   return v === "accomplished" || v === "failed" ? v : undefined;
 }
@@ -50,6 +55,8 @@ function habitFromRow(row: {
     ? row.completed_dates.filter((x): x is string => typeof x === "string")
     : [];
   const completedDatesMigrated = canonicalizeMissionDateKeys(row.start_date, rawCompleted, tdRow);
+  const repairedDates: string[] =
+    (row as unknown as { repairedDates?: string[] }).repairedDates ?? [];
 
   const storedStreak = typeof row.streak === "number" && Number.isFinite(row.streak) ? row.streak : 0;
   const missionReport = parseMissionReport(row.mission_report);
@@ -67,7 +74,7 @@ function habitFromRow(row: {
   }
 
   const d = getDerivedState(
-    completedDatesMigrated,
+    [...completedDatesMigrated, ...repairedDates],
     tdRow,
     effectiveReport,
   );
@@ -102,6 +109,7 @@ function habitFromRow(row: {
     missionReport: effectiveReport,
     missionReportAt,
     streakMemories,
+    repairedDates,
     challengeGroupId: row.challenge_group_id ?? null,
     challengeCreatorTimezone: row.challenge_creator_timezone ?? null,
   };
@@ -229,17 +237,35 @@ export async function pullFromSupabase(userId: string): Promise<RemoteSnapshot> 
     return { habits: [], miniMissions: [], xp: 0, username: null, cohortPeerHabits: [] };
   }
 
-  const [habitsRes, miniRes, profileRes] = await Promise.all([
+  const [habitsRes, miniRes, profileRes, repairsRes] = await Promise.all([
     supabase.from("habits").select("*").eq("user_id", userId),
     supabase.from("mini_missions").select("*").eq("user_id", userId),
     supabase.from("profiles").select("xp, username").eq("id", userId).maybeSingle(),
+    supabase.from("streak_repairs").select("habit_id, date_str").eq("user_id", userId).eq("status", "applied"),
   ]);
 
   if (habitsRes.error) throw habitsRes.error;
   if (miniRes.error) throw miniRes.error;
   if (profileRes.error) throw profileRes.error;
+  if (repairsRes.error) throw repairsRes.error;
 
-  const habits = (habitsRes.data ?? []).map((r) => habitFromRow(r));
+  const repairs = (repairsRes.data ?? []) as unknown as RepairRow[];
+  const repairedByHabit = new Map<string, string[]>();
+  for (const rr of repairs) {
+    const hid = rr.habit_id;
+    const ds = rr.date_str;
+    if (!hid || !ds) continue;
+    const prev = repairedByHabit.get(hid) ?? [];
+    prev.push(ds);
+    repairedByHabit.set(hid, prev);
+  }
+
+  const habits = (habitsRes.data ?? []).map((r) => {
+    const row = r as unknown as Record<string, unknown>;
+    const hid = String(row.id ?? "");
+    const repairedDates = repairedByHabit.get(hid) ?? [];
+    return habitFromRow({ ...(r as any), repairedDates });
+  });
   const miniMissions = (miniRes.data ?? []).map((r) => miniFromRow(r));
   const xp = profileRes.data?.xp ?? 0;
   const rawUser = profileRes.data as { username?: string | null } | null;

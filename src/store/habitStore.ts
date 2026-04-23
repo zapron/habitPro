@@ -185,6 +185,49 @@ export const useHabitStore = create<HabitStore>()(
         }
         return changed;
       },
+      applyStreakRepairLocally: ({ habitId, dateStr, xpCost }) => {
+        let didApply = false;
+        set((state) => {
+          const updatedHabits = state.habits.map((habit) => {
+            if (habit.id !== habitId) return habit;
+
+            // If already completed, still record repairedDates for UI dot (if missing).
+            const alreadyCompleted = habit.completedDates.includes(dateStr);
+            const nextCompletedDates = alreadyCompleted
+              ? habit.completedDates
+              : [...habit.completedDates, dateStr];
+
+            const nextRepaired = Array.isArray(habit.repairedDates)
+              ? habit.repairedDates.includes(dateStr)
+                ? habit.repairedDates
+                : [...habit.repairedDates, dateStr]
+              : [dateStr];
+
+            const { normalized, streak, isCompleted, status } = getDerivedState(
+              nextCompletedDates,
+              habit.totalDays,
+              habit.missionReport,
+            );
+
+            didApply = true;
+            return {
+              ...habit,
+              completedDates: normalized,
+              repairedDates: nextRepaired,
+              streak,
+              isCompleted,
+              status,
+            };
+          });
+
+          const nextXp =
+            typeof xpCost === "number" && Number.isFinite(xpCost) && xpCost > 0
+              ? Math.max(0, state.xp - xpCost)
+              : state.xp;
+
+          return didApply ? { habits: updatedHabits, xp: nextXp } : { habits: updatedHabits };
+        });
+      },
       setStreakMemory: (id, date, memory) => {
         set((state) => ({
           habits: state.habits.map((habit) => {
