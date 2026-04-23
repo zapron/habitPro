@@ -1,18 +1,22 @@
-import React, { memo, useMemo } from 'react';
+import React, { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { Text } from "./AppText";
 import {
   View,
   TouchableOpacity,
   StyleSheet,
+  Animated,
+  Easing,
 } from "react-native";
 import { useRouter } from 'expo-router';
-import { TreePine, Flame, Check, Plane, Gamepad2, Globe, Swords, Users } from 'lucide-react-native';
+import { Flame, Check, Plane, Gamepad2, Globe, Swords, Users } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
 import { Habit } from '../types/habit';
 import { needsMainMissionOutcome } from '../utils/mainMissionUi';
 import { ProgressRing } from './ProgressRing';
 import * as Haptics from 'expo-haptics';
 import { getEligibleStreakRepair } from "../utils/streakRepairEligibility";
+import { calendarDateForMissionDayIndex, getActiveMissionDaySlot } from "../utils/missionDaySlots";
+import { useReducedMotion } from "../hooks/useReducedMotion";
 
 interface HabitCardProps {
     item: Habit;
@@ -21,16 +25,67 @@ interface HabitCardProps {
 export const HabitCard = memo(({ item }: HabitCardProps) => {
     const router = useRouter();
     const { theme } = useTheme();
-    const nowMs = Date.now();
+    const reduceMotion = useReducedMotion();
+    const [nowMs, setNowMs] = useState(() => Date.now());
     const totalDays = Math.max(1, item.totalDays ?? 21);
     const needsReport = needsMainMissionOutcome(item, nowMs);
     const missionWon = item.missionReport === 'accomplished';
     const isManual = (item.mode ?? 'autopilot') === 'manual';
+
+    useEffect(() => {
+      if (item.status !== "active" || item.isCompleted || missionWon) return;
+      const t = setInterval(() => setNowMs(Date.now()), 30_000);
+      return () => clearInterval(t);
+    }, [item.status, item.isCompleted, missionWon, item.id]);
     /** Mission completion: distinct days checked / campaign length */
     const campaignProgress = Math.min(item.completedDates.length / totalDays, 1);
     /** Current consecutive streak as a share of the mission (ring + center number) */
     const streakProgress = Math.min(item.streak / totalDays, 1);
     const repair = useMemo(() => getEligibleStreakRepair(item, nowMs), [item, nowMs]);
+
+    const streakCheckinAvailable = useMemo(() => {
+      if (missionWon || needsReport) return false;
+      if (item.status !== "active" || item.isCompleted) return false;
+      if (isManual && item.endDate && nowMs >= new Date(item.endDate).getTime()) return false;
+      const slot = getActiveMissionDaySlot(item.startDate, nowMs, totalDays);
+      if (slot == null) return false;
+      const dateStr = calendarDateForMissionDayIndex(item.startDate, slot - 1);
+      if (!dateStr) return false;
+      return !item.completedDates.includes(dateStr);
+    }, [missionWon, needsReport, item, nowMs, totalDays, isManual]);
+
+    const pulse = useRef(new Animated.Value(0)).current;
+    useEffect(() => {
+      if (!streakCheckinAvailable || reduceMotion) {
+        pulse.stopAnimation();
+        pulse.setValue(0);
+        return;
+      }
+      const loop = Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulse, {
+            toValue: 1,
+            duration: 900,
+            easing: Easing.inOut(Easing.quad),
+            useNativeDriver: true,
+          }),
+          Animated.timing(pulse, {
+            toValue: 0,
+            duration: 900,
+            easing: Easing.inOut(Easing.quad),
+            useNativeDriver: true,
+          }),
+        ]),
+      );
+      loop.start();
+      return () => {
+        loop.stop();
+        pulse.setValue(0);
+      };
+    }, [streakCheckinAvailable, reduceMotion, pulse]);
+
+    const pulseScale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.22] });
+    const pulseOpacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.22, 0.62] });
 
     return (
         <TouchableOpacity
@@ -62,6 +117,26 @@ export const HabitCard = memo(({ item }: HabitCardProps) => {
                     {Boolean(item.challengeGroupId) && (
                         <Swords size={14} color={theme.colors.indigo[400]} />
                     )}
+                    {streakCheckinAvailable && !missionWon ? (
+                        <View
+                            style={styles.pulseGlyphWrap}
+                            accessibilityLabel="Streak check-in available"
+                            accessibilityRole="image"
+                        >
+                            <Animated.View
+                                pointerEvents="none"
+                                style={[
+                                    styles.pulseGlyphHalo,
+                                    {
+                                        borderColor: theme.colors.cyan[400],
+                                        backgroundColor: "rgba(34, 211, 238, 0.10)",
+                                        transform: [{ scale: reduceMotion ? 1 : pulseScale }],
+                                        opacity: reduceMotion ? 0.5 : pulseOpacity,
+                                    },
+                                ]}
+                            />
+                        </View>
+                    ) : null}
                     {item.missionReport === 'accomplished' && (
                         <Text style={[styles.reportPillText, { color: theme.colors.green[500] }]}>ACCOMPLISHED</Text>
                     )}
@@ -182,6 +257,23 @@ const styles = StyleSheet.create({
     pillRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 10, marginBottom: 8 },
     reportPillText: { fontSize: 10, fontWeight: '800', letterSpacing: 0.8 },
     repairCta: { fontSize: 10, fontWeight: "900", letterSpacing: 0.9 },
+    pulseGlyphWrap: {
+        width: 16,
+        height: 16,
+        alignItems: "center",
+        justifyContent: "center",
+        position: "relative",
+    },
+    pulseGlyphHalo: {
+        position: "absolute",
+        left: 2,
+        top: 2,
+        width: 12,
+        height: 12,
+        borderRadius: 3,
+        borderWidth: 1,
+        zIndex: 0,
+    },
     ringInner: { alignItems: 'center', justifyContent: 'center', paddingTop: 2 },
     cardTitle: { fontWeight: '800', marginBottom: 4, flexShrink: 1 },
     cardDescription: { fontSize: 14 },
