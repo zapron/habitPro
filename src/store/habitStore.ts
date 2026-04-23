@@ -53,6 +53,7 @@ const migrateHabit = (h: any): Habit => {
       typeof h.reminderTimeLocal === "string" || h.reminderTimeLocal === null
         ? h.reminderTimeLocal
         : null,
+    reminderLocked: typeof h.reminderLocked === "boolean" ? h.reminderLocked : false,
     missionReport,
     missionReportAt:
       typeof h.missionReportAt === "string" ? h.missionReportAt : undefined,

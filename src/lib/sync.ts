@@ -47,6 +47,7 @@ function habitFromRow(row: {
   mission_report_at?: string | null;
   reminder_enabled?: boolean | null;
   reminder_time_local?: string | null;
+  reminder_locked?: boolean | null;
 }): Habit {
   const vis: MissionVisibility =
     row.visibility === "public" || row.visibility === "solo"
@@ -114,6 +115,7 @@ function habitFromRow(row: {
     repairedDates,
     reminderEnabled: row.reminder_enabled ?? false,
     reminderTimeLocal: row.reminder_time_local ?? null,
+    reminderLocked: row.reminder_locked ?? false,
     challengeGroupId: row.challenge_group_id ?? null,
     challengeCreatorTimezone: row.challenge_creator_timezone ?? null,
   };
@@ -141,6 +143,7 @@ function habitToRow(sessionUserId: string, h: Habit) {
     mission_report_at: h.missionReportAt ?? null,
     reminder_enabled: h.reminderEnabled ?? false,
     reminder_time_local: h.reminderTimeLocal ?? null,
+    reminder_locked: h.reminderLocked ?? false,
   };
 }
 

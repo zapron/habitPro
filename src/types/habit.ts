@@ -57,6 +57,8 @@ export interface Habit {
   reminderEnabled?: boolean;
   /** Local time (HH:MM 24h) in the user's timezone for reminders. */
   reminderTimeLocal?: string | null;
+  /** After true, reminder time cannot be changed (one-time confirmation). */
+  reminderLocked?: boolean;
 }
 
 export type MiniMissionStatus =
