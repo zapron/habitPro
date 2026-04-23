@@ -20,6 +20,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
+import Svg, { Defs, LinearGradient as SvgLinearGradient, Stop, Text as SvgText } from "react-native-svg";
 import { FlashList } from "@shopify/flash-list";
 import {
   Trophy,
@@ -54,6 +55,39 @@ function getGreeting(): string {
   if (hour < 17) return "Keep pushing forward";
   if (hour < 21) return "Evening focus mode";
   return "Night owl mode";
+}
+
+function MiniMissionLiveGradientLabel({ count }: { count: number }) {
+  const fontSize = 17;
+  const label = `${count} LIVE`;
+  const w = Math.min(200, Math.max(44, Math.ceil(label.length * fontSize * 0.58)));
+  const h = Math.ceil(fontSize * 1.2);
+  const baseline = Math.ceil(fontSize * 0.88);
+
+  return (
+    <Svg
+      width={w}
+      height={h}
+      viewBox={`0 0 ${w} ${h}`}
+      accessibilityLabel={`${count} live mini missions`}
+    >
+      <Defs>
+        <SvgLinearGradient id="miniLiveGrad" x1="0" y1="0" x2={w} y2="0">
+          <Stop offset="0" stopColor="#f97316" />
+          <Stop offset="1" stopColor="#fde047" />
+        </SvgLinearGradient>
+      </Defs>
+      <SvgText
+        x={0}
+        y={baseline}
+        fill="url(#miniLiveGrad)"
+        fontSize={fontSize}
+        fontWeight="800"
+      >
+        {label}
+      </SvgText>
+    </Svg>
+  );
 }
 
 const SECTION_GAP = 12;
@@ -135,7 +169,7 @@ export default function Home() {
     return () => loop.stop();
   }, [reduceMotion, emptyIconScale]);
 
-  const listBottomPad = Math.max(insets.bottom, 12) + 56;
+  const listBottomPad = Math.max(insets.bottom, 12) + 48;
 
   const level = Math.floor(xp / 100);
   const xpInLevel = xp % 100;
@@ -479,12 +513,17 @@ export default function Home() {
             </View>
             <View style={{ marginLeft: 10 }}>
               <Text style={{ color: theme.colors.textPrimary, fontWeight: "700", fontSize: 15 }}>Mini Missions</Text>
-              <Text style={{ color: theme.colors.textMuted, fontSize: 11 }}>
-                {miniMissionStats.live > 0 ? `${miniMissionStats.live} live now` : "Browse side-quests"}
-              </Text>
+              {miniMissionStats.live === 0 ? (
+                <Text style={{ color: theme.colors.textMuted, fontSize: 11 }}>Browse side-quests</Text>
+              ) : null}
             </View>
           </View>
-          <ChevronRight size={20} color={theme.colors.textMuted} />
+          <View style={styles.miniBannerRight}>
+            {miniMissionStats.live > 0 ? (
+              <MiniMissionLiveGradientLabel count={miniMissionStats.live} />
+            ) : null}
+            <ChevronRight size={20} color={theme.colors.textMuted} />
+          </View>
         </TouchableOpacity>
 
         <Text style={[styles.missionsLabel, { color: theme.colors.textMuted }]}>
@@ -709,7 +748,7 @@ export default function Home() {
           activeOpacity={0.8}
           style={styles.fabInner}
         >
-          <Plus size={28} color="#fff" strokeWidth={3} />
+          <Plus size={24} color="#fff" strokeWidth={3} />
         </TouchableOpacity>
       </Animated.View>
     </Screen>
@@ -781,6 +820,14 @@ const styles = StyleSheet.create({
   miniBannerLeft: {
     flexDirection: "row",
     alignItems: "center",
+    flexShrink: 1,
+  },
+  miniBannerRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flexShrink: 0,
+    marginLeft: 10,
   },
   commandIconMini: {
     width: 36,
@@ -794,9 +841,9 @@ const styles = StyleSheet.create({
     position: "absolute",
     bottom: 30,
     right: 20,
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     elevation: 8,
   },
   fabInner: {
