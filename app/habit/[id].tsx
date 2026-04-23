@@ -128,24 +128,28 @@ function AnimatedDayCell({
     const shimmer = useRef(new Animated.Value(0)).current;
     const todayPulse = useRef(new Animated.Value(1)).current;
 
-    useMemo(() => {
-        if (reduceMotion) return;
-        if (isCurrentMissionDay && !isCompleted) {
-            Animated.loop(Animated.sequence([
+    useEffect(() => {
+        if (reduceMotion || !(isCurrentMissionDay && !isCompleted)) return;
+        const loop = Animated.loop(
+            Animated.sequence([
                 Animated.timing(todayPulse, { toValue: 1.06, duration: 1400, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
                 Animated.timing(todayPulse, { toValue: 1, duration: 1400, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-            ])).start();
-        }
+            ]),
+        );
+        loop.start();
+        return () => loop.stop();
     }, [reduceMotion, isCurrentMissionDay, isCompleted, todayPulse]);
 
-    useMemo(() => {
-        if (reduceMotion) return;
-        if (isMilestone && isCompleted) {
-            Animated.loop(Animated.sequence([
+    useEffect(() => {
+        if (reduceMotion || !(isMilestone && isCompleted)) return;
+        const loop = Animated.loop(
+            Animated.sequence([
                 Animated.timing(shimmer, { toValue: 1, duration: 2000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
                 Animated.timing(shimmer, { toValue: 0, duration: 2000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-            ])).start();
-        }
+            ]),
+        );
+        loop.start();
+        return () => loop.stop();
     }, [reduceMotion, isMilestone, isCompleted, shimmer]);
 
     const handlePress = useCallback(() => {
@@ -280,6 +284,7 @@ export default function HabitDetail() {
 
     const [reminderEditorOpen, setReminderEditorOpen] = useState(false);
     const [reminderDraft, setReminderDraft] = useState("21:00");
+    const [reminderLockPending, setReminderLockPending] = useState<string | null>(null);
 
     const eligibleRepair = useMemo(() => {
       if (!habit) return null;
@@ -321,6 +326,8 @@ export default function HabitDetail() {
       const current = typeof habit.reminderTimeLocal === "string" ? habit.reminderTimeLocal : "21:00";
       setReminderDraft(current);
     }, [habit?.id, habit?.reminderTimeLocal]);
+
+    const reminderIsLocked = Boolean(habit?.reminderLocked);
     const pendingMemoryRef = useRef<{ dateStr: string; day: number; dayIndex: number } | null>(null);
 
     useEffect(() => {
@@ -938,42 +945,58 @@ export default function HabitDetail() {
                     />
                 </View>
 
-                <View
-                    style={[
-                        styles.visibilityRow,
-                        { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, borderRadius: theme.radius.md },
-                    ]}
-                >
-                    <Bell size={theme.icon.md} color={theme.colors.indigo[400]} />
-                    <View style={styles.visibilityTextCol}>
-                        <Text style={[styles.visibilityTitle, { color: theme.colors.textPrimary }]}>Reminders</Text>
-                        <Text style={[styles.visibilityHint, { color: theme.colors.textMuted }]}>
-                            {habit.reminderEnabled
-                                ? `Daily at ${habit.reminderTimeLocal ?? "21:00"} (plus last hour).`
-                                : "Default schedule (opening + last hour)."}
-                        </Text>
+                {reminderIsLocked && habit.reminderEnabled && typeof habit.reminderTimeLocal === "string" ? (
+                    <View
+                        style={[
+                            styles.reminderLockedRow,
+                            {
+                                borderColor: theme.colors.border,
+                                backgroundColor: isDark ? "rgba(99, 102, 241, 0.08)" : "rgba(99, 102, 241, 0.06)",
+                            },
+                        ]}
+                    >
+                        <View style={[styles.reminderLockedAccent, { backgroundColor: theme.colors.indigo[500] }]} />
+                        <View style={{ flex: 1, minWidth: 0 }}>
+                            <Text style={[styles.reminderLockedLabel, { color: theme.colors.textMuted }]}>DAILY REMINDER</Text>
+                            <Text style={[styles.reminderLockedTime, { color: theme.colors.textPrimary }]}>{habit.reminderTimeLocal}</Text>
+                        </View>
+                        <Bell size={18} color={theme.colors.indigo[400]} />
                     </View>
-                    <Switch
-                        value={Boolean(habit.reminderEnabled)}
-                        onValueChange={(v) => {
-                            if (!habit) return;
-                            setReminderEditorOpen(true);
-                            // If turning off, apply immediately without editor.
-                            if (!v) {
-                                useHabitStore.setState((state) => ({
-                                    habits: state.habits.map((h) =>
-                                        h.id === habit.id ? { ...h, reminderEnabled: false } : h,
-                                    ),
-                                }));
-                                requestRemoteSync({ immediate: false });
-                                return;
-                            }
-                        }}
-                        trackColor={{ false: theme.colors.border, true: theme.colors.indigo[600] }}
-                        thumbColor={theme.colors.white}
-                        ios_backgroundColor={theme.colors.border}
-                    />
-                </View>
+                ) : (
+                    <View
+                        style={[
+                            styles.visibilityRow,
+                            { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, borderRadius: theme.radius.md },
+                        ]}
+                    >
+                        <Bell size={theme.icon.md} color={theme.colors.indigo[400]} />
+                        <View style={styles.visibilityTextCol}>
+                            <Text style={[styles.visibilityTitle, { color: theme.colors.textPrimary }]}>Reminders</Text>
+                            <Text style={[styles.visibilityHint, { color: theme.colors.textMuted }]}>
+                                Default: opening + last hour. Or set one daily time (final).
+                            </Text>
+                        </View>
+                        <TouchableOpacity
+                            onPress={() => {
+                                const seed =
+                                    typeof habit.reminderTimeLocal === "string" && habit.reminderTimeLocal.length > 0
+                                        ? habit.reminderTimeLocal
+                                        : "21:00";
+                                setReminderDraft(seed);
+                                setReminderEditorOpen(true);
+                            }}
+                            activeOpacity={0.86}
+                            style={[
+                                styles.reminderSetBtn,
+                                { borderColor: theme.colors.border, backgroundColor: theme.colors.surfaceElevated },
+                            ]}
+                            accessibilityRole="button"
+                            accessibilityLabel="Set reminder time"
+                        >
+                            <Text style={[styles.reminderSetBtnText, { color: theme.colors.indigo[400] }]}>Set time</Text>
+                        </TouchableOpacity>
+                    </View>
+                )}
 
                 <StreakBanner streak={habit.streak} />
 
@@ -1048,104 +1071,99 @@ export default function HabitDetail() {
                   />
                 ) : null}
 
-                <Modal
-                    visible={reminderEditorOpen}
-                    animationType="fade"
-                    transparent
-                    onRequestClose={() => setReminderEditorOpen(false)}
-                >
-                    <Pressable
-                        style={[
-                            styles.backdrop,
-                            { backgroundColor: isDark ? "rgba(0,0,0,0.55)" : "rgba(0,0,0,0.28)" },
-                        ]}
-                        onPress={() => setReminderEditorOpen(false)}
+                {!reminderIsLocked ? (
+                    <Modal
+                        visible={reminderEditorOpen}
+                        animationType="fade"
+                        transparent
+                        onRequestClose={() => setReminderEditorOpen(false)}
                     >
                         <Pressable
-                            onPress={(e) => e.stopPropagation()}
                             style={[
-                                styles.reminderModal,
-                                { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
+                                styles.backdrop,
+                                { backgroundColor: isDark ? "rgba(0,0,0,0.55)" : "rgba(0,0,0,0.28)" },
                             ]}
+                            onPress={() => setReminderEditorOpen(false)}
                         >
-                            <Text style={[styles.reminderTitle, { color: theme.colors.textPrimary }]}>
-                                Daily reminder time
-                            </Text>
-                            <Text style={[styles.reminderHint, { color: theme.colors.textSecondary }]}>
-                                Use 24h format (HH:MM). We’ll remind you at this time if today isn’t marked.
-                            </Text>
-
-                            <View style={styles.reminderChipsRow}>
-                                {["08:00", "12:00", "18:00", "21:00"].map((t) => (
-                                    <TouchableOpacity
-                                        key={t}
-                                        activeOpacity={0.85}
-                                        onPress={() => setReminderDraft(t)}
-                                        style={[
-                                            styles.reminderChip,
-                                            {
-                                                borderColor: theme.colors.border,
-                                                backgroundColor:
-                                                    reminderDraft === t ? theme.colors.indigo[600] : theme.colors.surfaceElevated,
-                                            },
-                                        ]}
-                                    >
-                                        <Text style={{ color: reminderDraft === t ? "#fff" : theme.colors.textSecondary, fontWeight: "800" }}>
-                                            {t}
-                                        </Text>
-                                    </TouchableOpacity>
-                                ))}
-                            </View>
-
-                            <TextInput
-                                value={reminderDraft}
-                                onChangeText={setReminderDraft}
-                                placeholder="21:00"
-                                placeholderTextColor={theme.colors.textMuted}
-                                autoCapitalize="none"
-                                autoCorrect={false}
-                                keyboardType="numbers-and-punctuation"
+                            <Pressable
+                                onPress={(e) => e.stopPropagation()}
                                 style={[
-                                    styles.reminderInput,
-                                    { color: theme.colors.textPrimary, borderColor: theme.colors.border, backgroundColor: theme.colors.background },
+                                    styles.reminderModal,
+                                    { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
                                 ]}
-                            />
+                            >
+                                <Text style={[styles.reminderTitle, { color: theme.colors.textPrimary }]}>
+                                    Daily reminder time
+                                </Text>
+                                <Text style={[styles.reminderHint, { color: theme.colors.textSecondary }]}>
+                                    24h time (HH:MM). You’ll get this ping if today isn’t marked, plus the last-hour safety reminder. This choice is final.
+                                </Text>
 
-                            <View style={styles.reminderActionsRow}>
-                                <TouchableOpacity
-                                    onPress={() => setReminderEditorOpen(false)}
-                                    activeOpacity={0.86}
-                                    style={[styles.reminderActionBtn, { backgroundColor: theme.colors.surfaceElevated, borderColor: theme.colors.border }]}
-                                >
-                                    <Text style={{ color: theme.colors.textPrimary, fontWeight: "800" }}>Cancel</Text>
-                                </TouchableOpacity>
-                                <TouchableOpacity
-                                    onPress={() => {
-                                        if (!habit) return;
-                                        const next = reminderDraft.trim();
-                                        if (!isValidHHMM(next)) {
-                                            showToast("Enter time like 21:00", "info");
-                                            return;
-                                        }
-                                        useHabitStore.setState((state) => ({
-                                            habits: state.habits.map((h) =>
-                                                h.id === habit.id
-                                                    ? { ...h, reminderEnabled: true, reminderTimeLocal: next }
-                                                    : h,
-                                            ),
-                                        }));
-                                        requestRemoteSync({ immediate: false });
-                                        setReminderEditorOpen(false);
-                                    }}
-                                    activeOpacity={0.86}
-                                    style={[styles.reminderActionBtn, { backgroundColor: theme.colors.indigo[600], borderColor: theme.colors.indigo[600] }]}
-                                >
-                                    <Text style={{ color: "#fff", fontWeight: "900" }}>Save</Text>
-                                </TouchableOpacity>
-                            </View>
+                                <View style={styles.reminderChipsRow}>
+                                    {["08:00", "12:00", "18:00", "21:00"].map((t) => (
+                                        <TouchableOpacity
+                                            key={t}
+                                            activeOpacity={0.85}
+                                            onPress={() => setReminderDraft(t)}
+                                            style={[
+                                                styles.reminderChip,
+                                                {
+                                                    borderColor: theme.colors.border,
+                                                    backgroundColor:
+                                                        reminderDraft === t ? theme.colors.indigo[600] : theme.colors.surfaceElevated,
+                                                },
+                                            ]}
+                                        >
+                                            <Text style={{ color: reminderDraft === t ? "#fff" : theme.colors.textSecondary, fontWeight: "800" }}>
+                                                {t}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </View>
+
+                                <TextInput
+                                    value={reminderDraft}
+                                    onChangeText={setReminderDraft}
+                                    placeholder="21:00"
+                                    placeholderTextColor={theme.colors.textMuted}
+                                    autoCapitalize="none"
+                                    autoCorrect={false}
+                                    keyboardType="numbers-and-punctuation"
+                                    style={[
+                                        styles.reminderInput,
+                                        { color: theme.colors.textPrimary, borderColor: theme.colors.border, backgroundColor: theme.colors.background },
+                                    ]}
+                                />
+
+                                <View style={styles.reminderActionsRow}>
+                                    <TouchableOpacity
+                                        onPress={() => setReminderEditorOpen(false)}
+                                        activeOpacity={0.86}
+                                        style={[styles.reminderActionBtn, { backgroundColor: theme.colors.surfaceElevated, borderColor: theme.colors.border }]}
+                                    >
+                                        <Text style={{ color: theme.colors.textPrimary, fontWeight: "800" }}>Cancel</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity
+                                        onPress={() => {
+                                            if (!habit) return;
+                                            const next = reminderDraft.trim();
+                                            if (!isValidHHMM(next)) {
+                                                showToast("Enter time like 21:00", "info");
+                                                return;
+                                            }
+                                            setReminderLockPending(next);
+                                            setReminderEditorOpen(false);
+                                        }}
+                                        activeOpacity={0.86}
+                                        style={[styles.reminderActionBtn, { backgroundColor: theme.colors.indigo[600], borderColor: theme.colors.indigo[600] }]}
+                                    >
+                                        <Text style={{ color: "#fff", fontWeight: "900" }}>Continue</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            </Pressable>
                         </Pressable>
-                    </Pressable>
-                </Modal>
+                    </Modal>
+                ) : null}
 
                 <Text style={[styles.gridTitle, { color: theme.colors.textPrimary, fontSize: theme.typography.h3 }]}>
                     {isManual ? `${totalDays}-Day Grid` : '21-Day Grid'}
@@ -1295,6 +1313,43 @@ export default function HabitDetail() {
                               : [{ label: 'OK', onPress: () => setMissionDialog({ kind: 'none' }) }]
                 }
             />
+
+            <ConfirmDialog
+                visible={reminderLockPending !== null}
+                onRequestClose={() => setReminderLockPending(null)}
+                title="Lock reminder time?"
+                message={
+                    reminderLockPending
+                        ? `You chose ${reminderLockPending}. This time can’t be changed later for this mission.`
+                        : undefined
+                }
+                actions={[
+                    { label: "Cancel", variant: "secondary", onPress: () => setReminderLockPending(null) },
+                    {
+                        label: "Lock time",
+                        onPress: () => {
+                            const next = reminderLockPending;
+                            setReminderLockPending(null);
+                            if (!habit || !next) return;
+                            useHabitStore.setState((state) => ({
+                                habits: state.habits.map((h) =>
+                                    h.id === habit.id
+                                        ? {
+                                              ...h,
+                                              reminderEnabled: true,
+                                              reminderTimeLocal: next,
+                                              reminderLocked: true,
+                                          }
+                                        : h,
+                                ),
+                            }));
+                            requestRemoteSync({ immediate: false });
+                            void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                            showToast("Reminder locked", "success");
+                        },
+                    },
+                ]}
+            />
         </Screen>
     );
 }
@@ -1338,6 +1393,22 @@ const styles = StyleSheet.create({
     reminderInput: { marginTop: 14, borderWidth: 1, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 10, fontWeight: "800" },
     reminderActionsRow: { flexDirection: "row", gap: 10, marginTop: 16 },
     reminderActionBtn: { flex: 1, paddingVertical: 12, borderRadius: 14, alignItems: "center", borderWidth: 1 },
+    reminderLockedRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 12,
+        paddingVertical: 10,
+        paddingHorizontal: 12,
+        borderWidth: 1,
+        borderRadius: 14,
+        marginBottom: 20,
+        overflow: "hidden",
+    },
+    reminderLockedAccent: { width: 3, alignSelf: "stretch", borderRadius: 9999 },
+    reminderLockedLabel: { fontSize: 10, fontWeight: "900", letterSpacing: 1.1 },
+    reminderLockedTime: { fontSize: 20, fontWeight: "900", marginTop: 2, fontVariant: ["tabular-nums"] },
+    reminderSetBtn: { paddingHorizontal: 12, paddingVertical: 9, borderRadius: 12, borderWidth: 1 },
+    reminderSetBtnText: { fontSize: 12, fontWeight: "900" },
     repairBanner: {
         flexDirection: "row",
         alignItems: "center",
