@@ -18,7 +18,7 @@ import {
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
-import { ArrowLeft, LogOut } from "lucide-react-native";
+import { ArrowLeft, LogOut, Users } from "lucide-react-native";
 import {
   CohortMasthead,
   type CohortMastheadModel,
@@ -53,6 +53,7 @@ import {
 import { isSupabaseConfigured } from "../../src/lib/env";
 import { deleteAllCommunityWinsForHabit } from "../../src/lib/communityWinsApi";
 import { PlusBadge } from "../../src/components/PlusBadge";
+import { listChallengeStreakRepairs, voteStreakRepair, type StreakRepairRow, type StreakRepairVoteRow } from "../../src/lib/streakRepairApi";
 import type {
   ChallengeActivityRow,
   ChallengeGroupRow,
@@ -117,6 +118,9 @@ export default function ChallengeDetailScreen() {
   const [leaveBusy, setLeaveBusy] = useState(false);
   const [leaveDialogOpen, setLeaveDialogOpen] = useState(false);
   const [customNoteToUserId, setCustomNoteToUserId] = useState<string | null>(null);
+  const [repairRows, setRepairRows] = useState<StreakRepairRow[]>([]);
+  const [repairVotes, setRepairVotes] = useState<StreakRepairVoteRow[]>([]);
+  const [repairBusyId, setRepairBusyId] = useState<string | null>(null);
 
   const focusOnceRef = useRef(false);
 
@@ -144,6 +148,15 @@ export default function ChallengeDetailScreen() {
       }
       const labels = await getProfileLabelsForIds([...labelIds]);
       setProfileLabels(labels);
+
+      const repairsRes = await listChallengeStreakRepairs(challengeId);
+      if (repairsRes.ok) {
+        setRepairRows(repairsRes.repairs);
+        setRepairVotes(repairsRes.votes);
+      } else {
+        setRepairRows([]);
+        setRepairVotes([]);
+      }
     } finally {
       if (!silent) setLoading(false);
     }
@@ -514,6 +527,126 @@ export default function ChallengeDetailScreen() {
             allowNudgeActions={squadNudgeActionsEnabled}
           />
 
+          {repairRows.length > 0 ? (
+            <>
+              <Text style={[styles.sectionLabel, { color: theme.colors.textMuted }]}>REPAIR REQUESTS</Text>
+              {repairRows
+                .filter((r) => r.status === "pending")
+                .slice(0, 10)
+                .map((r) => {
+                  const requester = profileLabels[r.user_id];
+                  const name = participantDisplayName(requester);
+                  const votes = repairVotes.filter((v) => v.repair_id === r.id);
+                  const approves = votes.filter((v) => v.vote === "approve").length;
+                  const declines = votes.filter((v) => v.vote === "decline").length;
+                  const myVote = myUserId ? votes.find((v) => v.voter_id === myUserId)?.vote ?? null : null;
+                  const isRequester = Boolean(myUserId && myUserId === r.user_id);
+                  const canVote = Boolean(myUserId && !isRequester && declines === 0);
+                  return (
+                    <View
+                      key={r.id}
+                      style={[
+                        styles.repairCard,
+                        {
+                          backgroundColor: theme.colors.surface,
+                          borderColor: theme.colors.border,
+                          ...theme.shadow.card,
+                        },
+                      ]}
+                    >
+                      <View style={styles.repairTopRow}>
+                        <View style={{ flex: 1, minWidth: 0 }}>
+                          <Text style={[styles.repairTitle, { color: theme.colors.textPrimary }]} numberOfLines={2}>
+                            Approve streak repair?
+                          </Text>
+                          <Text style={[styles.repairMeta, { color: theme.colors.textSecondary }]} numberOfLines={2}>
+                            {name} missed {r.date_str} · {approves} / {r.approvals_required} approvals · {r.xp_cost} XP
+                          </Text>
+                        </View>
+                        <Users size={18} color={theme.colors.indigo[400]} />
+                      </View>
+
+                      <Text style={[styles.repairReason, { color: theme.colors.textMuted }]} numberOfLines={3}>
+                        “{r.reason}”
+                      </Text>
+
+                      {isRequester ? (
+                        <View style={styles.repairRequesterRow}>
+                          <Text style={[styles.repairRequesterText, { color: theme.colors.textMuted }]}>
+                            Waiting for approvals…
+                          </Text>
+                        </View>
+                      ) : (
+                        <View style={styles.repairActionsRow}>
+                          <TouchableOpacity
+                            disabled={!canVote || repairBusyId === r.id}
+                            onPress={() => {
+                              if (!canVote) return;
+                              void (async () => {
+                                setRepairBusyId(r.id);
+                                const res = await voteStreakRepair({ repairId: r.id, vote: "approve" });
+                                setRepairBusyId(null);
+                                if (!res.ok) {
+                                  const msg = "error" in res ? res.error : "Could not approve.";
+                                  showToast(msg, "error");
+                                  return;
+                                }
+                                await load({ silent: true });
+                              })();
+                            }}
+                            activeOpacity={0.88}
+                            style={[
+                              styles.repairBtn,
+                              {
+                                backgroundColor: myVote === "approve" ? theme.colors.indigo[600] : theme.colors.surfaceElevated,
+                                borderColor: theme.colors.border,
+                                opacity: !canVote || repairBusyId === r.id ? 0.6 : 1,
+                              },
+                            ]}
+                          >
+                            <Text style={[styles.repairBtnText, { color: myVote === "approve" ? "#fff" : theme.colors.textPrimary }]}>
+                              Approve
+                            </Text>
+                          </TouchableOpacity>
+
+                          <TouchableOpacity
+                            disabled={!canVote || repairBusyId === r.id}
+                            onPress={() => {
+                              if (!canVote) return;
+                              void (async () => {
+                                setRepairBusyId(r.id);
+                                const res = await voteStreakRepair({ repairId: r.id, vote: "decline" });
+                                setRepairBusyId(null);
+                                if (!res.ok) {
+                                  const msg = "error" in res ? res.error : "Could not decline.";
+                                  showToast(msg, "error");
+                                  return;
+                                }
+                                await load({ silent: true });
+                              })();
+                            }}
+                            activeOpacity={0.88}
+                            style={[
+                              styles.repairBtn,
+                              {
+                                backgroundColor: myVote === "decline" ? "rgba(239, 68, 68, 0.14)" : theme.colors.surfaceElevated,
+                                borderColor: theme.colors.border,
+                                opacity: !canVote || repairBusyId === r.id ? 0.6 : 1,
+                              },
+                            ]}
+                          >
+                            <Text style={[styles.repairBtnText, { color: myVote === "decline" ? theme.colors.red[500] : theme.colors.textPrimary }]}>
+                              Decline
+                            </Text>
+                          </TouchableOpacity>
+                        </View>
+                      )}
+                    </View>
+                  );
+                })}
+            </>
+          ) : null}
+
           {cohortMastheadModel ? (
             <CohortMasthead theme={theme} isDark={isDark} model={cohortMastheadModel} />
           ) : null}
@@ -647,6 +780,32 @@ const styles = StyleSheet.create({
     letterSpacing: 1.2,
     marginBottom: 12,
   },
+  repairCard: {
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 12,
+  },
+  repairTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  repairTitle: { fontSize: 14, fontWeight: "900" },
+  repairMeta: { fontSize: 12, fontWeight: "700", marginTop: 4 },
+  repairReason: { fontSize: 12, fontWeight: "600", marginTop: 10, lineHeight: 17 },
+  repairActionsRow: { flexDirection: "row", gap: 10, marginTop: 12 },
+  repairRequesterRow: { marginTop: 12 },
+  repairRequesterText: { fontSize: 12, fontWeight: "800" },
+  repairBtn: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: 14,
+    paddingVertical: 10,
+    alignItems: "center",
+  },
+  repairBtnText: { fontSize: 12, fontWeight: "900" },
   participantCard: {
     borderRadius: 18,
     borderWidth: 1,
