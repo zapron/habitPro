@@ -409,7 +409,18 @@ export default function Home() {
                           backgroundColor: theme.colors.red[500],
                         },
                       ]}
-                    />
+                      accessibilityElementsHidden
+                      importantForAccessibility="no-hide-descendants"
+                    >
+                      <Text
+                        style={[
+                          styles.notifBadgeText,
+                          { color: theme.colors.white },
+                        ]}
+                      >
+                        {unreadNotifCount > 99 ? "99+" : String(unreadNotifCount)}
+                      </Text>
+                    </View>
                   ) : null}
                 </View>
               ) : null}
@@ -783,12 +794,21 @@ const styles = StyleSheet.create({
   bellWrap: { position: "relative" },
   notifBadge: {
     position: "absolute",
-    top: 2,
-    right: 2,
-    width: 10,
-    height: 10,
+    top: -2,
+    right: -2,
+    minWidth: 18,
+    height: 18,
+    paddingHorizontal: 5,
     borderRadius: 9999,
     borderWidth: 2,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  notifBadgeText: {
+    fontSize: 10,
+    fontWeight: "800",
+    fontVariant: ["tabular-nums"],
+    lineHeight: 12,
   },
   headerIconBtn: {
     width: 42,
