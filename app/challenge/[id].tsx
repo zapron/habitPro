@@ -18,16 +18,17 @@ import {
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
-import { ArrowLeft, LogOut, Users } from "lucide-react-native";
-import {
-  CohortMasthead,
-  type CohortMastheadModel,
-} from "../../src/components/CohortMasthead";
+import { ArrowLeft, Globe, LogOut, Users } from "lucide-react-native";
+import { CohortLeaderHero } from "../../src/components/CohortLeaderHero";
+import type { CohortMastheadModel } from "../../src/components/CohortMasthead";
 import { CohortNudgeChips } from "../../src/components/CohortNudgeChips";
 import { CustomNudgeModal } from "../../src/components/CustomNudgeModal";
 import { Screen } from "../../src/components/Screen";
 import { ConfirmDialog } from "../../src/components/ConfirmDialog";
-import { CohortPeerStreakDots } from "../../src/components/CohortPeerStreakDots";
+import {
+  CohortParticipantTimelineLegend,
+  CohortPeerStreakDots,
+} from "../../src/components/CohortPeerStreakDots";
 import { CohortStreakPill } from "../../src/components/CohortStreakPill";
 import { SquadActivitySection } from "../../src/components/SquadActivitySection";
 import { useTheme } from "../../src/context/ThemeContext";
@@ -62,6 +63,10 @@ import type {
 } from "../../src/types/groupChallenge";
 import type { Habit } from "../../src/types/habit";
 import { isHabitMissionWindowClosed } from "../../src/utils/habitMissionWindow";
+import {
+  calendarDateForMissionDayIndex,
+  getActiveMissionDaySlot,
+} from "../../src/utils/missionDaySlots";
 
 function parseGroupMissionDisplay(g: ChallengeGroupRow | null): { title: string; description?: string } {
   if (!g) return { title: "Group mission" };
@@ -88,6 +93,22 @@ function participantDisplayName(label: ProfileLabel | undefined): string {
     return u.charAt(0).toUpperCase() + u.slice(1);
   }
   return "Member";
+}
+
+function formatCreatorTimezone(tz: string | null | undefined): string {
+  const raw = (tz ?? "").trim();
+  if (!raw) return "Creator timezone";
+  try {
+    const d = new Date();
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: raw,
+      timeZoneName: "short",
+    }).formatToParts(d);
+    const abbr = parts.find((p) => p.type === "timeZoneName")?.value;
+    return abbr ? `${raw} (${abbr})` : raw;
+  } catch {
+    return raw;
+  }
 }
 
 export default function ChallengeDetailScreen() {
@@ -326,7 +347,12 @@ export default function ChallengeDetailScreen() {
     });
   }, [memberIdsOrdered, habitForMember]);
 
-  const cohortMastheadModel = useMemo((): CohortMastheadModel | null => {
+  const cohortBoard = useMemo((): {
+    model: CohortMastheadModel;
+    spotlight: { userId: string; habit: Habit; name: string } | null;
+    /** Second-ranked member (same sort as spotlight) for 1st vs 2nd progress in the hero card. */
+    runnerUp: { userId: string; habit: Habit; name: string } | null;
+  } | null => {
     if (memberIdsOrdered.length === 0) return null;
     const rows = memberIdsOrdered.map((id) => ({
       id,
@@ -335,26 +361,83 @@ export default function ChallengeDetailScreen() {
     }));
     const withHabit = rows.filter((r): r is typeof r & { habit: Habit } => Boolean(r.habit));
     if (withHabit.length === 0) {
-      return { kind: "sync_prompt" };
+      return { model: { kind: "sync_prompt" }, spotlight: null, runnerUp: null };
     }
     const sorted = [...withHabit].sort((a, b) => {
       const d = b.habit.streak - a.habit.streak;
       if (d !== 0) return d;
       return b.habit.completedDates.length - a.habit.completedDates.length;
     });
+    const runnerUp =
+      sorted.length >= 2
+        ? { userId: sorted[1].id, habit: sorted[1].habit, name: sorted[1].name }
+        : null;
     const top = sorted[0];
     const maxS = top.habit.streak;
     const leaders = sorted.filter((r) => r.habit.streak === maxS);
     if (maxS === 0) {
       const byDays = [...sorted].sort((a, b) => b.habit.completedDates.length - a.habit.completedDates.length)[0];
       const n = byDays.habit.completedDates.length;
-      return { kind: "most_days", leaderName: byDays.name, daysChecked: n };
+      return {
+        model: { kind: "most_days", leaderName: byDays.name, daysChecked: n },
+        spotlight: { userId: byDays.id, habit: byDays.habit, name: byDays.name },
+        runnerUp,
+      };
     }
     if (leaders.length >= 2) {
-      return { kind: "tie", leadersCount: leaders.length, streakDays: maxS };
+      return {
+        model: { kind: "tie", leadersCount: leaders.length, streakDays: maxS },
+        spotlight: { userId: top.id, habit: top.habit, name: top.name },
+        runnerUp,
+      };
     }
-    return { kind: "leader", leaderName: top.name, streakDays: maxS };
+    return {
+      model: { kind: "leader", leaderName: top.name, streakDays: maxS },
+      spotlight: { userId: top.id, habit: top.habit, name: top.name },
+      runnerUp,
+    };
   }, [memberIdsOrdered, profileLabels, habitForMember]);
+
+  const missionTotalDays = useMemo(() => {
+    if (myHabit) return Math.max(1, myHabit.totalDays ?? 21);
+    const tpl = group?.habit_template as Record<string, unknown> | undefined;
+    const n = tpl && typeof tpl.totalDays === "number" ? tpl.totalDays : null;
+    if (n != null && Number.isFinite(n)) return Math.max(1, Math.floor(n));
+    return 21;
+  }, [myHabit, group?.habit_template]);
+
+  const viewerMissionSlot = useMemo(() => {
+    if (!myHabit || myHabit.isCompleted) return null;
+    return getActiveMissionDaySlot(myHabit.startDate, cohortNow, missionTotalDays);
+  }, [myHabit, cohortNow, missionTotalDays]);
+
+  const onTrackTodayCount = useMemo(() => {
+    if (viewerMissionSlot == null || !myUserId) return null;
+    const dateStr = calendarDateForMissionDayIndex(myHabit?.startDate ?? "", viewerMissionSlot - 1);
+    if (!dateStr || !myHabit) return null;
+    let n = 0;
+    for (const memberId of memberIdsOrdered) {
+      const h = habitForMember(memberId);
+      if (!h) continue;
+      const slot = getActiveMissionDaySlot(h.startDate, cohortNow, h.totalDays ?? missionTotalDays);
+      if (slot !== viewerMissionSlot) continue;
+      const ds = calendarDateForMissionDayIndex(h.startDate, viewerMissionSlot - 1);
+      if (!ds) continue;
+      if (!h.completedDates.includes(ds)) n += 1;
+    }
+    return n;
+  }, [
+    viewerMissionSlot,
+    myUserId,
+    myHabit,
+    memberIdsOrdered,
+    habitForMember,
+    cohortNow,
+    missionTotalDays,
+  ]);
+
+  const scrollRef = useRef<ScrollView>(null);
+  const squadSectionOffsetY = useRef(0);
 
   const customNoteSentTodayToUserIds = useMemo(() => {
     if (!myUserId) return new Set<string>();
@@ -462,6 +545,7 @@ export default function ChallengeDetailScreen() {
         <ActivityIndicator color={theme.colors.indigo[400]} style={{ marginTop: 24 }} />
       ) : (
         <ScrollView
+          ref={scrollRef}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingBottom: bottomPad }}
           refreshControl={
@@ -486,10 +570,85 @@ export default function ChallengeDetailScreen() {
             <Text style={[styles.heroTitle, { color: theme.colors.textPrimary }]}>{missionTitle}</Text>
           )}
 
-          <Text style={[styles.metaLine, { color: theme.colors.textMuted }]}>
-            {memberIdsOrdered.length} participant{memberIdsOrdered.length === 1 ? "" : "s"} ·{" "}
-            {group?.creator_timezone ?? "-"}
-          </Text>
+          <View style={styles.metaChipsRow}>
+            <View
+              style={[
+                styles.metaChip,
+                {
+                  borderColor: theme.colors.border,
+                  backgroundColor: isDark ? "rgba(255,255,255,0.06)" : theme.colors.surfaceElevated,
+                },
+              ]}
+            >
+              <Users size={14} color={theme.colors.indigo[400]} strokeWidth={2.2} />
+              <Text style={[styles.metaChipText, { color: theme.colors.textSecondary }]}>
+                {memberIdsOrdered.length} participant{memberIdsOrdered.length === 1 ? "" : "s"}
+              </Text>
+            </View>
+            <View
+              style={[
+                styles.metaChip,
+                {
+                  borderColor: theme.colors.border,
+                  backgroundColor: isDark ? "rgba(255,255,255,0.06)" : theme.colors.surfaceElevated,
+                },
+              ]}
+            >
+              <Globe size={14} color={theme.colors.cyan[400]} strokeWidth={2.2} />
+              <Text
+                style={[styles.metaChipText, { color: theme.colors.textSecondary }]}
+                numberOfLines={1}
+              >
+                {formatCreatorTimezone(group?.creator_timezone)}
+              </Text>
+            </View>
+            <View
+              style={[
+                styles.metaChip,
+                {
+                  borderColor: theme.colors.border,
+                  backgroundColor: isDark ? "rgba(255,255,255,0.06)" : theme.colors.surfaceElevated,
+                },
+              ]}
+            >
+              <Text style={[styles.metaChipText, { color: theme.colors.textSecondary }]}>
+                {missionTotalDays}-day mission
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.dayPillsRow}>
+            {viewerMissionSlot != null ? (
+              <View
+                style={[
+                  styles.dayPill,
+                  {
+                    borderColor: theme.colors.indigo[500],
+                    backgroundColor: isDark ? "rgba(99, 102, 241, 0.12)" : "rgba(99, 102, 241, 0.08)",
+                  },
+                ]}
+              >
+                <Text style={[styles.dayPillText, { color: theme.colors.indigo[400] }]}>
+                  Day {viewerMissionSlot} of {missionTotalDays}
+                </Text>
+              </View>
+            ) : null}
+            {onTrackTodayCount != null && onTrackTodayCount > 0 ? (
+              <View
+                style={[
+                  styles.dayPill,
+                  {
+                    borderColor: theme.colors.border,
+                    backgroundColor: theme.colors.surfaceElevated,
+                  },
+                ]}
+              >
+                <Text style={[styles.dayPillText, { color: theme.colors.textMuted }]}>
+                  {onTrackTodayCount} still due today
+                </Text>
+              </View>
+            ) : null}
+          </View>
 
           {!isPremium ? (
             <View style={styles.plusGateRow}>
@@ -514,18 +673,6 @@ export default function ChallengeDetailScreen() {
               {missionDescription}
             </Text>
           ) : null}
-
-          <SquadActivitySection
-            theme={theme}
-            isDark={isDark}
-            feedActivity={feedActivity}
-            feedNudges={feedNudges}
-            profileLabels={profileLabels}
-            myUserId={myUserId}
-            nudgeBusyKey={nudgeBusyKey}
-            onCongrats={(actorUserId) => void onCongrats(actorUserId)}
-            allowNudgeActions={squadNudgeActionsEnabled}
-          />
 
           {repairRows.length > 0 ? (
             <>
@@ -647,11 +794,26 @@ export default function ChallengeDetailScreen() {
             </>
           ) : null}
 
-          {cohortMastheadModel ? (
-            <CohortMasthead theme={theme} isDark={isDark} model={cohortMastheadModel} />
+          {cohortBoard ? (
+            <CohortLeaderHero
+              theme={theme}
+              isDark={isDark}
+              model={cohortBoard.model}
+              leaderName={cohortBoard.spotlight?.name ?? "Squad"}
+              leaderLabel={
+                cohortBoard.spotlight ? profileLabels[cohortBoard.spotlight.userId] : undefined
+              }
+              leaderHabit={cohortBoard.spotlight?.habit}
+              runnerUp={cohortBoard.runnerUp}
+            />
           ) : null}
 
-          <Text style={[styles.sectionLabel, { color: theme.colors.textMuted }]}>PARTICIPANTS</Text>
+          <View style={styles.participantsSectionHeader}>
+            <Text style={[styles.sectionLabel, styles.participantsSectionTitle, { color: theme.colors.textMuted }]}>
+              PARTICIPANTS
+            </Text>
+            <CohortParticipantTimelineLegend theme={theme} isDark={isDark} />
+          </View>
 
           {memberIdsOrdered.length === 0 ? (
             <Text style={{ color: theme.colors.textSecondary }}>No members loaded yet.</Text>
@@ -713,6 +875,32 @@ export default function ChallengeDetailScreen() {
               );
             })
           )}
+
+          <View
+            onLayout={(e) => {
+              squadSectionOffsetY.current = e.nativeEvent.layout.y;
+            }}
+          >
+            <SquadActivitySection
+              theme={theme}
+              isDark={isDark}
+              feedActivity={feedActivity}
+              feedNudges={feedNudges}
+              profileLabels={profileLabels}
+              myUserId={myUserId}
+              nudgeBusyKey={nudgeBusyKey}
+              onCongrats={(actorUserId) => void onCongrats(actorUserId)}
+              allowNudgeActions={squadNudgeActionsEnabled}
+              onScrollToSection={() => {
+                setTimeout(() => {
+                  scrollRef.current?.scrollTo({
+                    y: Math.max(0, squadSectionOffsetY.current - 16),
+                    animated: true,
+                  });
+                }, 100);
+              }}
+            />
+          </View>
         </ScrollView>
       )}
 
@@ -764,7 +952,36 @@ const styles = StyleSheet.create({
     lineHeight: 34,
     marginBottom: 8,
   },
-  metaLine: { fontSize: 13, fontWeight: "600", marginBottom: 12 },
+  metaChipsRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: 10,
+  },
+  metaChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 9999,
+    borderWidth: 1,
+    maxWidth: "100%",
+  },
+  metaChipText: { fontSize: 12, fontWeight: "700", flexShrink: 1 },
+  dayPillsRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: 14,
+  },
+  dayPill: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 9999,
+    borderWidth: 1,
+  },
+  dayPillText: { fontSize: 11, fontWeight: "800", letterSpacing: 0.3 },
   plusGateRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 14 },
   plusGateText: { fontSize: 12, fontWeight: "700" },
   missionDescription: {
@@ -779,6 +996,18 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     letterSpacing: 1.2,
     marginBottom: 12,
+  },
+  participantsSectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+    flexWrap: "wrap",
+    marginBottom: 12,
+  },
+  participantsSectionTitle: {
+    marginBottom: 0,
+    flexShrink: 0,
   },
   repairCard: {
     borderWidth: 1,

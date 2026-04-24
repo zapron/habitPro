@@ -18,7 +18,8 @@ type Props = {
   isDark?: boolean;
 };
 
-export function CohortMasthead({ theme, model, isDark = false }: Props) {
+/** Trophy + narrative row (no outer card). Composed by CohortLeaderHero. */
+export function CohortMastheadTrophyNarrative({ theme, model, isDark = false }: Props) {
   const reduceMotion = useReducedMotion();
   const shimmer = useRef(new Animated.Value(0)).current;
 
@@ -92,6 +93,42 @@ export function CohortMasthead({ theme, model, isDark = false }: Props) {
   })();
 
   return (
+    <View style={styles.row}>
+      <View
+        style={[
+          styles.iconBadge,
+          {
+            backgroundColor: iconBg,
+            borderColor: iconBorder,
+          },
+        ]}
+      >
+        <Trophy size={20} color={theme.colors.amber[500]} strokeWidth={2.1} />
+      </View>
+
+      <View style={styles.textColumn}>
+        <View style={styles.textShimmerInner}>
+          {body}
+          {!reduceMotion ? (
+            <Animated.View
+              pointerEvents="none"
+              style={[
+                styles.shimmerBand,
+                {
+                  backgroundColor: bandColor,
+                  transform: [{ translateX: shimmerTranslate }],
+                },
+              ]}
+            />
+          ) : null}
+        </View>
+      </View>
+    </View>
+  );
+}
+
+export function CohortMasthead({ theme, model, isDark = false }: Props) {
+  return (
     <View
       style={[
         styles.wrap,
@@ -103,37 +140,7 @@ export function CohortMasthead({ theme, model, isDark = false }: Props) {
       ]}
     >
       <View style={styles.inner}>
-        <View style={styles.row}>
-          <View
-            style={[
-              styles.iconBadge,
-              {
-                backgroundColor: iconBg,
-                borderColor: iconBorder,
-              },
-            ]}
-          >
-            <Trophy size={20} color={theme.colors.amber[500]} strokeWidth={2.1} />
-          </View>
-
-          <View style={styles.textColumn}>
-            <View style={styles.textShimmerInner}>
-              {body}
-              {!reduceMotion ? (
-                <Animated.View
-                  pointerEvents="none"
-                  style={[
-                    styles.shimmerBand,
-                    {
-                      backgroundColor: bandColor,
-                      transform: [{ translateX: shimmerTranslate }],
-                    },
-                  ]}
-                />
-              ) : null}
-            </View>
-          </View>
-        </View>
+        <CohortMastheadTrophyNarrative theme={theme} model={model} isDark={isDark} />
       </View>
     </View>
   );

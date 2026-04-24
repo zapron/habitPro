@@ -195,6 +195,8 @@ type Props = {
   onCongrats: (actorUserId: string) => void;
   /** When false (e.g. viewer mission window ended), hide Congrats on milestones */
   allowNudgeActions?: boolean;
+  /** Expand accordion and scroll parent ScrollView to this section (e.g. challenge screen). */
+  onScrollToSection?: () => void;
 };
 
 export function SquadActivitySection({
@@ -207,6 +209,7 @@ export function SquadActivitySection({
   nudgeBusyKey,
   onCongrats,
   allowNudgeActions = true,
+  onScrollToSection,
 }: Props) {
   const [expanded, setExpanded] = useState(false);
 
@@ -234,42 +237,74 @@ export function SquadActivitySection({
           },
         ]}
       >
-        <Pressable
-          accessibilityRole="button"
-          accessibilityState={{ expanded }}
-          onPress={() => setExpanded((v) => !v)}
-          style={({ pressed }) => [
+        <View
+          style={[
             styles.accordionTrigger,
             {
               borderBottomWidth: expanded ? StyleSheet.hairlineWidth : 0,
               borderBottomColor: border,
-              backgroundColor: pressed ? (isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)") : "transparent",
             },
           ]}
         >
-          <View style={[styles.headerIconWrap, { backgroundColor: isDark ? "rgba(129, 140, 248, 0.18)" : "rgba(99, 102, 241, 0.12)" }]}>
-            <Users size={theme.icon.md} color={theme.colors.indigo[400]} strokeWidth={2.2} />
-          </View>
-          <View style={styles.headerText}>
-            <SquadActivityTitle theme={theme} isDark={isDark} />
-            <View style={styles.heroSubColumn}>
-              <Text style={[styles.heroSub, { color: theme.colors.textMuted }]} numberOfLines={1}>
-                {summaryLine}
-              </Text>
-              <Text style={[styles.heroSubHint, { color: theme.colors.textMuted }]} numberOfLines={1}>
-                {expanded ? "Milestones and cheers from your group" : "Tap to expand"}
-              </Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityState={{ expanded }}
+            onPress={() => setExpanded((v) => !v)}
+            style={({ pressed }) => [
+              styles.accordionTriggerMain,
+              {
+                backgroundColor: pressed ? (isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)") : "transparent",
+              },
+            ]}
+          >
+            <View style={[styles.headerIconWrap, { backgroundColor: isDark ? "rgba(129, 140, 248, 0.18)" : "rgba(99, 102, 241, 0.12)" }]}>
+              <Users size={theme.icon.md} color={theme.colors.indigo[400]} strokeWidth={2.2} />
             </View>
+            <View style={styles.headerText}>
+              <SquadActivityTitle theme={theme} isDark={isDark} />
+              <View style={styles.heroSubColumn}>
+                <Text style={[styles.heroSub, { color: theme.colors.textMuted }]} numberOfLines={1}>
+                  {summaryLine}
+                </Text>
+                <Text style={[styles.heroSubHint, { color: theme.colors.textMuted }]} numberOfLines={1}>
+                  {expanded ? "Milestones and cheers from your group" : "Tap to expand"}
+                </Text>
+              </View>
+            </View>
+          </Pressable>
+          <View style={styles.headerRightCluster}>
+            {onScrollToSection ? (
+              <Pressable
+                onPress={() => {
+                  setExpanded(true);
+                  onScrollToSection();
+                }}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel="View all squad activity"
+                style={({ pressed }) => [{ opacity: pressed ? 0.75 : 1 }]}
+              >
+                <Text style={[styles.viewAllText, { color: theme.colors.indigo[400] }]}>View all</Text>
+              </Pressable>
+            ) : null}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityState={{ expanded }}
+              onPress={() => setExpanded((v) => !v)}
+              hitSlop={8}
+              style={({ pressed }) => [{ opacity: pressed ? 0.75 : 1 }]}
+            >
+              <ChevronDown
+                size={theme.icon.lg}
+                color={theme.colors.textMuted}
+                strokeWidth={2.2}
+                style={{
+                  transform: [{ rotate: expanded ? "0deg" : "-90deg" }],
+                }}
+              />
+            </Pressable>
           </View>
-          <ChevronDown
-            size={theme.icon.lg}
-            color={theme.colors.textMuted}
-            strokeWidth={2.2}
-            style={{
-              transform: [{ rotate: expanded ? "0deg" : "-90deg" }],
-            }}
-          />
-        </Pressable>
+        </View>
 
         {expanded ? (
           <View style={styles.accordionBody}>
@@ -401,9 +436,19 @@ const styles = StyleSheet.create({
   accordionTrigger: {
     flexDirection: "row",
     alignItems: "center",
+    gap: 8,
+    paddingRight: 10,
+    paddingVertical: 6,
+    paddingLeft: 14,
+  },
+  accordionTriggerMain: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
     gap: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
+    paddingVertical: 8,
+    minWidth: 0,
+    borderRadius: 12,
   },
   accordionBody: {
     paddingVertical: 8,
@@ -466,6 +511,16 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     letterSpacing: 0.2,
     opacity: 0.92,
+  },
+  headerRightCluster: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  viewAllText: {
+    fontSize: 13,
+    fontWeight: "800",
+    letterSpacing: 0.2,
   },
   subsectionHeader: {
     flexDirection: "row",

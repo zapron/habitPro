@@ -12,8 +12,57 @@ import {
 } from "react-native";
 import { X } from "lucide-react-native";
 import { useTheme } from "../context/ThemeContext";
+import type { AppTheme } from "../styles/theme";
 import type { Habit, StreakMemory } from "../types/habit";
 import { calendarDateForMissionDayIndex, getActiveMissionDaySlot } from "../utils/missionDaySlots";
+
+/** Dot timeline key: Completed / Today / Upcoming — use once beside the cohort participants heading. */
+export function CohortParticipantTimelineLegend({
+  theme,
+  isDark,
+}: {
+  theme: AppTheme;
+  isDark: boolean;
+}) {
+  const completedLegendFill = isDark ? theme.colors.indigo[600] : "rgba(99, 102, 241, 0.18)";
+  const todayLegendBorder = theme.colors.amber[500];
+  /** Stronger than `border` so the swatch doesn’t read as empty space on light cards (timeline dots use low opacity; legend stays legible). */
+  const upcomingLegendBorder = theme.colors.slate[500];
+
+  return (
+    <View
+      style={styles.legendRow}
+      accessibilityLabel="Timeline legend: completed days, today, upcoming days"
+    >
+      <View style={styles.legendItem}>
+        <View style={[styles.legendSwatch, { backgroundColor: completedLegendFill, borderColor: theme.colors.border }]} />
+        <Text style={[styles.legendLabel, { color: theme.colors.textMuted }]}>Completed</Text>
+      </View>
+      <View style={styles.legendItem}>
+        <View
+          style={[
+            styles.legendSwatch,
+            { backgroundColor: theme.colors.surfaceElevated, borderColor: todayLegendBorder, borderWidth: 2 },
+          ]}
+        />
+        <Text style={[styles.legendLabel, { color: theme.colors.textMuted }]}>Today</Text>
+      </View>
+      <View style={styles.legendItem}>
+        <View
+          style={[
+            styles.legendSwatch,
+            {
+              backgroundColor: theme.colors.surfaceElevated,
+              borderColor: upcomingLegendBorder,
+              borderWidth: 2,
+            },
+          ]}
+        />
+        <Text style={[styles.legendLabel, { color: theme.colors.textMuted }]}>Upcoming</Text>
+      </View>
+    </View>
+  );
+}
 
 type Props = {
   habit: Habit;
@@ -165,6 +214,22 @@ export function CohortPeerStreakDots({
 const styles = StyleSheet.create({
   wrap: { marginBottom: 16 },
   wrapEmbedded: { marginTop: 4 },
+  legendRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    gap: 10,
+    justifyContent: "flex-end",
+    flexShrink: 1,
+  },
+  legendItem: { flexDirection: "row", alignItems: "center", gap: 6 },
+  legendSwatch: {
+    width: 10,
+    height: 10,
+    borderRadius: 9999,
+    borderWidth: 1,
+  },
+  legendLabel: { fontSize: 10, fontWeight: "700", letterSpacing: 0.2 },
   headRow: { marginBottom: 10 },
   handle: { fontWeight: "800", fontSize: 15 },
   meta: { fontSize: 13, marginTop: 4 },
