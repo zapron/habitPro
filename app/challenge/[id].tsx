@@ -64,7 +64,6 @@ import type {
 import type { Habit } from "../../src/types/habit";
 import { isHabitMissionWindowClosed } from "../../src/utils/habitMissionWindow";
 import {
-  calendarDateForMissionDayIndex,
   getActiveMissionDaySlot,
 } from "../../src/utils/missionDaySlots";
 
@@ -395,31 +394,6 @@ export default function ChallengeDetailScreen() {
     return getActiveMissionDaySlot(myHabit.startDate, cohortNow, missionTotalDays);
   }, [myHabit, cohortNow, missionTotalDays]);
 
-  const onTrackTodayCount = useMemo(() => {
-    if (viewerMissionSlot == null || !myUserId) return null;
-    const dateStr = calendarDateForMissionDayIndex(myHabit?.startDate ?? "", viewerMissionSlot - 1);
-    if (!dateStr || !myHabit) return null;
-    let n = 0;
-    for (const memberId of memberIdsOrdered) {
-      const h = habitForMember(memberId);
-      if (!h) continue;
-      const slot = getActiveMissionDaySlot(h.startDate, cohortNow, h.totalDays ?? missionTotalDays);
-      if (slot !== viewerMissionSlot) continue;
-      const ds = calendarDateForMissionDayIndex(h.startDate, viewerMissionSlot - 1);
-      if (!ds) continue;
-      if (!h.completedDates.includes(ds)) n += 1;
-    }
-    return n;
-  }, [
-    viewerMissionSlot,
-    myUserId,
-    myHabit,
-    memberIdsOrdered,
-    habitForMember,
-    cohortNow,
-    missionTotalDays,
-  ]);
-
   const scrollRef = useRef<ScrollView>(null);
   const squadSectionOffsetY = useRef(0);
 
@@ -554,7 +528,12 @@ export default function ChallengeDetailScreen() {
             <Text style={[styles.heroTitle, { color: theme.colors.textPrimary }]}>{missionTitle}</Text>
           )}
 
-          <View style={styles.metaChipsRow}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.metaPillsRow}
+            style={{ marginBottom: 14 }}
+          >
             <View
               style={[
                 styles.metaChip,
@@ -569,6 +548,7 @@ export default function ChallengeDetailScreen() {
                 {memberIdsOrdered.length} participant{memberIdsOrdered.length === 1 ? "" : "s"}
               </Text>
             </View>
+
             <View
               style={[
                 styles.metaChip,
@@ -582,9 +562,7 @@ export default function ChallengeDetailScreen() {
                 {missionTotalDays}-day mission
               </Text>
             </View>
-          </View>
 
-          <View style={styles.dayPillsRow}>
             {viewerMissionSlot != null ? (
               <View
                 style={[
@@ -600,22 +578,7 @@ export default function ChallengeDetailScreen() {
                 </Text>
               </View>
             ) : null}
-            {onTrackTodayCount != null && onTrackTodayCount > 0 ? (
-              <View
-                style={[
-                  styles.dayPill,
-                  {
-                    borderColor: theme.colors.border,
-                    backgroundColor: theme.colors.surfaceElevated,
-                  },
-                ]}
-              >
-                <Text style={[styles.dayPillText, { color: theme.colors.textMuted }]}>
-                  {onTrackTodayCount} still due today
-                </Text>
-              </View>
-            ) : null}
-          </View>
+          </ScrollView>
 
           {!isPremium ? (
             <View style={styles.plusGateRow}>
@@ -919,11 +882,10 @@ const styles = StyleSheet.create({
     lineHeight: 34,
     marginBottom: 8,
   },
-  metaChipsRow: {
+  metaPillsRow: {
     flexDirection: "row",
-    flexWrap: "wrap",
     gap: 8,
-    marginBottom: 10,
+    paddingRight: 16,
   },
   metaChip: {
     flexDirection: "row",
@@ -936,12 +898,6 @@ const styles = StyleSheet.create({
     maxWidth: "100%",
   },
   metaChipText: { fontSize: 12, fontWeight: "700", flexShrink: 1 },
-  dayPillsRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    marginBottom: 14,
-  },
   dayPill: {
     paddingVertical: 6,
     paddingHorizontal: 12,
