@@ -668,7 +668,7 @@ export default function ChallengeDetailScreen() {
                                   showToast(msg, "error");
                                   return;
                                 }
-                                await load({ silent: true });
+                                await Promise.all([load({ silent: true }), refreshCohortPeerHabits()]);
                               })();
                             }}
                             activeOpacity={0.88}
@@ -699,7 +699,7 @@ export default function ChallengeDetailScreen() {
                                   showToast(msg, "error");
                                   return;
                                 }
-                                await load({ silent: true });
+                                await Promise.all([load({ silent: true }), refreshCohortPeerHabits()]);
                               })();
                             }}
                             activeOpacity={0.88}
