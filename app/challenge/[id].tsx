@@ -18,7 +18,7 @@ import {
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
-import { ArrowLeft, Globe, LogOut, Users } from "lucide-react-native";
+import { ArrowLeft, LogOut, Users } from "lucide-react-native";
 import { CohortLeaderHero } from "../../src/components/CohortLeaderHero";
 import type { CohortMastheadModel } from "../../src/components/CohortMasthead";
 import { CohortNudgeChips } from "../../src/components/CohortNudgeChips";
@@ -93,22 +93,6 @@ function participantDisplayName(label: ProfileLabel | undefined): string {
     return u.charAt(0).toUpperCase() + u.slice(1);
   }
   return "Member";
-}
-
-function formatCreatorTimezone(tz: string | null | undefined): string {
-  const raw = (tz ?? "").trim();
-  if (!raw) return "Creator timezone";
-  try {
-    const d = new Date();
-    const parts = new Intl.DateTimeFormat("en-US", {
-      timeZone: raw,
-      timeZoneName: "short",
-    }).formatToParts(d);
-    const abbr = parts.find((p) => p.type === "timeZoneName")?.value;
-    return abbr ? `${raw} (${abbr})` : raw;
-  } catch {
-    return raw;
-  }
 }
 
 export default function ChallengeDetailScreen() {
@@ -583,23 +567,6 @@ export default function ChallengeDetailScreen() {
               <Users size={14} color={theme.colors.indigo[400]} strokeWidth={2.2} />
               <Text style={[styles.metaChipText, { color: theme.colors.textSecondary }]}>
                 {memberIdsOrdered.length} participant{memberIdsOrdered.length === 1 ? "" : "s"}
-              </Text>
-            </View>
-            <View
-              style={[
-                styles.metaChip,
-                {
-                  borderColor: theme.colors.border,
-                  backgroundColor: isDark ? "rgba(255,255,255,0.06)" : theme.colors.surfaceElevated,
-                },
-              ]}
-            >
-              <Globe size={14} color={theme.colors.cyan[400]} strokeWidth={2.2} />
-              <Text
-                style={[styles.metaChipText, { color: theme.colors.textSecondary }]}
-                numberOfLines={1}
-              >
-                {formatCreatorTimezone(group?.creator_timezone)}
               </Text>
             </View>
             <View
