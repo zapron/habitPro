@@ -604,7 +604,7 @@ export default function ChallengeDetailScreen() {
             </Text>
           ) : null}
 
-          {repairRows.length > 0 ? (
+          {repairRows.some((r) => r.status === "pending") ? (
             <>
               <Text style={[styles.sectionLabel, { color: theme.colors.textMuted }]}>REPAIR REQUESTS</Text>
               {repairRows
