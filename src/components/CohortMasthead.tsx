@@ -1,8 +1,6 @@
 import { Text } from "./AppText";
-import { useEffect, useRef } from "react";
-import { Animated, Easing, Platform, StyleSheet, View } from "react-native";
+import { Platform, StyleSheet, View } from "react-native";
 import { Trophy } from "lucide-react-native";
-import { useReducedMotion } from "../hooks/useReducedMotion";
 import type { AppTheme } from "../styles/theme";
 
 /** Rich streak-board headline. Copy matches `challenge/[id]` cohort logic. */
@@ -20,31 +18,7 @@ type Props = {
 
 /** Trophy + narrative row (no outer card). Composed by CohortLeaderHero. */
 export function CohortMastheadTrophyNarrative({ theme, model, isDark = false }: Props) {
-  const reduceMotion = useReducedMotion();
-  const shimmer = useRef(new Animated.Value(0)).current;
-
   const textProps = Platform.OS === "android" ? { includeFontPadding: false as const } : {};
-
-  useEffect(() => {
-    if (reduceMotion) return;
-    const loop = Animated.loop(
-      Animated.timing(shimmer, {
-        toValue: 1,
-        duration: 3000,
-        easing: Easing.linear,
-        useNativeDriver: true,
-      }),
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [reduceMotion, shimmer]);
-
-  const shimmerTranslate = shimmer.interpolate({
-    inputRange: [0, 1],
-    outputRange: [-56, 260],
-  });
-
-  const bandColor = isDark ? "rgba(255, 255, 255, 0.1)" : "rgba(255, 255, 255, 0.48)";
 
   const iconBg = isDark ? "rgba(251, 191, 36, 0.1)" : "rgba(251, 191, 36, 0.16)";
   const iconBorder = isDark ? "rgba(251, 191, 36, 0.28)" : "rgba(217, 119, 6, 0.38)";
@@ -107,21 +81,7 @@ export function CohortMastheadTrophyNarrative({ theme, model, isDark = false }: 
       </View>
 
       <View style={styles.textColumn}>
-        <View style={styles.textShimmerInner}>
-          {body}
-          {!reduceMotion ? (
-            <Animated.View
-              pointerEvents="none"
-              style={[
-                styles.shimmerBand,
-                {
-                  backgroundColor: bandColor,
-                  transform: [{ translateX: shimmerTranslate }],
-                },
-              ]}
-            />
-          ) : null}
-        </View>
+        {body}
       </View>
     </View>
   );
@@ -165,22 +125,8 @@ const styles = StyleSheet.create({
   textColumn: {
     flex: 1,
     minWidth: 0,
-  },
-  textShimmerInner: {
-    position: "relative",
-    overflow: "hidden",
-    borderRadius: 10,
-    paddingVertical: 2,
-    paddingHorizontal: 2,
-  },
-  shimmerBand: {
-    position: "absolute",
-    top: 2,
-    bottom: 2,
-    width: 40,
-    left: 0,
-    borderRadius: 8,
-    opacity: 0.62,
+    minHeight: 44,
+    justifyContent: "center",
   },
   iconBadge: {
     width: 44,

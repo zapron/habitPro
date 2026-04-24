@@ -1,15 +1,12 @@
 import { Text } from "./AppText";
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import {
   ActivityIndicator,
-  Animated,
-  Easing,
   Platform,
   Pressable,
   StyleSheet,
   View,
 } from "react-native";
-import { useReducedMotion } from "../hooks/useReducedMotion";
 import { ChevronDown, Flame, Heart, MessageSquare, Sparkles, Flag, Users } from "lucide-react-native";
 import type { AppTheme } from "../styles/theme";
 import type {
@@ -19,32 +16,8 @@ import type {
 } from "../types/groupChallenge";
 import type { ProfileLabel } from "../lib/groupChallengesApi";
 
-/** Calm header: indigo “Squad” + neutral “activity”, with a slow horizontal shimmer (no text motion). */
+/** Calm header: indigo “Squad” + neutral “activity”. */
 function SquadActivityTitle({ theme, isDark }: { theme: AppTheme; isDark: boolean }) {
-  const reduceMotion = useReducedMotion();
-  const shimmer = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    if (reduceMotion) return;
-    const loop = Animated.loop(
-      Animated.timing(shimmer, {
-        toValue: 1,
-        duration: 3000,
-        easing: Easing.linear,
-        useNativeDriver: true,
-      }),
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [reduceMotion, shimmer]);
-
-  const shimmerTranslate = shimmer.interpolate({
-    inputRange: [0, 1],
-    outputRange: [-52, 200],
-  });
-
-  const bandColor = isDark ? "rgba(255, 255, 255, 0.11)" : "rgba(255, 255, 255, 0.5)";
-
   return (
     <View style={styles.brandTitleOuter}>
       <View style={styles.brandTitleInner}>
@@ -52,18 +25,6 @@ function SquadActivityTitle({ theme, isDark }: { theme: AppTheme; isDark: boolea
           <Text style={[styles.heroBrandStrong, { color: theme.colors.indigo[400] }]}>Squad</Text>
           <Text style={[styles.heroBrandRest, { color: theme.colors.textPrimary }]}> activity</Text>
         </View>
-        {!reduceMotion ? (
-          <Animated.View
-            pointerEvents="none"
-            style={[
-              styles.titleShimmerBand,
-              {
-                backgroundColor: bandColor,
-                transform: [{ translateX: shimmerTranslate }],
-              },
-            ]}
-          />
-        ) : null}
       </View>
     </View>
   );
@@ -467,8 +428,6 @@ const styles = StyleSheet.create({
     maxWidth: "100%",
   },
   brandTitleInner: {
-    position: "relative",
-    overflow: "hidden",
     borderRadius: 10,
     paddingVertical: 3,
     paddingHorizontal: 2,
@@ -477,15 +436,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "baseline",
     flexWrap: "nowrap",
-  },
-  titleShimmerBand: {
-    position: "absolute",
-    top: 2,
-    bottom: 2,
-    width: 36,
-    left: 0,
-    borderRadius: 8,
-    opacity: 0.65,
   },
   heroBrandStrong: {
     fontSize: 17,
