@@ -4,6 +4,7 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  View,
 } from "react-native";
 import { Flame, Heart, MessageSquare } from "lucide-react-native";
 import type { AppTheme } from "../styles/theme";
@@ -12,6 +13,7 @@ import type { PresetChallengeNudgeKind } from "../types/groupChallenge";
 const NUDGE_SPECS: {
   kind: PresetChallengeNudgeKind;
   label: string;
+  subtitle: string;
   Icon?: typeof Heart;
   glyph?: string;
   suffixGlyph?: string;
@@ -21,6 +23,7 @@ const NUDGE_SPECS: {
   {
     kind: "cheer",
     label: "Cheer",
+    subtitle: "Show support",
     Icon: Heart,
     bgLight: "rgba(99, 102, 241, 0.08)",
     bgDark: "rgba(129, 140, 248, 0.1)",
@@ -28,6 +31,7 @@ const NUDGE_SPECS: {
   {
     kind: "ping",
     label: "What's up",
+    subtitle: "Check in",
     suffixGlyph: "?!",
     bgLight: "rgba(8, 145, 178, 0.06)",
     bgDark: "rgba(34, 211, 238, 0.09)",
@@ -35,6 +39,7 @@ const NUDGE_SPECS: {
   {
     kind: "fire",
     label: "Fire",
+    subtitle: "Raise the bar",
     Icon: Flame,
     bgLight: "rgba(217, 119, 6, 0.08)",
     bgDark: "rgba(251, 191, 36, 0.1)",
@@ -80,7 +85,7 @@ export function CohortNudgeChips({
       contentContainerStyle={styles.scrollContent}
       style={styles.scroll}
     >
-      {NUDGE_SPECS.map(({ kind, label, Icon, glyph, suffixGlyph, bgLight, bgDark }) => {
+      {NUDGE_SPECS.map(({ kind, label, subtitle, Icon, glyph, suffixGlyph, bgLight, bgDark }) => {
         const busy = nudgeBusyKey === `${memberId}-${kind}`;
         const presetLocked = plusLocked;
         const bg = isDark ? bgDark : bgLight;
@@ -126,17 +131,24 @@ export function CohortNudgeChips({
             {busy ? (
               <ActivityIndicator size="small" color={iconColor} />
             ) : (
-              <>
-                {glyph ? (
-                  <Text style={[styles.glyph, { color: iconColor }]}>{glyph}</Text>
-                ) : Icon ? (
-                  <Icon size={theme.icon.sm} color={iconColor} strokeWidth={2.2} />
-                ) : null}
-                <Text style={[styles.chipLabel, { color: theme.colors.textSecondary }]}>{label}</Text>
-                {suffixGlyph ? (
-                  <Text style={[styles.glyph, { color: iconColor }]}>{suffixGlyph}</Text>
-                ) : null}
-              </>
+              <View style={styles.chipInner}>
+                <View style={styles.chipIconRow}>
+                  {glyph ? (
+                    <Text style={[styles.glyph, { color: iconColor }]}>{glyph}</Text>
+                  ) : Icon ? (
+                    <Icon size={theme.icon.sm} color={iconColor} strokeWidth={2.2} />
+                  ) : null}
+                  {suffixGlyph ? (
+                    <Text style={[styles.glyph, { color: iconColor }]}>{suffixGlyph}</Text>
+                  ) : null}
+                </View>
+                <Text style={[styles.chipLabel, { color: theme.colors.textPrimary }]} numberOfLines={1}>
+                  {label}
+                </Text>
+                <Text style={[styles.chipSubtitle, { color: theme.colors.textMuted }]} numberOfLines={1}>
+                  {subtitle}
+                </Text>
+              </View>
             )}
           </Pressable>
         );
@@ -165,13 +177,18 @@ export function CohortNudgeChips({
         {customBusy ? (
           <ActivityIndicator size="small" color={customIcon} />
         ) : (
-          <>
-            <MessageSquare size={theme.icon.sm} color={customIcon} strokeWidth={2.2} />
-            <Text style={[styles.chipLabel, { color: theme.colors.textSecondary }]}>
+          <View style={styles.chipInner}>
+            <View style={styles.chipIconRow}>
+              <MessageSquare size={theme.icon.sm} color={customIcon} strokeWidth={2.2} />
+              {plusLocked ? <Text style={[styles.proBadge, { color: customIcon }]}>Plus</Text> : null}
+            </View>
+            <Text style={[styles.chipLabel, { color: theme.colors.textPrimary }]} numberOfLines={1}>
               {customNoteSentToday ? "Note sent" : "Note"}
             </Text>
-            {plusLocked ? <Text style={[styles.proBadge, { color: customIcon }]}>Plus</Text> : null}
-          </>
+            <Text style={[styles.chipSubtitle, { color: theme.colors.textMuted }]} numberOfLines={1}>
+              Send a note
+            </Text>
+          </View>
         )}
       </Pressable>
     </ScrollView>
@@ -188,14 +205,24 @@ const styles = StyleSheet.create({
     paddingVertical: 0,
   },
   chip: {
+    alignItems: "stretch",
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    minHeight: 56,
+    minWidth: 100,
+    justifyContent: "center",
+  },
+  chipInner: {
+    gap: 2,
+    minWidth: 0,
+  },
+  chipIconRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-    minHeight: 30,
+    marginBottom: 2,
   },
   customChip: {
     borderWidth: 1,
@@ -213,7 +240,12 @@ const styles = StyleSheet.create({
   },
   chipLabel: {
     fontSize: 11,
-    fontWeight: "700",
+    fontWeight: "800",
     letterSpacing: 0.15,
+  },
+  chipSubtitle: {
+    fontSize: 9,
+    fontWeight: "700",
+    letterSpacing: 0.12,
   },
 });
