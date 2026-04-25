@@ -1,8 +1,37 @@
 import * as FileSystem from "expo-file-system/legacy";
+import * as ImageManipulator from "expo-image-manipulator";
 import { getSupabase } from "./supabase";
 import { isSupabaseConfigured } from "./env";
 
 const BUCKET = "streak-memories";
+
+const MAX_UPLOAD_WIDTH = 1280;
+const UPLOAD_JPEG_QUALITY = 0.82;
+
+async function maybeCompressImageForUpload(localUri: string): Promise<string> {
+  // Only attempt manipulations for local URIs (Picker usually returns file://).
+  // For other schemes, just upload as-is.
+  const isLocal =
+    localUri.startsWith("file:") ||
+    localUri.startsWith("content:") ||
+    (localUri.startsWith("/") && !localUri.startsWith("//"));
+  if (!isLocal) return localUri;
+
+  try {
+    const res = await ImageManipulator.manipulateAsync(
+      localUri,
+      [{ resize: { width: MAX_UPLOAD_WIDTH } }],
+      {
+        compress: UPLOAD_JPEG_QUALITY,
+        format: ImageManipulator.SaveFormat.JPEG,
+      },
+    );
+    return res.uri || localUri;
+  } catch {
+    // Best-effort: if compression fails (some Android content URIs), fall back to original.
+    return localUri;
+  }
+}
 
 /** RN `fetch(fileUri)` often throws "Network request failed" for local URIs; use base64 read instead. */
 function base64ToUint8Array(base64: string): Uint8Array {
@@ -87,11 +116,13 @@ export async function uploadHabitStreakMemoryImage(
   if (!user) throw new Error("Not signed in");
 
   const uid = user.id.toLowerCase();
-  const ext = extFromUri(params.localUri);
+  const compressedUri = await maybeCompressImageForUpload(params.localUri);
+  // We re-encode as JPEG for consistent size/perf.
+  const ext = "jpg";
   const safeDate = params.dateStr.replace(/[^0-9-]/g, "");
   const path = `${uid}/habits/${params.habitId}/${safeDate}.${ext}`;
   const ct = contentTypeForExt(ext);
-  const { body, contentType } = await readImageBytesForUpload(params.localUri, ct);
+  const { body, contentType } = await readImageBytesForUpload(compressedUri, ct);
 
   const { error: upErr } = await supabase.storage.from(BUCKET).upload(path, body, {
     upsert: true,
@@ -123,10 +154,12 @@ export async function uploadMiniStreakMemoryImage(
   if (!user) throw new Error("Not signed in");
 
   const uid = user.id.toLowerCase();
-  const ext = extFromUri(params.localUri);
+  const compressedUri = await maybeCompressImageForUpload(params.localUri);
+  // We re-encode as JPEG for consistent size/perf.
+  const ext = "jpg";
   const path = `${uid}/mini-missions/${params.miniMissionId}/memory.${ext}`;
   const ct = contentTypeForExt(ext);
-  const { body, contentType } = await readImageBytesForUpload(params.localUri, ct);
+  const { body, contentType } = await readImageBytesForUpload(compressedUri, ct);
 
   const { error: upErr } = await supabase.storage.from(BUCKET).upload(path, body, {
     upsert: true,
