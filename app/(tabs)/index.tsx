@@ -57,36 +57,56 @@ function getGreeting(): string {
   return "Night owl mode";
 }
 
-function MiniMissionLiveGradientLabel({ count }: { count: number }) {
+function MiniMissionLiveGradientLabel({ count, reduceMotion }: { count: number; reduceMotion: boolean }) {
   const fontSize = 17;
   const label = `${count} LIVE`;
   const w = Math.min(200, Math.max(44, Math.ceil(label.length * fontSize * 0.58)));
   const h = Math.ceil(fontSize * 1.2);
   const baseline = Math.ceil(fontSize * 0.88);
 
+  const liveOpacity = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    if (reduceMotion || count <= 0) {
+      liveOpacity.setValue(1);
+      return;
+    }
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(liveOpacity, { toValue: 0.55, duration: 650, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+        Animated.timing(liveOpacity, { toValue: 1, duration: 650, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+      ]),
+      { resetBeforeIteration: false },
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [reduceMotion, count, liveOpacity]);
+
   return (
-    <Svg
-      width={w}
-      height={h}
-      viewBox={`0 0 ${w} ${h}`}
-      accessibilityLabel={`${count} live mini missions`}
-    >
-      <Defs>
-        <SvgLinearGradient id="miniLiveGrad" x1="0" y1="0" x2={w} y2="0">
-          <Stop offset="0" stopColor="#f97316" />
-          <Stop offset="1" stopColor="#fde047" />
-        </SvgLinearGradient>
-      </Defs>
-      <SvgText
-        x={0}
-        y={baseline}
-        fill="url(#miniLiveGrad)"
-        fontSize={fontSize}
-        fontWeight="800"
+    <Animated.View style={{ opacity: reduceMotion ? 1 : liveOpacity }}>
+      <Svg
+        width={w}
+        height={h}
+        viewBox={`0 0 ${w} ${h}`}
+        accessibilityLabel={`${count} live mini missions`}
       >
-        {label}
-      </SvgText>
-    </Svg>
+        <Defs>
+          <SvgLinearGradient id="miniLiveGrad" x1="0" y1="0" x2={w} y2="0">
+            <Stop offset="0" stopColor="#f97316" />
+            <Stop offset="1" stopColor="#fde047" />
+          </SvgLinearGradient>
+        </Defs>
+        <SvgText
+          x={0}
+          y={baseline}
+          fill="url(#miniLiveGrad)"
+          fontSize={fontSize}
+          fontWeight="800"
+        >
+          {label}
+        </SvgText>
+      </Svg>
+    </Animated.View>
   );
 }
 
@@ -136,19 +156,32 @@ export default function Home() {
   const [missionNow, setMissionNow] = useState(() => Date.now());
   const showAccount = isSupabaseConfigured();
   const bellScale = useRef(new Animated.Value(1)).current;
+  const bellBuzz = useRef(new Animated.Value(0)).current;
   const emptyIconScale = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     if (reduceMotion) {
       bellScale.setValue(1);
+      bellBuzz.setValue(0);
       return;
     }
     if (unreadNotifCount > 0) {
       const loop = Animated.loop(
         Animated.sequence([
-          Animated.timing(bellScale, { toValue: 1.18, duration: 120, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
-          Animated.timing(bellScale, { toValue: 0.96, duration: 110, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
-          Animated.timing(bellScale, { toValue: 1, duration: 140, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+          // Quick "buzz" wiggle + punch scale, then rest.
+          Animated.parallel([
+            Animated.sequence([
+              Animated.timing(bellBuzz, { toValue: 1, duration: 60, easing: Easing.out(Easing.linear), useNativeDriver: true }),
+              Animated.timing(bellBuzz, { toValue: -1, duration: 60, easing: Easing.out(Easing.linear), useNativeDriver: true }),
+              Animated.timing(bellBuzz, { toValue: 1, duration: 60, easing: Easing.out(Easing.linear), useNativeDriver: true }),
+              Animated.timing(bellBuzz, { toValue: 0, duration: 70, easing: Easing.out(Easing.linear), useNativeDriver: true }),
+            ]),
+            Animated.sequence([
+              Animated.timing(bellScale, { toValue: 1.22, duration: 110, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+              Animated.timing(bellScale, { toValue: 0.98, duration: 110, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+              Animated.timing(bellScale, { toValue: 1, duration: 160, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+            ]),
+          ]),
           Animated.delay(2400),
         ]),
       );
@@ -156,6 +189,12 @@ export default function Home() {
       return () => loop.stop();
     }
   }, [unreadNotifCount, reduceMotion, bellScale]);
+
+  const bellBuzzStyle = useMemo(() => {
+    const rotate = bellBuzz.interpolate({ inputRange: [-1, 0, 1], outputRange: ["-12deg", "0deg", "12deg"] });
+    const translateX = bellBuzz.interpolate({ inputRange: [-1, 0, 1], outputRange: [-1.2, 0, 1.2] });
+    return { transform: [{ translateX }, { rotate }] } as const;
+  }, [bellBuzz]);
 
   useEffect(() => {
     if (reduceMotion) return;
@@ -381,6 +420,7 @@ export default function Home() {
                       ],
                     }}
                   >
+                    <Animated.View style={unreadNotifCount > 0 && !reduceMotion ? bellBuzzStyle : undefined}>
                     <TouchableOpacity
                       onPress={() => router.push("/notifications")}
                       style={[
@@ -399,6 +439,7 @@ export default function Home() {
                     >
                       <Bell size={20} color={theme.colors.textPrimary} />
                     </TouchableOpacity>
+                    </Animated.View>
                   </Animated.View>
                   {unreadNotifCount > 0 ? (
                     <View
@@ -531,7 +572,7 @@ export default function Home() {
           </View>
           <View style={styles.miniBannerRight}>
             {miniMissionStats.live > 0 ? (
-              <MiniMissionLiveGradientLabel count={miniMissionStats.live} />
+              <MiniMissionLiveGradientLabel count={miniMissionStats.live} reduceMotion={reduceMotion} />
             ) : null}
             <ChevronRight size={20} color={theme.colors.textMuted} />
           </View>
