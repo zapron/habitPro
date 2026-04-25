@@ -1,6 +1,7 @@
 import { Text } from "./AppText";
-import { Platform, StyleSheet, View } from "react-native";
-import { Trophy } from "lucide-react-native";
+import { Animated, Easing, Platform, StyleSheet, View } from "react-native";
+import { Sun } from "lucide-react-native";
+import { useEffect, useMemo, useRef } from "react";
 import type { AppTheme } from "../styles/theme";
 
 /** Rich streak-board headline. Copy matches `challenge/[id]` cohort logic. */
@@ -20,12 +21,36 @@ type Props = {
 export function CohortMastheadTrophyNarrative({ theme, model, isDark = false }: Props) {
   const textProps = Platform.OS === "android" ? { includeFontPadding: false as const } : {};
 
-  const iconBg = isDark ? "rgba(251, 191, 36, 0.1)" : "rgba(251, 191, 36, 0.16)";
-  const iconBorder = isDark ? "rgba(251, 191, 36, 0.28)" : "rgba(217, 119, 6, 0.38)";
-
   const base = theme.colors.textSecondary;
   const nameColor = theme.colors.textPrimary;
   const streakAccent = theme.colors.indigo[400];
+
+  const pulse = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 1, duration: 1100, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 0, duration: 1100, easing: Easing.in(Easing.quad), useNativeDriver: true }),
+      ]),
+      { resetBeforeIteration: false },
+    );
+    loop.start();
+    return () => {
+      loop.stop();
+    };
+  }, [pulse]);
+
+  const sunGlowStyle = useMemo(() => {
+    const opacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.16, 0.34] });
+    const scale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.12] });
+    return { opacity, transform: [{ scale }] } as const;
+  }, [pulse]);
+
+  const sunPulseStyle = useMemo(() => {
+    const scale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.04] });
+    return { transform: [{ scale }] } as const;
+  }, [pulse]);
 
   const body = (() => {
     switch (model.kind) {
@@ -68,16 +93,17 @@ export function CohortMastheadTrophyNarrative({ theme, model, isDark = false }: 
 
   return (
     <View style={styles.row}>
-      <View
-        style={[
-          styles.iconBadge,
-          {
-            backgroundColor: iconBg,
-            borderColor: iconBorder,
-          },
-        ]}
-      >
-        <Trophy size={20} color={theme.colors.amber[500]} strokeWidth={2.1} />
+      <View style={styles.iconBadge}>
+        <Animated.View
+          style={[
+            styles.sunGlow,
+            { backgroundColor: isDark ? "rgba(251, 191, 36, 0.65)" : "rgba(251, 191, 36, 0.55)" },
+            sunGlowStyle,
+          ]}
+        />
+        <Animated.View style={sunPulseStyle}>
+          <Sun size={22} color={theme.colors.amber[500]} strokeWidth={2.1} />
+        </Animated.View>
       </View>
 
       <View style={styles.textColumn}>
@@ -125,19 +151,23 @@ const styles = StyleSheet.create({
   textColumn: {
     flex: 1,
     minWidth: 0,
-    minHeight: 44,
     justifyContent: "center",
   },
   iconBadge: {
     width: 44,
     height: 44,
     borderRadius: 14,
-    borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
+    overflow: "hidden",
+  },
+  sunGlow: {
+    position: "absolute",
+    width: 22,
+    height: 22,
+    borderRadius: 9999,
   },
   body: {
-    flex: 1,
     fontSize: 13,
     lineHeight: 19,
     fontWeight: "600",
