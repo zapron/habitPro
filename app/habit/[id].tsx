@@ -726,7 +726,12 @@ export default function HabitDetail() {
             </View>
 
             <GroupChallengeSheet visible={groupSheetOpen} onClose={() => setGroupSheetOpen(false)} habit={habit} />
-            <MissionDetailsSheet visible={missionDetailsOpen} onClose={() => setMissionDetailsOpen(false)} habit={habit} />
+            <MissionDetailsSheet
+                variant="habit"
+                visible={missionDetailsOpen}
+                onClose={() => setMissionDetailsOpen(false)}
+                habit={habit}
+            />
 
             <StreakMemorySheet
                 visible={memoryUi !== null}

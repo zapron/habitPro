@@ -13,12 +13,13 @@ import {
   StyleSheet,
   StatusBar,
   ActivityIndicator,
-  Platform,
   RefreshControl,
+  useWindowDimensions,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
-import { ArrowLeft, LogOut, Users } from "lucide-react-native";
+import * as Haptics from "expo-haptics";
+import { ArrowLeft, Info, LogOut, Users } from "lucide-react-native";
 import { CohortLeaderHero } from "../../src/components/CohortLeaderHero";
 import type { CohortMastheadModel } from "../../src/components/CohortMasthead";
 import { CohortNudgeChips } from "../../src/components/CohortNudgeChips";
@@ -31,6 +32,7 @@ import {
 } from "../../src/components/CohortPeerStreakDots";
 import { CohortStreakPill } from "../../src/components/CohortStreakPill";
 import { SquadActivitySection } from "../../src/components/SquadActivitySection";
+import { MissionDetailsSheet } from "../../src/components/MissionDetailsSheet";
 import { useTheme } from "../../src/context/ThemeContext";
 import { useToast } from "../../src/context/ToastContext";
 import { useAuth } from "../../src/context/AuthContext";
@@ -66,6 +68,7 @@ import { isHabitMissionWindowClosed } from "../../src/utils/habitMissionWindow";
 import {
   getActiveMissionDaySlot,
 } from "../../src/utils/missionDaySlots";
+import { levelFromTotalXp } from "../../src/utils/xpLevel";
 
 function parseGroupMissionDisplay(g: ChallengeGroupRow | null): { title: string; description?: string } {
   if (!g) return { title: "Group mission" };
@@ -98,6 +101,7 @@ export default function ChallengeDetailScreen() {
   const { id } = useLocalSearchParams<{ id?: string | string[] }>();
   const challengeId = Array.isArray(id) ? id[0] : id;
   const router = useRouter();
+  const { width: windowWidth } = useWindowDimensions();
   const { theme, isDark } = useTheme();
   const { showToast } = useToast();
   const { session } = useAuth();
@@ -108,6 +112,7 @@ export default function ChallengeDetailScreen() {
 
   const habits = useHabitStore((s) => s.habits);
   const cohortPeerHabits = useHabitStore((s) => s.cohortPeerHabits);
+  const myXp = useHabitStore((s) => s.xp);
   const deleteHabit = useHabitStore((s) => s.deleteHabit);
 
   const [group, setGroup] = useState<ChallengeGroupRow | null>(null);
@@ -125,6 +130,7 @@ export default function ChallengeDetailScreen() {
   const [repairRows, setRepairRows] = useState<StreakRepairRow[]>([]);
   const [repairVotes, setRepairVotes] = useState<StreakRepairVoteRow[]>([]);
   const [repairBusyId, setRepairBusyId] = useState<string | null>(null);
+  const [missionDetailsOpen, setMissionDetailsOpen] = useState(false);
 
   const focusOnceRef = useRef(false);
 
@@ -307,6 +313,12 @@ export default function ChallengeDetailScreen() {
     [group],
   );
 
+  /** Reserve space for the details icon so it stays on the same line (doesn't wrap below the title). */
+  const cohortHeroTitleMaxWidth = useMemo(() => {
+    const iconSlot = Math.max(36, theme.icon.lg + 14);
+    return Math.max(120, windowWidth - theme.spacing.sm * 2 - iconSlot);
+  }, [windowWidth, theme.spacing.sm, theme.icon.lg]);
+
   const habitForMember = useCallback(
     (memberId: string): Habit | undefined => {
       const fromPeers = peers.find((h) => (h.ownerUserId ?? "") === memberId);
@@ -388,6 +400,18 @@ export default function ChallengeDetailScreen() {
     if (n != null && Number.isFinite(n)) return Math.max(1, Math.floor(n));
     return 21;
   }, [myHabit, group?.habit_template]);
+
+  const groupMissionMode = useMemo((): "manual" | "autopilot" => {
+    const tpl = group?.habit_template as Record<string, unknown> | undefined;
+    if (tpl && tpl.mode === "manual") return "manual";
+    return "autopilot";
+  }, [group?.habit_template]);
+
+  const groupTemplateEndDate = useMemo(() => {
+    const tpl = group?.habit_template as Record<string, unknown> | undefined;
+    const e = tpl?.endDate;
+    return typeof e === "string" && e.trim().length > 0 ? e.trim() : null;
+  }, [group?.habit_template]);
 
   const viewerMissionSlot = useMemo(() => {
     if (!myHabit || myHabit.isCompleted) return null;
@@ -515,18 +539,38 @@ export default function ChallengeDetailScreen() {
             />
           }
         >
-          {myHabit?.id ? (
-            <Pressable
+          <View style={[styles.heroTitleRow, { maxWidth: cohortHeroTitleMaxWidth + Math.max(36, theme.icon.lg + 14) }]}>
+            {myHabit?.id ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Open mission: ${missionTitle}`}
+                onPress={() => router.push(`/habit/${myHabit.id}`)}
+                style={({ pressed }) => [
+                  styles.heroTitlePressable,
+                  { maxWidth: cohortHeroTitleMaxWidth, opacity: pressed ? 0.85 : 1 },
+                ]}
+              >
+                <Text style={[styles.heroTitle, { color: theme.colors.textPrimary }]}>{missionTitle}</Text>
+              </Pressable>
+            ) : (
+              <View style={[styles.heroTitleFlex, { maxWidth: cohortHeroTitleMaxWidth }]}>
+                <Text style={[styles.heroTitle, { color: theme.colors.textPrimary }]}>{missionTitle}</Text>
+              </View>
+            )}
+            <TouchableOpacity
+              style={styles.cohortMissionDetailsBtn}
+              onPress={() => {
+                void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                setMissionDetailsOpen(true);
+              }}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
               accessibilityRole="button"
-              accessibilityLabel={`Open mission: ${missionTitle}`}
-              onPress={() => router.push(`/habit/${myHabit.id}`)}
-              style={({ pressed }) => [{ opacity: pressed ? 0.85 : 1 }]}
+              accessibilityLabel="View mission details"
+              accessibilityHint="Opens full mission name and brief"
             >
-              <Text style={[styles.heroTitle, { color: theme.colors.textPrimary }]}>{missionTitle}</Text>
-            </Pressable>
-          ) : (
-            <Text style={[styles.heroTitle, { color: theme.colors.textPrimary }]}>{missionTitle}</Text>
-          )}
+              <Info size={theme.icon.lg} color={theme.colors.indigo[400]} />
+            </TouchableOpacity>
+          </View>
 
           <ScrollView
             horizontal
@@ -568,8 +612,7 @@ export default function ChallengeDetailScreen() {
                 style={[
                   styles.dayPill,
                   {
-                    borderColor: theme.colors.indigo[500],
-                    backgroundColor: isDark ? "rgba(99, 102, 241, 0.12)" : "rgba(99, 102, 241, 0.08)",
+                    backgroundColor: isDark ? "rgba(99, 102, 241, 0.2)" : "rgba(99, 102, 241, 0.14)",
                   },
                 ]}
               >
@@ -587,21 +630,6 @@ export default function ChallengeDetailScreen() {
                 Squad features are part of HabitPro Community.
               </Text>
             </View>
-          ) : null}
-
-          {missionDescription ? (
-            <Text
-              style={[
-                styles.missionDescription,
-                {
-                  color: theme.colors.textSecondary,
-                  fontFamily: Platform.select({ ios: "Georgia", android: "serif", default: undefined }),
-                },
-              ]}
-              numberOfLines={6}
-            >
-              {missionDescription}
-            </Text>
           ) : null}
 
           {repairRows.some((r) => r.status === "pending") ? (
@@ -752,6 +780,9 @@ export default function ChallengeDetailScreen() {
               const label = profileLabels[memberId];
               const habit = habitForMember(memberId);
               const nameOnCard = participantDisplayName(label);
+              const xpForLevel =
+                label?.xp != null ? label.xp : myUserId === memberId ? myXp : null;
+              const memberLevel = xpForLevel != null ? levelFromTotalXp(xpForLevel) : null;
 
               return (
                 <View
@@ -766,14 +797,41 @@ export default function ChallengeDetailScreen() {
                   ]}
                 >
                   <View style={styles.participantHeaderRow}>
-                    <Text style={[styles.participantName, { color: theme.colors.textPrimary }]} numberOfLines={2}>
-                      {nameOnCard}
-                    </Text>
-                    {habit ? (
-                      <CohortStreakPill streak={habit.streak} isDark={isDark} />
-                    ) : (
-                      <Text style={[styles.streakPlaceholder, { color: theme.colors.textMuted }]}>-</Text>
-                    )}
+                    <View style={styles.participantNameLevelCluster}>
+                      <Text
+                        style={[
+                          styles.participantName,
+                          styles.participantNameInline,
+                          { color: theme.colors.textPrimary },
+                        ]}
+                        numberOfLines={2}
+                      >
+                        {nameOnCard}
+                      </Text>
+                      {memberLevel != null ? (
+                        <View
+                          style={[
+                            styles.levelPill,
+                            {
+                              borderColor: theme.colors.border,
+                              backgroundColor: isDark ? "rgba(251, 191, 36, 0.12)" : "rgba(234, 179, 8, 0.12)",
+                            },
+                          ]}
+                        >
+                          <Text style={[styles.levelPillText, { color: theme.colors.yellow[400] }]}>
+                            Lv {memberLevel}
+                          </Text>
+                        </View>
+                      ) : null}
+                    </View>
+                    <View style={styles.participantHeaderSpacer} />
+                    <View style={styles.participantHeaderStreakWrap}>
+                      {habit ? (
+                        <CohortStreakPill streak={habit.streak} isDark={isDark} />
+                      ) : (
+                        <Text style={[styles.streakPlaceholder, { color: theme.colors.textMuted }]}>-</Text>
+                      )}
+                    </View>
                   </View>
 
                   {habit ? (
@@ -852,6 +910,20 @@ export default function ChallengeDetailScreen() {
           { label: "Leave", variant: "danger", onPress: confirmLeaveMission },
         ]}
       />
+
+      {group ? (
+        <MissionDetailsSheet
+          variant="group"
+          visible={missionDetailsOpen}
+          onClose={() => setMissionDetailsOpen(false)}
+          title={missionTitle}
+          description={missionDescription ?? null}
+          mode={groupMissionMode}
+          totalDays={missionTotalDays}
+          startDate={group.start_date}
+          endDate={groupTemplateEndDate}
+        />
+      ) : null}
     </Screen>
   );
 }
@@ -875,12 +947,33 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   leaveButtonText: { fontSize: 14, fontWeight: "800" },
+  heroTitleRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    alignSelf: "flex-start",
+    marginBottom: 8,
+  },
+  heroTitlePressable: {
+    alignSelf: "flex-start",
+    flexGrow: 0,
+  },
+  heroTitleFlex: {
+    alignSelf: "flex-start",
+    flexGrow: 0,
+  },
+  cohortMissionDetailsBtn: {
+    justifyContent: "center",
+    alignItems: "center",
+    paddingVertical: 4,
+    paddingLeft: 0,
+    paddingRight: 2,
+    marginTop: 6,
+  },
   heroTitle: {
     fontSize: 28,
     fontWeight: "900",
     letterSpacing: -0.5,
     lineHeight: 34,
-    marginBottom: 8,
   },
   metaPillsRow: {
     flexDirection: "row",
@@ -902,18 +995,11 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     paddingHorizontal: 12,
     borderRadius: 9999,
-    borderWidth: 1,
+    borderWidth: 0,
   },
   dayPillText: { fontSize: 11, fontWeight: "800", letterSpacing: 0.3 },
   plusGateRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 14 },
   plusGateText: { fontSize: 12, fontWeight: "700" },
-  missionDescription: {
-    fontSize: 15,
-    lineHeight: 24,
-    fontStyle: "italic",
-    letterSpacing: 0.2,
-    marginBottom: 22,
-  },
   sectionLabel: {
     fontSize: 11,
     fontWeight: "800",
@@ -966,17 +1052,41 @@ const styles = StyleSheet.create({
   },
   participantHeaderRow: {
     flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
-    gap: 12,
+    alignItems: "center",
+    width: "100%",
     marginBottom: 6,
   },
+  participantNameLevelCluster: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexShrink: 1,
+    minWidth: 0,
+    gap: 6,
+  },
+  participantHeaderSpacer: {
+    flex: 1,
+    minWidth: 8,
+  },
+  participantHeaderStreakWrap: {
+    flexShrink: 0,
+  },
+  levelPill: {
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 9999,
+    borderWidth: 1,
+  },
+  levelPillText: { fontSize: 11, fontWeight: "800", letterSpacing: 0.2 },
   participantName: {
     fontSize: 18,
     fontWeight: "800",
     letterSpacing: -0.2,
-    flex: 1,
+  },
+  participantNameInline: {
+    flexGrow: 0,
+    flexShrink: 1,
     minWidth: 0,
+    maxWidth: "100%",
   },
   streakPlaceholder: { fontSize: 13, fontWeight: "700" },
   noSyncHint: { fontSize: 12, lineHeight: 17, fontStyle: "italic", marginTop: 4 },

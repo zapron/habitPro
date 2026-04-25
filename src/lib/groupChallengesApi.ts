@@ -158,7 +158,7 @@ export async function getProfileUsernamesForIds(userIds: string[]): Promise<Reco
   return out;
 }
 
-export type ProfileLabel = { username: string; displayName: string | null };
+export type ProfileLabel = { username: string; displayName: string | null; xp: number | null };
 
 /** Usernames + optional display names for challenge participant cards. */
 /** `profiles.is_premium` — set server-side (billing / admin). Used for squad custom note gate. */
@@ -179,15 +179,16 @@ export async function getProfileLabelsForIds(userIds: string[]): Promise<Record<
   if (uniq.length === 0) return {};
   const supabase = getSupabase();
   if (!supabase) return {};
-  const { data, error } = await supabase.from("profiles").select("id, username, display_name").in("id", uniq);
+  const { data, error } = await supabase.from("profiles").select("id, username, display_name, xp").in("id", uniq);
   if (error) throw error;
   const out: Record<string, ProfileLabel> = {};
   for (const r of data ?? []) {
-    const row = r as { id: string; username: string | null; display_name: string | null };
+    const row = r as { id: string; username: string | null; display_name: string | null; xp?: number | null };
     const u = typeof row.username === "string" ? row.username.trim().toLowerCase() : "";
     if (!u) continue;
     const dn = typeof row.display_name === "string" ? row.display_name.trim() : "";
-    out[row.id] = { username: u, displayName: dn.length > 0 ? dn : null };
+    const xp = typeof row.xp === "number" && Number.isFinite(row.xp) ? row.xp : null;
+    out[row.id] = { username: u, displayName: dn.length > 0 ? dn : null, xp };
   }
   return out;
 }

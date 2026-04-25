@@ -11,11 +11,24 @@ import { Gamepad2, Plane, X } from "lucide-react-native";
 import type { Habit } from "../types/habit";
 import { useTheme } from "../context/ThemeContext";
 
-type Props = {
-  visible: boolean;
-  onClose: () => void;
-  habit: Habit;
-};
+export type MissionDetailsSheetProps =
+  | {
+      visible: boolean;
+      onClose: () => void;
+      variant: "habit";
+      habit: Habit;
+    }
+  | {
+      visible: boolean;
+      onClose: () => void;
+      variant: "group";
+      title: string;
+      description?: string | null;
+      mode: "manual" | "autopilot";
+      totalDays: number;
+      startDate: string;
+      endDate?: string | null;
+    };
 
 function formatShortDate(iso: string): string {
   try {
@@ -27,13 +40,37 @@ function formatShortDate(iso: string): string {
   }
 }
 
-export function MissionDetailsSheet({ visible, onClose, habit }: Props) {
+export function MissionDetailsSheet(props: MissionDetailsSheetProps) {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
-  const isManual = habit.mode === "manual";
+
+  const payload =
+    props.variant === "group"
+      ? {
+          isManual: props.mode === "manual",
+          title: props.title,
+          description: props.description,
+          totalDays: props.totalDays,
+          startDate: props.startDate,
+          endDate: props.endDate ?? null,
+        }
+      : {
+          isManual: props.habit.mode === "manual",
+          title: props.habit.title,
+          description: props.habit.description,
+          totalDays: props.habit.totalDays,
+          startDate: props.habit.startDate,
+          endDate: props.habit.endDate ?? null,
+        };
+
+  const { isManual, title, description, totalDays, startDate, endDate } = payload;
+  const brief =
+    typeof description === "string" && description.trim().length > 0
+      ? description.trim()
+      : "No brief added yet.";
 
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+    <Modal visible={props.visible} animationType="slide" transparent onRequestClose={props.onClose}>
       <View style={styles.backdrop}>
         <View
           style={[
@@ -49,7 +86,7 @@ export function MissionDetailsSheet({ visible, onClose, habit }: Props) {
           <View style={styles.sheetHead}>
             <Text style={[styles.sheetTitle, { color: theme.colors.textPrimary }]}>Mission</Text>
             <TouchableOpacity
-              onPress={onClose}
+              onPress={props.onClose}
               style={[styles.closeBtn, { borderColor: theme.colors.border, backgroundColor: theme.colors.surfaceElevated }]}
               hitSlop={12}
               accessibilityLabel="Close"
@@ -63,7 +100,7 @@ export function MissionDetailsSheet({ visible, onClose, habit }: Props) {
             keyboardShouldPersistTaps="handled"
             contentContainerStyle={styles.scrollContent}
           >
-            <Text style={[styles.missionTitle, { color: theme.colors.textPrimary }]}>{habit.title}</Text>
+            <Text style={[styles.missionTitle, { color: theme.colors.textPrimary }]}>{title}</Text>
 
             <View style={[styles.modePill, isManual ? styles.modePillManual : null]}>
               {isManual ? (
@@ -77,22 +114,20 @@ export function MissionDetailsSheet({ visible, onClose, habit }: Props) {
             </View>
 
             <Text style={[styles.sectionLabel, { color: theme.colors.textMuted }]}>Brief</Text>
-            <Text style={[styles.body, { color: theme.colors.textSecondary }]}>
-              {habit.description?.trim() ? habit.description.trim() : "No brief added yet."}
-            </Text>
+            <Text style={[styles.body, { color: theme.colors.textSecondary }]}>{brief}</Text>
 
             <Text style={[styles.sectionLabel, { color: theme.colors.textMuted }]}>Campaign</Text>
             <Text style={[styles.metaLine, { color: theme.colors.textPrimary }]}>
-              {habit.totalDays} day{habit.totalDays === 1 ? "" : "s"}
+              {totalDays} day{totalDays === 1 ? "" : "s"}
             </Text>
 
             <Text style={[styles.sectionLabel, { color: theme.colors.textMuted }]}>Started</Text>
-            <Text style={[styles.metaLine, { color: theme.colors.textPrimary }]}>{formatShortDate(habit.startDate)}</Text>
+            <Text style={[styles.metaLine, { color: theme.colors.textPrimary }]}>{formatShortDate(startDate)}</Text>
 
-            {isManual && habit.endDate ? (
+            {isManual && endDate ? (
               <>
                 <Text style={[styles.sectionLabel, { color: theme.colors.textMuted }]}>Ends</Text>
-                <Text style={[styles.metaLine, { color: theme.colors.textPrimary }]}>{formatShortDate(habit.endDate)}</Text>
+                <Text style={[styles.metaLine, { color: theme.colors.textPrimary }]}>{formatShortDate(endDate)}</Text>
               </>
             ) : null}
           </ScrollView>

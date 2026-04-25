@@ -3,6 +3,7 @@ import { StyleSheet, View } from "react-native";
 import type { AppTheme } from "../styles/theme";
 import type { Habit } from "../types/habit";
 import type { ProfileLabel } from "../lib/groupChallengesApi";
+import { levelFromTotalXp } from "../utils/xpLevel";
 import { CohortMastheadTrophyNarrative, type CohortMastheadModel } from "./CohortMasthead";
 import { CohortStreakPill } from "./CohortStreakPill";
 
@@ -81,6 +82,8 @@ export function CohortLeaderHero({
   const secondDone = runnerUp ? runnerUp.habit.completedDates.length : 0;
   const firstPct = Math.min(100, Math.round((firstDone / total) * 100));
   const secondPct = Math.min(100, Math.round((secondDone / total) * 100));
+  const leaderLevel =
+    leaderLabel?.xp != null && Number.isFinite(leaderLabel.xp) ? levelFromTotalXp(leaderLabel.xp) : null;
 
   const avatarBg = isDark ? "rgba(129, 140, 248, 0.22)" : "rgba(99, 102, 241, 0.14)";
   const avatarBorder = isDark ? "rgba(129, 140, 248, 0.35)" : "rgba(99, 102, 241, 0.28)";
@@ -112,11 +115,31 @@ export function CohortLeaderHero({
                 <Text style={[styles.avatarText, { color: theme.colors.indigo[400] }]}>{initials}</Text>
               </View>
               <View style={styles.heroTextCol}>
-                <Text style={[styles.leaderName, { color: theme.colors.textPrimary }]} numberOfLines={1}>
-                  {leaderName}
-                </Text>
-                <View style={styles.streakRow}>
-                  <CohortStreakPill streak={leaderHabit.streak} isDark={isDark} />
+                <View style={styles.nameLevelStreakRow}>
+                  <View style={styles.nameLevelCluster}>
+                    <Text style={[styles.leaderName, { color: theme.colors.textPrimary }]} numberOfLines={2}>
+                      {leaderName}
+                    </Text>
+                    {leaderLevel != null ? (
+                      <View
+                        style={[
+                          styles.levelPill,
+                          {
+                            borderColor: theme.colors.border,
+                            backgroundColor: isDark ? "rgba(251, 191, 36, 0.12)" : "rgba(234, 179, 8, 0.12)",
+                          },
+                        ]}
+                      >
+                        <Text style={[styles.levelPillText, { color: theme.colors.yellow[400] }]}>
+                          Lv {leaderLevel}
+                        </Text>
+                      </View>
+                    ) : null}
+                  </View>
+                  <View style={styles.heroNameRowSpacer} />
+                  <View style={styles.heroStreakWrap}>
+                    <CohortStreakPill streak={leaderHabit.streak} isDark={isDark} />
+                  </View>
                 </View>
                 {pace ? (
                   <Text style={[styles.paceLine, { color: theme.colors.textMuted }]} numberOfLines={2}>
@@ -222,10 +245,37 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: "800",
     letterSpacing: -0.2,
+    flexGrow: 0,
+    flexShrink: 1,
+    minWidth: 0,
   },
-  streakRow: {
-    alignSelf: "flex-start",
+  nameLevelStreakRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "stretch",
+    width: "100%",
   },
+  nameLevelCluster: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexShrink: 1,
+    minWidth: 0,
+    gap: 6,
+  },
+  heroNameRowSpacer: {
+    flex: 1,
+    minWidth: 8,
+  },
+  heroStreakWrap: {
+    flexShrink: 0,
+  },
+  levelPill: {
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 9999,
+    borderWidth: 1,
+  },
+  levelPillText: { fontSize: 11, fontWeight: "800", letterSpacing: 0.2 },
   paceLine: {
     fontSize: 12,
     fontWeight: "700",
