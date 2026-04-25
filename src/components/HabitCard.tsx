@@ -17,6 +17,146 @@ import * as Haptics from 'expo-haptics';
 import { getEligibleStreakRepair } from "../utils/streakRepairEligibility";
 import { calendarDateForMissionDayIndex, getActiveMissionDaySlot } from "../utils/missionDaySlots";
 import { useReducedMotion } from "../hooks/useReducedMotion";
+import Svg, { Circle, G } from "react-native-svg";
+
+function clamp(n: number, lo: number, hi: number): number {
+  return Math.max(lo, Math.min(hi, n));
+}
+
+function RingBoundaryDots({
+  ringSize,
+  strokeWidth,
+  totalDays,
+  slot,
+  completedDates,
+  startDate,
+  doneColor,
+  missedColor,
+  futureColor,
+  pendingColor,
+}: {
+  ringSize: number;
+  strokeWidth: number;
+  totalDays: number;
+  slot: number | null;
+  completedDates: string[];
+  startDate: string;
+  doneColor: string;
+  missedColor: string;
+  futureColor: string;
+  pendingColor: string;
+}) {
+  const days = Math.max(1, Math.floor(totalDays));
+  const current = slot == null ? 0 : clamp(Math.floor(slot), 0, days);
+
+  // Dot size scales down as mission length grows.
+  const dotD = clamp((ringSize * 0.58) / (Math.sqrt(days) * 2.35), 0.9, 2.5);
+  const radius = ringSize / 2 - strokeWidth / 2;
+  const cx = ringSize / 2;
+  const cy = ringSize / 2;
+
+  const nodes = [];
+  for (let day = 1; day <= days; day++) {
+    const theta = ((day - 1) / days) * Math.PI * 2 - Math.PI / 2;
+    const x = cx + radius * Math.cos(theta) - dotD / 2;
+    const y = cy + radius * Math.sin(theta) - dotD / 2;
+
+    const dateStr = calendarDateForMissionDayIndex(startDate, day - 1);
+    const done = Boolean(dateStr && completedDates.includes(dateStr));
+
+    let bg = futureColor;
+    if (day < current) bg = done ? doneColor : missedColor;
+    else if (day === current) bg = done ? doneColor : pendingColor;
+
+    nodes.push(
+      <View
+        key={day}
+        style={{
+          position: "absolute",
+          left: x,
+          top: y,
+          width: dotD,
+          height: dotD,
+          borderRadius: 9999,
+          backgroundColor: bg,
+        }}
+      />,
+    );
+  }
+
+  return <View style={{ position: "absolute", left: 0, top: 0, width: ringSize, height: ringSize }}>{nodes}</View>;
+}
+
+function RingDayArcs({
+  ringSize,
+  strokeWidth,
+  totalDays,
+  slot,
+  completedDates,
+  startDate,
+  doneColor,
+  missedColor,
+  futureColor,
+  pendingColor,
+}: {
+  ringSize: number;
+  strokeWidth: number;
+  totalDays: number;
+  slot: number | null;
+  completedDates: string[];
+  startDate: string;
+  doneColor: string;
+  missedColor: string;
+  futureColor: string;
+  pendingColor: string;
+}) {
+  const days = Math.max(1, Math.floor(totalDays));
+  const current = slot == null ? 0 : clamp(Math.floor(slot), 0, days);
+
+  const cx = ringSize / 2;
+  const cy = ringSize / 2;
+  const r = (ringSize - strokeWidth) / 2;
+  const circumference = 2 * Math.PI * r;
+
+  // Small visual gap between day segments.
+  const gap = clamp(circumference / (days * 14), 0.6, 1.6);
+  const seg = circumference / days;
+  const segLen = Math.max(0.8, seg - gap);
+
+  const arcs = [];
+  for (let day = 1; day <= days; day++) {
+    const dateStr = calendarDateForMissionDayIndex(startDate, day - 1);
+    const done = Boolean(dateStr && completedDates.includes(dateStr));
+
+    let color = futureColor;
+    if (day < current) color = done ? doneColor : missedColor;
+    else if (day === current) color = done ? doneColor : pendingColor;
+
+    arcs.push(
+      <Circle
+        key={day}
+        cx={cx}
+        cy={cy}
+        r={r}
+        fill="none"
+        stroke={color}
+        strokeWidth={strokeWidth}
+        strokeLinecap="butt"
+        strokeDasharray={`${segLen} ${circumference - segLen}`}
+        strokeDashoffset={-(day - 1) * seg}
+      />,
+    );
+  }
+
+  return (
+    <Svg width={ringSize} height={ringSize} style={{ position: "absolute", left: 0, top: 0 }}>
+      <G transform={`rotate(-90 ${cx} ${cy})`}>{arcs}</G>
+    </Svg>
+  );
+}
+
+// NOTE: Lottie tinting is not reliable across assets (many are not recolorable at runtime).
+// For a true bluish flame, we use the app's AnimatedFire with a cyan color.
 
 interface HabitCardProps {
     item: Habit;
@@ -24,7 +164,7 @@ interface HabitCardProps {
 
 export const HabitCard = memo(({ item }: HabitCardProps) => {
     const router = useRouter();
-    const { theme } = useTheme();
+    const { theme, isDark } = useTheme();
     const reduceMotion = useReducedMotion();
     const [nowMs, setNowMs] = useState(() => Date.now());
     const totalDays = Math.max(1, item.totalDays ?? 21);
@@ -221,25 +361,68 @@ export const HabitCard = memo(({ item }: HabitCardProps) => {
                 </View>
             </View>
 
-            <ProgressRing
-                progress={missionWon ? 1 : streakProgress}
-                size={56}
-                strokeWidth={3}
-                color={isManual ? theme.colors.amber[500] : missionWon ? theme.colors.green[500] : theme.colors.indigo[500]}
-            >
-                {missionWon ? (
-                    <Check size={20} color={theme.colors.green[500]} strokeWidth={3} />
-                ) : (
-                    <View style={styles.ringInner}>
-                        {item.streak > 0 ? (
-                           <Flame size={14} color="#f59e0b" fill="#fde68a" style={{ marginBottom: -2 }} />
-                        ) : (
-                           <Flame size={14} color={theme.colors.textMuted} style={{ marginBottom: -2 }} />
-                        )}
-                        <Text style={[styles.progressText, { color: theme.colors.textPrimary, fontSize: 13 }]}>{item.streak}</Text>
-                    </View>
-                )}
-            </ProgressRing>
+            {(() => {
+              const ringSize = 56;
+              const strokeWidth = 4;
+              const slot = getActiveMissionDaySlot(item.startDate, nowMs, totalDays);
+
+              return (
+                <View style={[styles.ringWrap, { width: ringSize, height: ringSize }]}>
+                  {!missionWon ? (
+                    <RingDayArcs
+                      ringSize={ringSize}
+                      strokeWidth={strokeWidth}
+                      totalDays={totalDays}
+                      slot={slot}
+                      completedDates={item.completedDates ?? []}
+                      startDate={item.startDate}
+                      // Use brand color for "done", and a calmer neutral for "missed".
+                      doneColor={theme.colors.indigo[400]}
+                      missedColor={isDark ? "rgba(148, 163, 184, 0.55)" : "rgba(100, 116, 139, 0.55)"}
+                      pendingColor={isDark ? "rgba(148, 163, 184, 0.75)" : "rgba(100, 116, 139, 0.75)"}
+                      futureColor={isDark ? "rgba(148, 163, 184, 0.22)" : "rgba(100, 116, 139, 0.22)"}
+                    />
+                  ) : null}
+
+                  <View
+                    style={[
+                      styles.ringCenter,
+                      {
+                        width: ringSize - strokeWidth * 2 - 6,
+                        height: ringSize - strokeWidth * 2 - 6,
+                        borderRadius: (ringSize - strokeWidth * 2 - 6) / 2,
+                        backgroundColor: theme.colors.surfaceElevated,
+                      },
+                    ]}
+                  >
+                    {missionWon ? (
+                      <Check size={20} color={theme.colors.green[500]} strokeWidth={3} />
+                    ) : (
+                      <View style={styles.ringCenterInner}>
+                        <Text
+                          style={[
+                            styles.streakNumber,
+                            {
+                              color: theme.colors.textPrimary,
+                              ...(isDark
+                                ? {
+                                    textShadowColor: "rgba(0,0,0,0.45)",
+                                    textShadowOffset: { width: 0, height: 1 },
+                                    textShadowRadius: 3,
+                                  }
+                                : null),
+                            },
+                          ]}
+                        >
+                          {item.streak}d
+                        </Text>
+                        <Text style={[styles.streakMicroLabel, { color: theme.colors.textMuted }]}>STREAK</Text>
+                      </View>
+                    )}
+                  </View>
+                </View>
+              );
+            })()}
         </TouchableOpacity>
     );
 });
@@ -274,6 +457,9 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         zIndex: 0,
     },
+    ringWrap: { position: "relative", alignItems: "center", justifyContent: "center" },
+    ringCenter: { alignItems: "center", justifyContent: "center" },
+    ringCenterInner: { alignItems: "center", justifyContent: "center" },
     ringInner: { alignItems: 'center', justifyContent: 'center', paddingTop: 2 },
     cardTitle: { fontWeight: '800', marginBottom: 4, flexShrink: 1 },
     cardDescription: { fontSize: 14 },
@@ -293,6 +479,8 @@ const styles = StyleSheet.create({
     },
     groupStreakPillText: { fontSize: 8, fontWeight: '800', letterSpacing: 0.25 },
     progressText: { fontWeight: '700', fontSize: 18 },
+    streakNumber: { fontWeight: "800", fontSize: 12.5, letterSpacing: -0.15, lineHeight: 15 },
+    streakMicroLabel: { fontSize: 8.5, fontWeight: "900", letterSpacing: 1.0, marginTop: 1 },
     flameStack: { position: 'relative', width: 20, height: 18 },
     progressBarBg: {
         height: 4,
