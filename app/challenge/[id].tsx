@@ -14,7 +14,6 @@ import {
   StatusBar,
   ActivityIndicator,
   RefreshControl,
-  useWindowDimensions,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
@@ -101,7 +100,6 @@ export default function ChallengeDetailScreen() {
   const { id } = useLocalSearchParams<{ id?: string | string[] }>();
   const challengeId = Array.isArray(id) ? id[0] : id;
   const router = useRouter();
-  const { width: windowWidth } = useWindowDimensions();
   const { theme, isDark } = useTheme();
   const { showToast } = useToast();
   const { session } = useAuth();
@@ -313,12 +311,6 @@ export default function ChallengeDetailScreen() {
     [group],
   );
 
-  /** Reserve space for the details icon so it stays on the same line (doesn't wrap below the title). */
-  const cohortHeroTitleMaxWidth = useMemo(() => {
-    const iconSlot = Math.max(36, theme.icon.lg + 14);
-    return Math.max(120, windowWidth - theme.spacing.sm * 2 - iconSlot);
-  }, [windowWidth, theme.spacing.sm, theme.icon.lg]);
-
   const habitForMember = useCallback(
     (memberId: string): Habit | undefined => {
       const fromPeers = peers.find((h) => (h.ownerUserId ?? "") === memberId);
@@ -498,29 +490,54 @@ export default function ChallengeDetailScreen() {
         >
           <ArrowLeft size={theme.icon.xl} color={theme.colors.textPrimary} />
         </TouchableOpacity>
-        {canLeaveMission ? (
-          <TouchableOpacity
-            style={[
-              styles.leaveButton,
-              {
-                backgroundColor: theme.colors.surface,
-                borderColor: theme.colors.border,
-                opacity: leaveBusy ? 0.65 : 1,
-              },
-            ]}
-            onPress={onLeaveMission}
-            disabled={leaveBusy}
-            accessibilityRole="button"
-            accessibilityLabel="Leave group mission"
-          >
-            {leaveBusy ? (
-              <ActivityIndicator color={theme.colors.red[500]} size="small" />
-            ) : (
-              <LogOut size={theme.icon.md} color={theme.colors.red[500]} />
-            )}
-            <Text style={[styles.leaveButtonText, { color: theme.colors.red[500] }]}>Leave</Text>
-          </TouchableOpacity>
-        ) : null}
+        <View style={styles.headerActionsRow}>
+          {group ? (
+            <TouchableOpacity
+              style={[
+                styles.missionDetailsButton,
+                {
+                  backgroundColor: theme.colors.surface,
+                  borderColor: theme.colors.border,
+                  opacity: loading ? 0.65 : 1,
+                },
+              ]}
+              onPress={() => {
+                void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                setMissionDetailsOpen(true);
+              }}
+              disabled={loading}
+              accessibilityRole="button"
+              accessibilityLabel="View mission detail"
+            >
+              <Info size={theme.icon.md} color={theme.colors.indigo[400]} />
+              <Text style={[styles.missionDetailsButtonText, { color: theme.colors.indigo[400] }]}>View mission detail</Text>
+            </TouchableOpacity>
+          ) : null}
+
+          {canLeaveMission ? (
+            <TouchableOpacity
+              style={[
+                styles.leaveButton,
+                {
+                  backgroundColor: theme.colors.surface,
+                  borderColor: theme.colors.border,
+                  opacity: leaveBusy ? 0.65 : 1,
+                },
+              ]}
+              onPress={onLeaveMission}
+              disabled={leaveBusy}
+              accessibilityRole="button"
+              accessibilityLabel="Leave group mission"
+            >
+              {leaveBusy ? (
+                <ActivityIndicator color={theme.colors.red[500]} size="small" />
+              ) : (
+                <LogOut size={theme.icon.md} color={theme.colors.red[500]} />
+              )}
+              <Text style={[styles.leaveButtonText, { color: theme.colors.red[500] }]}>Leave</Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
       </View>
 
       {loading ? (
@@ -539,38 +556,18 @@ export default function ChallengeDetailScreen() {
             />
           }
         >
-          <View style={[styles.heroTitleRow, { maxWidth: cohortHeroTitleMaxWidth + Math.max(36, theme.icon.lg + 14) }]}>
-            {myHabit?.id ? (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={`Open mission: ${missionTitle}`}
-                onPress={() => router.push(`/habit/${myHabit.id}`)}
-                style={({ pressed }) => [
-                  styles.heroTitlePressable,
-                  { maxWidth: cohortHeroTitleMaxWidth, opacity: pressed ? 0.85 : 1 },
-                ]}
-              >
-                <Text style={[styles.heroTitle, { color: theme.colors.textPrimary }]}>{missionTitle}</Text>
-              </Pressable>
-            ) : (
-              <View style={[styles.heroTitleFlex, { maxWidth: cohortHeroTitleMaxWidth }]}>
-                <Text style={[styles.heroTitle, { color: theme.colors.textPrimary }]}>{missionTitle}</Text>
-              </View>
-            )}
-            <TouchableOpacity
-              style={styles.cohortMissionDetailsBtn}
-              onPress={() => {
-                void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                setMissionDetailsOpen(true);
-              }}
-              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          {myHabit?.id ? (
+            <Pressable
               accessibilityRole="button"
-              accessibilityLabel="View mission details"
-              accessibilityHint="Opens full mission name and brief"
+              accessibilityLabel={`Open mission: ${missionTitle}`}
+              onPress={() => router.push(`/habit/${myHabit.id}`)}
+              style={({ pressed }) => [{ opacity: pressed ? 0.85 : 1 }]}
             >
-              <Info size={theme.icon.lg} color={theme.colors.indigo[400]} />
-            </TouchableOpacity>
-          </View>
+              <Text style={[styles.heroTitle, { color: theme.colors.textPrimary }]}>{missionTitle}</Text>
+            </Pressable>
+          ) : (
+            <Text style={[styles.heroTitle, { color: theme.colors.textPrimary }]}>{missionTitle}</Text>
+          )}
 
           <ScrollView
             horizontal
@@ -937,6 +934,17 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   iconButton: { padding: 8, borderRadius: 9999, borderWidth: 1 },
+  headerActionsRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  missionDetailsButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 9999,
+    borderWidth: 1,
+  },
+  missionDetailsButtonText: { fontSize: 13, fontWeight: "800" },
   leaveButton: {
     flexDirection: "row",
     alignItems: "center",
@@ -947,33 +955,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   leaveButtonText: { fontSize: 14, fontWeight: "800" },
-  heroTitleRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    alignSelf: "flex-start",
-    marginBottom: 8,
-  },
-  heroTitlePressable: {
-    alignSelf: "flex-start",
-    flexGrow: 0,
-  },
-  heroTitleFlex: {
-    alignSelf: "flex-start",
-    flexGrow: 0,
-  },
-  cohortMissionDetailsBtn: {
-    justifyContent: "center",
-    alignItems: "center",
-    paddingVertical: 4,
-    paddingLeft: 0,
-    paddingRight: 2,
-    marginTop: 6,
-  },
   heroTitle: {
     fontSize: 28,
     fontWeight: "900",
     letterSpacing: -0.5,
     lineHeight: 34,
+    marginBottom: 8,
   },
   metaPillsRow: {
     flexDirection: "row",
