@@ -3,13 +3,13 @@ import {
   useState } from "react";
 import {
   View,
-  ScrollView,
   Image,
   Pressable,
   StyleSheet,
   Modal,
   Dimensions,
 } from "react-native";
+import { FlashList } from "@shopify/flash-list";
 import { Bookmark, X } from "lucide-react-native";
 import { useTheme } from "../context/ThemeContext";
 import type { StreakMemory } from "../types/habit";
@@ -62,73 +62,73 @@ export function StreakMemoryGallery({
           <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>{sectionTitle}</Text>
         </View>
         <Text style={[styles.sectionHint, { color: theme.colors.textMuted }]}>{sectionHint}</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
-          {entries.map(({ dateStr, memory }) => {
+        <FlashList
+          horizontal
+          data={entries}
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.row}
+          keyExtractor={(it) => it.dateStr}
+          renderItem={({ item }) => {
+            const { dateStr, memory } = item;
             const displayUri = memory.imageUrl || memory.imageUri;
-            const showImage =
-              Boolean(displayUri) &&
-              (!remotePeer || uriLoadsForRemoteViewer(displayUri));
+            const showImage = Boolean(displayUri) && (!remotePeer || uriLoadsForRemoteViewer(displayUri));
             const hasLocalOnlyPhoto =
               remotePeer &&
               Boolean(memory.imageUri) &&
               !memory.imageUrl &&
               !uriLoadsForRemoteViewer(memory.imageUri);
             const noteTrim = memory.note?.trim() ?? "";
-            const textOnlyThumb =
-              !showImage && !hasLocalOnlyPhoto && noteTrim.length > 0;
+            const textOnlyThumb = !showImage && !hasLocalOnlyPhoto && noteTrim.length > 0;
+
             return (
-            <Pressable
-              key={dateStr}
-              onPress={() => setOpen({ dateStr, memory })}
-              style={[
-                styles.card,
-                { width: cardW, backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
-              ]}
-            >
-              {showImage ? (
-                <Image source={{ uri: displayUri! }} style={styles.thumb} resizeMode="cover" />
-              ) : textOnlyThumb ? (
-                <View
-                  style={[
-                    styles.textOnlyThumb,
-                    {
-                      borderColor: theme.colors.border,
-                      borderLeftColor: theme.colors.indigo[500],
-                      backgroundColor: isDark ? "rgba(79, 70, 229, 0.14)" : "rgba(79, 70, 229, 0.08)",
-                    },
-                  ]}
-                >
-                  <Text style={[styles.textOnlyThumbKicker, { color: theme.colors.cyan[400] }]}>FIELD NOTE</Text>
-                  <Text
-                    style={[styles.textOnlyThumbBody, { color: theme.colors.textPrimary }]}
-                    numberOfLines={6}
+              <Pressable
+                onPress={() => setOpen({ dateStr, memory })}
+                style={[
+                  styles.card,
+                  { width: cardW, backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
+                ]}
+              >
+                {showImage ? (
+                  <Image source={{ uri: displayUri! }} style={styles.thumb} resizeMode="cover" />
+                ) : textOnlyThumb ? (
+                  <View
+                    style={[
+                      styles.textOnlyThumb,
+                      {
+                        borderColor: theme.colors.border,
+                        borderLeftColor: theme.colors.indigo[500],
+                        backgroundColor: isDark ? "rgba(79, 70, 229, 0.14)" : "rgba(79, 70, 229, 0.08)",
+                      },
+                    ]}
                   >
-                    {noteTrim}
-                  </Text>
-                </View>
-              ) : (
-                <View style={[styles.thumbPlaceholder, { backgroundColor: theme.colors.surfaceElevated }]}>
-                  {hasLocalOnlyPhoto ? (
-                    <Text style={[styles.remotePhotoHint, { color: theme.colors.textMuted }]} numberOfLines={3}>
-                      Photo on their device (not synced yet)
+                    <Text style={[styles.textOnlyThumbKicker, { color: theme.colors.cyan[400] }]}>FIELD NOTE</Text>
+                    <Text style={[styles.textOnlyThumbBody, { color: theme.colors.textPrimary }]} numberOfLines={6}>
+                      {noteTrim}
                     </Text>
-                  ) : (
-                    <Text style={[styles.quoteMark, { color: theme.colors.indigo[400] }]}>{'\u201C'}</Text>
-                  )}
-                </View>
-              )}
-              <Text style={[styles.cardDate, { color: theme.colors.textSecondary }]} numberOfLines={1}>
-                {dateStr}
-              </Text>
-              {memory.note && !textOnlyThumb ? (
-                <Text style={[styles.cardNote, { color: theme.colors.textMuted }]} numberOfLines={2}>
-                  {memory.note}
+                  </View>
+                ) : (
+                  <View style={[styles.thumbPlaceholder, { backgroundColor: theme.colors.surfaceElevated }]}>
+                    {hasLocalOnlyPhoto ? (
+                      <Text style={[styles.remotePhotoHint, { color: theme.colors.textMuted }]} numberOfLines={3}>
+                        Photo on their device (not synced yet)
+                      </Text>
+                    ) : (
+                      <Text style={[styles.quoteMark, { color: theme.colors.indigo[400] }]}>{'\u201C'}</Text>
+                    )}
+                  </View>
+                )}
+                <Text style={[styles.cardDate, { color: theme.colors.textSecondary }]} numberOfLines={1}>
+                  {dateStr}
                 </Text>
-              ) : null}
-            </Pressable>
+                {memory.note && !textOnlyThumb ? (
+                  <Text style={[styles.cardNote, { color: theme.colors.textMuted }]} numberOfLines={2}>
+                    {memory.note}
+                  </Text>
+                ) : null}
+              </Pressable>
             );
-          })}
-        </ScrollView>
+          }}
+        />
       </View>
 
       <Modal visible={open !== null} transparent animationType="fade" onRequestClose={() => setOpen(null)}>
