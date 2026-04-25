@@ -6,6 +6,7 @@ import { StyleSheet,
 } from "react-native";
 import { useTheme } from "../context/ThemeContext";
 import { AnimatedFire } from "./AnimatedFire";
+import { FireLottie } from "./FireLottie";
 import {
   SplitFlapTimeDisplay,
   type ProgressivePhase,
@@ -81,6 +82,11 @@ export function MiniMissionFlightCountdown({
         ? theme.colors.slate[500]
         : theme.colors.amber[500];
 
+  const fireLottieUri =
+    tone === "danger"
+      ? "https://fonts.gstatic.com/s/e/notoemoji/latest/1f9e8/lottie.json" // firecracker-esque
+      : "https://fonts.gstatic.com/s/e/notoemoji/latest/1f525/lottie.json";
+
   const timeColor =
     tone === "danger" ? theme.colors.red[500] : theme.colors.textPrimary;
 
@@ -120,7 +126,11 @@ export function MiniMissionFlightCountdown({
           },
         ]}
       >
-        <AnimatedFire size={32} color={fireColor} />
+        {tone === "muted" ? (
+          <AnimatedFire size={32} color={fireColor} />
+        ) : (
+          <FireLottie source={{ uri: fireLottieUri }} size={56} />
+        )}
       </View>
       <View style={styles.contentContainer}>
         <Text style={[styles.label, { color: theme.colors.textSecondary }]}>

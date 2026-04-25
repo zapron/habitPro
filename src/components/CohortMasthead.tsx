@@ -3,6 +3,11 @@ import { Animated, Easing, Platform, StyleSheet, View } from "react-native";
 import { Sun } from "lucide-react-native";
 import { useEffect, useMemo, useRef } from "react";
 import type { AppTheme } from "../styles/theme";
+import { FireLottie } from "./FireLottie";
+
+// Easy-off switch for trying Lottie in the UI.
+const USE_FIRE_LOTTIE = true;
+const FIRE_LOTTIE_URI = "https://fonts.gstatic.com/s/e/notoemoji/latest/1f525/lottie.json";
 
 /** Rich streak-board headline. Copy matches `challenge/[id]` cohort logic. */
 export type CohortMastheadModel =
@@ -94,16 +99,22 @@ export function CohortMastheadTrophyNarrative({ theme, model, isDark = false }: 
   return (
     <View style={styles.row}>
       <View style={styles.iconBadge}>
-        <Animated.View
-          style={[
-            styles.sunGlow,
-            { backgroundColor: isDark ? "rgba(251, 191, 36, 0.65)" : "rgba(251, 191, 36, 0.55)" },
-            sunGlowStyle,
-          ]}
-        />
-        <Animated.View style={sunPulseStyle}>
-          <Sun size={22} color={theme.colors.amber[500]} strokeWidth={2.1} />
-        </Animated.View>
+        {USE_FIRE_LOTTIE ? (
+          <FireLottie source={{ uri: FIRE_LOTTIE_URI }} size={44} />
+        ) : (
+          <>
+            <Animated.View
+              style={[
+                styles.sunGlow,
+                { backgroundColor: isDark ? "rgba(251, 191, 36, 0.65)" : "rgba(251, 191, 36, 0.55)" },
+                sunGlowStyle,
+              ]}
+            />
+            <Animated.View style={sunPulseStyle}>
+              <Sun size={22} color={theme.colors.amber[500]} strokeWidth={2.1} />
+            </Animated.View>
+          </>
+        )}
       </View>
 
       <View style={styles.textColumn}>

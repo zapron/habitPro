@@ -3,8 +3,11 @@ import { Fragment, useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { useTheme } from '../context/ThemeContext';
 import { AnimatedFire } from './AnimatedFire';
+import { FireLottie } from "./FireLottie";
 import { SplitFlapTimeDisplay, type ProgressivePhase } from './SplitFlapTimeDisplay';
 import type { HabitMode } from '../types/habit';
+
+const FIRE_LOTTIE_URI = "https://fonts.gstatic.com/s/e/notoemoji/latest/1f525/lottie.json";
 
 interface TimerProps {
     startDate: string;
@@ -143,7 +146,7 @@ export function Timer({ startDate, mode = 'autopilot', endDate }: TimerProps) {
                     isCountdown && { backgroundColor: 'rgba(245, 158, 11, 0.15)', borderColor: 'rgba(245, 158, 11, 0.4)' },
                 ]}
             >
-                <AnimatedFire size={32} color={theme.colors.amber[500]} />
+                <FireLottie source={{ uri: FIRE_LOTTIE_URI }} size={56} />
             </View>
             <View style={styles.contentContainer}>
                 <Text style={[styles.label, { color: theme.colors.textSecondary }]}>
