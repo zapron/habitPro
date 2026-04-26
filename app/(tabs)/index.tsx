@@ -42,6 +42,7 @@ import { Screen } from "../../src/components/Screen";
 import { useTheme } from "../../src/context/ThemeContext";
 import { useReducedMotion } from "../../src/hooks/useReducedMotion";
 import { AnimatedFire } from "../../src/components/AnimatedFire";
+import { FireLottie, FIRE_LOTTIE_URI } from "../../src/components/FireLottie";
 import { getMiniRemainingMs } from "../../src/utils/miniMissionTime";
 import {
   isMainMissionPlayableOnHome,
@@ -558,7 +559,10 @@ export default function Home() {
           <View style={styles.miniBannerLeft}>
             <View style={styles.commandIconMini}>
               {miniCount > 0 ? (
-                <AnimatedFire size={theme.icon.sm} color={theme.colors.amber[500]} />
+                <FireLottie
+                  source={{ uri: FIRE_LOTTIE_URI }}
+                  size={28}
+                />
               ) : (
                 <Bolt size={18} color={theme.colors.yellow[400]} />
               )}
