@@ -296,11 +296,12 @@ export default function HabitDetail() {
     useEffect(() => {
       if (repair !== "1") return;
       if (!eligibleRepair) return;
+      if (repairStatus === "applied") return;
       if (typeof repairDate === "string" && repairDate.length > 0 && repairDate !== eligibleRepair.dateStr) {
         return;
       }
       setRepairSheetOpen(true);
-    }, [repair, repairDate, eligibleRepair]);
+    }, [repair, repairDate, eligibleRepair, repairStatus]);
 
     useEffect(() => {
       if (!eligibleRepair || !habit) {
@@ -1005,7 +1006,15 @@ export default function HabitDetail() {
 
                 <StreakBanner streak={habit.streak} />
 
-                {eligibleRepair ? (
+                {habit.repairedDates && habit.repairedDates.length > 0 ? (
+                    <View style={{ marginTop: 12, marginHorizontal: 20, padding: 10, borderRadius: theme.radius.md, backgroundColor: isDark ? "rgba(34, 211, 238, 0.1)" : "rgba(34, 211, 238, 0.15)", borderWidth: 1, borderColor: theme.colors.cyan[500], alignItems: 'center' }}>
+                        <Text style={{ color: theme.colors.cyan[500], fontSize: 12, fontWeight: '800', letterSpacing: 0.5, textTransform: 'uppercase' }}>
+                            ✓ Streak Saved by Squad
+                        </Text>
+                    </View>
+                ) : null}
+
+                {eligibleRepair && repairStatus !== "applied" ? (
                   <View
                     style={[
                       styles.repairBanner,
