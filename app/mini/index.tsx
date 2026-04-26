@@ -263,19 +263,47 @@ export default function MiniMissionsScreen() {
   }, [hasActiveCountdown]);
 
   const filtered = useMemo(() => {
-    if (view === "running") return miniMissions.filter((m) => m.status === "in_progress");
+    const latestMs = (m: MiniMission) => {
+      const t =
+        m.completedAt ??
+        m.startedAt ??
+        m.scheduledStartAt ??
+        m.createdAt;
+      const ms = new Date(t).getTime();
+      return Number.isFinite(ms) ? ms : 0;
+    };
+
+    const sortByLatestDesc = (arr: MiniMission[]) =>
+      [...arr].sort((a, b) => latestMs(b) - latestMs(a));
+
+    if (view === "running") {
+      return sortByLatestDesc(miniMissions.filter((m) => m.status === "in_progress"));
+    }
     if (tab === "active") {
-      return miniMissions.filter(
-        (m) => m.status === "in_progress" && getMiniRemainingMs(m, now) > 0,
+      return sortByLatestDesc(
+        miniMissions.filter(
+          (m) => m.status === "in_progress" && getMiniRemainingMs(m, now) > 0,
+        ),
       );
     }
     if (tab === "failed") {
-      return miniMissions.filter(
-        (m) => m.status === "in_progress" && getMiniRemainingMs(m, now) === 0,
+      return sortByLatestDesc(
+        miniMissions.filter((m) => {
+          if (m.status === "cancelled") return true;
+          return m.status === "in_progress" && getMiniRemainingMs(m, now) === 0;
+        }),
       );
     }
-    if (tab === "queued") return miniMissions.filter((m) => m.status === "pending" || m.status === "scheduled");
-    if (tab === "completed") return miniMissions.filter((m) => m.status === "completed" || m.status === "cancelled");
+    if (tab === "queued") {
+      return sortByLatestDesc(
+        miniMissions.filter((m) => m.status === "pending" || m.status === "scheduled"),
+      );
+    }
+    if (tab === "completed") {
+      return sortByLatestDesc(
+        miniMissions.filter((m) => m.status === "completed"),
+      );
+    }
     return [];
   }, [miniMissions, tab, view, now]);
 
@@ -283,10 +311,10 @@ export default function MiniMissionsScreen() {
     (m) => m.status === "in_progress" && getMiniRemainingMs(m, now) > 0,
   ).length;
   const failedCount = miniMissions.filter(
-    (m) => m.status === "in_progress" && getMiniRemainingMs(m, now) === 0,
+    (m) => m.status === "cancelled" || (m.status === "in_progress" && getMiniRemainingMs(m, now) === 0),
   ).length;
   const queuedCount = miniMissions.filter((m) => m.status === "pending" || m.status === "scheduled").length;
-  const completedCount = miniMissions.filter((m) => m.status === "completed" || m.status === "cancelled").length;
+  const completedCount = miniMissions.filter((m) => m.status === "completed").length;
 
   return (
     <Screen>
