@@ -166,6 +166,41 @@ function buildMessage(
         data,
       };
     }
+    case "streak_repair_request": {
+      const requesterName =
+        typeof payload.requester_username === "string" && payload.requester_username.length > 0
+          ? `@${payload.requester_username.toLowerCase()}`
+          : "A squadmate";
+      const dateStr = typeof payload.date_str === "string" ? payload.date_str : "a missed day";
+      return {
+        title: "Streak repair request",
+        body: `${requesterName} is asking to repair ${dateStr}. Tap to review.`,
+        data,
+      };
+    }
+    case "streak_repair_result": {
+      const status = typeof payload.status === "string" ? payload.status : "";
+      if (status === "applied") {
+        return {
+          title: "Streak repaired! 🔥",
+          body: "Your squad approved your repair request. Your streak is back on track.",
+          data,
+        };
+      }
+      const reason = typeof payload.reason === "string" ? payload.reason : "";
+      if (reason === "insufficient_xp") {
+        return {
+          title: "Repair declined",
+          body: "Your squad approved but you didn't have enough XP. Earn more and try again.",
+          data,
+        };
+      }
+      return {
+        title: "Repair request declined",
+        body: "Your squad declined the streak repair request.",
+        data,
+      };
+    }
     default: {
       // Fallback: webhook may omit notifications.type; squad check-in payload is distinctive
       if (
@@ -258,7 +293,7 @@ Deno.serve(async (req) => {
   const payload = (record.payload ?? {}) as Record<string, unknown>;
   const { title, body: msgBody, data } = buildMessage(record.type, payload);
 
-  const messages = tokens.map((t) => ({
+  const messages = tokens.map((t: { expo_push_token: string }) => ({
     to: t.expo_push_token,
     sound: "default",
     title,
