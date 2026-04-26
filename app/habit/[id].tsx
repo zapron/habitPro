@@ -104,6 +104,7 @@ function AnimatedDayCell({
     hasStreakRecord,
     hasMomentMedia,
     repaired,
+    repairSource,
     onPress,
 }: {
     day: number;
@@ -120,6 +121,7 @@ function AnimatedDayCell({
     hasMomentMedia: boolean;
     /** This day was restored via Streak Repair. */
     repaired: boolean;
+    repairSource?: "squad" | "solo";
     onPress: () => void;
 }) {
     const { theme } = useTheme();
@@ -197,7 +199,16 @@ function AnimatedDayCell({
                             <View style={[styles.memoryDot, { backgroundColor: theme.colors.amber[500], borderColor: theme.colors.surface }]} />
                         ) : null}
                         {repaired ? (
-                          <View style={[styles.repairDot, { backgroundColor: theme.colors.cyan[400], borderColor: theme.colors.surface }]} />
+                          <View
+                            style={[
+                              styles.repairDot,
+                              {
+                                backgroundColor:
+                                  repairSource === "solo" ? theme.colors.amber[500] : theme.colors.cyan[400],
+                                borderColor: theme.colors.surface,
+                              },
+                            ]}
+                          />
                         ) : null}
                     </Animated.View>
                 ) : locked ? (
@@ -1006,14 +1017,6 @@ export default function HabitDetail() {
 
                 <StreakBanner streak={habit.streak} />
 
-                {habit.repairedDates && habit.repairedDates.length > 0 ? (
-                    <View style={{ marginTop: 12, marginHorizontal: 20, padding: 10, borderRadius: theme.radius.md, backgroundColor: isDark ? "rgba(34, 211, 238, 0.1)" : "rgba(34, 211, 238, 0.15)", borderWidth: 1, borderColor: theme.colors.cyan[500], alignItems: 'center' }}>
-                        <Text style={{ color: theme.colors.cyan[500], fontSize: 12, fontWeight: '800', letterSpacing: 0.5, textTransform: 'uppercase' }}>
-                            ✓ Streak Saved by Squad
-                        </Text>
-                    </View>
-                ) : null}
-
                 {eligibleRepair && repairStatus !== "applied" ? (
                   <View
                     style={[
@@ -1202,6 +1205,7 @@ export default function HabitDetail() {
                                     streakMem.imageUri),
                         );
                         const repaired = Boolean(habit.repairedDates?.includes(dateStr));
+                        const repairSource = streakMem?.repairSource;
 
                         return (
                             <AnimatedDayCell
@@ -1215,6 +1219,7 @@ export default function HabitDetail() {
                                 hasStreakRecord={hasStreakRecord}
                                 hasMomentMedia={hasMomentMedia}
                                 repaired={repaired}
+                                repairSource={repairSource}
                                 onPress={() => handleDayPress(index, day)}
                             />
                         );

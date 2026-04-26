@@ -13,6 +13,10 @@ import { FlashList } from "@shopify/flash-list";
 import { Bookmark, X } from "lucide-react-native";
 import { useTheme } from "../context/ThemeContext";
 import type { StreakMemory } from "../types/habit";
+import {
+  REPAIR_MEMORY_NOTE_SOLO,
+  REPAIR_MEMORY_NOTE_SQUAD,
+} from "../utils/repairStreakMemoryMerge";
 
 type Entry = { dateStr: string; memory: StreakMemory };
 
@@ -53,6 +57,14 @@ export function StreakMemoryGallery({
   );
   const modalNoteTrim = open?.memory?.note?.trim() ?? "";
   const modalTextOnlyHero = Boolean(modalNoteTrim && !modalHasRenderableImage);
+  const modalRepairKicker =
+    open?.memory?.repairSource === "squad"
+      ? "SQUAD REPAIR"
+      : open?.memory?.repairSource === "solo"
+        ? "STREAK REPAIR"
+        : modalNoteTrim === REPAIR_MEMORY_NOTE_SQUAD || modalNoteTrim === REPAIR_MEMORY_NOTE_SOLO
+          ? "STREAK REPAIR"
+          : null;
 
   return (
     <>
@@ -79,6 +91,14 @@ export function StreakMemoryGallery({
               !uriLoadsForRemoteViewer(memory.imageUri);
             const noteTrim = memory.note?.trim() ?? "";
             const textOnlyThumb = !showImage && !hasLocalOnlyPhoto && noteTrim.length > 0;
+            const repairKicker =
+              memory.repairSource === "squad"
+                ? "SQUAD REPAIR"
+                : memory.repairSource === "solo"
+                  ? "STREAK REPAIR"
+                  : noteTrim === REPAIR_MEMORY_NOTE_SQUAD || noteTrim === REPAIR_MEMORY_NOTE_SOLO
+                    ? "STREAK REPAIR"
+                    : null;
 
             return (
               <Pressable
@@ -101,7 +121,9 @@ export function StreakMemoryGallery({
                       },
                     ]}
                   >
-                    <Text style={[styles.textOnlyThumbKicker, { color: theme.colors.cyan[400] }]}>FIELD NOTE</Text>
+                    <Text style={[styles.textOnlyThumbKicker, { color: theme.colors.cyan[400] }]}>
+                      {repairKicker ?? "FIELD NOTE"}
+                    </Text>
                     <Text style={[styles.textOnlyThumbBody, { color: theme.colors.textPrimary }]} numberOfLines={6}>
                       {noteTrim}
                     </Text>
@@ -120,6 +142,41 @@ export function StreakMemoryGallery({
                 <Text style={[styles.cardDate, { color: theme.colors.textSecondary }]} numberOfLines={1}>
                   {dateStr}
                 </Text>
+                {memory.repairSource ? (
+                  <View
+                    style={[
+                      styles.repairChip,
+                      {
+                        backgroundColor:
+                          memory.repairSource === "squad"
+                            ? isDark
+                              ? "rgba(34, 211, 238, 0.14)"
+                              : "rgba(34, 211, 238, 0.18)"
+                            : isDark
+                              ? "rgba(245, 158, 11, 0.14)"
+                              : "rgba(245, 158, 11, 0.16)",
+                        borderColor:
+                          memory.repairSource === "squad"
+                            ? theme.colors.cyan[500]
+                            : theme.colors.amber[500],
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.repairChipText,
+                        {
+                          color:
+                            memory.repairSource === "squad"
+                              ? theme.colors.cyan[500]
+                              : theme.colors.amber[500],
+                        },
+                      ]}
+                    >
+                      {memory.repairSource === "squad" ? "Squad repair" : "Solo repair"}
+                    </Text>
+                  </View>
+                ) : null}
                 {memory.note && !textOnlyThumb ? (
                   <Text style={[styles.cardNote, { color: theme.colors.textMuted }]} numberOfLines={2}>
                     {memory.note}
@@ -147,7 +204,9 @@ export function StreakMemoryGallery({
                   },
                 ]}
               >
-                <Text style={[styles.viewerTextOnlyKicker, { color: theme.colors.cyan[400] }]}>FIELD NOTE</Text>
+                <Text style={[styles.viewerTextOnlyKicker, { color: theme.colors.cyan[400] }]}>
+                  {modalRepairKicker ?? "FIELD NOTE"}
+                </Text>
                 <Text style={[styles.viewerTextOnlyBody, { color: theme.colors.textPrimary }]}>{modalNoteTrim}</Text>
               </View>
             ) : null}
@@ -225,6 +284,16 @@ const styles = StyleSheet.create({
   quoteMark: { fontSize: 42, fontWeight: "700", opacity: 0.5 },
   remotePhotoHint: { fontSize: 11, lineHeight: 15, textAlign: "center", paddingHorizontal: 8 },
   cardDate: { fontSize: 11, fontWeight: "700", marginTop: 8, paddingHorizontal: 10 },
+  repairChip: {
+    alignSelf: "flex-start",
+    marginTop: 6,
+    marginHorizontal: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  repairChipText: { fontSize: 9, fontWeight: "900", letterSpacing: 0.6 },
   cardNote: { fontSize: 12, lineHeight: 16, paddingHorizontal: 10, marginTop: 4 },
   viewerBackdrop: { flex: 1, justifyContent: "center", padding: 20 },
   viewerInner: { borderRadius: 20, overflow: "hidden" },
