@@ -21,6 +21,14 @@ type Supabase = ReturnType<typeof createClient>;
 const MS_PER_MISSION_DAY = 24 * 60 * 60 * 1000;
 const MS_REMINDER_WINDOW = 60 * 60 * 1000;
 const MS_DEBUG_INTERVAL = 10 * 60 * 1000;
+const DEFAULT_CRON_INTERVAL_MINUTES = 10;
+
+function cronIntervalMinutes(): number {
+  const raw = Deno.env.get("CRON_INTERVAL_MINUTES");
+  const n = raw ? Number(raw) : NaN;
+  if (Number.isFinite(n) && n >= 1 && n <= 60) return Math.floor(n);
+  return DEFAULT_CRON_INTERVAL_MINUTES;
+}
 
 type HabitRow = {
   id: string;
@@ -65,6 +73,23 @@ function minutesLeft(nowMs: number, slotEndMs: number): number {
   return Math.max(0, Math.ceil((slotEndMs - nowMs) / 60_000));
 }
 
+function isTimeInNextWindow(
+  now: { hh: number; mm: number },
+  target: { hh: number; mm: number },
+  windowMinutes: number,
+): boolean {
+  const w = Math.max(1, Math.min(60, Math.floor(windowMinutes)));
+  const nowMin = now.hh * 60 + now.mm;
+  const targetMin = target.hh * 60 + target.mm;
+  const end = nowMin + w;
+  if (end < 1440) {
+    return targetMin >= nowMin && targetMin < end;
+  }
+  // Wraps across midnight.
+  const endWrapped = end % 1440;
+  return targetMin >= nowMin || targetMin < endWrapped;
+}
+
 /** Same slot index as `getActiveMissionDaySlot` in `src/utils/missionDaySlots.ts` */
 function getActiveMissionDaySlot(startIso: string, nowMs: number, totalDays: number): number | null {
   const td = Math.max(1, totalDays);
@@ -94,17 +119,6 @@ async function insertStreakReminderIfEligible(
 ): Promise<boolean> {
   // No reminders if this mission day is already marked in `completed_dates` (same YYYY-MM-DD key as the grid).
   if (dates.includes(reminderDateKey)) return false;
-
-  const { data: existing } = await supabase
-    .from("streak_reminder_log")
-    .select("user_id")
-    .eq("user_id", h.user_id)
-    .eq("habit_id", h.id)
-    .eq("reminder_date", logKey)
-    .eq("reminder_kind", reminderKind)
-    .maybeSingle();
-
-  if (existing) return false;
 
   const { error: logErr } = await supabase.from("streak_reminder_log").insert({
     user_id: h.user_id,
@@ -258,7 +272,10 @@ Deno.serve(async (req) => {
 
     if (hasCustom) {
       const nowLocal = getLocalHHMM(nowMs, tz);
-      if (nowLocal && nowLocal.hh === reminderTime.hh && nowLocal.mm === reminderTime.mm) {
+      // Cron can run every N minutes (e.g. 10/15). Use a window so custom reminders aren't missed.
+      // Example: cron every 10m, user picks 10:07 → the 10:00 run should still deliver.
+      const windowMin = cronIntervalMinutes();
+      if (nowLocal && isTimeInNextWindow(nowLocal, reminderTime, windowMin)) {
         const ok = await insertStreakReminderIfEligible(
           supabase,
           h,
