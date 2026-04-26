@@ -1,6 +1,10 @@
 import React, { useMemo } from "react";
 import LottieView, { type AnimationObject } from "lottie-react-native";
 
+/** Canonical Noto Emoji 🔥 Lottie — shared by FireProgressBar, home banner, etc. */
+export const FIRE_LOTTIE_URI =
+  "https://fonts.gstatic.com/s/e/notoemoji/latest/1f525/lottie.json";
+
 type Props = {
   /** Lottie JSON (local require or remote json object). */
   source: AnimationObject | { uri: string };
