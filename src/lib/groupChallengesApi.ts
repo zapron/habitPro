@@ -1,4 +1,6 @@
 import type { Habit } from "../types/habit";
+import { canonicalGroupMissionHabitStartIso } from "../utils/challengeInviteeStart";
+import { calculateMissionEndDateFromStart } from "../utils/groupMissionClock";
 import type {
   ChallengeGroupRow,
   ChallengeInviteRow,
@@ -61,12 +63,15 @@ export async function createGroupChallengeFromHabit(
   const creatorTz = getTz();
   const startDate = localDateStr(new Date(habit.startDate));
 
-  const habitTemplate = {
+  const habitTemplate: Record<string, unknown> = {
     title: habit.title,
     mode: habit.mode,
     totalDays: habit.totalDays,
     description: habit.description ?? null,
   };
+  if (habit.mode === "manual" && typeof habit.endDate === "string" && habit.endDate.trim().length > 0) {
+    habitTemplate.endDate = habit.endDate.trim();
+  }
 
   const { data: group, error: gErr } = await supabase
     .from("challenge_groups")
@@ -83,11 +88,22 @@ export async function createGroupChallengeFromHabit(
 
   if (gErr || !group) return { group: null as unknown as ChallengeGroupRow, error: new Error(gErr?.message ?? "create group failed") };
 
+  const canonicalStartIso = canonicalGroupMissionHabitStartIso(startDate);
+  const td = Math.max(1, habit.totalDays ?? 21);
+  const nextEndDate =
+    habit.mode === "manual"
+      ? typeof habit.endDate === "string" && habit.endDate.trim().length > 0
+        ? habit.endDate.trim()
+        : calculateMissionEndDateFromStart(canonicalStartIso, td)
+      : null;
+
   const { error: hErr } = await supabase
     .from("habits")
     .update({
       challenge_group_id: group.id,
       challenge_creator_timezone: creatorTz,
+      start_date: canonicalStartIso,
+      end_date: nextEndDate,
     })
     .eq("user_id", user.id)
     .eq("id", habit.id);

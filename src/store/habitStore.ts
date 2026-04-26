@@ -20,6 +20,8 @@ import { getDerivedState, isMissionGridFull } from "../utils/habitDerived";
 import { isHabitCalendarDateToggleable } from "../utils/missionDaySlots";
 import { isHabitMissionWindowClosed } from "../utils/habitMissionWindow";
 import { mergeRepairIntoStreakMemory } from "../utils/repairStreakMemoryMerge";
+import { alignGroupHabitToChallengeStart } from "../utils/groupMissionClock";
+import type { ChallengeGroupRow } from "../types/groupChallenge";
 
 /** Calculate endDate by adding `totalDays` to a start ISO string. */
 const calculateEndDate = (startIso: string, totalDays: number): string => {
@@ -86,6 +88,24 @@ export const useHabitStore = create<HabitStore>()(
         }));
         requestRemoteSync({ immediate: true });
       },
+      synchronizeHabitWithChallengeGroup: (habitId, group: ChallengeGroupRow) => {
+        set((state) => ({
+          habits: state.habits.map((h) => {
+            if (h.id !== habitId) return h;
+            const withMeta: Habit = {
+              ...h,
+              challengeGroupId: group.id,
+              challengeCreatorTimezone: group.creator_timezone,
+            };
+            return alignGroupHabitToChallengeStart(
+              withMeta,
+              group.start_date,
+              group.habit_template,
+            );
+          }),
+        }));
+        requestRemoteSync({ immediate: true });
+      },
       resetStore: () =>
         set({ habits: [], miniMissions: [], xp: 0, username: null, cohortPeerHabits: [] }),
       addHabit: ({
@@ -97,6 +117,7 @@ export const useHabitStore = create<HabitStore>()(
         challengeGroupId,
         challengeCreatorTimezone,
         startDate: startDateOverride,
+        endDate: endDateOverride,
       }) => {
         const now = startDateOverride ?? new Date().toISOString();
         const totalDays =
@@ -113,7 +134,9 @@ export const useHabitStore = create<HabitStore>()(
           visibility: vis,
           startDate: now,
           endDate:
-            mode === "manual" ? calculateEndDate(now, totalDays) : undefined,
+            mode === "manual"
+              ? endDateOverride ?? calculateEndDate(now, totalDays)
+              : undefined,
           completedDates: [],
           streak: 0,
           totalDays,

@@ -101,6 +101,8 @@ export type AddHabitInput = {
   challengeCreatorTimezone?: string | null;
   /** Override start date (ISO) e.g. to align with challenge start. */
   startDate?: string;
+  /** Manual mode: fixed mission end (from group template). */
+  endDate?: string;
 };
 
 export type HabitStore = {
@@ -167,5 +169,10 @@ export type HabitStore = {
   setHabitChallengeMeta: (
     id: string,
     meta: { challengeGroupId: string | null; challengeCreatorTimezone: string | null },
+  ) => void;
+  /** Align habit clock + grid keys to `challenge_groups.start_date` after create/join; pushes to Supabase. */
+  synchronizeHabitWithChallengeGroup: (
+    habitId: string,
+    group: import("./groupChallenge").ChallengeGroupRow,
   ) => void;
 };

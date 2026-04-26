@@ -11,6 +11,7 @@ import {
   canonicalizeMissionDateKeys,
   canonicalizeStreakMemoryKeys,
 } from "../utils/missionCalendarKeys";
+import { alignGroupHabitToChallengeStart } from "../utils/groupMissionClock";
 import { getSupabase } from "./supabase";
 
 type RemoteSnapshot = Pick<HabitStore, "habits" | "miniMissions" | "xp" | "username"> & {
@@ -221,6 +222,45 @@ function miniFromRow(row: {
   };
 }
 
+type ChallengeGroupAlignmentMeta = {
+  start_date: string;
+  habit_template: Record<string, unknown>;
+};
+
+async function fetchChallengeGroupAlignmentMeta(
+  supabase: NonNullable<ReturnType<typeof getSupabase>>,
+  groupIds: string[],
+): Promise<Map<string, ChallengeGroupAlignmentMeta>> {
+  const map = new Map<string, ChallengeGroupAlignmentMeta>();
+  const uniq = [...new Set(groupIds)].filter(Boolean);
+  if (uniq.length === 0) return map;
+  const { data, error } = await supabase
+    .from("challenge_groups")
+    .select("id, start_date, habit_template")
+    .in("id", uniq);
+  if (error) throw error;
+  for (const row of data ?? []) {
+    const rec = row as { id: string; start_date: string; habit_template?: unknown };
+    map.set(rec.id, {
+      start_date: String(rec.start_date),
+      habit_template: (rec.habit_template ?? {}) as Record<string, unknown>,
+    });
+  }
+  return map;
+}
+
+function alignHabitsToChallengeGroups(
+  list: Habit[],
+  meta: Map<string, ChallengeGroupAlignmentMeta>,
+): Habit[] {
+  return list.map((h) => {
+    if (!h.challengeGroupId) return h;
+    const g = meta.get(h.challengeGroupId);
+    if (!g) return h;
+    return alignGroupHabitToChallengeStart(h, g.start_date, g.habit_template);
+  });
+}
+
 function miniToRow(sessionUserId: string, m: MiniMission) {
   return {
     id: m.id,
@@ -300,7 +340,15 @@ export async function pullFromSupabase(userId: string): Promise<RemoteSnapshot> 
     cohortPeerHabits = (peerRows ?? []).map((r) => habitFromRow(r));
   }
 
-  return { habits, miniMissions, xp, username, cohortPeerHabits };
+  const alignGroupIds = [
+    ...habits.map((h) => h.challengeGroupId).filter((id): id is string => Boolean(id)),
+    ...cohortPeerHabits.map((h) => h.challengeGroupId).filter((id): id is string => Boolean(id)),
+  ];
+  const groupMeta = await fetchChallengeGroupAlignmentMeta(supabase, alignGroupIds);
+  const alignedHabits = alignHabitsToChallengeGroups(habits, groupMeta);
+  const alignedPeers = alignHabitsToChallengeGroups(cohortPeerHabits, groupMeta);
+
+  return { habits: alignedHabits, miniMissions, xp, username, cohortPeerHabits: alignedPeers };
 }
 
 export async function pushFullState(
