@@ -14,6 +14,8 @@ import {
   Vibration,
   Animated,
   Image,
+  Modal,
+  Pressable,
   ScrollView,
   ActivityIndicator,
 } from "react-native";
@@ -166,6 +168,18 @@ export default function MiniMissionDetail() {
   /** Avoid not-found flash after delete; mission is removed before navigation finishes. */
   const [pendingExitAfterRemove, setPendingExitAfterRemove] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [completionImageAspect, setCompletionImageAspect] = useState<number | null>(null);
+  const [completionImageOpen, setCompletionImageOpen] = useState(false);
+
+  const completionImageUri = useMemo(() => {
+    return mission?.completionMemory?.imageUrl ?? mission?.completionMemory?.imageUri ?? null;
+  }, [mission?.completionMemory?.imageUrl, mission?.completionMemory?.imageUri]);
+
+  useEffect(() => {
+    // Reset when switching missions / images so we don't reuse an old aspect ratio.
+    setCompletionImageAspect(null);
+    setCompletionImageOpen(false);
+  }, [completionImageUri]);
 
   useEffect(() => {
     const unsubFail = subscribeSyncFailure(() => {
@@ -631,34 +645,32 @@ export default function MiniMissionDetail() {
           </Text>
         )}
 
-        <MiniMissionFlightCountdown
-          label={flightBoard.label}
-          display={flightProgressive.display}
-          phase={flightProgressive.phase}
-          tone={flightBoard.tone}
-        />
-        <Text
-          style={[styles.timerHint, { color: theme.colors.textSecondary }]}
-        >
-          {mission.status === "completed"
-            ? "Completed"
-            : isTimerUp
-              ? "Timer depleted. No reserve fuel after zero. Cancel this mission or go back."
-              : mission.status === "in_progress"
-                ? completeSheetOpen
-                  ? "Timer paused while you save your moment."
-                  : `Stay with it until done. Reserve fuel is capped at ${MAX_RESERVE_FUEL_MINUTES} min total.`
-                : "Ready when you are."}
-        </Text>
-
-        {mission.status === "in_progress" && !isTimerUp && (
-          <MiniMissionFireProgressBar
-            progress={missionFuelProgress}
-            isDark={isDark}
+        {mission.status === "in_progress" && !isTimerUp ? (
+          <MiniMissionFlightCountdown
+            label={flightBoard.label}
+            display={flightProgressive.display}
+            phase={flightProgressive.phase}
+            tone={flightBoard.tone}
           />
-        )}
+        ) : null}
+        <View style={styles.topPillsRow}>
+          {mission.status === "completed" ? (
+            <View
+              style={[
+                styles.completedPill,
+                {
+                  backgroundColor: isDark ? "rgba(34, 197, 94, 0.14)" : "rgba(22, 163, 74, 0.12)",
+                  borderColor: isDark ? "rgba(34, 197, 94, 0.28)" : "rgba(22, 163, 74, 0.22)",
+                },
+              ]}
+            >
+              <Check size={16} color={theme.colors.green[500]} />
+              <Text style={[styles.completedPillText, { color: theme.colors.green[500] }]}>
+                Completed
+              </Text>
+            </View>
+          ) : null}
 
-        <View style={styles.metaRow}>
           <View
             style={[
               styles.metaPill,
@@ -669,9 +681,7 @@ export default function MiniMissionDetail() {
             ]}
           >
             <Clock3 size={14} color={theme.colors.cyan[400]} />
-            <Text
-              style={[styles.metaText, { color: theme.colors.textPrimary }]}
-            >
+            <Text style={[styles.metaText, { color: theme.colors.textPrimary }]}>
               {mission.status === "in_progress" && !isTimerUp
                 ? `${totalMinutes} min total · reserve ${reserveUsed}/${MAX_RESERVE_FUEL_MINUTES} min`
                 : `${totalMinutes} minutes ${
@@ -682,6 +692,27 @@ export default function MiniMissionDetail() {
             </Text>
           </View>
         </View>
+
+        {mission.status !== "completed" ? (
+          <Text style={[styles.timerHint, { color: theme.colors.textSecondary }]}>
+            {isTimerUp
+              ? "Timer depleted. No reserve fuel after zero. Cancel this mission or go back."
+              : mission.status === "in_progress"
+                ? completeSheetOpen
+                  ? "Timer paused while you save your moment."
+                  : `Stay with it until done. Reserve fuel is capped at ${MAX_RESERVE_FUEL_MINUTES} min total.`
+                : "Ready when you are."}
+          </Text>
+        ) : null}
+
+        {mission.status === "in_progress" && !isTimerUp && (
+          <View style={styles.progressBarWrap}>
+            <MiniMissionFireProgressBar
+              progress={missionFuelProgress}
+              isDark={isDark}
+            />
+          </View>
+        )}
 
         {mission.status === "completed" ? (
           <MiniVisibilityRow
@@ -784,84 +815,19 @@ export default function MiniMissionDetail() {
 
           {mission.status === "completed" && (
             <>
+              {/* Achievement stats */}
               <View style={styles.completedRow}>
                 <Check size={18} color={theme.colors.green[500]} />
-                <Text
-                  style={[
-                    styles.completedText,
-                    { color: theme.colors.green[500] },
-                  ]}
-                >
+                <Text style={[styles.completedText, { color: theme.colors.green[500] }]}>
                   Mini mission completed
                 </Text>
               </View>
-              {(mission.completionMemory?.imageUrl ||
-                mission.completionMemory?.imageUri ||
-                mission.completionMemory?.note) && (
-                <View style={styles.completionMomentSection}>
-                  <View style={styles.completionMomentHead}>
-                    <Sparkles size={16} color={theme.colors.amber[500]} />
-                    <Text
-                      style={[
-                        styles.completionMomentTitle,
-                        { color: theme.colors.textPrimary },
-                      ]}
-                    >
-                      Your moment
-                    </Text>
-                  </View>
-                  {mission.completionMemory?.imageUrl || mission.completionMemory?.imageUri ? (
-                    <View
-                      style={[
-                        styles.completionImageWrap,
-                        { borderColor: theme.colors.border },
-                      ]}
-                    >
-                      <Image
-                        source={{
-                          uri:
-                            mission.completionMemory.imageUrl ??
-                            mission.completionMemory.imageUri!,
-                        }}
-                        style={styles.completionImage}
-                        resizeMode="cover"
-                      />
-                    </View>
-                  ) : null}
-                  {mission.completionMemory?.note ? (
-                    <View
-                      style={[
-                        styles.completionNoteBox,
-                        {
-                          borderColor: theme.colors.border,
-                          backgroundColor: theme.colors.surface,
-                        },
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.completionNoteText,
-                          { color: theme.colors.textPrimary },
-                        ]}
-                      >
-                        {mission.completionMemory.note}
-                      </Text>
-                    </View>
-                  ) : null}
-                </View>
-              )}
+
               {earlyFinishMs > 0 && (
-                <View
-                  style={[styles.rewardCard, { borderRadius: theme.radius.md }]}
-                >
+                <View style={[styles.rewardCard, { borderRadius: theme.radius.md }]}>
                   <View style={styles.rewardHeader}>
                     <Flame size={18} color="#f59e0b" fill="#fde68a" />
-                    <Text
-                      style={[
-                        styles.rewardTitle,
-                        { color: theme.colors.yellow[400] },
-                      ]}
-                    >
+                    <Text style={[styles.rewardTitle, { color: theme.colors.yellow[400] }]}>
                       Early Finish Reward
                     </Text>
                   </View>
@@ -876,6 +842,67 @@ export default function MiniMissionDetail() {
                       You beat your estimate by {formatDuration(earlyFinishMs)}.
                     </Text>
                   </View>
+                </View>
+              )}
+
+              {/* Moment captured */}
+              {(mission.completionMemory?.imageUrl ||
+                mission.completionMemory?.imageUri ||
+                mission.completionMemory?.note) && (
+                <View style={styles.completionMomentSection}>
+                  <View style={styles.completionMomentHead}>
+                    <Sparkles size={16} color={theme.colors.amber[500]} />
+                    <Text style={[styles.completionMomentTitle, { color: theme.colors.textPrimary }]}>
+                      Your moment
+                    </Text>
+                  </View>
+                  {completionImageUri ? (
+                    <Pressable
+                      onPress={() => setCompletionImageOpen(true)}
+                      accessibilityRole="button"
+                      accessibilityLabel="View moment photo"
+                      style={({ pressed }) => [{ opacity: pressed ? 0.92 : 1 }]}
+                    >
+                      <View
+                        style={[
+                          styles.completionImageWrap,
+                          {
+                            borderColor: theme.colors.border,
+                            backgroundColor: theme.colors.surfaceElevated,
+                          },
+                          completionImageAspect != null ? { aspectRatio: completionImageAspect } : null,
+                        ]}
+                      >
+                        <Image
+                          source={{ uri: completionImageUri }}
+                          style={styles.completionImage}
+                          resizeMode="cover"
+                          onLoad={(e) => {
+                            const w = e.nativeEvent.source?.width;
+                            const h = e.nativeEvent.source?.height;
+                            if (typeof w === "number" && typeof h === "number" && w > 0 && h > 0) {
+                              setCompletionImageAspect(w / h);
+                            }
+                          }}
+                        />
+                      </View>
+                    </Pressable>
+                  ) : null}
+                  {mission.completionMemory?.note ? (
+                    <View
+                      style={[
+                        styles.completionNoteBox,
+                        {
+                          borderColor: theme.colors.border,
+                          backgroundColor: theme.colors.surface,
+                        },
+                      ]}
+                    >
+                      <Text style={[styles.completionNoteText, { color: theme.colors.textPrimary }]}>
+                        {mission.completionMemory.note}
+                      </Text>
+                    </View>
+                  ) : null}
                 </View>
               )}
             </>
@@ -964,6 +991,29 @@ export default function MiniMissionDetail() {
           </TouchableOpacity>
         )}
       </ScrollView>
+
+      {completionImageUri ? (
+        <Modal
+          visible={completionImageOpen}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setCompletionImageOpen(false)}
+        >
+          <Pressable style={styles.viewerBackdrop} onPress={() => setCompletionImageOpen(false)}>
+            <Pressable style={styles.viewerInner} onPress={(e) => e.stopPropagation()}>
+              <Image source={{ uri: completionImageUri }} style={styles.viewerImg} resizeMode="contain" />
+              <Pressable
+                onPress={() => setCompletionImageOpen(false)}
+                style={[styles.viewerClose, { backgroundColor: theme.colors.surface }]}
+                accessibilityRole="button"
+                accessibilityLabel="Close photo"
+              >
+                <CircleX size={22} color={theme.colors.textPrimary} />
+              </Pressable>
+            </Pressable>
+          </Pressable>
+        </Modal>
+      ) : null}
     </Screen>
   );
 }
@@ -989,9 +1039,26 @@ const styles = StyleSheet.create({
   title: { fontWeight: "800", marginBottom: 8 },
   objective: { marginBottom: 20, lineHeight: 23 },
   timerHint: { textAlign: "center", marginTop: 4, marginBottom: 4, paddingHorizontal: 4 },
-  metaRow: { marginTop: 16, marginBottom: 12 },
+  topPillsRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    marginTop: 12,
+    marginBottom: 10,
+  },
+  completedPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    borderRadius: 9999,
+    borderWidth: 1,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
+  completedPillText: { fontWeight: "800", fontSize: 13, letterSpacing: 0.2 },
   metaPill: {
-    alignSelf: "flex-start",
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
@@ -1002,6 +1069,7 @@ const styles = StyleSheet.create({
   },
   metaText: { fontWeight: "700" },
   actions: { gap: 10 },
+  progressBarWrap: { marginBottom: 24 },
   failedRow: {
     flexDirection: "row",
     alignItems: "flex-start",
@@ -1043,12 +1111,38 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1,
     overflow: "hidden",
-    maxHeight: 220,
-    width: "100%",
+    width: "92%",
+    alignSelf: "center",
+    maxWidth: 380,
+    maxHeight: 260,
   },
-  completionImage: { width: "100%", aspectRatio: 4 / 5, maxHeight: 220 },
+  completionImage: { ...StyleSheet.absoluteFillObject },
   completionNoteBox: { borderRadius: 14, borderWidth: 1, padding: 14 },
   completionNoteText: { fontSize: 15, lineHeight: 22 },
+  viewerBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.85)",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 18,
+  },
+  viewerInner: {
+    width: "100%",
+    maxWidth: 520,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  viewerImg: { width: "100%", height: 420 },
+  viewerClose: {
+    position: "absolute",
+    top: 12,
+    right: 12,
+    width: 42,
+    height: 42,
+    borderRadius: 9999,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   rewardCard: {
     borderWidth: 1,
     borderColor: "rgba(251, 191, 36, 0.45)",
