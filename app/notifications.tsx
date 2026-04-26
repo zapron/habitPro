@@ -69,6 +69,10 @@ function notificationTitle(type: string, payload?: Record<string, unknown>): str
       if (fs === "habit_streak") return "Love for your streak";
       return "Cheer on your win";
     }
+    case "streak_repair_request":
+      return "Streak repair request";
+    case "streak_repair_result":
+      return payload?.status === "applied" ? "Streak repaired! 🔥" : "Repair request declined";
     default:
       return type;
   }
@@ -128,6 +132,16 @@ function notificationSubtitle(n: NotificationRow): string | null {
         return `You have almost an hour left. Complete your streak for “${title}” · Tap to open`;
       }
       return `About 1 hour left to mark today for “${title}” · Tap to open`;
+    }
+    case "streak_repair_request": {
+      const dateStr = typeof p.date_str === "string" ? p.date_str : "a missed day";
+      return `A squadmate needs approval to repair ${dateStr} · Tap to review`;
+    }
+    case "streak_repair_result": {
+      const status = typeof p.status === "string" ? p.status : "";
+      if (status === "applied") return "Your squad approved — streak is back! · Tap to view mission";
+      if (p.reason === "insufficient_xp") return "Approved but insufficient XP · Earn more and retry";
+      return "Your repair was declined by the squad · Tap to view";
     }
     default:
       return null;
@@ -191,8 +205,20 @@ export default function NotificationsScreen() {
       return;
     }
 
-    if ((n.type === "challenge_nudge" || n.type === "challenge_squad_checkin") && challengeId) {
+    if ((n.type === "challenge_nudge" || n.type === "challenge_squad_checkin" || n.type === "streak_repair_request") && challengeId) {
       router.push(`/challenge/${challengeId}`);
+      return;
+    }
+
+    if (n.type === "streak_repair_result") {
+      const hid = typeof p.habit_id === "string" ? p.habit_id : "";
+      if (hid) {
+        router.push(`/habit/${hid}`);
+      } else if (challengeId) {
+        router.push(`/challenge/${challengeId}`);
+      } else {
+        router.push("/(tabs)/compete");
+      }
       return;
     }
 

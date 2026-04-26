@@ -135,7 +135,7 @@ function RootLayoutNav() {
         return;
       }
 
-      if (type === "streak_repair_request" || type === "streak_repair_result") {
+      if (type === "streak_repair_request") {
         const challengeId = typeof data.challenge_id === "string" ? data.challenge_id : "";
         const repairId = typeof data.repair_id === "string" ? data.repair_id : "";
         if (challengeId) {
@@ -143,6 +143,19 @@ function RootLayoutNav() {
             pathname: `/challenge/${challengeId}`,
             params: repairId ? { repairId } : {},
           });
+        } else {
+          router.push("/(tabs)/compete");
+        }
+        return;
+      }
+
+      if (type === "streak_repair_result") {
+        const habitId = typeof data.habit_id === "string" ? data.habit_id : "";
+        const challengeId = typeof data.challenge_id === "string" ? data.challenge_id : "";
+        if (habitId) {
+          router.push(`/habit/${habitId}`);
+        } else if (challengeId) {
+          router.push(`/challenge/${challengeId}`);
         } else {
           router.push("/(tabs)/compete");
         }
