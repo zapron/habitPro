@@ -48,7 +48,6 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
   const { isPremium, loading: premiumLoading } = usePremium();
   const { openUpsell } = usePlusUpsell();
   const plusOk = isPremium && !premiumLoading;
-  const setHabitChallengeMeta = useHabitStore((s) => s.setHabitChallengeMeta);
   const myUsername = useHabitStore((s) => s.username);
 
   const [creating, setCreating] = useState(false);
@@ -134,15 +133,12 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
         showToast(error?.message ?? "Unknown error", "error");
         return;
       }
-      setHabitChallengeMeta(habit.id, {
-        challengeGroupId: group.id,
-        challengeCreatorTimezone: group.creator_timezone,
-      });
+      useHabitStore.getState().synchronizeHabitWithChallengeGroup(habit.id, group);
       showToast("Group mission ready. Invite your squad.", "success");
     } finally {
       setCreating(false);
     }
-  }, [configured, signedIn, habit, setHabitChallengeMeta, showToast, plusOk, openUpsell]);
+  }, [configured, signedIn, habit, showToast, plusOk, openUpsell]);
 
   const handleInvite = useCallback(
     async (userId: string) => {

@@ -370,6 +370,8 @@ export default function CompeteScreen() {
       const mode = tpl.mode === "manual" ? "manual" : "autopilot";
       const totalDays = typeof tpl.totalDays === "number" ? tpl.totalDays : 21;
       const description = typeof tpl.description === "string" ? tpl.description : undefined;
+      const tplEnd =
+        typeof tpl.endDate === "string" && tpl.endDate.trim().length > 0 ? tpl.endDate.trim() : undefined;
       const startIso = inviteeHabitStartIsoFromGroupStartDate(group.start_date);
 
       let newHabitId = "";
@@ -394,6 +396,7 @@ export default function CompeteScreen() {
           challengeGroupId: group.id,
           challengeCreatorTimezone: group.creator_timezone,
           startDate: startIso,
+          endDate: mode === "manual" ? tplEnd : undefined,
         });
 
         unsub = subscribeSyncSuccess(() => {
@@ -405,6 +408,7 @@ export default function CompeteScreen() {
                 finish(error);
                 return;
               }
+              useHabitStore.getState().synchronizeHabitWithChallengeGroup(newHabitId, group);
               void refreshCohortPeerHabits();
               void loadInvites();
               showToast("Joined the group mission", "success");
