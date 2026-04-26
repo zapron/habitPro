@@ -19,6 +19,7 @@ import { tryRecordChallengeMilestones } from "../lib/challengeCohort";
 import { getDerivedState, isMissionGridFull } from "../utils/habitDerived";
 import { isHabitCalendarDateToggleable } from "../utils/missionDaySlots";
 import { isHabitMissionWindowClosed } from "../utils/habitMissionWindow";
+import { mergeRepairIntoStreakMemory } from "../utils/repairStreakMemoryMerge";
 
 /** Calculate endDate by adding `totalDays` to a start ISO string. */
 const calculateEndDate = (startIso: string, totalDays: number): string => {
@@ -191,11 +192,30 @@ export const useHabitStore = create<HabitStore>()(
         }
         return changed;
       },
-      applyStreakRepairLocally: ({ habitId, dateStr, xpCost }) => {
+      applyStreakRepairLocally: ({
+        habitId,
+        dateStr,
+        xpCost,
+        repairSource = "squad",
+        deductXp,
+      }) => {
+        const shouldDeduct =
+          deductXp !== false &&
+          typeof xpCost === "number" &&
+          Number.isFinite(xpCost) &&
+          xpCost > 0;
+
         let didApply = false;
         set((state) => {
           const updatedHabits = state.habits.map((habit) => {
             if (habit.id !== habitId) return habit;
+
+            const prevMem = habit.streakMemories?.[dateStr];
+            const mergedMem = mergeRepairIntoStreakMemory(prevMem, repairSource);
+            const nextStreakMemories: Record<string, StreakMemory> = {
+              ...(habit.streakMemories ?? {}),
+              [dateStr]: mergedMem,
+            };
 
             // If already completed, still record repairedDates for UI dot (if missing).
             const alreadyCompleted = habit.completedDates.includes(dateStr);
@@ -220,6 +240,7 @@ export const useHabitStore = create<HabitStore>()(
               ...habit,
               completedDates: normalized,
               repairedDates: nextRepaired,
+              streakMemories: nextStreakMemories,
               streak,
               isCompleted,
               status,
@@ -227,9 +248,7 @@ export const useHabitStore = create<HabitStore>()(
           });
 
           const nextXp =
-            typeof xpCost === "number" && Number.isFinite(xpCost) && xpCost > 0
-              ? Math.max(0, state.xp - xpCost)
-              : state.xp;
+            shouldDeduct && didApply ? Math.max(0, state.xp - (xpCost as number)) : state.xp;
 
           return didApply ? { habits: updatedHabits, xp: nextXp } : { habits: updatedHabits };
         });

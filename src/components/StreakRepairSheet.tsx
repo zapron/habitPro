@@ -235,6 +235,12 @@ export function StreakRepairSheet({ visible, onClose, habit, eligible, onRequest
                 // Solo repair: server already charged XP; keep local UX snappy and consistent.
                 addXp(-cost);
                 toggleCompletion(habit.id, eligible.dateStr);
+                useHabitStore.getState().applyStreakRepairLocally({
+                  habitId: habit.id,
+                  dateStr: eligible.dateStr,
+                  repairSource: "solo",
+                  deductXp: false,
+                });
                 showToast("Streak repaired.", "success");
                 onRequested?.({ status: "applied" });
               } else {

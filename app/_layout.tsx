@@ -218,7 +218,18 @@ function RootLayoutNav() {
           const dateStr = typeof next.date_str === "string" ? next.date_str : "";
           const xpCost = typeof next.xp_cost === "number" ? next.xp_cost : undefined;
           if (!habitId || !dateStr) return;
-          useHabitStore.getState().applyStreakRepairLocally({ habitId, dateStr, xpCost });
+          // Solo repairs update the client in StreakRepairSheet (avoids double XP); squad applies here.
+          const cid = next.challenge_id;
+          const isSquad =
+            cid != null && typeof cid === "string" && (cid as string).length > 0;
+          if (!isSquad) return;
+          useHabitStore.getState().applyStreakRepairLocally({
+            habitId,
+            dateStr,
+            xpCost,
+            repairSource: "squad",
+            deductXp: true,
+          });
         },
       )
       .subscribe();

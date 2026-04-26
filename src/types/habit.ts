@@ -18,6 +18,8 @@ export interface StreakMemory {
   communityPosted?: boolean;
   /** User removed this moment from Community; cannot publish this memory again. */
   communityFeedRevoked?: boolean;
+  /** Day was completed via streak repair (squad approval vs solo XP). */
+  repairSource?: "squad" | "solo";
   /**
    * User chose “Just mark done” with no photo/note — check-in is final (same lock as a saved moment).
    * Prevents re-opening the capture sheet or toggling the day off with a normal tap.
@@ -116,7 +118,14 @@ export type HabitStore = {
    * Apply a server-approved streak repair to local state immediately (without granting completion XP).
    * Used for squad approvals so UI updates without logout/login.
    */
-  applyStreakRepairLocally: (input: { habitId: string; dateStr: string; xpCost?: number }) => void;
+  applyStreakRepairLocally: (input: {
+    habitId: string;
+    dateStr: string;
+    xpCost?: number;
+    repairSource?: "squad" | "solo";
+    /** When false, XP was already adjusted client-side (e.g. solo repair). Default true if xpCost > 0. */
+    deductXp?: boolean;
+  }) => void;
   setStreakMemory: (id: string, date: string, memory: StreakMemory | null) => void;
   /** Merge into an existing streak memory (e.g. Community flags); no-op if no memory for date. */
   patchStreakMemory: (id: string, date: string, patch: Partial<StreakMemory>) => void;
