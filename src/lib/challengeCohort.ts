@@ -74,6 +74,7 @@ export async function sendChallengeNudge(
   challengeId: string,
   toUserId: string,
   kind: PresetChallengeNudgeKind,
+  opts?: { activityId?: string },
 ): Promise<{ error: Error | null }> {
   const supabase = getSupabase();
   if (!supabase) return { error: new Error("Supabase not configured") };
@@ -90,6 +91,7 @@ export async function sendChallengeNudge(
       from_user_id: user.id,
       to_user_id: toUserId,
       kind,
+      ...(kind === "congrats" && opts?.activityId ? { activity_id: opts.activityId } : {}),
     })
     .select("id")
     .single();
@@ -97,7 +99,9 @@ export async function sendChallengeNudge(
   if (error) {
     const msg =
       error.code === "23505" || String(error.message).includes("duplicate")
-        ? "You already sent that today."
+        ? kind === "congrats"
+          ? "You already congratulated that milestone."
+          : "You already sent that today."
         : error.message;
     return { error: new Error(msg) };
   }
@@ -175,7 +179,7 @@ export async function listRecentNudges(
   if (!supabase) return [];
   const { data, error } = await supabase
     .from("challenge_nudges")
-    .select("id, challenge_id, from_user_id, to_user_id, kind, message, created_at")
+    .select("id, challenge_id, from_user_id, to_user_id, kind, activity_id, message, created_at")
     .eq("challenge_id", challengeId)
     .order("created_at", { ascending: false })
     .limit(limit);

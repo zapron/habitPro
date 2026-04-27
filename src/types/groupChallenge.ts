@@ -54,6 +54,8 @@ export type ChallengeNudgeRow = {
   from_user_id: string;
   to_user_id: string;
   kind: ChallengeNudgeKind;
+  /** For milestone congrats: which challenge_activity row was congratulated. */
+  activity_id?: string | null;
   /** Set when `kind === "custom_note"`. */
   message: string | null;
   created_at: string;

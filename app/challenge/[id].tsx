@@ -221,7 +221,7 @@ export default function ChallengeDetailScreen() {
   );
 
   const onCongrats = useCallback(
-    async (actorUserId: string) => {
+    async (actorUserId: string, activityId: string) => {
       if (!challengeId || !myUserId || actorUserId === myUserId) return;
       if (socialLocked) {
         openUpsell("squad_nudge");
@@ -238,7 +238,7 @@ export default function ChallengeDetailScreen() {
       const key = `${actorUserId}-congrats`;
       setNudgeBusyKey(key);
       try {
-        const { error } = await sendChallengeNudge(challengeId, actorUserId, "congrats");
+        const { error } = await sendChallengeNudge(challengeId, actorUserId, "congrats", { activityId });
         if (error) {
           showToast(error.message, "error");
           return;
@@ -250,6 +250,17 @@ export default function ChallengeDetailScreen() {
     },
     [challengeId, myUserId, load, habits, showToast, socialLocked, openUpsell],
   );
+
+  const congratsSentActivityIds = useMemo(() => {
+    if (!myUserId) return new Set<string>();
+    const s = new Set<string>();
+    for (const n of feedNudges) {
+      if (n.from_user_id === myUserId && n.kind === "congrats" && typeof n.activity_id === "string" && n.activity_id) {
+        s.add(n.activity_id);
+      }
+    }
+    return s;
+  }, [feedNudges, myUserId]);
 
   const myHabit = useMemo(
     () => habits.find((h) => h.challengeGroupId === challengeId),
@@ -874,7 +885,8 @@ export default function ChallengeDetailScreen() {
               profileLabels={profileLabels}
               myUserId={myUserId}
               nudgeBusyKey={nudgeBusyKey}
-              onCongrats={(actorUserId) => void onCongrats(actorUserId)}
+              congratsSentActivityIds={congratsSentActivityIds}
+              onCongrats={(actorUserId, activityId) => void onCongrats(actorUserId, activityId)}
               allowNudgeActions={squadNudgeActionsEnabled}
               onScrollToSection={() => {
                 setTimeout(() => {

@@ -153,7 +153,9 @@ type Props = {
   profileLabels: Record<string, ProfileLabel>;
   myUserId: string | null;
   nudgeBusyKey: string | null;
-  onCongrats: (actorUserId: string) => void;
+  onCongrats: (actorUserId: string, activityId: string) => void;
+  /** Activity ids the viewer already congratulated. */
+  congratsSentActivityIds?: Set<string>;
   /** When false (e.g. viewer mission window ended), hide Congrats on milestones */
   allowNudgeActions?: boolean;
   /** Expand accordion and scroll parent ScrollView to this section (e.g. challenge screen). */
@@ -169,6 +171,7 @@ export function SquadActivitySection({
   myUserId,
   nudgeBusyKey,
   onCongrats,
+  congratsSentActivityIds,
   allowNudgeActions = true,
   onScrollToSection,
 }: Props) {
@@ -176,10 +179,32 @@ export function SquadActivitySection({
 
   if (feedActivity.length === 0 && feedNudges.length === 0) return null;
 
+  // Dedupe: when a check-in triggers both mission_day and streak_milestone at the same value
+  // (common on 7/14/21), prefer showing the streak milestone to avoid repetitive rows.
+  const effectiveActivity = (() => {
+    const keepByKey = new Map<string, ChallengeActivityRow>();
+    for (const row of feedActivity) {
+      const k = `${row.actor_user_id}:${row.value}`;
+      const prev = keepByKey.get(k);
+      if (!prev) {
+        keepByKey.set(k, row);
+        continue;
+      }
+      const prevIsMission = prev.kind === "mission_day";
+      const nextIsStreak = row.kind === "streak_milestone";
+      if (prevIsMission && nextIsStreak) {
+        keepByKey.set(k, row);
+      }
+    }
+    // Preserve original order as much as possible.
+    const keptIds = new Set([...keepByKey.values()].map((r) => r.id));
+    return feedActivity.filter((r) => keptIds.has(r.id));
+  })();
+
   const cardBg = theme.colors.surfaceElevated;
   const border = theme.colors.border;
 
-  const mCount = feedActivity.length;
+  const mCount = effectiveActivity.length;
   const nCount = feedNudges.length;
   const summaryParts: string[] = [];
   if (mCount > 0) summaryParts.push(`${mCount} milestone${mCount === 1 ? "" : "s"}`);
@@ -269,13 +294,13 @@ export function SquadActivitySection({
 
         {expanded ? (
           <View style={styles.accordionBody}>
-        {feedActivity.length > 0 ? (
+        {effectiveActivity.length > 0 ? (
           <>
             <View style={styles.subsectionHeader}>
               <Flag size={theme.icon.sm} color={theme.colors.green[500]} strokeWidth={2.2} />
               <Text style={[styles.subsectionTitle, { color: theme.colors.textMuted }]}>Milestones</Text>
             </View>
-            {feedActivity.map((row, index) => {
+            {effectiveActivity.map((row, index) => {
               const { title, subtitle } = milestoneCopy(row, profileLabels);
               const isMission = row.kind === "mission_day";
               const accent = isMission ? theme.colors.green[500] : theme.colors.cyan[400];
@@ -292,7 +317,7 @@ export function SquadActivitySection({
                   key={row.id}
                   style={[
                     styles.milestoneRow,
-                    index > 0 && feedActivity.length > 1 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: border },
+                    index > 0 && effectiveActivity.length > 1 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: border },
                   ]}
                 >
                   <View style={[styles.accentBar, { backgroundColor: accent }]} />
@@ -318,18 +343,29 @@ export function SquadActivitySection({
                   </View>
                   {allowNudgeActions && myUserId && row.actor_user_id !== myUserId ? (
                     <Pressable
-                      disabled={nudgeBusyKey !== null}
-                      onPress={() => onCongrats(row.actor_user_id)}
+                      disabled={nudgeBusyKey !== null || congratsSentActivityIds?.has(row.id) === true}
+                      onPress={() => onCongrats(row.actor_user_id, row.id)}
                       style={({ pressed }) => [
                         styles.congratsPill,
                         {
                           backgroundColor: isDark ? "rgba(129, 140, 248, 0.22)" : "rgba(99, 102, 241, 0.12)",
-                          opacity: pressed ? 0.85 : nudgeBusyKey !== null ? 0.5 : 1,
+                          opacity:
+                            pressed
+                              ? 0.85
+                              : congratsSentActivityIds?.has(row.id) === true
+                                ? 0.55
+                                : nudgeBusyKey !== null
+                                  ? 0.5
+                                  : 1,
                         },
                       ]}
                     >
                       {nudgeBusyKey === `${row.actor_user_id}-congrats` ? (
                         <ActivityIndicator size="small" color={theme.colors.indigo[400]} />
+                      ) : congratsSentActivityIds?.has(row.id) === true ? (
+                        <Text style={[styles.congratsPillText, { color: theme.colors.indigo[400] }]}>
+                          Congratulated
+                        </Text>
                       ) : (
                         <>
                           <Sparkles size={theme.icon.xs} color={theme.colors.indigo[400]} strokeWidth={2.2} />
@@ -347,7 +383,7 @@ export function SquadActivitySection({
         {feedNudges.length > 0 ? (
           <View
             style={
-              feedActivity.length > 0
+              effectiveActivity.length > 0
                 ? [styles.nudgeBlock, { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: border }]
                 : { paddingTop: 4 }
             }
