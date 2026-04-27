@@ -118,7 +118,7 @@ function BillingUpsellModal({
   const { theme } = useTheme();
   const { configured, ready, isExpoGo, purchaseCommunity, restore } = useBilling();
   const { showToast } = useToast();
-  const [busy, setBusy] = useState<null | "monthly" | "annual" | "restore">(
+  const [busy, setBusy] = useState<null | "monthly" | "yearly" | "restore">(
     null,
   );
 
@@ -126,7 +126,7 @@ function BillingUpsellModal({
 
   const canBuy = configured && ready && busy === null;
 
-  const run = async (kind: "monthly" | "annual" | "restore") => {
+  const run = async (kind: "monthly" | "yearly" | "restore") => {
     setBusy(kind);
     try {
       if (kind === "restore") {
@@ -220,7 +220,7 @@ function BillingUpsellModal({
         </View>
 
         <Text style={[styles.disclaimer, { color: theme.colors.textMuted }]}>
-          7-day free trial, then ₹99/month or ₹999/year. Cancel anytime in Google Play.
+          7-day free trial, then ₹149/month or ₹999/year. Cancel anytime in Google Play.
         </Text>
 
         {!configured ? (
@@ -243,9 +243,9 @@ function BillingUpsellModal({
         />
         <Button
           title={
-            busy === "annual" ? "Starting trial…" : "7 day trial then Yearly"
+            busy === "yearly" ? "Starting trial…" : "7 day trial then Yearly"
           }
-          onPress={() => void run("annual")}
+          onPress={() => void run("yearly")}
           disabled={!canBuy}
           style={{ marginTop: 10, opacity: canBuy ? 1 : 0.65 }}
         />

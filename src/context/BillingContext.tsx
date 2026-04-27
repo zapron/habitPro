@@ -5,7 +5,7 @@ import Purchases, { type CustomerInfo, LOG_LEVEL } from "react-native-purchases"
 import { getRevenueCatConfig, logRevenueCatEnvHint } from "../lib/env";
 import { useAuth } from "./AuthContext";
 
-type PlanId = "monthly" | "annual";
+type PlanId = "monthly" | "yearly";
 
 type BillingContextValue = {
   /** True when an API key is present for this platform. */
@@ -32,14 +32,14 @@ const BillingContext = createContext<BillingContextValue | null>(null);
 /**
  * RevenueCat wiring note:
  * - Create an entitlement in RevenueCat: `habitpro_community`
- * - Map it to Play subscription products (monthly + annual)
+ * - Map it to Play subscription products (monthly + yearly)
  * - Create an Offering in RevenueCat and set it as the current offering
- * - Ensure monthly/annual packages exist (RevenueCat default IDs: `$rc_monthly`, `$rc_annual`)
+ * - Ensure monthly/yearly packages exist (RevenueCat default IDs: `$rc_monthly`, `$rc_annual`)
  */
 const ENTITLEMENT_ID = "habitpro_community";
 const PACKAGE_BY_PLAN: Record<PlanId, string> = {
   monthly: "$rc_monthly",
-  annual: "$rc_annual",
+  yearly: "$rc_annual",
 };
 
 function shouldSkipNativePurchases(): boolean {

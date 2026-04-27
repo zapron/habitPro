@@ -416,7 +416,14 @@ export const HabitCard = memo(({ item }: HabitCardProps) => {
                         >
                           {item.streak}d
                         </Text>
-                        <Text style={[styles.streakMicroLabel, { color: theme.colors.textMuted }]}>STREAK</Text>
+                        <Text
+                          numberOfLines={1}
+                          adjustsFontSizeToFit
+                          minimumFontScale={0.8}
+                          style={[styles.streakMicroLabel, { color: theme.colors.textMuted }]}
+                        >
+                          STREAK
+                        </Text>
                       </View>
                     )}
                   </View>
