@@ -39,20 +39,22 @@ function ToastBanner({
 }) {
   const { theme, isDark } = useTheme();
 
-  const slab = isDark ? "rgba(38, 38, 40, 0.96)" : "rgba(33, 33, 33, 0.92)";
+  const slab = isDark ? theme.colors.surfaceElevated : "rgba(33, 33, 33, 0.92)";
 
-  const textColor =
+  const accent =
     payload.variant === "success"
-      ? isDark
-        ? theme.colors.green[400]
-        : "#bbf7d0"
+      ? theme.colors.green[500]
       : payload.variant === "error"
-        ? isDark
-          ? theme.colors.red[400]
-          : "#fecaca"
-        : isDark
-          ? theme.colors.textPrimary
-          : "#fafafa";
+        ? theme.colors.red[500]
+        : theme.colors.indigo[400];
+
+  const textColor = isDark
+    ? theme.colors.textPrimary
+    : payload.variant === "success"
+      ? "#bbf7d0"
+      : payload.variant === "error"
+        ? "#fecaca"
+        : "#fafafa";
 
   return (
     <View
@@ -71,7 +73,9 @@ function ToastBanner({
           {
             color: textColor,
             backgroundColor: slab,
-            borderColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.12)",
+            borderColor: isDark ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.12)",
+            borderLeftColor: accent,
+            borderLeftWidth: 3,
             ...(Platform.OS === "android"
               ? { elevation: 6 }
               : {
@@ -156,7 +160,7 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: 999,
     fontSize: 12,
-    fontWeight: "500",
+    fontWeight: "700",
     textAlign: "center",
     overflow: "hidden",
   },

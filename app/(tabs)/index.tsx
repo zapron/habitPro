@@ -137,7 +137,7 @@ export default function Home() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { theme, isDark } = useTheme();
-  const { session } = useAuth();
+  const { session, syncReady } = useAuth();
   const reduceMotion = useReducedMotion();
   const habits = useHabitStore((state) => state.habits);
   const miniMissions = useHabitStore((state) => state.miniMissions);
@@ -156,6 +156,10 @@ export default function Home() {
   const [miniNow, setMiniNow] = useState(() => Date.now());
   const [missionNow, setMissionNow] = useState(() => Date.now());
   const showAccount = isSupabaseConfigured();
+  // On new devices, zustand can hydrate an "empty" store before Supabase hydrate completes.
+  // Show skeleton until first Supabase hydrate finishes to avoid a confusing empty flash.
+  const waitingForFirstSync = Boolean(showAccount && session?.user && !syncReady);
+
   const bellScale = useRef(new Animated.Value(1)).current;
   const bellBuzz = useRef(new Animated.Value(0)).current;
   const emptyIconScale = useRef(new Animated.Value(1)).current;
@@ -686,7 +690,7 @@ export default function Home() {
         ) : null}
 
         <View style={styles.listWrap}>
-          {!storeHydrated ? (
+          {!storeHydrated || waitingForFirstSync ? (
             <ListSkeleton theme={theme} />
           ) : filteredHabits.length === 0 ? (
             <ScrollView
