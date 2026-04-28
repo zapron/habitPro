@@ -37,6 +37,7 @@ type Props = {
   onOpenLightbox: (uri: string) => void;
   /** Returns whether the cheer API succeeded (optimistic list update in parent). */
   onCheer: (win: CommunityWinFeedItem) => Promise<boolean>;
+  onOpenCheerers?: (win: CommunityWinFeedItem) => void;
   /** When false, cheering others' wins is off (browse-only). Default true. */
   canCheer?: boolean;
   /** Optional; parent may already handle via `onCheer`. Used for accessibility copy. */
@@ -112,6 +113,7 @@ export function CommunityWinFeedPost({
   onToggleExpanded,
   onOpenLightbox,
   onCheer,
+  onOpenCheerers,
   canCheer = true,
   onCheerBlocked,
 }: Props) {
@@ -307,43 +309,43 @@ export function CommunityWinFeedPost({
       >
         <View style={styles.cheerTimeRow}>
           <View style={styles.cheerTimeLeft}>
-            <Pressable
-              onPress={() => void runCheer()}
-              disabled={isOwn}
-              style={({ pressed }) => [
-                styles.cheerTap,
-                { opacity: isOwn ? 0.55 : pressed ? 0.7 : 1 },
-              ]}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              accessibilityRole="button"
-              accessibilityLabel={
-                isOwn
-                  ? `${win.cheerCount} cheers on your win`
-                  : win.viewerHasCheered
-                    ? "Unlike, remove cheer"
-                    : "Cheer"
-              }
-              accessibilityState={{ disabled: isOwn, selected: win.viewerHasCheered }}
-            >
-              <Animated.View style={{ transform: [{ scale: cheerScale }] }}>
-                <View style={styles.cheerIconRow}>
+            <View style={styles.cheerIconRow}>
+              <Pressable
+                onPress={() => void runCheer()}
+                disabled={isOwn}
+                style={({ pressed }) => [styles.cheerTap, { opacity: isOwn ? 0.55 : pressed ? 0.7 : 1 }]}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                accessibilityRole="button"
+                accessibilityLabel={isOwn ? "Cheer" : win.viewerHasCheered ? "Unlike, remove cheer" : "Cheer"}
+                accessibilityState={{ disabled: isOwn, selected: win.viewerHasCheered }}
+              >
+                <Animated.View style={{ transform: [{ scale: cheerScale }] }}>
                   <ThumbsUp
                     size={17}
                     color={win.viewerHasCheered ? theme.colors.indigo[400] : theme.colors.textMuted}
                     fill={win.viewerHasCheered ? theme.colors.indigo[400] : "transparent"}
                     strokeWidth={2}
                   />
-                  <Text
-                    style={[
-                      styles.cheerCount,
-                      { color: win.viewerHasCheered ? theme.colors.indigo[400] : theme.colors.textMuted },
-                    ]}
-                  >
-                    {win.cheerCount}
-                  </Text>
-                </View>
-              </Animated.View>
-            </Pressable>
+                </Animated.View>
+              </Pressable>
+
+              <Pressable
+                onPress={() => onOpenCheerers?.(win)}
+                disabled={win.cheerCount < 1}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                accessibilityRole="button"
+                accessibilityLabel={win.cheerCount < 1 ? "No cheers yet" : `View ${win.cheerCount} cheerers`}
+              >
+                <Text
+                  style={[
+                    styles.cheerCount,
+                    { color: win.viewerHasCheered ? theme.colors.indigo[400] : theme.colors.textMuted },
+                  ]}
+                >
+                  {win.cheerCount}
+                </Text>
+              </Pressable>
+            </View>
             <Text style={[styles.handleInline, { color: theme.colors.cyan[400] }]} numberOfLines={1}>
               {handle}
             </Text>

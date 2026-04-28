@@ -30,6 +30,14 @@ export type CommunityWinFeedItem = CommunityWinRow & {
   viewerHasCheered: boolean;
 };
 
+export type CommunityWinCheerer = {
+  userId: string;
+  username: string | null;
+  /** Total XP from profile; used for level display (100 XP per level). */
+  xp: number;
+  cheeredAt: string | null;
+};
+
 export async function postCommunityWin(input: {
   miniMissionId: string;
   title: string;
@@ -243,4 +251,56 @@ export async function toggleCheer(winId: string, currentlyCheered: boolean): Pro
     if (error) return { ok: false, error: error.message };
   }
   return { ok: true };
+}
+
+export async function listCommunityWinCheerers(
+  winId: string,
+  limit = 50,
+): Promise<{ ok: true; items: CommunityWinCheerer[] } | { ok: false; error: string }> {
+  const supabase = getSupabase();
+  if (!supabase) return { ok: false, error: "Cloud sync not configured." };
+
+  const { data: cheers, error } = await supabase
+    .from("community_win_cheers")
+    .select("user_id, created_at")
+    .eq("win_id", winId)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (error) return { ok: false, error: error.message };
+
+  const userIds = [...new Set((cheers ?? []).map((c) => c.user_id as string).filter(Boolean))];
+  if (userIds.length === 0) return { ok: true, items: [] };
+
+  const { data: profiles, error: profilesErr } = await supabase
+    .from("profiles")
+    .select("id, username, xp")
+    .in("id", userIds);
+
+  if (profilesErr) return { ok: false, error: profilesErr.message };
+
+  const profileById = new Map<string, { username: string | null; xp: number }>();
+  for (const p of profiles ?? []) {
+    const id = p.id as string;
+    const u = p.username;
+    const xpRaw = p.xp;
+    const xp = typeof xpRaw === "number" && Number.isFinite(xpRaw) ? xpRaw : 0;
+    profileById.set(id, {
+      username: typeof u === "string" && u.trim().length > 0 ? u.trim().toLowerCase() : null,
+      xp,
+    });
+  }
+
+  const items: CommunityWinCheerer[] = (cheers ?? []).map((c) => {
+    const uid = c.user_id as string;
+    const prof = profileById.get(uid);
+    return {
+      userId: uid,
+      username: prof?.username ?? null,
+      xp: prof?.xp ?? 0,
+      cheeredAt: (c.created_at as string | null) ?? null,
+    };
+  });
+
+  return { ok: true, items };
 }

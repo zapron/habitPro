@@ -1,9 +1,11 @@
 import { Text } from "./AppText";
 import {
   useCallback,
+  useEffect,
   useMemo,
   useRef,
-  useState } from "react";
+  useState,
+} from "react";
 import {
   View,
   FlatList,
@@ -17,6 +19,7 @@ import * as Haptics from "expo-haptics";
 import { Sparkles } from "lucide-react-native";
 import { useTheme } from "../context/ThemeContext";
 import { useAuth } from "../context/AuthContext";
+import { useUsernameGate } from "../context/UsernameGateContext";
 import { useReducedMotion } from "../hooks/useReducedMotion";
 import { isSupabaseConfigured } from "../lib/env";
 import {
@@ -28,6 +31,9 @@ import {
 import { CommunityWinFeedPost } from "./CommunityWinFeedPost";
 import { CommunityWinFeedSkeletonRow } from "./CommunityWinFeedSkeleton";
 import { CommunityWinImageLightbox } from "./CommunityWinImageLightbox";
+import { CommunityWinCheerersModal } from "./CommunityWinCheerersModal";
+
+type CheerersSheetState = { winId: string; totalLikes: number };
 
 type Props = {
   contentPaddingBottom?: number;
@@ -51,6 +57,7 @@ export function CommunityWinsFeed({
 }: Props) {
   const { theme, isDark } = useTheme();
   const { session } = useAuth();
+  const { requireUsername } = useUsernameGate();
   const reduceMotion = useReducedMotion();
   const [items, setItems] = useState<CommunityWinFeedItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -59,10 +66,20 @@ export function CommunityWinsFeed({
   const [hasMore, setHasMore] = useState(true);
   const [expandedById, setExpandedById] = useState<Record<string, boolean>>({});
   const [lightboxUri, setLightboxUri] = useState<string | null>(null);
+  const [cheerersSheet, setCheerersSheet] = useState<CheerersSheetState | null>(null);
   const itemsRef = useRef<CommunityWinFeedItem[]>([]);
   const loadMoreInFlight = useRef(false);
 
   itemsRef.current = items;
+
+  useEffect(() => {
+    setCheerersSheet((s) => {
+      if (!s) return s;
+      const fresh = items.find((w) => w.id === s.winId);
+      if (!fresh) return s;
+      return { winId: fresh.id, totalLikes: fresh.cheerCount };
+    });
+  }, [items]);
 
   const feedBleed = variant === "feed" ? theme.spacing.sm : 0;
 
@@ -138,6 +155,8 @@ export function CommunityWinsFeed({
         onCheerBlocked?.();
         return false;
       }
+      const ok = await requireUsername("community_like");
+      if (!ok) return false;
       const res = await toggleCheer(win.id, win.viewerHasCheered);
       if (!res.ok) return false;
       setItems((prev) =>
@@ -153,7 +172,7 @@ export function CommunityWinsFeed({
       );
       return true;
     },
-    [session?.user, canCheer, onCheerBlocked],
+    [session?.user, canCheer, onCheerBlocked, requireUsername],
   );
 
   const renderItem: ListRenderItem<ListRow> = useCallback(
@@ -174,6 +193,7 @@ export function CommunityWinsFeed({
           onToggleExpanded={() => toggleExpanded(win.id)}
           onOpenLightbox={(uri) => setLightboxUri(uri)}
           onCheer={handleCheer}
+          onOpenCheerers={(w) => setCheerersSheet({ winId: w.id, totalLikes: w.cheerCount })}
           canCheer={canCheer}
           onCheerBlocked={onCheerBlocked}
         />
@@ -244,6 +264,12 @@ export function CommunityWinsFeed({
         visible={lightboxUri !== null}
         imageUri={lightboxUri}
         onClose={() => setLightboxUri(null)}
+      />
+      <CommunityWinCheerersModal
+        visible={cheerersSheet !== null}
+        winId={cheerersSheet?.winId ?? null}
+        totalLikes={cheerersSheet?.totalLikes}
+        onClose={() => setCheerersSheet(null)}
       />
     </>
   );
