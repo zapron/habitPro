@@ -28,6 +28,7 @@ import { useHabitStore } from "../store/habitStore";
 import { useAuth } from "../context/AuthContext";
 import { usePremium } from "../context/PremiumContext";
 import { usePlusUpsell } from "../context/PlusUpsellContext";
+import { useUsernameGate } from "../context/UsernameGateContext";
 import type { ProfileSearchRow } from "../types/groupChallenge";
 import { Button } from "./Button";
 import { ConfirmDialog } from "./ConfirmDialog";
@@ -47,6 +48,7 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
   const { session } = useAuth();
   const { isPremium, loading: premiumLoading } = usePremium();
   const { openUpsell } = usePlusUpsell();
+  const { requireUsername } = useUsernameGate();
   const plusOk = isPremium && !premiumLoading;
   const myUsername = useHabitStore((s) => s.username);
 
@@ -126,6 +128,11 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
       openUpsell("group_mission");
       return;
     }
+    const ok = await requireUsername("group_mission_create");
+    if (!ok) {
+      showToast("Choose a username to start a group mission.", "info");
+      return;
+    }
     setCreating(true);
     try {
       const { group, error } = await createGroupChallengeFromHabit(habit);
@@ -138,7 +145,7 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
     } finally {
       setCreating(false);
     }
-  }, [configured, signedIn, habit, showToast, plusOk, openUpsell]);
+  }, [configured, signedIn, habit, showToast, plusOk, openUpsell, requireUsername]);
 
   const handleInvite = useCallback(
     async (userId: string) => {
@@ -153,7 +160,10 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
       }
       const uname = myUsername?.trim() ?? "";
       if (!uname) {
-        setNoUsernameDialogOpen(true);
+        const ok = await requireUsername("group_invite");
+        if (!ok) {
+          showToast("Choose a username to invite your squad.", "info");
+        }
         return;
       }
       if (inviteeStatusById[userId]) return;
@@ -171,7 +181,7 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
         setInvitingId(null);
       }
     },
-    [habit.challengeGroupId, inviteeStatusById, myUsername, showToast],
+    [habit.challengeGroupId, inviteeStatusById, myUsername, showToast, plusOk, openUpsell, requireUsername],
   );
 
   const openChallenge = () => {

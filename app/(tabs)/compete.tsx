@@ -39,6 +39,7 @@ import type { ChallengeGroupRow, ChallengeInviteRow } from "../../src/types/grou
 import { useAuth } from "../../src/context/AuthContext";
 import { usePremium } from "../../src/context/PremiumContext";
 import { usePlusUpsell } from "../../src/context/PlusUpsellContext";
+import { useNotificationGate } from "../../src/context/NotificationGateContext";
 import { isSupabaseConfigured } from "../../src/lib/env";
 import {
   acceptInviteAndJoin,
@@ -260,6 +261,7 @@ export default function CompeteScreen() {
   const { session } = useAuth();
   const { isPremium, loading: premiumLoading } = usePremium();
   const { openUpsell } = usePlusUpsell();
+  const { suggestNotifications } = useNotificationGate();
   /** True while we do not know premium yet — do not run accept API or open paywall. */
   const inviteAcceptPremiumUnknown = premiumLoading;
   /** Non-premium users see Accept → paywall instead of API (avoids RLS errors on accept). */
@@ -412,6 +414,9 @@ export default function CompeteScreen() {
               void refreshCohortPeerHabits();
               void loadInvites();
               showToast("Joined the group mission", "success");
+              setTimeout(() => {
+                void suggestNotifications("invite_accept");
+              }, 450);
               finish();
             })
             .catch(finish);

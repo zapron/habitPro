@@ -60,6 +60,8 @@ import {
 import { useAuth } from '../../src/context/AuthContext';
 import { usePremium } from '../../src/context/PremiumContext';
 import { usePlusUpsell } from '../../src/context/PlusUpsellContext';
+import { useUsernameGate } from "../../src/context/UsernameGateContext";
+import { useNotificationGate } from "../../src/context/NotificationGateContext";
 import { isSupabaseConfigured } from '../../src/lib/env';
 import {
   leaveChallengeGroup,
@@ -234,6 +236,8 @@ export default function HabitDetail() {
     const { session } = useAuth();
     const { isPremium, loading: premiumLoading } = usePremium();
     const { openUpsell } = usePlusUpsell();
+    const { requireUsername } = useUsernameGate();
+    const { requireNotifications } = useNotificationGate();
     const socialLocked = !isPremium || premiumLoading;
     const habitId = Array.isArray(id) ? id[0] : id;
 
@@ -464,6 +468,11 @@ export default function HabitDetail() {
                 }
                 const winId = habitStreakCommunityWinId(habit.id, ctx.dateStr);
                 const streakAfter = useHabitStore.getState().getHabit(habit.id)?.streak ?? 1;
+                const ok = await requireUsername("community_post");
+                if (!ok) {
+                    Alert.alert('Username required', 'Choose a username to publish to Community.', [{ text: 'OK' }]);
+                    return;
+                }
                 const res = await postCommunityWin({
                     miniMissionId: winId,
                     title: habit.title,
@@ -542,6 +551,11 @@ export default function HabitDetail() {
                             showToast(msg, 'error');
                             return;
                         }
+                    }
+                    const ok = await requireUsername("community_post");
+                    if (!ok) {
+                        Alert.alert('Username required', 'Choose a username to publish to Community.', [{ text: 'OK' }]);
+                        return;
                     }
                     const res = await postCommunityWin({
                         miniMissionId: habitStreakCommunityWinId(habit.id, dateStr),
@@ -1348,23 +1362,27 @@ export default function HabitDetail() {
                         label: "Lock time",
                         onPress: () => {
                             const next = reminderLockPending;
-                            setReminderLockPending(null);
                             if (!habit || !next) return;
-                            useHabitStore.setState((state) => ({
-                                habits: state.habits.map((h) =>
-                                    h.id === habit.id
-                                        ? {
-                                              ...h,
-                                              reminderEnabled: true,
-                                              reminderTimeLocal: next,
-                                              reminderLocked: true,
-                                          }
-                                        : h,
-                                ),
-                            }));
-                            requestRemoteSync({ immediate: false });
-                            void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                            showToast("Reminder locked", "success");
+                            void (async () => {
+                                const ok = await requireNotifications("daily_reminder");
+                                if (!ok) return;
+                                setReminderLockPending(null);
+                                useHabitStore.setState((state) => ({
+                                    habits: state.habits.map((h) =>
+                                        h.id === habit.id
+                                            ? {
+                                                  ...h,
+                                                  reminderEnabled: true,
+                                                  reminderTimeLocal: next,
+                                                  reminderLocked: true,
+                                              }
+                                            : h,
+                                    ),
+                                }));
+                                requestRemoteSync({ immediate: false });
+                                void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                                showToast("Reminder locked", "success");
+                            })();
                         },
                     },
                 ]}

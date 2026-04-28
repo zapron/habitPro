@@ -29,6 +29,7 @@ import type { HabitMode, MissionVisibility } from "../src/types/habit";
 import { PlusBadge } from "../src/components/PlusBadge";
 import { usePremium } from "../src/context/PremiumContext";
 import { usePlusUpsell } from "../src/context/PlusUpsellContext";
+import { useNotificationGate } from "../src/context/NotificationGateContext";
 
 export default function CreateHabit() {
   const router = useRouter();
@@ -36,6 +37,7 @@ export default function CreateHabit() {
   const addHabit = useHabitStore((state) => state.addHabit);
   const { isPremium, loading: premiumLoading } = usePremium();
   const { openUpsell } = usePlusUpsell();
+  const { suggestNotifications } = useNotificationGate();
   const plusOk = isPremium && !premiumLoading;
 
   const [title, setTitle] = useState("");
@@ -76,6 +78,10 @@ export default function CreateHabit() {
       });
     }
     router.replace("/");
+    // Non-blocking soft ask after creation (best conversion moment).
+    setTimeout(() => {
+      void suggestNotifications("mission_create");
+    }, 450);
   };
 
   return (

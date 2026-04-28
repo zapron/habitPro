@@ -13,6 +13,8 @@ import { ToastHost, ToastProvider } from "../src/context/ToastContext";
 import { AuthProvider, useAuth } from "../src/context/AuthContext";
 import { BillingProvider } from "../src/context/BillingContext";
 import { PremiumProvider } from "../src/context/PremiumContext";
+import { UsernameGateProvider } from "../src/context/UsernameGateContext";
+import { NotificationGateProvider } from "../src/context/NotificationGateContext";
 import { PlusUpsellProvider } from "../src/context/PlusUpsellContext";
 import { AppVersionProvider, useAppVersion } from "../src/context/AppVersionContext";
 import { ForceUpdateModal } from "../src/components/ForceUpdateModal";
@@ -314,17 +316,21 @@ export default function Layout() {
     <ThemeProvider>
       <ToastProvider>
         <AuthProvider>
-          <BillingProvider>
-            <PremiumProvider>
-              <PlusUpsellProvider>
-                <AppVersionProvider>
-                  <SplashGate>
-                    <RootLayoutNav />
-                  </SplashGate>
-                </AppVersionProvider>
-              </PlusUpsellProvider>
-            </PremiumProvider>
-          </BillingProvider>
+          <UsernameGateProvider>
+            <NotificationGateProvider>
+              <BillingProvider>
+                <PremiumProvider>
+                  <PlusUpsellProvider>
+                    <AppVersionProvider>
+                      <SplashGate>
+                        <RootLayoutNav />
+                      </SplashGate>
+                    </AppVersionProvider>
+                  </PlusUpsellProvider>
+                </PremiumProvider>
+              </BillingProvider>
+            </NotificationGateProvider>
+          </UsernameGateProvider>
         </AuthProvider>
       </ToastProvider>
     </ThemeProvider>

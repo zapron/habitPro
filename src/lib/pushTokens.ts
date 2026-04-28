@@ -18,6 +18,36 @@ async function getNotificationsModule(): Promise<
   return import("expo-notifications");
 }
 
+export type RemotePushPermissionStatus =
+  | "granted"
+  | "denied"
+  | "undetermined"
+  | "unavailable";
+
+export async function getRemotePushPermissionStatus(): Promise<RemotePushPermissionStatus> {
+  const Notifications = await getNotificationsModule();
+  if (!Notifications) return "unavailable";
+  const res = await Notifications.getPermissionsAsync();
+  const status = res.status;
+  if (status === "granted") return "granted";
+  if (status === "denied") return "denied";
+  return "undetermined";
+}
+
+/**
+ * User-initiated permission request. Returns final status after the OS prompt.
+ * If the user previously denied (or blocked), this will usually remain denied.
+ */
+export async function requestRemotePushPermission(): Promise<RemotePushPermissionStatus> {
+  const Notifications = await getNotificationsModule();
+  if (!Notifications) return "unavailable";
+  const res = await Notifications.requestPermissionsAsync();
+  const status = res.status;
+  if (status === "granted") return "granted";
+  if (status === "denied") return "denied";
+  return "undetermined";
+}
+
 function getEasProjectId(): string | undefined {
   const extra = Constants.expoConfig?.extra as { eas?: { projectId?: string } } | undefined;
   return extra?.eas?.projectId ?? (Constants as { easConfig?: { projectId?: string } }).easConfig?.projectId;
@@ -26,16 +56,15 @@ function getEasProjectId(): string | undefined {
 /**
  * Registers Expo push token for this user + device. Safe to call repeatedly (upserts).
  * Call after sign-in when notification permission is granted.
+ *
+ * IMPORTANT: This function MUST NOT prompt for permissions.
  */
 export async function registerPushTokenForCurrentUser(userId: string): Promise<void> {
   const Notifications = await getNotificationsModule();
   if (!Notifications) return;
 
   const { status } = await Notifications.getPermissionsAsync();
-  if (status !== "granted") {
-    const { status: next } = await Notifications.requestPermissionsAsync();
-    if (next !== "granted") return;
-  }
+  if (status !== "granted") return;
 
   const projectId = getEasProjectId();
   if (!projectId) {

@@ -31,7 +31,10 @@ async function getNotifications(): Promise<NotificationsModule | null> {
 
 /**
  * Call once at app startup (from _layout.tsx).
- * Sets the foreground handler, creates Android channels, and requests permissions.
+ * Sets the foreground handler and creates Android channels.
+ *
+ * IMPORTANT: Do not request notification permission here. Permission prompts should be
+ * user-initiated (soft ask → OS prompt), and denied users must be routed to Settings.
  */
 export async function setupNotifications() {
   const Notifications = await getNotifications();
@@ -61,11 +64,6 @@ export async function setupNotifications() {
       vibrationPattern: [0, 250, 250, 250],
       lightColor: "#6366f1",
     });
-  }
-
-  const { status } = await Notifications.getPermissionsAsync();
-  if (status !== "granted") {
-    await Notifications.requestPermissionsAsync();
   }
 }
 

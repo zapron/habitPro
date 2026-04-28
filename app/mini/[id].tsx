@@ -52,6 +52,8 @@ import {
 import { useAuth } from "../../src/context/AuthContext";
 import { usePremium } from "../../src/context/PremiumContext";
 import { usePlusUpsell } from "../../src/context/PlusUpsellContext";
+import { useUsernameGate } from "../../src/context/UsernameGateContext";
+import { useNotificationGate } from "../../src/context/NotificationGateContext";
 import { isSupabaseConfigured } from "../../src/lib/env";
 import { MiniVisibilityRow } from "../../src/components/MiniVisibilityRow";
 import {
@@ -134,6 +136,7 @@ export default function MiniMissionDetail() {
   const { session } = useAuth();
   const { isPremium, loading: premiumLoading } = usePremium();
   const { openUpsell } = usePlusUpsell();
+  const { requireUsername } = useUsernameGate();
   const socialLocked = !isPremium || premiumLoading;
   const missionId = Array.isArray(id) ? id[0] : id;
   const scrollBottomPad = Math.max(insets.bottom, 16) + 16;
@@ -142,6 +145,7 @@ export default function MiniMissionDetail() {
     missionId ? state.getMiniMission(missionId) : undefined,
   );
   const startMiniMission = useHabitStore((state) => state.startMiniMission);
+  const { requireNotifications } = useNotificationGate();
   const completeMiniMission = useHabitStore(
     (state) => state.completeMiniMission,
   );
@@ -368,6 +372,8 @@ export default function MiniMissionDetail() {
   }
 
   const handleStart = async () => {
+    const ok = await requireNotifications("mini_timer");
+    if (!ok) return;
     startMiniMission(mission.id);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
   };
@@ -438,6 +444,11 @@ export default function MiniMissionDetail() {
     });
 
     if (canPublish) {
+      const ok = await requireUsername("community_post");
+      if (!ok) {
+        Alert.alert("Username required", "Choose a username to publish to Community.", [{ text: "OK" }]);
+        return;
+      }
       const res = await postCommunityWin({
         miniMissionId: mission.id,
         title: mission.title,
@@ -516,6 +527,12 @@ export default function MiniMissionDetail() {
       }
       void (async () => {
         lastVisibilityRef.current = { id: mission.id, prev };
+        const ok = await requireUsername("community_post");
+        if (!ok) {
+          Alert.alert("Username required", "Choose a username to publish to Community.", [{ text: "OK" }]);
+          lastVisibilityRef.current = null;
+          return;
+        }
         const res = await postCommunityWin({
           miniMissionId: mission.id,
           title: mission.title,

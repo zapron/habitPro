@@ -8,13 +8,16 @@ import {
   Pressable,
 } from "react-native";
 import { BlurView } from 'expo-blur';
-import { X, Monitor, Sun, Moon, type LucideIcon } from 'lucide-react-native';
+import { Bell, ExternalLink, X, Monitor, Sun, Moon, type LucideIcon } from 'lucide-react-native';
 import { useTheme, type ThemePreference } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { isSupabaseConfigured } from '../lib/env';
 import { useBilling } from "../context/BillingContext";
 import { useHabitStore } from '../store/habitStore';
 import { UsernameSetupFields } from './UsernameSetupFields';
+import { Linking } from "react-native";
+import { getRemotePushPermissionStatus, registerPushTokenForCurrentUser, requestRemotePushPermission } from "../lib/pushTokens";
+import { useEffect, useMemo, useState } from "react";
 
 const THEME_OPTIONS: { key: ThemePreference; label: string; Icon: LucideIcon }[] = [
     { key: 'system', label: 'System', Icon: Monitor },
@@ -33,6 +36,53 @@ export function SettingsModal({ visible, onClose }: SettingsModalProps) {
     const { configured: billingConfigured, ready: billingReady, isExpoGo, openManageSubscriptions } = useBilling();
     const showAccount = isSupabaseConfigured();
     const username = useHabitStore((s) => s.username);
+    const uid = session?.user?.id ?? null;
+    const [notifStatus, setNotifStatus] = useState<"loading" | "on" | "off" | "unavailable">("loading");
+
+    const canShowNotifRow = Boolean(showAccount && uid);
+
+    const refreshNotifStatus = async () => {
+        if (!uid) {
+            setNotifStatus("unavailable");
+            return;
+        }
+        const s = await getRemotePushPermissionStatus();
+        setNotifStatus(s === "granted" ? "on" : s === "unavailable" ? "unavailable" : "off");
+    };
+
+    useEffect(() => {
+        if (!visible) return;
+        void refreshNotifStatus();
+    }, [visible, uid]);
+
+    const notifHint = useMemo(() => {
+        if (notifStatus === "on") return "On";
+        if (notifStatus === "off") return "Off";
+        if (notifStatus === "unavailable") return "Unavailable";
+        return "Checking…";
+    }, [notifStatus]);
+
+    const onPressNotifications = async () => {
+        if (!uid) return;
+        const s = await getRemotePushPermissionStatus();
+        if (s === "granted") {
+            setNotifStatus("on");
+            return;
+        }
+        if (s === "undetermined") {
+            const next = await requestRemotePushPermission();
+            if (next === "granted") {
+                setNotifStatus("on");
+                await registerPushTokenForCurrentUser(uid);
+                return;
+            }
+            setNotifStatus("off");
+            return;
+        }
+        // denied (or unavailable): route to Settings
+        void Linking.openSettings();
+        setNotifStatus("off");
+    };
 
     return (
         <Modal
@@ -128,6 +178,50 @@ export function SettingsModal({ visible, onClose }: SettingsModalProps) {
                             );
                         })}
                     </View>
+
+                    {canShowNotifRow ? (
+                        <>
+                            <Text style={[styles.sectionLabel, { color: theme.colors.textMuted, marginTop: 14 }]}>NOTIFICATIONS</Text>
+                            <TouchableOpacity
+                                style={[
+                                    styles.rowBtn,
+                                    {
+                                        borderColor: theme.colors.border,
+                                        backgroundColor: theme.colors.surfaceElevated,
+                                    },
+                                ]}
+                                onPress={() => void onPressNotifications()}
+                                activeOpacity={0.85}
+                                accessibilityRole="button"
+                                accessibilityLabel="Notification settings"
+                            >
+                                <View style={styles.rowBtnTop}>
+                                    <View style={styles.rowBtnTitleRow}>
+                                        <Bell size={16} color={theme.colors.indigo[400]} />
+                                        <Text style={[styles.rowBtnText, { color: theme.colors.textPrimary }]}>
+                                            Push notifications
+                                        </Text>
+                                    </View>
+                                    <View style={styles.rowBtnRight}>
+                                        <Text style={[styles.rowBtnRightText, { color: notifStatus === "on" ? theme.colors.green[500] : theme.colors.textMuted }]}>
+                                            {notifHint}
+                                        </Text>
+                                        <ExternalLink size={14} color={theme.colors.textMuted} />
+                                    </View>
+                                </View>
+                                <Text style={[styles.rowBtnHint, { color: theme.colors.textMuted }]}>
+                                    {notifStatus === "on"
+                                        ? "You’ll receive streak reminders and updates."
+                                        : "Enable to get reminders and updates."}
+                                </Text>
+                                {notifStatus === "off" ? (
+                                    <Text style={[styles.rowBtnHint, { color: theme.colors.textSecondary, marginTop: 4 }]}>
+                                        If you denied earlier, this will open Settings.
+                                    </Text>
+                                ) : null}
+                            </TouchableOpacity>
+                        </>
+                    ) : null}
                 </Pressable>
             </Pressable>
         </Modal>
@@ -211,6 +305,15 @@ const styles = StyleSheet.create({
         paddingHorizontal: 14,
         gap: 2,
     },
+    rowBtnTop: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: 10,
+    },
+    rowBtnTitleRow: { flexDirection: "row", alignItems: "center", gap: 8, minWidth: 0, flex: 1 },
+    rowBtnRight: { flexDirection: "row", alignItems: "center", gap: 6, flexShrink: 0 },
+    rowBtnRightText: { fontSize: 12, fontWeight: "800" },
     rowBtnText: {
         fontSize: 14,
         fontWeight: "800",
