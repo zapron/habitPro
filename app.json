@@ -23,7 +23,7 @@
     },
     "android": {
       "package": "com.rakti.habitpro",
-      "versionCode": 3,
+      "versionCode": 4,
       "adaptiveIcon": {
         "foregroundImage": "./assets/swirling-gradient-flame-logo.png",
         "backgroundColor": "#000000"

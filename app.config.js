@@ -19,6 +19,8 @@ const hasGoogleServices = fs.existsSync(googleServicesPath);
 
 const supabaseUrl = (process.env.EXPO_PUBLIC_SUPABASE_URL ?? "").trim();
 const supabaseAnonKey = (process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? "").trim();
+const revenuecatAndroidApiKey = (process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY ?? "").trim();
+const revenuecatIosApiKey = (process.env.EXPO_PUBLIC_REVENUECAT_IOS_API_KEY ?? "").trim();
 
 if (process.env.EAS_BUILD === "true" && (!supabaseUrl || !supabaseAnonKey)) {
   console.warn(
@@ -43,6 +45,8 @@ module.exports = {
       ...appJson.expo.extra,
       supabaseUrl,
       supabaseAnonKey,
+      revenuecatAndroidApiKey,
+      revenuecatIosApiKey,
     },
   },
 };
