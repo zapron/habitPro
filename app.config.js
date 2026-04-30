@@ -28,6 +28,18 @@ if (process.env.EAS_BUILD === "true" && (!supabaseUrl || !supabaseAnonKey)) {
       "The release APK will not sync to Supabase until you add EAS project secrets (see app.config.js header).",
   );
 }
+if (process.env.EAS_BUILD === "true" && !revenuecatAndroidApiKey) {
+  console.warn(
+    "[habitPro] EAS build: EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY is missing. " +
+      "The release APK will show the paywall but cannot start Google Play purchases.",
+  );
+}
+if (process.env.EAS_BUILD === "true" && revenuecatAndroidApiKey.startsWith("test_")) {
+  console.warn(
+    "[habitPro] EAS build: EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY looks like a RevenueCat Test Store key. " +
+      "Use the Play Store public SDK key for release builds installed from Google Play.",
+  );
+}
 if (process.env.EAS_BUILD === "true" && !hasGoogleServices) {
   console.warn(
     "[habitPro] EAS build: google-services.json not found. Android remote push (FCM) will not work until you add it (see docs/PUSH_NOTIFICATIONS.md).",

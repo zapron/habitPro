@@ -21,7 +21,7 @@ type BillingContextValue = {
   refresh: () => Promise<void>;
   purchaseCommunity: (
     plan: PlanId,
-  ) => Promise<{ cancelled: boolean; purchaseFailed?: boolean }>;
+  ) => Promise<{ cancelled: boolean; purchaseFailed?: boolean; message?: string }>;
   restore: () => Promise<void>;
   /** Open OS subscription management. */
   openManageSubscriptions: () => Promise<void>;
@@ -153,7 +153,7 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
       if (__DEV__ && !userDismissed) {
         console.warn("[habitPro] purchase failed:", msg);
       }
-      return { cancelled: true, purchaseFailed: !userDismissed };
+      return { cancelled: true, purchaseFailed: !userDismissed, message: userDismissed ? undefined : msg };
     }
   };
 

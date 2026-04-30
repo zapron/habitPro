@@ -125,6 +125,7 @@ function BillingUpsellModal({
   const [busy, setBusy] = useState<null | "monthly" | "yearly" | "restore">(
     null,
   );
+  const [purchaseError, setPurchaseError] = useState<string | null>(null);
 
   if (!visible) return null;
 
@@ -132,6 +133,7 @@ function BillingUpsellModal({
 
   const run = async (kind: "monthly" | "yearly" | "restore") => {
     setBusy(kind);
+    setPurchaseError(null);
     showToast(kind === "restore" ? "Restoring…" : "Starting purchase…", "info", 1200);
     try {
       if (kind === "restore") {
@@ -145,10 +147,21 @@ function BillingUpsellModal({
         showToast("Trial started. Welcome to HabitPro Community.", "success");
         onClose();
       } else if (res.purchaseFailed) {
+        const msg = res.message?.trim();
+        setPurchaseError(
+          msg && msg.length <= 180
+            ? msg
+            : "Purchase could not start. Make sure this app was installed from Google Play with a tester account.",
+        );
         showToast("Purchase did not complete.", "error");
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
+      setPurchaseError(
+        msg.length <= 180
+          ? msg
+          : "Purchase could not start. Make sure this app was installed from Google Play with a tester account.",
+      );
       showToast(msg.length > 120 ? "Purchase failed to start." : msg, "error");
     } finally {
       setBusy(null);
@@ -242,6 +255,12 @@ function BillingUpsellModal({
           </Text>
         ) : null}
 
+        {purchaseError ? (
+          <Text style={[styles.errorText, { color: theme.colors.red[500] }]}>
+            {purchaseError}
+          </Text>
+        ) : null}
+
         <Button
           title={
             busy === "monthly" ? "Starting trial…" : "7 day trial then Monthly"
@@ -330,6 +349,7 @@ const styles = StyleSheet.create({
   bulletText: { flex: 1, fontSize: 13, lineHeight: 19, fontWeight: "600" },
   disclaimer: { fontSize: 11, lineHeight: 16, fontWeight: "700", marginTop: 10 },
   disclaimerHint: { fontSize: 11, lineHeight: 16, fontWeight: "700", marginTop: 6, opacity: 0.9 },
+  errorText: { fontSize: 12, lineHeight: 17, fontWeight: "800", marginTop: 8 },
   linkRow: { flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 8, marginTop: 10 },
   link: { fontSize: 12, fontWeight: "800" },
   linkSep: { fontSize: 12, fontWeight: "800" },
