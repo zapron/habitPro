@@ -18,6 +18,7 @@ import { useTheme } from "../src/context/ThemeContext";
 import { listNotifications, markAllNotificationsRead, markNotificationRead } from "../src/lib/groupChallengesApi";
 import { parseCommunityWinCheerPayload } from "../src/lib/notificationPayloads";
 import type { ChallengeNudgeKind, NotificationRow } from "../src/types/groupChallenge";
+import { ShimmerBlock } from "../src/components/ShimmerBlock";
 
 function groupMissionInviteSubtitle(n: NotificationRow): string {
   const p = n.payload ?? {};
@@ -282,7 +283,34 @@ export default function NotificationsScreen() {
       </View>
 
       {loading ? (
-        <ActivityIndicator color={theme.colors.indigo[400]} style={{ marginTop: 24 }} />
+        <View style={{ marginTop: 10 }}>
+          {Array.from({ length: 7 }, (_, i) => (
+            <View
+              key={i}
+              style={[
+                styles.row,
+                {
+                  borderColor: theme.colors.border,
+                  backgroundColor: theme.colors.surface,
+                },
+              ]}
+            >
+              <View style={styles.rowInner}>
+                <View style={styles.unreadSpacer} />
+                <View style={{ flex: 1, gap: 8 }}>
+                  <ShimmerBlock
+                    isDark={isDark}
+                    height={14}
+                    radius={7}
+                    style={{ width: i % 3 === 0 ? "62%" : i % 3 === 1 ? "74%" : "55%" }}
+                  />
+                  <ShimmerBlock isDark={isDark} height={12} radius={6} style={{ width: "88%", opacity: 0.95 }} />
+                  <ShimmerBlock isDark={isDark} height={12} radius={6} style={{ width: "42%", opacity: 0.9 }} />
+                </View>
+              </View>
+            </View>
+          ))}
+        </View>
       ) : (
         <FlatList
           data={items}

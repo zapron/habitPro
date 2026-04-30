@@ -50,6 +50,7 @@ import {
 } from "../../src/lib/groupChallengesApi";
 import { subscribeSyncSuccess } from "../../src/lib/syncQueue";
 import { PlusBadge } from "../../src/components/PlusBadge";
+import { ShimmerBlock } from "../../src/components/ShimmerBlock";
 
 const INVITE_ACCEPT_TIMEOUT_MS = 45_000;
 
@@ -271,6 +272,7 @@ export default function CompeteScreen() {
   const [groupInvites, setGroupInvites] = useState<ChallengeInviteRow[]>([]);
   const [inviteCardMeta, setInviteCardMeta] = useState<Record<string, InviteCardMeta>>({});
   const [inviteBusy, setInviteBusy] = useState<string | null>(null);
+  const [invitesLoading, setInvitesLoading] = useState(false);
   const [leaveEnrollmentId, setLeaveEnrollmentId] = useState<string | null>(null);
   const [highlightInviteId, setHighlightInviteId] = useState<string | null>(null);
   const [highlightChallengeId, setHighlightChallengeId] = useState<string | null>(null);
@@ -297,6 +299,7 @@ export default function CompeteScreen() {
       setInviteCardMeta({});
       return;
     }
+    setInvitesLoading(true);
     try {
       const rows = await listInvitesForMe();
       setGroupInvites(rows);
@@ -310,6 +313,8 @@ export default function CompeteScreen() {
       setInviteCardMeta(meta);
     } catch (e: unknown) {
       console.warn("[habitPro] loadInvites", e);
+    } finally {
+      setInvitesLoading(false);
     }
   }, [session?.user]);
 
@@ -676,7 +681,38 @@ export default function CompeteScreen() {
         ) : challengesSubTab === "invites" ? (
           <>
             <Text style={[styles.sectionLabel, { color: theme.colors.textMuted }]}>GROUP MISSION INVITES</Text>
-            {groupInvites.length === 0 ? (
+            {invitesLoading ? (
+              <View style={{ gap: 12 }}>
+                {Array.from({ length: 3 }, (_, i) => (
+                  <View
+                    key={i}
+                    style={[
+                      styles.card,
+                      {
+                        backgroundColor: theme.colors.surface,
+                        borderColor: theme.colors.border,
+                        ...theme.shadow.card,
+                      },
+                    ]}
+                  >
+                    <View style={{ gap: 10 }}>
+                      <ShimmerBlock
+                        isDark={isDark}
+                        height={18}
+                        radius={9}
+                        style={{ width: i % 2 === 0 ? "70%" : "58%" }}
+                      />
+                      <ShimmerBlock isDark={isDark} height={12} radius={6} style={{ width: "86%" }} />
+                      <ShimmerBlock isDark={isDark} height={12} radius={6} style={{ width: "62%" }} />
+                      <View style={{ flexDirection: "row", gap: 10, marginTop: 6 }}>
+                        <ShimmerBlock isDark={isDark} height={38} radius={12} style={{ flex: 1 }} />
+                        <ShimmerBlock isDark={isDark} height={38} radius={12} style={{ flex: 1 }} />
+                      </View>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            ) : groupInvites.length === 0 ? (
               <View
                 style={[styles.card, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, ...theme.shadow.card }]}
               >

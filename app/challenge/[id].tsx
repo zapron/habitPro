@@ -56,6 +56,7 @@ import { isSupabaseConfigured } from "../../src/lib/env";
 import { deleteAllCommunityWinsForHabit } from "../../src/lib/communityWinsApi";
 import { PlusBadge } from "../../src/components/PlusBadge";
 import { listChallengeStreakRepairs, voteStreakRepair, type StreakRepairRow, type StreakRepairVoteRow } from "../../src/lib/streakRepairApi";
+import { ShimmerBlock } from "../../src/components/ShimmerBlock";
 import type {
   ChallengeActivityRow,
   ChallengeGroupRow,
@@ -552,7 +553,58 @@ export default function ChallengeDetailScreen() {
       </View>
 
       {loading ? (
-        <ActivityIndicator color={theme.colors.indigo[400]} style={{ marginTop: 24 }} />
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: bottomPad }}
+        >
+          <View style={{ gap: 12, paddingTop: 6 }}>
+            <ShimmerBlock isDark={isDark} height={26} radius={10} style={{ width: "72%" }} />
+            <View style={{ flexDirection: "row", gap: 10, flexWrap: "wrap" }}>
+              <ShimmerBlock isDark={isDark} height={30} radius={999} style={{ width: 140 }} />
+              <ShimmerBlock isDark={isDark} height={30} radius={999} style={{ width: 118 }} />
+              <ShimmerBlock isDark={isDark} height={30} radius={999} style={{ width: 170 }} />
+            </View>
+            <View
+              style={[
+                styles.card,
+                {
+                  backgroundColor: theme.colors.surface,
+                  borderColor: theme.colors.border,
+                  ...theme.shadow.card,
+                },
+              ]}
+            >
+              <View style={{ gap: 10 }}>
+                <ShimmerBlock isDark={isDark} height={14} radius={7} style={{ width: "48%" }} />
+                <ShimmerBlock isDark={isDark} height={12} radius={6} style={{ width: "92%" }} />
+                <ShimmerBlock isDark={isDark} height={12} radius={6} style={{ width: "66%" }} />
+              </View>
+            </View>
+
+            <View style={{ gap: 10 }}>
+              <ShimmerBlock isDark={isDark} height={14} radius={7} style={{ width: "40%" }} />
+              {Array.from({ length: 3 }, (_, i) => (
+                <View
+                  key={i}
+                  style={[
+                    styles.card,
+                    {
+                      backgroundColor: theme.colors.surface,
+                      borderColor: theme.colors.border,
+                      ...theme.shadow.card,
+                    },
+                  ]}
+                >
+                  <View style={{ gap: 10 }}>
+                    <ShimmerBlock isDark={isDark} height={16} radius={8} style={{ width: i % 2 === 0 ? "62%" : "54%" }} />
+                    <ShimmerBlock isDark={isDark} height={12} radius={6} style={{ width: "88%" }} />
+                    <ShimmerBlock isDark={isDark} height={12} radius={6} style={{ width: "52%" }} />
+                  </View>
+                </View>
+              ))}
+            </View>
+          </View>
+        </ScrollView>
       ) : (
         <ScrollView
           ref={scrollRef}
@@ -695,6 +747,10 @@ export default function ChallengeDetailScreen() {
                             disabled={!canVote || repairBusyId === r.id}
                             onPress={() => {
                               if (!canVote) return;
+                              if (socialLocked) {
+                                openUpsell("streak_repair");
+                                return;
+                              }
                               void (async () => {
                                 setRepairBusyId(r.id);
                                 const res = await voteStreakRepair({ repairId: r.id, vote: "approve" });
@@ -726,6 +782,10 @@ export default function ChallengeDetailScreen() {
                             disabled={!canVote || repairBusyId === r.id}
                             onPress={() => {
                               if (!canVote) return;
+                              if (socialLocked) {
+                                openUpsell("streak_repair");
+                                return;
+                              }
                               void (async () => {
                                 setRepairBusyId(r.id);
                                 const res = await voteStreakRepair({ repairId: r.id, vote: "decline" });

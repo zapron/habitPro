@@ -114,20 +114,88 @@ function MiniMissionLiveGradientLabel({ count, reduceMotion }: { count: number; 
 const SECTION_GAP = 12;
 const HEADER_BOTTOM_GAP = 6;
 
-function ListSkeleton({ theme }: { theme: AppTheme }) {
+function ShimmerTile({
+  theme,
+  isDark,
+  reduceMotion,
+}: {
+  theme: AppTheme;
+  isDark: boolean;
+  reduceMotion: boolean;
+}) {
+  const shimmerX = useRef(new Animated.Value(0)).current;
+  const [w, setW] = useState(0);
+
+  useEffect(() => {
+    if (reduceMotion || w <= 0) return;
+    shimmerX.stopAnimation();
+    shimmerX.setValue(-w);
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(shimmerX, {
+          toValue: w,
+          duration: 1150,
+          easing: Easing.inOut(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.delay(250),
+      ]),
+      { resetBeforeIteration: true },
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [reduceMotion, shimmerX, w]);
+
+  const shimmerAlpha = reduceMotion ? 0 : 1;
+  // Light mode needs a darker sheen to be visible on light surfaces.
+  const sheen = isDark ? "rgba(255,255,255,0.22)" : "rgba(0,0,0,0.08)";
+  const sheer = "rgba(255,255,255,0)";
+
+  return (
+    <View
+      style={[
+        skeletonStyles.bar,
+        {
+          borderColor: theme.colors.border,
+          backgroundColor: theme.colors.surface,
+        },
+      ]}
+      onLayout={(e) => setW(e.nativeEvent.layout.width)}
+    >
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          skeletonStyles.shimmer,
+          {
+            opacity: shimmerAlpha,
+            transform: [{ translateX: shimmerX }],
+          },
+        ]}
+      >
+        <LinearGradient
+          colors={[sheer, sheen, sheer]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={skeletonStyles.shimmerGrad}
+        />
+      </Animated.View>
+    </View>
+  );
+}
+
+function ListSkeleton({
+  theme,
+  isDark,
+  reduceMotion,
+}: {
+  theme: AppTheme;
+  isDark: boolean;
+  reduceMotion: boolean;
+}) {
   return (
     <View style={skeletonStyles.wrap}>
-      {[0, 1, 2].map((i) => (
-        <View
-          key={i}
-          style={[
-            skeletonStyles.bar,
-            {
-              borderColor: theme.colors.border,
-              backgroundColor: theme.colors.surface,
-            },
-          ]}
-        />
+      {[0, 1, 2, 3, 4].map((i) => (
+        <ShimmerTile key={i} theme={theme} isDark={isDark} reduceMotion={reduceMotion} />
       ))}
     </View>
   );
@@ -691,7 +759,7 @@ export default function Home() {
 
         <View style={styles.listWrap}>
           {!storeHydrated || waitingForFirstSync ? (
-            <ListSkeleton theme={theme} />
+            <ListSkeleton theme={theme} isDark={isDark} reduceMotion={reduceMotion} />
           ) : filteredHabits.length === 0 ? (
             <ScrollView
               style={styles.emptyScroll}
@@ -1012,6 +1080,20 @@ const styles = StyleSheet.create({
 });
 
 const skeletonStyles = StyleSheet.create({
-  wrap: { flex: 1, gap: 12, paddingVertical: 8, minHeight: 200 },
-  bar: { height: 88, borderRadius: 14, borderWidth: 1, opacity: 0.92 },
+  wrap: { flex: 1, gap: 12, paddingVertical: 8, minHeight: 360 },
+  bar: {
+    height: 104,
+    borderRadius: 14,
+    borderWidth: 1,
+    opacity: 0.92,
+    overflow: "hidden",
+  },
+  shimmer: {
+    position: "absolute",
+    top: -2,
+    bottom: -2,
+    left: 0,
+    width: "55%",
+  },
+  shimmerGrad: { flex: 1 },
 });

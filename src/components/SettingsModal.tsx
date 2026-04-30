@@ -18,6 +18,7 @@ import { UsernameSetupFields } from './UsernameSetupFields';
 import { Linking } from "react-native";
 import { getRemotePushPermissionStatus, registerPushTokenForCurrentUser, requestRemotePushPermission } from "../lib/pushTokens";
 import { useEffect, useMemo, useState } from "react";
+import { ShimmerBlock } from "./ShimmerBlock";
 
 const THEME_OPTIONS: { key: ThemePreference; label: string; Icon: LucideIcon }[] = [
     { key: 'system', label: 'System', Icon: Monitor },
@@ -203,9 +204,18 @@ export function SettingsModal({ visible, onClose }: SettingsModalProps) {
                                         </Text>
                                     </View>
                                     <View style={styles.rowBtnRight}>
-                                        <Text style={[styles.rowBtnRightText, { color: notifStatus === "on" ? theme.colors.green[500] : theme.colors.textMuted }]}>
-                                            {notifHint}
-                                        </Text>
+                                        {notifStatus === "loading" ? (
+                                            <ShimmerBlock
+                                                isDark={isDark}
+                                                height={12}
+                                                radius={6}
+                                                style={{ width: 54, marginRight: 6 }}
+                                            />
+                                        ) : (
+                                            <Text style={[styles.rowBtnRightText, { color: notifStatus === "on" ? theme.colors.green[500] : theme.colors.textMuted }]}>
+                                                {notifHint}
+                                            </Text>
+                                        )}
                                         <ExternalLink size={14} color={theme.colors.textMuted} />
                                     </View>
                                 </View>
