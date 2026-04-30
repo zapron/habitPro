@@ -22,6 +22,7 @@ export type PlusUpsellReason =
   | "group_mission"
   | "invite_accept"
   | "squad_nudge"
+  | "streak_repair"
   | "profile";
 
 type PlusUpsellContextValue = {
@@ -38,6 +39,7 @@ const BULLETS = [
   "Group missions, invites, and cohort streaks",
   "Squad nudges (cheer, ping, fire, one-time note)",
   "Publish streak moments and mini wins to Community",
+  "Streak repairs to protect momentum",
 ];
 
 export function PlusUpsellProvider({
@@ -75,6 +77,8 @@ export function PlusUpsellProvider({
               ? "Joining group missions is HabitPro Community"
               : reason === "squad_nudge"
                 ? "Squad nudges are HabitPro Community"
+                : reason === "streak_repair"
+                  ? "Streak repairs are HabitPro Community"
                 : reason === "profile"
                   ? "HabitPro Community"
                   : "Unlock HabitPro Community";

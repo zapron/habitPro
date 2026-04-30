@@ -14,6 +14,8 @@ import type { Habit } from "../types/habit";
 import { useTheme } from "../context/ThemeContext";
 import { useHabitStore } from "../store/habitStore";
 import { useToast } from "../context/ToastContext";
+import { usePremium } from "../context/PremiumContext";
+import { usePlusUpsell } from "../context/PlusUpsellContext";
 import {
   STREAK_REPAIR_ALLOW_GROUP_SELF_APPROVE,
   STREAK_REPAIR_SQUAD_APPROVALS_REQUIRED,
@@ -36,11 +38,14 @@ type Props = {
 export function StreakRepairSheet({ visible, onClose, habit, eligible, onRequested }: Props) {
   const { theme, isDark } = useTheme();
   const { showToast } = useToast();
+  const { isPremium, loading: premiumLoading } = usePremium();
+  const { openUpsell } = usePlusUpsell();
   const xp = useHabitStore((s) => s.xp);
   const addXp = useHabitStore((s) => s.addXp);
   const toggleCompletion = useHabitStore((s) => s.toggleCompletion);
 
   const isGroup = Boolean(habit.challengeGroupId);
+  const plusOk = !isGroup || (isPremium && !premiumLoading);
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [askSquad, setAskSquad] = useState(true);
@@ -73,7 +78,7 @@ export function StreakRepairSheet({ visible, onClose, habit, eligible, onRequest
   const cost = eligible.xpCost;
   const hasXp = xp >= cost;
   const trimmed = reason.trim();
-  const canSubmit = trimmed.length > 0 && !busy && (!isGroup ? hasXp : true);
+  const canSubmit = trimmed.length > 0 && !busy && (!isGroup ? hasXp : true) && plusOk;
 
   const primaryLabel = useMemo(() => {
     if (isGroup) return "Request squad approval";
@@ -166,6 +171,11 @@ export function StreakRepairSheet({ visible, onClose, habit, eligible, onRequest
             <Text style={[styles.costBody, { color: theme.colors.textMuted }]}>
               Repairs are limited and must be used within {STREAK_REPAIR_WINDOW_HOURS}h of the missed day.
             </Text>
+            {isGroup && !plusOk ? (
+              <Text style={[styles.costBody, { color: theme.colors.textSecondary, marginTop: 6 }]}>
+                Streak repairs are part of HabitPro Community.
+              </Text>
+            ) : null}
             {!isGroup && !hasXp ? (
               <Text style={[styles.costBody, { color: theme.colors.red[500], marginTop: 6 }]}>
                 Not enough XP. Earn more by completing missions.
@@ -213,6 +223,10 @@ export function StreakRepairSheet({ visible, onClose, habit, eligible, onRequest
             activeOpacity={0.88}
             disabled={!canSubmit}
             onPress={async () => {
+              if (isGroup && !plusOk) {
+                openUpsell("streak_repair");
+                return;
+              }
               if (!trimmed) return;
               if (!isGroup && !hasXp) return;
               setBusy(true);

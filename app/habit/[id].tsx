@@ -308,6 +308,16 @@ export default function HabitDetail() {
     const [repairSheetOpen, setRepairSheetOpen] = useState(false);
     const [repairStatus, setRepairStatus] = useState<"pending" | "approved" | "declined" | "applied" | null>(null);
 
+    const openRepair = useCallback(() => {
+        if (!eligibleRepair || repairStatus === "pending") return;
+        const isGroupRepair = Boolean(habit?.challengeGroupId);
+        if (isGroupRepair && (!isPremium || premiumLoading)) {
+          openUpsell("streak_repair");
+          return;
+        }
+        setRepairSheetOpen(true);
+    }, [eligibleRepair, repairStatus, habit?.challengeGroupId, isPremium, premiumLoading, openUpsell]);
+
     useEffect(() => {
       if (repair !== "1") return;
       if (!eligibleRepair) return;
@@ -315,8 +325,8 @@ export default function HabitDetail() {
       if (typeof repairDate === "string" && repairDate.length > 0 && repairDate !== eligibleRepair.dateStr) {
         return;
       }
-      setRepairSheetOpen(true);
-    }, [repair, repairDate, eligibleRepair, repairStatus]);
+      openRepair();
+    }, [repair, repairDate, eligibleRepair, repairStatus, openRepair]);
 
     useEffect(() => {
       if (!eligibleRepair || !habit) {
@@ -1059,7 +1069,7 @@ export default function HabitDetail() {
                       </Text>
                     </View>
                     <TouchableOpacity
-                      onPress={() => setRepairSheetOpen(true)}
+                      onPress={openRepair}
                       activeOpacity={0.86}
                       disabled={repairStatus === "pending"}
                       style={[
