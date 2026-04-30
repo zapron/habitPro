@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { Linking, Platform } from "react-native";
 import Constants from "expo-constants";
 import Purchases, { type CustomerInfo, LOG_LEVEL } from "react-native-purchases";
@@ -6,6 +6,73 @@ import { getRevenueCatConfig, logRevenueCatEnvHint } from "../lib/env";
 import { useAuth } from "./AuthContext";
 
 type PlanId = "monthly" | "yearly";
+type PurchaseStage = "diagnostics" | "load offerings" | "load store products" | "start purchase";
+
+export type BillingDebugSnapshot = {
+  at: string;
+  appUserId: string | null;
+  platform: string;
+  appOwnership: string | null;
+  appVersion: string | null;
+  nativeAppVersion: string | null;
+  nativeBuildVersion: string | null;
+  configured: boolean;
+  ready: boolean;
+  isExpoGo: boolean;
+  apiKeyKind: "goog" | "test" | "other" | "missing";
+  plan?: PlanId;
+  stage?: PurchaseStage;
+  error?: {
+    code?: string;
+    message: string;
+    underlying?: string;
+    userCancelled?: boolean | null;
+  };
+  offerings?: BillingOfferingDebug | null;
+  offeringsError?: string;
+  storeProducts?: BillingProductDebug[];
+  storeProductsError?: string;
+  customerInfo?: {
+    originalAppUserId?: string | null;
+    activeEntitlements: string[];
+    allEntitlements: string[];
+  };
+  customerInfoError?: string;
+  recentLogs: string[];
+};
+
+type BillingOfferingDebug = {
+  currentIdentifier: string | null;
+  allIdentifiers: string[];
+  currentPackages: BillingPackageDebug[];
+};
+
+type BillingPackageDebug = {
+  identifier: string;
+  packageType?: string;
+  offeringIdentifier?: string | null;
+  product: BillingProductDebug;
+};
+
+type BillingProductDebug = {
+  identifier: string;
+  title?: string;
+  priceString?: string;
+  productType?: string;
+  productCategory?: string | null;
+  subscriptionPeriod?: string | null;
+  defaultOption?: BillingSubscriptionOptionDebug | null;
+  subscriptionOptions?: BillingSubscriptionOptionDebug[];
+};
+
+type BillingSubscriptionOptionDebug = {
+  id?: string;
+  storeProductId?: string;
+  productId?: string;
+  isBasePlan?: boolean;
+  billingPeriod?: string | null;
+  pricingPhases?: string[];
+};
 
 type BillingContextValue = {
   /** True when an API key is present for this platform. */
@@ -21,10 +88,18 @@ type BillingContextValue = {
   refresh: () => Promise<void>;
   purchaseCommunity: (
     plan: PlanId,
-  ) => Promise<{ cancelled: boolean; purchaseFailed?: boolean; message?: string }>;
+  ) => Promise<{
+    cancelled: boolean;
+    purchaseFailed?: boolean;
+    message?: string;
+    stage?: PurchaseStage;
+    debug?: BillingDebugSnapshot;
+  }>;
   restore: () => Promise<void>;
   /** Open OS subscription management. */
   openManageSubscriptions: () => Promise<void>;
+  billingDebug: BillingDebugSnapshot | null;
+  runBillingDiagnostics: (plan?: PlanId) => Promise<BillingDebugSnapshot>;
 };
 
 const BillingContext = createContext<BillingContextValue | null>(null);
@@ -42,6 +117,145 @@ const PACKAGE_BY_PLAN: Record<PlanId, string> = {
   yearly: "$rc_annual",
 };
 
+const STORE_PRODUCT_IDS: Record<PlanId, string> = {
+  monthly: "monthly",
+  yearly: "yearly",
+};
+
+const MAX_REVENUECAT_LOGS = 40;
+
+type RevenueCatErrorLike = {
+  code?: string | number;
+  message?: string;
+  readableErrorCode?: string;
+  underlyingErrorMessage?: string;
+  userCancelled?: boolean | null;
+  userInfo?: {
+    readableErrorCode?: string;
+  };
+};
+
+function stringFromUnknown(value: unknown): string | undefined {
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  return undefined;
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+}
+
+function apiKeyKind(apiKey: string): BillingDebugSnapshot["apiKeyKind"] {
+  if (!apiKey) return "missing";
+  if (apiKey.startsWith("goog_")) return "goog";
+  if (apiKey.startsWith("test_")) return "test";
+  return "other";
+}
+
+function getPurchaseErrorDetails(error: unknown): {
+  code?: string;
+  message: string;
+  underlying?: string;
+  userCancelled?: boolean | null;
+  userDismissed: boolean;
+} {
+  const e = error as RevenueCatErrorLike;
+  const message = e?.message ?? (error instanceof Error ? error.message : String(error));
+  const code = e?.userInfo?.readableErrorCode ?? e?.readableErrorCode ?? e?.code;
+  const underlying = e?.underlyingErrorMessage;
+  const userDismissed =
+    e?.userCancelled === true ||
+    String(code ?? "").includes("PURCHASE_CANCELLED") ||
+    message.toLowerCase().includes("cancel") ||
+    message.toLowerCase().includes("user cancelled");
+
+  const parts = [code ? `[${String(code)}]` : null, message, underlying].filter(
+    (part): part is string => Boolean(part && part.trim()),
+  );
+
+  return {
+    code: code == null ? undefined : String(code),
+    message: parts.join(" "),
+    underlying,
+    userCancelled: e?.userCancelled,
+    userDismissed,
+  };
+}
+
+function summarizeSubscriptionOption(value: unknown): BillingSubscriptionOptionDebug {
+  const option = asRecord(value);
+  const billingPeriod = asRecord(option.billingPeriod);
+  const phases = Array.isArray(option.pricingPhases) ? option.pricingPhases : [];
+  return {
+    id: stringFromUnknown(option.id),
+    storeProductId: stringFromUnknown(option.storeProductId),
+    productId: stringFromUnknown(option.productId),
+    isBasePlan: typeof option.isBasePlan === "boolean" ? option.isBasePlan : undefined,
+    billingPeriod: stringFromUnknown(billingPeriod.iso8601) ?? null,
+    pricingPhases: phases.map((phase) => {
+      const p = asRecord(phase);
+      const period = asRecord(p.billingPeriod);
+      const price = asRecord(p.price);
+      return [
+        stringFromUnknown(period.iso8601),
+        stringFromUnknown(price.formatted),
+        stringFromUnknown(p.offerPaymentMode),
+      ].filter(Boolean).join(" ");
+    }),
+  };
+}
+
+function summarizeProduct(value: unknown): BillingProductDebug {
+  const product = asRecord(value);
+  const options = Array.isArray(product.subscriptionOptions) ? product.subscriptionOptions : [];
+  return {
+    identifier: stringFromUnknown(product.identifier) ?? "unknown",
+    title: stringFromUnknown(product.title),
+    priceString: stringFromUnknown(product.priceString),
+    productType: stringFromUnknown(product.productType),
+    productCategory: stringFromUnknown(product.productCategory) ?? null,
+    subscriptionPeriod: stringFromUnknown(product.subscriptionPeriod) ?? null,
+    defaultOption: product.defaultOption ? summarizeSubscriptionOption(product.defaultOption) : null,
+    subscriptionOptions: options.map(summarizeSubscriptionOption),
+  };
+}
+
+function summarizePackage(value: unknown): BillingPackageDebug {
+  const pkg = asRecord(value);
+  return {
+    identifier: stringFromUnknown(pkg.identifier) ?? "unknown",
+    packageType: stringFromUnknown(pkg.packageType),
+    offeringIdentifier: stringFromUnknown(pkg.offeringIdentifier) ?? null,
+    product: summarizeProduct(pkg.product),
+  };
+}
+
+function summarizeOfferings(value: unknown): BillingOfferingDebug | null {
+  const offerings = asRecord(value);
+  const current = offerings.current ? asRecord(offerings.current) : null;
+  const all = asRecord(offerings.all);
+  return {
+    currentIdentifier: current ? stringFromUnknown(current.identifier) ?? null : null,
+    allIdentifiers: Object.keys(all),
+    currentPackages:
+      current && Array.isArray(current.availablePackages)
+        ? current.availablePackages.map(summarizePackage)
+        : [],
+  };
+}
+
+function summarizeCustomerInfo(value: unknown): BillingDebugSnapshot["customerInfo"] {
+  const info = asRecord(value);
+  const entitlements = asRecord(info.entitlements);
+  const active = asRecord(entitlements.active);
+  const all = asRecord(entitlements.all);
+  return {
+    originalAppUserId: stringFromUnknown(info.originalAppUserId) ?? null,
+    activeEntitlements: Object.keys(active),
+    allEntitlements: Object.keys(all),
+  };
+}
+
 function shouldSkipNativePurchases(): boolean {
   // Expo Go doesn't include native billing modules; skip to avoid crashes.
   return Constants.appOwnership === "expo";
@@ -51,16 +265,98 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
   const { session } = useAuth();
   const [ready, setReady] = useState(false);
   const [customerInfo, setCustomerInfo] = useState<CustomerInfo | null>(null);
+  const [billingDebug, setBillingDebug] = useState<BillingDebugSnapshot | null>(null);
   const configuredRef = useRef(false);
+  const logBufferRef = useRef<string[]>([]);
   const isExpoGo = shouldSkipNativePurchases();
 
   const { androidApiKey, iosApiKey } = getRevenueCatConfig();
   const apiKey = Platform.OS === "android" ? androidApiKey : iosApiKey;
   const configured = Boolean(apiKey);
+  const userId = session?.user?.id ?? null;
+
+  const appendRevenueCatLog = useCallback((level: unknown, message: unknown) => {
+    const entry = `${new Date().toISOString()} [${String(level)}] ${String(message)}`;
+    logBufferRef.current = [...logBufferRef.current, entry].slice(-MAX_REVENUECAT_LOGS);
+  }, []);
+
+  const createDebugSnapshot = useCallback(
+    (plan?: PlanId, stage?: PurchaseStage): BillingDebugSnapshot => ({
+      at: new Date().toISOString(),
+      appUserId: userId,
+      platform: Platform.OS,
+      appOwnership: Constants.appOwnership ?? null,
+      appVersion: Constants.expoConfig?.version ?? null,
+      nativeAppVersion: Constants.nativeAppVersion ?? null,
+      nativeBuildVersion: Constants.nativeBuildVersion ?? null,
+      configured,
+      ready,
+      isExpoGo,
+      apiKeyKind: apiKeyKind(apiKey),
+      plan,
+      stage,
+      recentLogs: logBufferRef.current.slice(-12),
+    }),
+    [apiKey, configured, isExpoGo, ready, userId],
+  );
+
+  const enrichDebugSnapshot = useCallback(
+    async (snapshot: BillingDebugSnapshot): Promise<BillingDebugSnapshot> => {
+      if (!configured || !ready || isExpoGo) {
+        const next = { ...snapshot, recentLogs: logBufferRef.current.slice(-12) };
+        setBillingDebug(next);
+        return next;
+      }
+
+      const next: BillingDebugSnapshot = { ...snapshot };
+      try {
+        const offerings = await Purchases.getOfferings();
+        next.offerings = summarizeOfferings(offerings);
+      } catch (e) {
+        next.offeringsError = getPurchaseErrorDetails(e).message;
+      }
+
+      try {
+        const products = await Purchases.getProducts(
+          Object.values(STORE_PRODUCT_IDS),
+          Purchases.PRODUCT_CATEGORY.SUBSCRIPTION,
+        );
+        next.storeProducts = products.map(summarizeProduct);
+      } catch (e) {
+        next.storeProductsError = getPurchaseErrorDetails(e).message;
+      }
+
+      try {
+        const info = await Purchases.getCustomerInfo();
+        next.customerInfo = summarizeCustomerInfo(info);
+      } catch (e) {
+        next.customerInfoError = getPurchaseErrorDetails(e).message;
+      }
+
+      next.recentLogs = logBufferRef.current.slice(-12);
+      setBillingDebug(next);
+      return next;
+    },
+    [configured, isExpoGo, ready],
+  );
+
+  const runBillingDiagnostics = useCallback(
+    async (plan?: PlanId) => enrichDebugSnapshot(createDebugSnapshot(plan, "diagnostics")),
+    [createDebugSnapshot, enrichDebugSnapshot],
+  );
 
   useEffect(() => {
     logRevenueCatEnvHint();
   }, []);
+
+  useEffect(() => {
+    if (isExpoGo) return;
+    Purchases.setLogHandler((level, message) => {
+      appendRevenueCatLog(level, message);
+      console.log("[habitPro][RevenueCat]", level, message);
+    });
+    void Purchases.setLogLevel(LOG_LEVEL.DEBUG);
+  }, [appendRevenueCatLog, isExpoGo]);
 
   useEffect(() => {
     if (!configured || !apiKey) {
@@ -79,23 +375,18 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
     if (configuredRef.current) return;
     configuredRef.current = true;
 
-    if (__DEV__) {
-      Purchases.setLogLevel(LOG_LEVEL.INFO);
-    }
-
     Purchases.configure({ apiKey });
     setReady(true);
-  }, [apiKey, configured]);
+  }, [apiKey, configured, isExpoGo]);
 
   useEffect(() => {
     if (!ready || !configured || isExpoGo) return;
-    const uid = session?.user?.id ?? null;
     let cancelled = false;
 
     void (async () => {
       try {
-        if (uid) {
-          await Purchases.logIn(uid);
+        if (userId) {
+          await Purchases.logIn(userId);
         } else {
           await Purchases.logOut();
         }
@@ -112,7 +403,7 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [configured, ready, session?.user?.id]);
+  }, [configured, ready, userId]);
 
   const refresh = async () => {
     if (!ready || !configured || isExpoGo) return;
@@ -131,29 +422,64 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
       return { cancelled: true };
     }
 
+    const snapshot = createDebugSnapshot(plan, "load offerings");
+    let stage: PurchaseStage = "load offerings";
     try {
       const offerings = await Purchases.getOfferings();
+      snapshot.offerings = summarizeOfferings(offerings);
+
+      try {
+        stage = "load store products";
+        snapshot.stage = stage;
+        const products = await Purchases.getProducts(
+          Object.values(STORE_PRODUCT_IDS),
+          Purchases.PRODUCT_CATEGORY.SUBSCRIPTION,
+        );
+        snapshot.storeProducts = products.map(summarizeProduct);
+      } catch (e) {
+        snapshot.storeProductsError = getPurchaseErrorDetails(e).message;
+      }
+
+      stage = "load offerings";
+      snapshot.stage = stage;
       const current = offerings.current;
       const pkgId = PACKAGE_BY_PLAN[plan];
       const pkg = current?.availablePackages?.find((p) => p.identifier === pkgId);
       if (!pkg) {
         throw new Error(`RevenueCat package not found: ${pkgId} (set current offering + packages).`);
       }
+      stage = "start purchase";
       const { customerInfo: info } = await Purchases.purchasePackage(pkg);
       setCustomerInfo(info);
+      snapshot.customerInfo = summarizeCustomerInfo(info);
+      snapshot.recentLogs = logBufferRef.current.slice(-12);
+      setBillingDebug(snapshot);
       return { cancelled: false };
     } catch (e: unknown) {
       // RevenueCat throws a typed error; keep this generic to avoid coupling on versions.
-      const msg = e instanceof Error ? e.message : String(e);
-      const userDismissed =
-        typeof msg === "string" &&
-        (msg.toLowerCase().includes("cancel") || msg.toLowerCase().includes("user cancelled"));
+      const { code, message, underlying, userCancelled, userDismissed } = getPurchaseErrorDetails(e);
+      snapshot.stage = stage;
+      snapshot.error = {
+        code,
+        message,
+        underlying,
+        userCancelled,
+      };
+      snapshot.recentLogs = logBufferRef.current.slice(-12);
+      setBillingDebug(snapshot);
+      console.warn("[habitPro][BillingDebug]", JSON.stringify(snapshot));
       // Any throw is a non-purchase: do not report cancelled:false (that showed a false "trial started"
       // toast for Test Store "failed purchase" and other errors whose message omits "cancel").
       if (__DEV__ && !userDismissed) {
-        console.warn("[habitPro] purchase failed:", msg);
+        console.warn("[habitPro] purchase failed:", stage, message);
       }
-      return { cancelled: true, purchaseFailed: !userDismissed, message: userDismissed ? undefined : msg };
+      return {
+        cancelled: true,
+        purchaseFailed: !userDismissed,
+        message: userDismissed ? undefined : message,
+        stage,
+        debug: snapshot,
+      };
     }
   };
 
@@ -186,8 +512,18 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
       purchaseCommunity,
       restore,
       openManageSubscriptions,
+      billingDebug,
+      runBillingDiagnostics,
     }),
-    [configured, ready, isExpoGo, customerInfo, hasCommunityAccess],
+    [
+      billingDebug,
+      configured,
+      customerInfo,
+      hasCommunityAccess,
+      isExpoGo,
+      ready,
+      runBillingDiagnostics,
+    ],
   );
 
   return <BillingContext.Provider value={value}>{children}</BillingContext.Provider>;

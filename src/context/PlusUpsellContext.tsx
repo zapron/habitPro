@@ -5,13 +5,13 @@ import React, {
   useMemo,
   useState,
 } from "react";
-import { Linking, Modal, Pressable, StyleSheet, View } from "react-native";
+import { Linking, Modal, Pressable, ScrollView, Share, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Text } from "../components/AppText";
 import { Button } from "../components/Button";
 import { PlusBadge } from "../components/PlusBadge";
 import { useTheme } from "./ThemeContext";
-import { useBilling } from "./BillingContext";
+import { useBilling, type BillingDebugSnapshot } from "./BillingContext";
 import { useToast } from "./ToastContext";
 
 export type PlusUpsellReason =
@@ -41,6 +41,63 @@ const BULLETS = [
   "Publish streak moments and mini wins to Community",
   "Streak repairs to protect momentum",
 ];
+
+function compactProduct(product: NonNullable<BillingDebugSnapshot["storeProducts"]>[number]): string {
+  const options = product.subscriptionOptions?.map((o) => o.id).filter(Boolean).join(", ");
+  return [
+    product.identifier,
+    product.priceString,
+    product.subscriptionPeriod,
+    options ? `options=${options}` : null,
+  ].filter(Boolean).join(" | ");
+}
+
+function billingDebugLines(debug: BillingDebugSnapshot): string[] {
+  const lines = [
+    `stage: ${debug.stage ?? "unknown"}`,
+    `build: ${debug.appVersion ?? "?"} (${debug.nativeBuildVersion ?? "?"})`,
+    `platform: ${debug.platform}, ownership: ${debug.appOwnership ?? "unknown"}`,
+    `configured: ${String(debug.configured)}, ready: ${String(debug.ready)}, key: ${debug.apiKeyKind}`,
+  ];
+
+  if (debug.error) {
+    lines.push(`error: ${debug.error.code ? `[${debug.error.code}] ` : ""}${debug.error.message}`);
+    if (debug.error.underlying) lines.push(`underlying: ${debug.error.underlying}`);
+  }
+
+  if (debug.offerings) {
+    lines.push(`offering: ${debug.offerings.currentIdentifier ?? "none"}`);
+    lines.push(
+      `packages: ${
+        debug.offerings.currentPackages
+          .map((p) => `${p.identifier} -> ${compactProduct(p.product)}`)
+          .join(" ; ") || "none"
+      }`,
+    );
+  }
+  if (debug.offeringsError) lines.push(`offerings error: ${debug.offeringsError}`);
+
+  if (debug.storeProducts?.length) {
+    lines.push(`store products: ${debug.storeProducts.map(compactProduct).join(" ; ")}`);
+  }
+  if (debug.storeProductsError) lines.push(`store products error: ${debug.storeProductsError}`);
+
+  if (debug.customerInfo) {
+    lines.push(`active entitlements: ${debug.customerInfo.activeEntitlements.join(", ") || "none"}`);
+  }
+  if (debug.customerInfoError) lines.push(`customer info error: ${debug.customerInfoError}`);
+
+  if (debug.recentLogs.length) {
+    lines.push("recent logs:");
+    lines.push(...debug.recentLogs.slice(-6));
+  }
+
+  return lines;
+}
+
+function billingDebugText(debug: BillingDebugSnapshot): string {
+  return `HabitPro billing debug\n\n${billingDebugLines(debug).join("\n")}\n\nRaw:\n${JSON.stringify(debug, null, 2)}`;
+}
 
 export function PlusUpsellProvider({
   children,
@@ -79,9 +136,9 @@ export function PlusUpsellProvider({
                 ? "Squad nudges are HabitPro Community"
                 : reason === "streak_repair"
                   ? "Streak repairs are HabitPro Community"
-                : reason === "profile"
-                  ? "HabitPro Community"
-                  : "Unlock HabitPro Community";
+                  : reason === "profile"
+                    ? "HabitPro Community"
+                    : "Unlock HabitPro Community";
 
   return (
     <PlusUpsellContext.Provider value={value}>
@@ -120,21 +177,48 @@ function BillingUpsellModal({
   insetsBottom: number;
 }) {
   const { theme } = useTheme();
-  const { configured, ready, isExpoGo, purchaseCommunity, restore } = useBilling();
+  const {
+    configured,
+    ready,
+    isExpoGo,
+    purchaseCommunity,
+    restore,
+    billingDebug,
+    runBillingDiagnostics,
+  } = useBilling();
   const { showToast } = useToast();
-  const [busy, setBusy] = useState<null | "monthly" | "yearly" | "restore">(
-    null,
-  );
+  const [busy, setBusy] = useState<
+    null | "monthly" | "yearly" | "restore" | "diagnostics"
+  >(null);
   const [purchaseError, setPurchaseError] = useState<string | null>(null);
 
   if (!visible) return null;
 
   const canBuy = configured && ready && busy === null;
+  const debugLines = billingDebug ? billingDebugLines(billingDebug) : [];
+
+  const shareBillingDebug = async () => {
+    if (!billingDebug) return;
+    await Share.share({ message: billingDebugText(billingDebug) });
+  };
+
+  const refreshBillingDebug = async () => {
+    setBusy("diagnostics");
+    try {
+      await runBillingDiagnostics();
+    } finally {
+      setBusy(null);
+    }
+  };
 
   const run = async (kind: "monthly" | "yearly" | "restore") => {
     setBusy(kind);
     setPurchaseError(null);
-    showToast(kind === "restore" ? "Restoring…" : "Starting purchase…", "info", 1200);
+    showToast(
+      kind === "restore" ? "Restoring…" : "Starting purchase…",
+      "info",
+      1200,
+    );
     try {
       if (kind === "restore") {
         await restore();
@@ -148,9 +232,10 @@ function BillingUpsellModal({
         onClose();
       } else if (res.purchaseFailed) {
         const msg = res.message?.trim();
+        const prefix = res.stage ? `Failed to ${res.stage}: ` : "";
         setPurchaseError(
           msg && msg.length <= 180
-            ? msg
+            ? `${prefix}${msg}`
             : "Purchase could not start. Make sure this app was installed from Google Play with a tester account.",
         );
         showToast("Purchase did not complete.", "error");
@@ -206,6 +291,10 @@ function BillingUpsellModal({
         ]}
         onPress={(e) => e.stopPropagation()}
       >
+        <ScrollView
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
         <View style={styles.titleRow}>
           <PlusBadge withFlame size="md" />
         </View>
@@ -242,15 +331,21 @@ function BillingUpsellModal({
         </View>
 
         <Text style={[styles.disclaimer, { color: theme.colors.textMuted }]}>
-          7-day free trial, then ₹149/month or ₹999/year. Cancel anytime in Google Play.
+          7-day free trial, then ₹149/month or ₹999/year. Cancel anytime in
+          Google Play.
         </Text>
 
         {!configured ? (
-          <Text style={[styles.disclaimerHint, { color: theme.colors.textMuted }]}>
-            Billing isn’t configured yet on this build. Add your RevenueCat API key to enable purchases.
+          <Text
+            style={[styles.disclaimerHint, { color: theme.colors.textMuted }]}
+          >
+            Billing isn’t configured yet on this build. Add your RevenueCat API
+            key to enable purchases.
           </Text>
         ) : isExpoGo ? (
-          <Text style={[styles.disclaimerHint, { color: theme.colors.textMuted }]}>
+          <Text
+            style={[styles.disclaimerHint, { color: theme.colors.textMuted }]}
+          >
             Billing is available in a dev build / Play install (not Expo Go).
           </Text>
         ) : null}
@@ -259,6 +354,56 @@ function BillingUpsellModal({
           <Text style={[styles.errorText, { color: theme.colors.red[500] }]}>
             {purchaseError}
           </Text>
+        ) : null}
+
+        {debugLines.length > 0 ? (
+          <View
+            style={[
+              styles.debugBox,
+              {
+                borderColor: theme.colors.border,
+                backgroundColor: theme.colors.surfaceElevated,
+              },
+            ]}
+          >
+            <Text style={[styles.debugTitle, { color: theme.colors.textPrimary }]}>
+              Billing debug
+            </Text>
+            {debugLines.map((line, idx) => (
+              <Text
+                key={`${idx}-${line.slice(0, 12)}`}
+                style={[styles.debugLine, { color: theme.colors.textSecondary }]}
+              >
+                {line}
+              </Text>
+            ))}
+          </View>
+        ) : null}
+
+        {purchaseError || billingDebug ? (
+          <>
+            <Button
+              title={
+                busy === "diagnostics"
+                  ? "Checking billing..."
+                  : "Refresh billing debug"
+              }
+              variant="secondary"
+              onPress={() => void refreshBillingDebug()}
+              disabled={busy !== null}
+              style={{ marginTop: 10, opacity: busy === null ? 1 : 0.65 }}
+            />
+            <Button
+              title="Share billing debug"
+              variant="secondary"
+              onPress={() => void shareBillingDebug()}
+              disabled={!billingDebug || busy !== null}
+              style={{
+                marginTop: 10,
+                opacity: billingDebug && busy === null ? 1 : 0.65,
+              }}
+            />
+          </>
         ) : null}
 
         <Button
@@ -289,12 +434,24 @@ function BillingUpsellModal({
         />
 
         <View style={styles.linkRow}>
-          <Pressable onPress={() => void onOpenTerms()} accessibilityRole="link">
-            <Text style={[styles.link, { color: theme.colors.indigo[400] }]}>Terms</Text>
+          <Pressable
+            onPress={() => void onOpenTerms()}
+            accessibilityRole="link"
+          >
+            <Text style={[styles.link, { color: theme.colors.indigo[400] }]}>
+              Terms
+            </Text>
           </Pressable>
-          <Text style={[styles.linkSep, { color: theme.colors.textMuted }]}>·</Text>
-          <Pressable onPress={() => void onOpenPrivacy()} accessibilityRole="link">
-            <Text style={[styles.link, { color: theme.colors.indigo[400] }]}>Privacy</Text>
+          <Text style={[styles.linkSep, { color: theme.colors.textMuted }]}>
+            ·
+          </Text>
+          <Pressable
+            onPress={() => void onOpenPrivacy()}
+            accessibilityRole="link"
+          >
+            <Text style={[styles.link, { color: theme.colors.indigo[400] }]}>
+              Privacy
+            </Text>
           </Pressable>
         </View>
 
@@ -304,6 +461,7 @@ function BillingUpsellModal({
           onPress={onClose}
           style={{ marginTop: 10 }}
         />
+        </ScrollView>
       </Pressable>
     </View>
   );
@@ -329,6 +487,7 @@ const styles = StyleSheet.create({
   sheet: {
     padding: 20,
     borderWidth: 1,
+    maxHeight: "92%",
     maxWidth: 440,
     width: "100%",
     alignSelf: "center",
@@ -347,10 +506,36 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   bulletText: { flex: 1, fontSize: 13, lineHeight: 19, fontWeight: "600" },
-  disclaimer: { fontSize: 11, lineHeight: 16, fontWeight: "700", marginTop: 10 },
-  disclaimerHint: { fontSize: 11, lineHeight: 16, fontWeight: "700", marginTop: 6, opacity: 0.9 },
+  disclaimer: {
+    fontSize: 11,
+    lineHeight: 16,
+    fontWeight: "700",
+    marginTop: 10,
+  },
+  disclaimerHint: {
+    fontSize: 11,
+    lineHeight: 16,
+    fontWeight: "700",
+    marginTop: 6,
+    opacity: 0.9,
+  },
   errorText: { fontSize: 12, lineHeight: 17, fontWeight: "800", marginTop: 8 },
-  linkRow: { flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 8, marginTop: 10 },
+  debugBox: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 10,
+    marginTop: 10,
+    gap: 4,
+  },
+  debugTitle: { fontSize: 12, fontWeight: "900" },
+  debugLine: { fontSize: 10, lineHeight: 14, fontWeight: "700" },
+  linkRow: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 10,
+  },
   link: { fontSize: 12, fontWeight: "800" },
   linkSep: { fontSize: 12, fontWeight: "800" },
 });

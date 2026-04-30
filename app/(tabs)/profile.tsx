@@ -13,6 +13,7 @@ import {
   Alert,
   Image,
 } from "react-native";
+import type { ImageStyle } from "react-native";
 import Svg, { Circle, G } from "react-native-svg";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Settings, Zap, Globe, User, Target, Flame, LogOut } from "lucide-react-native";
@@ -542,7 +543,7 @@ export default function ProfileScreen() {
             >
               <Image
                 source={require("../../assets/habitpro-logo-transparent-v3.png")}
-                style={styles.heroLogo}
+                style={styles.heroLogo as ImageStyle}
                 resizeMode="contain"
                 accessibilityLabel="HabitPro logo"
               />

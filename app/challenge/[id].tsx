@@ -1083,6 +1083,11 @@ const styles = StyleSheet.create({
     padding: 14,
     marginBottom: 12,
   },
+  card: {
+    borderRadius: 18,
+    borderWidth: 1,
+    padding: 16,
+  },
   repairTopRow: {
     flexDirection: "row",
     alignItems: "center",
