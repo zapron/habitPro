@@ -89,7 +89,11 @@ function billingDebugLines(debug: BillingDebugSnapshot): string[] {
 
   if (debug.recentLogs.length) {
     lines.push("recent logs:");
-    lines.push(...debug.recentLogs.slice(-6));
+    lines.push(
+      ...debug.recentLogs.slice(-3).map((line) =>
+        line.length > 140 ? `${line.slice(0, 137)}...` : line,
+      ),
+    );
   }
 
   return lines;
@@ -278,7 +282,7 @@ function BillingUpsellModal({
         accessibilityRole="button"
         accessibilityLabel="Dismiss"
       />
-      <Pressable
+      <View
         style={[
           styles.sheet,
           {
@@ -289,11 +293,12 @@ function BillingUpsellModal({
             marginBottom: Math.max(insetsBottom, 16),
           },
         ]}
-        onPress={(e) => e.stopPropagation()}
       >
         <ScrollView
+          style={styles.sheetScroll}
+          contentContainerStyle={styles.sheetScrollContent}
           keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
+          showsVerticalScrollIndicator
         >
         <View style={styles.titleRow}>
           <PlusBadge withFlame size="md" />
@@ -356,32 +361,8 @@ function BillingUpsellModal({
           </Text>
         ) : null}
 
-        {debugLines.length > 0 ? (
-          <View
-            style={[
-              styles.debugBox,
-              {
-                borderColor: theme.colors.border,
-                backgroundColor: theme.colors.surfaceElevated,
-              },
-            ]}
-          >
-            <Text style={[styles.debugTitle, { color: theme.colors.textPrimary }]}>
-              Billing debug
-            </Text>
-            {debugLines.map((line, idx) => (
-              <Text
-                key={`${idx}-${line.slice(0, 12)}`}
-                style={[styles.debugLine, { color: theme.colors.textSecondary }]}
-              >
-                {line}
-              </Text>
-            ))}
-          </View>
-        ) : null}
-
         {purchaseError || billingDebug ? (
-          <>
+          <View style={styles.debugActions}>
             <Button
               title={
                 busy === "diagnostics"
@@ -403,7 +384,34 @@ function BillingUpsellModal({
                 opacity: billingDebug && busy === null ? 1 : 0.65,
               }}
             />
-          </>
+          </View>
+        ) : null}
+
+        {debugLines.length > 0 ? (
+          <View
+            style={[
+              styles.debugBox,
+              {
+                borderColor: theme.colors.border,
+                backgroundColor: theme.colors.surfaceElevated,
+              },
+            ]}
+          >
+            <Text style={[styles.debugTitle, { color: theme.colors.textPrimary }]}>
+              Billing debug
+            </Text>
+            {debugLines.map((line, idx) => (
+              <Text
+                key={`${idx}-${line.slice(0, 12)}`}
+                style={[styles.debugLine, { color: theme.colors.textSecondary }]}
+              >
+                {line}
+              </Text>
+            ))}
+            <Text style={[styles.debugLine, { color: theme.colors.textMuted }]}>
+              Share includes the full raw debug text.
+            </Text>
+          </View>
         ) : null}
 
         <Button
@@ -462,7 +470,7 @@ function BillingUpsellModal({
           style={{ marginTop: 10 }}
         />
         </ScrollView>
-      </Pressable>
+      </View>
     </View>
   );
 }
@@ -485,14 +493,16 @@ const styles = StyleSheet.create({
     zIndex: 1,
   },
   sheet: {
-    padding: 20,
     borderWidth: 1,
     maxHeight: "92%",
     maxWidth: 440,
     width: "100%",
     alignSelf: "center",
     zIndex: 2,
+    overflow: "hidden",
   },
+  sheetScroll: { width: "100%" },
+  sheetScrollContent: { padding: 20, paddingBottom: 24 },
   titleRow: { marginBottom: 10 },
   title: { fontWeight: "800", letterSpacing: -0.3, marginBottom: 8 },
   sub: { fontSize: 14, lineHeight: 20, marginBottom: 14, fontWeight: "500" },
@@ -520,6 +530,7 @@ const styles = StyleSheet.create({
     opacity: 0.9,
   },
   errorText: { fontSize: 12, lineHeight: 17, fontWeight: "800", marginTop: 8 },
+  debugActions: { marginTop: 10 },
   debugBox: {
     borderWidth: 1,
     borderRadius: 12,
