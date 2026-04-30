@@ -11,6 +11,7 @@ import {
   StyleSheet,
   StatusBar,
   Alert,
+  Image,
 } from "react-native";
 import Svg, { Circle, G } from "react-native-svg";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -260,12 +261,24 @@ const hubVisStyles = StyleSheet.create({
 const RING_SIZE = 102;
 const RING_STROKE = 4;
 
+function hexToRgba(hex: string | undefined | null, a: number): string {
+  const raw = typeof hex === "string" ? hex : "#6366f1";
+  const h = raw.replace("#", "").trim();
+  if (h.length !== 6) return `rgba(99,102,241,${a})`;
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  return `rgba(${r},${g},${b},${a})`;
+}
+
 function LevelXpRing({
+  level,
   xpInLevel,
   theme,
   isDark,
   children,
 }: {
+  level: number;
   xpInLevel: number;
   theme: AppTheme;
   isDark: boolean;
@@ -275,7 +288,18 @@ function LevelXpRing({
   const r = (RING_SIZE - RING_STROKE) / 2 - 1;
   const circ = 2 * Math.PI * r;
   const pct = Math.min(1, Math.max(0, xpInLevel / 100));
-  const track = isDark ? "rgba(255,255,255,0.1)" : "rgba(15,23,42,0.1)";
+
+  const levelPalette = [
+    theme.colors.indigo[500],
+    theme.colors.cyan[400],
+    theme.colors.amber[500],
+    theme.colors.green[500],
+    theme.colors.red[500],
+    theme.colors.yellow[400],
+  ] as const;
+  const levelColor =
+    levelPalette[Math.abs(level) % levelPalette.length] ?? theme.colors.indigo[500];
+  const track = hexToRgba(levelColor, isDark ? 0.22 : 0.16);
   return (
     <View style={{ width: RING_SIZE, height: RING_SIZE, alignItems: "center", justifyContent: "center" }}>
       <Svg width={RING_SIZE} height={RING_SIZE} style={StyleSheet.absoluteFill}>
@@ -285,7 +309,7 @@ function LevelXpRing({
             cx={c}
             cy={c}
             r={r}
-            stroke={theme.colors.indigo[500]}
+            stroke={levelColor}
             strokeWidth={RING_STROKE}
             fill="none"
             strokeLinecap="round"
@@ -506,13 +530,39 @@ export default function ProfileScreen() {
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: bottomPad }}>
         <View style={[styles.hero, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, ...theme.shadow.card }]}>
-          <LevelXpRing xpInLevel={xpInLevel} theme={theme} isDark={isDark}>
-            <View style={[styles.levelOrb, { borderColor: theme.colors.indigo[500] + "cc", ...theme.shadow.glow }]}>
-              <Text style={[styles.levelHuge, { color: theme.colors.yellow[400] }]}>{level}</Text>
-              <Text style={[styles.levelTag, { color: theme.colors.textMuted }]}>LEVEL</Text>
+          <LevelXpRing level={level} xpInLevel={xpInLevel} theme={theme} isDark={isDark}>
+            <View
+              style={[
+                styles.levelOrb,
+                {
+                  borderColor: theme.colors.border,
+                  ...theme.shadow.glow,
+                },
+              ]}
+            >
+              <Image
+                source={require("../../assets/habitpro-logo-transparent-v3.png")}
+                style={styles.heroLogo}
+                resizeMode="contain"
+                accessibilityLabel="HabitPro logo"
+              />
+              <View
+                style={[
+                  styles.levelBadge,
+                  {
+                    backgroundColor: theme.colors.surface,
+                    borderColor: theme.colors.border,
+                  },
+                ]}
+              >
+                <Text style={[styles.levelBadgeText, { color: theme.colors.textPrimary }]}>
+                  {level}
+                </Text>
+              </View>
             </View>
           </LevelXpRing>
           <View style={styles.heroText}>
+            <Text style={[styles.levelInline, { color: theme.colors.textMuted }]}>Level {level}</Text>
             <View style={styles.xpLine}>
               <Zap size={16} color={theme.colors.yellow[400]} fill={theme.colors.yellow[400]} />
               <Text style={[styles.xpBig, { color: theme.colors.textPrimary }]}>
@@ -788,9 +838,25 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  heroLogo: { width: 86, height: 86 },
   levelHuge: { fontSize: 32, fontWeight: "900" },
   levelTag: { fontSize: 9, fontWeight: "800", letterSpacing: 1 },
   heroText: { flex: 1, gap: 6 },
+  levelInline: { fontSize: 12, fontWeight: "900", letterSpacing: 0.6, marginBottom: 2 },
+  levelBadge: {
+    position: "absolute",
+    left: "50%",
+    top: "50%",
+    minWidth: 34,
+    height: 34,
+    borderRadius: 999,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 9,
+    transform: [{ translateX: -17 }, { translateY: -17 }],
+  },
+  levelBadgeText: { fontSize: 14, fontWeight: "900", fontVariant: ["tabular-nums"] },
   xpLine: { flexDirection: "row", alignItems: "center", gap: 8 },
   xpBig: { fontSize: 17, fontWeight: "800" },
   totalXp: { fontSize: 13 },
