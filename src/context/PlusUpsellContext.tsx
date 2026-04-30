@@ -132,6 +132,7 @@ function BillingUpsellModal({
 
   const run = async (kind: "monthly" | "yearly" | "restore") => {
     setBusy(kind);
+    showToast(kind === "restore" ? "Restoring…" : "Starting purchase…", "info", 1200);
     try {
       if (kind === "restore") {
         await restore();
@@ -146,6 +147,9 @@ function BillingUpsellModal({
       } else if (res.purchaseFailed) {
         showToast("Purchase did not complete.", "error");
       }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      showToast(msg.length > 120 ? "Purchase failed to start." : msg, "error");
     } finally {
       setBusy(null);
     }
@@ -162,7 +166,7 @@ function BillingUpsellModal({
   };
 
   return (
-    <View style={styles.root}>
+    <View style={styles.root} pointerEvents="box-none">
       <Pressable
         style={[
           styles.backdrop,
@@ -176,7 +180,7 @@ function BillingUpsellModal({
         accessibilityRole="button"
         accessibilityLabel="Dismiss"
       />
-      <View
+      <Pressable
         style={[
           styles.sheet,
           {
@@ -187,6 +191,7 @@ function BillingUpsellModal({
             marginBottom: Math.max(insetsBottom, 16),
           },
         ]}
+        onPress={(e) => e.stopPropagation()}
       >
         <View style={styles.titleRow}>
           <PlusBadge withFlame size="md" />
@@ -280,7 +285,7 @@ function BillingUpsellModal({
           onPress={onClose}
           style={{ marginTop: 10 }}
         />
-      </View>
+      </Pressable>
     </View>
   );
 }
@@ -300,6 +305,7 @@ const styles = StyleSheet.create({
   },
   backdrop: {
     ...StyleSheet.absoluteFillObject,
+    zIndex: 1,
   },
   sheet: {
     padding: 20,
@@ -307,6 +313,7 @@ const styles = StyleSheet.create({
     maxWidth: 440,
     width: "100%",
     alignSelf: "center",
+    zIndex: 2,
   },
   titleRow: { marginBottom: 10 },
   title: { fontWeight: "800", letterSpacing: -0.3, marginBottom: 8 },
