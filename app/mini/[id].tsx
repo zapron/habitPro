@@ -31,6 +31,7 @@ import {
   Fuel,
   Flame,
   Sparkles,
+  Info,
 } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import { fireImmediateNotification } from "../../src/utils/notifications";
@@ -38,6 +39,7 @@ import { clearMiniMissionNotifications } from "../../src/utils/miniMissionNotifi
 import { Screen } from "../../src/components/Screen";
 import { ConfirmDialog } from "../../src/components/ConfirmDialog";
 import { Button } from "../../src/components/Button";
+import { MissionDetailsSheet } from "../../src/components/MissionDetailsSheet";
 import { StreakMemorySheet } from "../../src/components/StreakMemorySheet";
 import { MiniMissionFireProgressBar } from "../../src/components/MiniMissionFireProgressBar";
 import { MiniMissionFlightCountdown } from "../../src/components/MiniMissionFlightCountdown";
@@ -172,6 +174,7 @@ export default function MiniMissionDetail() {
   /** Avoid not-found flash after delete; mission is removed before navigation finishes. */
   const [pendingExitAfterRemove, setPendingExitAfterRemove] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [missionDetailsOpen, setMissionDetailsOpen] = useState(false);
   const [completionImageAspect, setCompletionImageAspect] = useState<number | null>(null);
   const [completionImageOpen, setCompletionImageOpen] = useState(false);
 
@@ -275,29 +278,26 @@ export default function MiniMissionDetail() {
     [countdown],
   );
 
-  const flightBoard = useMemo(() => {
+  const flightTone = useMemo(() => {
     if (!mission) {
-      return {
-        label: "",
-        tone: "muted" as const,
-      };
+      return "muted" as const;
     }
     if (completeSheetOpen) {
-      return { label: "TIMER PAUSED", tone: "countdown" as const };
+      return "countdown" as const;
     }
     if (isTimerUp) {
-      return { label: "TIME'S UP", tone: "danger" as const };
+      return "danger" as const;
     }
     if (mission.status === "completed") {
-      return { label: "COMPLETED", tone: "muted" as const };
+      return "muted" as const;
     }
     if (mission.status === "cancelled") {
-      return { label: "CANCELLED", tone: "muted" as const };
+      return "muted" as const;
     }
     if (mission.status === "in_progress") {
-      return { label: "COUNTDOWN", tone: "countdown" as const };
+      return "countdown" as const;
     }
-    return { label: "PLANNED TIME", tone: "countdown" as const };
+    return "countdown" as const;
   }, [mission, completeSheetOpen, isTimerUp]);
 
   const missionFuelProgress = useMemo(() => {
@@ -589,6 +589,12 @@ export default function MiniMissionDetail() {
           { label: "Delete", variant: "danger", onPress: confirmDeleteMiniMission },
         ]}
       />
+      <MissionDetailsSheet
+        variant="mini"
+        visible={missionDetailsOpen}
+        onClose={() => setMissionDetailsOpen(false)}
+        mission={mission}
+      />
       <StreakMemorySheet
         visible={completeSheetOpen}
         variant="mini"
@@ -640,34 +646,39 @@ export default function MiniMissionDetail() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <Text
-          style={[
-            styles.title,
-            { color: theme.colors.textPrimary, fontSize: theme.typography.h1 },
-          ]}
-        >
-          {mission.title}
-        </Text>
-        {!!mission.objective && (
+        <View style={styles.titleRow}>
           <Text
             style={[
-              styles.objective,
+              styles.title,
               {
-                color: theme.colors.textSecondary,
-                fontSize: theme.typography.body,
+                color: theme.colors.textPrimary,
+                fontSize: theme.typography.h1,
+                lineHeight: Math.round(theme.typography.h1 * 1.12),
               },
             ]}
+            numberOfLines={2}
           >
-            {mission.objective}
+            {mission.title}
           </Text>
-        )}
+          <TouchableOpacity
+            style={styles.infoButton}
+            onPress={() => {
+              void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              setMissionDetailsOpen(true);
+            }}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            accessibilityRole="button"
+            accessibilityLabel="Mini mission details"
+          >
+            <Info size={theme.icon.md} color={theme.colors.indigo[400]} />
+          </TouchableOpacity>
+        </View>
 
         {mission.status === "in_progress" && !isTimerUp ? (
           <MiniMissionFlightCountdown
-            label={flightBoard.label}
             display={flightProgressive.display}
             phase={flightProgressive.phase}
-            tone={flightBoard.tone}
+            tone={flightTone}
           />
         ) : null}
         <View style={styles.topPillsRow}>
@@ -722,11 +733,12 @@ export default function MiniMissionDetail() {
           </Text>
         ) : null}
 
-        {mission.status === "in_progress" && !isTimerUp && (
+        {mission.status === "in_progress" && (
           <View style={styles.progressBarWrap}>
             <MiniMissionFireProgressBar
-              progress={missionFuelProgress}
+              progress={isTimerUp ? 1 : missionFuelProgress}
               isDark={isDark}
+              showCompleteEffect={isTimerUp}
             />
           </View>
         )}
@@ -1053,8 +1065,22 @@ const styles = StyleSheet.create({
   centered: { flex: 1, alignItems: "center", justifyContent: "center" },
   notFound: { marginBottom: 12 },
   scroll: { flex: 1 },
-  title: { fontWeight: "800", marginBottom: 8 },
-  objective: { marginBottom: 20, lineHeight: 23 },
+  titleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    maxWidth: "100%",
+    gap: 8,
+    marginBottom: 12,
+  },
+  title: { flexShrink: 1, fontWeight: "800" },
+  infoButton: {
+    width: 24,
+    height: 24,
+    justifyContent: "center",
+    alignItems: "center",
+    transform: [{ translateY: 3 }],
+  },
   timerHint: { textAlign: "center", marginTop: 4, marginBottom: 4, paddingHorizontal: 4 },
   topPillsRow: {
     flexDirection: "row",

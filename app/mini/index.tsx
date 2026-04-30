@@ -149,7 +149,11 @@ function MiniMissionCard({ item, now }: { item: MiniMission; now: number }) {
               {totalMinutes} min total
             </Text>
           </View>
-          <MiniMissionFireProgressBar progress={progress} isDark={isDark} />
+          <MiniMissionFireProgressBar
+            progress={isTimerUp ? 1 : progress}
+            isDark={isDark}
+            showCompleteEffect={isTimerUp}
+          />
         </View>
       )}
 

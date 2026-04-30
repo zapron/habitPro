@@ -154,6 +154,9 @@ type SplitFlapTimeDisplayProps = {
   display: string;
   phase: ProgressivePhase;
   timeColor: string;
+  size?: "normal" | "large";
+  unitLabels?: readonly string[];
+  unitColor?: string;
   digitTextShadow?: Pick<
     TextStyle,
     "textShadowColor" | "textShadowOffset" | "textShadowRadius"
@@ -164,6 +167,9 @@ export function SplitFlapTimeDisplay({
   display,
   phase,
   timeColor,
+  size = "normal",
+  unitLabels,
+  unitColor,
   digitTextShadow,
 }: SplitFlapTimeDisplayProps) {
   const { width: windowW } = useWindowDimensions();
@@ -171,11 +177,31 @@ export function SplitFlapTimeDisplay({
 
   const { fontSize, lineHeight, digitWidth } = useMemo(() => {
     const narrow = windowW < 380;
-    const fs = narrow ? 20 : 23;
-    const lh = narrow ? 22 : 25;
+    let fs = narrow ? 20 : 23;
+    let lh = narrow ? 22 : 25;
+
+    if (size === "large") {
+      if (pairs.length <= 1) {
+        fs = narrow ? 68 : 84;
+        lh = narrow ? 76 : 92;
+      } else if (pairs.length === 2) {
+        fs = narrow ? 62 : 76;
+        lh = narrow ? 68 : 84;
+      } else if (pairs.length === 3) {
+        fs = narrow ? 38 : 46;
+        lh = narrow ? 44 : 52;
+      } else {
+        fs = narrow ? 30 : 36;
+        lh = narrow ? 36 : 42;
+      }
+    }
+
     const dw = Math.max(16, Math.round(fs * 0.68));
     return { fontSize: fs, lineHeight: lh, digitWidth: dw };
-  }, [windowW]);
+  }, [pairs.length, size, windowW]);
+
+  const separatorFontSize = Math.round(fontSize * 0.82);
+  const separatorWidth = Math.max(11, Math.round(fontSize * 0.5));
 
   const digitProps = {
     fontSize,
@@ -188,27 +214,72 @@ export function SplitFlapTimeDisplay({
   const compact = pairs.length === 1;
 
   return (
-    <View style={[styles.row, compact && styles.rowCompact]}>
-      {pairs.map((pair, i) => (
-        <Fragment key={`${phase}-${i}`}>
-          {i > 0 ? (
-            <Text
-              style={[styles.sep, { color: timeColor, lineHeight: lineHeight + 10 }]}
-            >
-              :
-            </Text>
-          ) : null}
-          <View style={[styles.pair, compact && styles.pairCompact]}>
-            <SplitFlapDigit digit={pair[0]} {...digitProps} />
-            <SplitFlapDigit digit={pair[1]} {...digitProps} />
-          </View>
-        </Fragment>
-      ))}
+    <View style={styles.stack}>
+      <View style={[styles.row, compact && styles.rowCompact]}>
+        {pairs.map((pair, i) => (
+          <Fragment key={`${phase}-${i}`}>
+            {i > 0 ? (
+              <Text
+                style={[
+                  styles.sep,
+                  {
+                    color: timeColor,
+                    fontSize: separatorFontSize,
+                    lineHeight: lineHeight + 10,
+                    width: separatorWidth,
+                  },
+                ]}
+              >
+                :
+              </Text>
+            ) : null}
+            <View style={[styles.pair, compact && styles.pairCompact]}>
+              <SplitFlapDigit digit={pair[0]} {...digitProps} />
+              <SplitFlapDigit digit={pair[1]} {...digitProps} />
+            </View>
+          </Fragment>
+        ))}
+      </View>
+
+      {unitLabels ? (
+        <View
+          style={[
+            styles.unitRow,
+            size === "large" && styles.unitRowLarge,
+            compact && styles.rowCompact,
+          ]}
+        >
+          {pairs.map((_, i) => (
+            <Fragment key={`${phase}-unit-${i}`}>
+              {i > 0 ? (
+                <View style={{ width: separatorWidth, flexShrink: 0 }} />
+              ) : null}
+              <View style={[styles.unitCol, compact && styles.unitColCompact]}>
+                <Text
+                  style={[
+                    styles.unitText,
+                    size === "large" && styles.unitTextLarge,
+                    { color: unitColor ?? timeColor },
+                  ]}
+                  numberOfLines={1}
+                >
+                  {unitLabels[i] ?? ""}
+                </Text>
+              </View>
+            </Fragment>
+          ))}
+        </View>
+      ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  stack: {
+    width: "100%",
+    minWidth: 0,
+    alignSelf: "stretch",
+  },
   row: {
     flexDirection: "row",
     alignItems: "center",
@@ -233,9 +304,7 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   sep: {
-    width: 11,
     flexShrink: 0,
-    fontSize: 20,
     fontWeight: "700",
     opacity: 0.45,
     textAlign: "center",
@@ -264,5 +333,36 @@ const styles = StyleSheet.create({
     ...(Platform.OS === "android"
       ? { includeFontPadding: false, textAlignVertical: "center" as const }
       : {}),
+  },
+  unitRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    width: "100%",
+    minWidth: 0,
+    alignSelf: "stretch",
+    marginTop: 6,
+  },
+  unitRowLarge: {
+    marginTop: 4,
+  },
+  unitCol: {
+    flex: 1,
+    minWidth: 0,
+    alignItems: "center",
+  },
+  unitColCompact: {
+    flex: 0,
+    flexGrow: 0,
+    flexShrink: 0,
+  },
+  unitText: {
+    fontSize: 10,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  unitTextLarge: {
+    fontSize: 12,
+    fontWeight: "800",
+    letterSpacing: 0.8,
   },
 });

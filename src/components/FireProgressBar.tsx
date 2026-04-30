@@ -22,7 +22,7 @@ import {
   Easing,
   LayoutChangeEvent,
 } from "react-native";
-import LottieView from "lottie-react-native";
+import LottieView, { type AnimationObject } from "lottie-react-native";
 import { useReducedMotion } from "../hooks/useReducedMotion";
 import { FIRE_LOTTIE_URI } from "./FireLottie";
 
@@ -142,6 +142,12 @@ export interface FireProgressBarProps {
   fireSize?: number;
   /** Custom accessibility label. */
   accessibilityLabel?: string;
+  /** Lottie source rendered instead of the flame once progress reaches 100%. */
+  completeEffectSource?: AnimationObject | { uri: string };
+  /** Size of the complete effect. Default: fireSize + 16 */
+  completeEffectSize?: number;
+  /** Whether the complete effect should loop. Default false. */
+  completeEffectLoop?: boolean;
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -156,12 +162,16 @@ export function FireProgressBar({
   isDark = true,
   fireSize = 36,
   accessibilityLabel,
+  completeEffectSource,
+  completeEffectSize = fireSize + 16,
+  completeEffectLoop = false,
 }: FireProgressBarProps) {
   const reduceMotion = useReducedMotion();
   const clamped = Math.min(1, Math.max(0, progress));
   const pct = Math.round(clamped * 100);
   const color = progressColor(clamped);
-  const showFlame = clamped > 0.02;
+  const showCompleteEffect = clamped >= 1 && Boolean(completeEffectSource);
+  const showFlame = clamped > 0.02 && !showCompleteEffect;
 
   // Track layout width (needed to translate % → px for Animated positioning)
   const [trackWidth, setTrackWidth] = useState(0);
@@ -268,6 +278,30 @@ export function FireProgressBar({
             Array.from({ length: EMBER_COUNT }, (_, i) => (
               <EmberParticle key={i} fireSize={fireSize} />
             ))}
+        </Animated.View>
+      )}
+
+      {showCompleteEffect && completeEffectSource && trackWidth > 0 && (
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            styles.fireWrap,
+            {
+              width: completeEffectSize,
+              height: completeEffectSize,
+              bottom: height / 2 - completeEffectSize / 2,
+              left: trackWidth - completeEffectSize / 2,
+            },
+          ]}
+        >
+          <LottieView
+            source={completeEffectSource}
+            autoPlay={!reduceMotion}
+            loop={!reduceMotion && completeEffectLoop}
+            progress={reduceMotion ? 0.5 : undefined}
+            resizeMode="contain"
+            style={{ width: completeEffectSize, height: completeEffectSize }}
+          />
         </Animated.View>
       )}
     </View>

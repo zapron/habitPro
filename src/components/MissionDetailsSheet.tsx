@@ -7,8 +7,9 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Gamepad2, Plane, X } from "lucide-react-native";
-import type { Habit } from "../types/habit";
+import { Clock3, Gamepad2, Plane, X } from "lucide-react-native";
+import { MAX_RESERVE_FUEL_MINUTES } from "../constants/miniMission";
+import type { Habit, MiniMission } from "../types/habit";
 import { useTheme } from "../context/ThemeContext";
 
 export type MissionDetailsSheetProps =
@@ -28,6 +29,12 @@ export type MissionDetailsSheetProps =
       totalDays: number;
       startDate: string;
       endDate?: string | null;
+    }
+  | {
+      visible: boolean;
+      onClose: () => void;
+      variant: "mini";
+      mission: MiniMission;
     };
 
 function formatShortDate(iso: string): string {
@@ -40,9 +47,151 @@ function formatShortDate(iso: string): string {
   }
 }
 
+function formatShortDateTime(iso?: string | null): string {
+  if (!iso) return "Not set";
+  try {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return iso;
+    return d.toLocaleString(undefined, {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  } catch {
+    return iso;
+  }
+}
+
+function getMiniStatusLabel(mission: MiniMission): string {
+  if (mission.status === "completed") return "Completed";
+  if (mission.status === "cancelled") return "Cancelled";
+  if (mission.status === "pending") return "Waiting";
+  if (mission.status === "scheduled") return "Scheduled";
+  if (mission.status === "in_progress" && mission.startedAt) {
+    const totalMinutes = mission.estimatedMinutes + (mission.extendedMinutes ?? 0);
+    const endMs = new Date(mission.startedAt).getTime() + totalMinutes * 60 * 1000;
+    return Date.now() >= endMs ? "Failed" : "In progress";
+  }
+  return "In progress";
+}
+
 export function MissionDetailsSheet(props: MissionDetailsSheetProps) {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
+
+  if (props.variant === "mini") {
+    const { mission } = props;
+    const reserveMinutes = mission.extendedMinutes ?? 0;
+    const totalMinutes = mission.estimatedMinutes + reserveMinutes;
+    const brief =
+      typeof mission.objective === "string" && mission.objective.trim().length > 0
+        ? mission.objective.trim()
+        : "No objective added yet.";
+    const visibility = mission.visibility === "public" ? "Community" : "Solo";
+    const completionNote =
+      typeof mission.completionMemory?.note === "string" &&
+      mission.completionMemory.note.trim().length > 0
+        ? mission.completionMemory.note.trim()
+        : null;
+
+    return (
+      <Modal visible={props.visible} animationType="slide" transparent onRequestClose={props.onClose}>
+        <View style={styles.backdrop}>
+          <View
+            style={[
+              styles.sheet,
+              {
+                backgroundColor: theme.colors.surface,
+                borderColor: theme.colors.border,
+                paddingBottom: Math.max(insets.bottom, 20),
+                maxHeight: "88%",
+              },
+            ]}
+          >
+            <View style={styles.sheetHead}>
+              <Text style={[styles.sheetTitle, { color: theme.colors.textPrimary }]}>Mini mission</Text>
+              <TouchableOpacity
+                onPress={props.onClose}
+                style={[styles.closeBtn, { borderColor: theme.colors.border, backgroundColor: theme.colors.surfaceElevated }]}
+                hitSlop={12}
+                accessibilityLabel="Close"
+              >
+                <X size={20} color={theme.colors.textMuted} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              contentContainerStyle={styles.scrollContent}
+            >
+              <Text style={[styles.missionTitle, { color: theme.colors.textPrimary }]}>{mission.title}</Text>
+
+              <View style={[styles.modePill, styles.modePillMini]}>
+                <Clock3 size={14} color={theme.colors.indigo[400]} />
+                <Text style={[styles.modePillText, { color: theme.colors.indigo[400] }]}>
+                  Focus sprint
+                </Text>
+              </View>
+
+              <Text style={[styles.sectionLabel, { color: theme.colors.textMuted }]}>Objective</Text>
+              <Text style={[styles.body, { color: theme.colors.textSecondary }]}>{brief}</Text>
+
+              <Text style={[styles.sectionLabel, { color: theme.colors.textMuted }]}>Status</Text>
+              <Text style={[styles.metaLine, { color: theme.colors.textPrimary }]}>{getMiniStatusLabel(mission)}</Text>
+
+              <Text style={[styles.sectionLabel, { color: theme.colors.textMuted }]}>Time box</Text>
+              <Text style={[styles.metaLine, { color: theme.colors.textPrimary }]}>
+                {mission.estimatedMinutes} min planned
+              </Text>
+              <Text style={[styles.metaSubLine, { color: theme.colors.textSecondary }]}>
+                Reserve used: {reserveMinutes}/{MAX_RESERVE_FUEL_MINUTES} min
+              </Text>
+              <Text style={[styles.metaSubLine, { color: theme.colors.textSecondary }]}>
+                Total: {totalMinutes} min
+              </Text>
+
+              <Text style={[styles.sectionLabel, { color: theme.colors.textMuted }]}>Visibility</Text>
+              <Text style={[styles.metaLine, { color: theme.colors.textPrimary }]}>{visibility}</Text>
+
+              <Text style={[styles.sectionLabel, { color: theme.colors.textMuted }]}>Created</Text>
+              <Text style={[styles.metaLine, { color: theme.colors.textPrimary }]}>{formatShortDateTime(mission.createdAt)}</Text>
+
+              {mission.scheduledStartAt ? (
+                <>
+                  <Text style={[styles.sectionLabel, { color: theme.colors.textMuted }]}>Scheduled</Text>
+                  <Text style={[styles.metaLine, { color: theme.colors.textPrimary }]}>{formatShortDateTime(mission.scheduledStartAt)}</Text>
+                </>
+              ) : null}
+
+              {mission.startedAt ? (
+                <>
+                  <Text style={[styles.sectionLabel, { color: theme.colors.textMuted }]}>Started</Text>
+                  <Text style={[styles.metaLine, { color: theme.colors.textPrimary }]}>{formatShortDateTime(mission.startedAt)}</Text>
+                </>
+              ) : null}
+
+              {mission.completedAt ? (
+                <>
+                  <Text style={[styles.sectionLabel, { color: theme.colors.textMuted }]}>Completed</Text>
+                  <Text style={[styles.metaLine, { color: theme.colors.textPrimary }]}>{formatShortDateTime(mission.completedAt)}</Text>
+                </>
+              ) : null}
+
+              {completionNote ? (
+                <>
+                  <Text style={[styles.sectionLabel, { color: theme.colors.textMuted }]}>Completion note</Text>
+                  <Text style={[styles.body, { color: theme.colors.textSecondary }]}>{completionNote}</Text>
+                </>
+              ) : null}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+    );
+  }
 
   const payload =
     props.variant === "group"
@@ -191,6 +340,10 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(245, 158, 11, 0.1)",
     borderColor: "rgba(245, 158, 11, 0.28)",
   },
+  modePillMini: {
+    backgroundColor: "rgba(99, 102, 241, 0.1)",
+    borderColor: "rgba(99, 102, 241, 0.28)",
+  },
   modePillText: {
     fontSize: 12,
     fontWeight: "800",
@@ -213,5 +366,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
     marginBottom: 4,
+  },
+  metaSubLine: {
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: "600",
+    marginBottom: 2,
   },
 });
