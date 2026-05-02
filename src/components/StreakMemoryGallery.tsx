@@ -18,7 +18,7 @@ import {
   REPAIR_MEMORY_NOTE_SQUAD,
 } from "../utils/repairStreakMemoryMerge";
 
-type Entry = { dateStr: string; memory: StreakMemory };
+type Entry = { dateStr: string; memory: StreakMemory; missionDay?: number | null };
 
 type StreakMemoryGalleryProps = {
   entries: Entry[];
@@ -57,6 +57,11 @@ export function StreakMemoryGallery({
   );
   const modalNoteTrim = open?.memory?.note?.trim() ?? "";
   const modalTextOnlyHero = Boolean(modalNoteTrim && !modalHasRenderableImage);
+  const openDayLabel =
+    open && typeof open.missionDay === "number" && open.missionDay > 0
+      ? `Day ${open.missionDay}`
+      : null;
+
   const modalRepairKicker =
     open?.memory?.repairSource === "squad"
       ? "SQUAD REPAIR"
@@ -81,7 +86,7 @@ export function StreakMemoryGallery({
           contentContainerStyle={styles.row}
           keyExtractor={(it) => it.dateStr}
           renderItem={({ item }) => {
-            const { dateStr, memory } = item;
+            const { dateStr, memory, missionDay } = item;
             const displayUri = memory.imageUrl || memory.imageUri;
             const showImage = Boolean(displayUri) && (!remotePeer || uriLoadsForRemoteViewer(displayUri));
             const hasLocalOnlyPhoto =
@@ -100,9 +105,12 @@ export function StreakMemoryGallery({
                     ? "STREAK REPAIR"
                     : null;
 
+            const dayLabel =
+              typeof missionDay === "number" && missionDay > 0 ? `Day ${missionDay}` : null;
+
             return (
               <Pressable
-                onPress={() => setOpen({ dateStr, memory })}
+                onPress={() => setOpen({ dateStr, memory, missionDay })}
                 style={[
                   styles.card,
                   { width: cardW, backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
@@ -139,9 +147,16 @@ export function StreakMemoryGallery({
                     )}
                   </View>
                 )}
-                <Text style={[styles.cardDate, { color: theme.colors.textSecondary }]} numberOfLines={1}>
-                  {dateStr}
-                </Text>
+                <View style={styles.cardMetaRow}>
+                  <Text style={[styles.cardDate, { color: theme.colors.textSecondary }]} numberOfLines={1}>
+                    {dateStr}
+                  </Text>
+                  {dayLabel ? (
+                    <Text style={[styles.cardDay, { color: theme.colors.indigo[400] }]} numberOfLines={1}>
+                      {dayLabel}
+                    </Text>
+                  ) : null}
+                </View>
                 {memory.repairSource ? (
                   <View
                     style={[
@@ -211,7 +226,12 @@ export function StreakMemoryGallery({
               </View>
             ) : null}
             <View style={[styles.viewerMeta, { backgroundColor: theme.colors.surfaceElevated, borderColor: theme.colors.border }]}>
-              <Text style={[styles.viewerDate, { color: theme.colors.cyan[400] }]}>{open?.dateStr}</Text>
+              <View style={styles.viewerMetaTop}>
+                <Text style={[styles.viewerDate, { color: theme.colors.cyan[400] }]}>{open?.dateStr}</Text>
+                {openDayLabel ? (
+                  <Text style={[styles.viewerDay, { color: theme.colors.indigo[400] }]}>{openDayLabel}</Text>
+                ) : null}
+              </View>
               {modalHasRenderableImage && modalNoteTrim ? (
                 <Text style={[styles.viewerNote, { color: theme.colors.textPrimary }]}>{modalNoteTrim}</Text>
               ) : modalTextOnlyHero ? null : open?.memory.imageUri &&
@@ -283,7 +303,16 @@ const styles = StyleSheet.create({
   },
   quoteMark: { fontSize: 42, fontWeight: "700", opacity: 0.5 },
   remotePhotoHint: { fontSize: 11, lineHeight: 15, textAlign: "center", paddingHorizontal: 8 },
-  cardDate: { fontSize: 11, fontWeight: "700", marginTop: 8, paddingHorizontal: 10 },
+  cardMetaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+    marginTop: 8,
+    paddingHorizontal: 10,
+  },
+  cardDate: { fontSize: 11, fontWeight: "700", flex: 1, minWidth: 0 },
+  cardDay: { fontSize: 11, fontWeight: "900", letterSpacing: 0.3 },
   repairChip: {
     alignSelf: "flex-start",
     marginTop: 6,
@@ -317,7 +346,15 @@ const styles = StyleSheet.create({
   },
   viewerTextOnlyBody: { fontSize: 18, lineHeight: 28, fontWeight: "600" },
   viewerMeta: { padding: 16, borderTopWidth: 1 },
-  viewerDate: { fontSize: 12, fontWeight: "800", letterSpacing: 0.8, marginBottom: 8 },
+  viewerMetaTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    marginBottom: 8,
+  },
+  viewerDate: { fontSize: 12, fontWeight: "800", letterSpacing: 0.8, flex: 1 },
+  viewerDay: { fontSize: 12, fontWeight: "900", letterSpacing: 0.6 },
   viewerNote: { fontSize: 16, lineHeight: 24 },
   viewerClose: {
     position: "absolute",

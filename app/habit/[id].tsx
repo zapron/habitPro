@@ -41,6 +41,7 @@ import {
   calendarDateForMissionDayIndex,
   getActiveMissionDaySlot,
   isHabitCalendarDateToggleable,
+  missionDayNumberForCalendarDate,
 } from '../../src/utils/missionDaySlots';
 import { isMissionGridFull } from '../../src/utils/habitDerived';
 import { shouldShowMainMissionTimer } from '../../src/utils/mainMissionUi';
@@ -369,7 +370,8 @@ export default function HabitDetail() {
     );
 
     const memoryGalleryEntries = useMemo(() => {
-        const raw = habit?.streakMemories ?? {};
+        if (!habit) return [];
+        const raw = habit.streakMemories ?? {};
         return Object.entries(raw)
             .filter(([, memory]) => {
                 if (memory.checkInOnly) {
@@ -377,9 +379,13 @@ export default function HabitDetail() {
                 }
                 return true;
             })
-            .map(([dateStr, memory]) => ({ dateStr, memory }))
+            .map(([dateStr, memory]) => ({
+                dateStr,
+                memory,
+                missionDay: missionDayNumberForCalendarDate(habit, dateStr),
+            }))
             .sort((a, b) => (a.dateStr < b.dateStr ? 1 : -1));
-    }, [habit?.streakMemories]);
+    }, [habit]);
 
     const showMissionReportInsteadOfTimer = useMemo(() => {
         if (!habit) return false;
