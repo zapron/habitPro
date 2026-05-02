@@ -263,12 +263,44 @@ function leaderboardAccent(rank: number, theme: ReturnType<typeof useTheme>["the
   return theme.colors.textMuted;
 }
 
-function lifetimeLeagueForLevel(level: number, theme: ReturnType<typeof useTheme>["theme"]) {
-  if (level >= 25) return { label: "Mythic League", color: theme.colors.indigo[400] };
-  if (level >= 15) return { label: "Gold League", color: theme.colors.amber[500] };
-  if (level >= 8) return { label: "Silver League", color: theme.colors.cyan[400] };
-  if (level >= 3) return { label: "Bronze League", color: theme.colors.yellow[400] };
-  return { label: "Rookie League", color: theme.colors.textMuted };
+function lifetimeLeagueForLevel(
+  level: number,
+  theme: ReturnType<typeof useTheme>["theme"],
+  isDark: boolean,
+) {
+  if (level >= 25) {
+    return {
+      label: "Mythic League",
+      color: theme.colors.indigo[400],
+      backgroundColor: isDark ? "rgba(99, 102, 241, 0.16)" : "rgba(99, 102, 241, 0.09)",
+    };
+  }
+  if (level >= 15) {
+    return {
+      label: "Gold League",
+      color: theme.colors.amber[500],
+      backgroundColor: isDark ? "rgba(245, 158, 11, 0.15)" : "rgba(245, 158, 11, 0.11)",
+    };
+  }
+  if (level >= 8) {
+    return {
+      label: "Silver League",
+      color: theme.colors.cyan[400],
+      backgroundColor: isDark ? "rgba(34, 211, 238, 0.13)" : "rgba(8, 145, 178, 0.09)",
+    };
+  }
+  if (level >= 3) {
+    return {
+      label: "Bronze League",
+      color: theme.colors.yellow[400],
+      backgroundColor: isDark ? "rgba(217, 119, 6, 0.14)" : "rgba(180, 83, 9, 0.08)",
+    };
+  }
+  return {
+    label: "Rookie League",
+    color: theme.colors.textMuted,
+    backgroundColor: isDark ? "rgba(148, 163, 184, 0.08)" : "rgba(148, 163, 184, 0.12)",
+  };
 }
 
 function LeagueRow({
@@ -284,31 +316,13 @@ function LeagueRow({
   const xpInLevel = entry.xp % 100;
   const displayName = entry.displayName ?? `@${entry.username}`;
   const showHandle = Boolean(entry.displayName);
-  const playerLeague = lifetimeLeagueForLevel(entry.level, theme);
-  const podiumBg =
-    entry.rankPosition === 1
-      ? isDark
-        ? "rgba(245, 158, 11, 0.13)"
-        : "rgba(245, 158, 11, 0.10)"
-      : entry.rankPosition === 2
-        ? isDark
-          ? "rgba(34, 211, 238, 0.12)"
-          : "rgba(8, 145, 178, 0.08)"
-        : entry.rankPosition === 3
-          ? isDark
-            ? "rgba(168, 85, 247, 0.12)"
-            : "rgba(124, 58, 237, 0.08)"
-          : null;
+  const playerLeague = lifetimeLeagueForLevel(entry.level, theme, isDark);
   return (
     <View
       style={[
         styles.leagueRow,
         {
-          backgroundColor: entry.isMe
-            ? isDark
-              ? "rgba(99, 102, 241, 0.16)"
-              : "rgba(79, 70, 229, 0.08)"
-            : podiumBg ?? theme.colors.surface,
+          backgroundColor: playerLeague.backgroundColor,
         },
       ]}
     >
@@ -320,7 +334,7 @@ function LeagueRow({
         )}
       </View>
 
-      <LevelXpRing level={entry.level} xpInLevel={xpInLevel} size={50} strokeWidth={3}>
+      <LevelXpRing level={entry.level} xpInLevel={xpInLevel} size={46} strokeWidth={3}>
         <View style={[styles.leagueLevelOrb, { borderColor: theme.colors.border }]}>
           <Text style={[styles.leagueLevelNum, { color: theme.colors.textPrimary }]}>{entry.level}</Text>
           <Text style={[styles.leagueLevelLabel, { color: theme.colors.textMuted }]}>LVL</Text>
@@ -1445,27 +1459,34 @@ const styles = StyleSheet.create({
     minHeight: 74,
     borderRadius: 16,
     borderWidth: 0,
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
     paddingVertical: 12,
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: 9,
   },
   leagueRankSlot: {
-    width: 34,
+    width: 44,
     alignItems: "center",
     justifyContent: "center",
   },
-  leagueRankText: { fontSize: 16, fontWeight: "900", fontVariant: ["tabular-nums"] },
+  leagueRankText: {
+    width: 44,
+    textAlign: "center",
+    fontSize: 16,
+    lineHeight: 20,
+    fontWeight: "900",
+    fontVariant: ["tabular-nums"],
+  },
   leagueLevelOrb: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
   },
-  leagueLevelNum: { fontSize: 15, lineHeight: 17, fontWeight: "900", fontVariant: ["tabular-nums"] },
+  leagueLevelNum: { fontSize: 14, lineHeight: 16, fontWeight: "900", fontVariant: ["tabular-nums"] },
   leagueLevelLabel: { fontSize: 6, lineHeight: 8, fontWeight: "900", letterSpacing: 0.7 },
   leaguePerson: { flex: 1, minWidth: 0 },
   leagueNameRow: { flexDirection: "row", alignItems: "center", gap: 6, minWidth: 0 },
@@ -1479,7 +1500,7 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
   },
   youPillText: { color: "#fff", fontSize: 8, fontWeight: "900", letterSpacing: 0.8 },
-  leagueXpCol: { width: 58, alignItems: "flex-end" },
+  leagueXpCol: { width: 50, alignItems: "flex-end" },
   leagueXp: { fontSize: 16, lineHeight: 20, fontWeight: "900", fontVariant: ["tabular-nums"] },
   leagueXpLabelRow: { flexDirection: "row", alignItems: "center", gap: 3, marginTop: 2 },
   leagueXpLabel: { fontSize: 9, fontWeight: "900", letterSpacing: 0.8 },
