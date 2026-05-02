@@ -32,11 +32,12 @@ import { useTheme } from "../../src/context/ThemeContext";
 import { useHabitStore } from "../../src/store/habitStore";
 import { MiniMission } from "../../src/types/habit";
 import { getMiniRemainingMs } from "../../src/utils/miniMissionTime";
+import {
+  MINI_MISSION_KEEP_SCREEN_ON_KEY,
+  MINI_MISSIONS_LIST_KEEP_AWAKE_TAG,
+} from "../../src/constants/miniMissionKeepAwake";
 
 type MiniTab = "active" | "queued" | "completed" | "failed";
-
-const KEEP_SCREEN_ON_KEY = "@habitpro_mini_keep_screen_on";
-const MINI_MISSIONS_KEEP_AWAKE_TAG = "mini-missions-list";
 
 const formatCountdown = (ms: number) => {
   const totalSeconds = Math.max(0, Math.floor(ms / 1000));
@@ -223,7 +224,7 @@ export default function MiniMissionsScreen() {
   const isFocused = useIsFocused();
 
   useEffect(() => {
-    AsyncStorage.getItem(KEEP_SCREEN_ON_KEY).then((v) => {
+    AsyncStorage.getItem(MINI_MISSION_KEEP_SCREEN_ON_KEY).then((v) => {
       if (v === "true") setKeepScreenOn(true);
     }).catch(() => {});
   }, []);
@@ -235,20 +236,20 @@ export default function MiniMissionsScreen() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      await deactivateKeepAwake(MINI_MISSIONS_KEEP_AWAKE_TAG);
+      await deactivateKeepAwake(MINI_MISSIONS_LIST_KEEP_AWAKE_TAG);
       if (cancelled) return;
       if (!isFocused || !keepScreenOn) return;
-      await activateKeepAwakeAsync(MINI_MISSIONS_KEEP_AWAKE_TAG);
+      await activateKeepAwakeAsync(MINI_MISSIONS_LIST_KEEP_AWAKE_TAG);
     })();
     return () => {
       cancelled = true;
-      void deactivateKeepAwake(MINI_MISSIONS_KEEP_AWAKE_TAG);
+      void deactivateKeepAwake(MINI_MISSIONS_LIST_KEEP_AWAKE_TAG);
     };
   }, [isFocused, keepScreenOn]);
 
   const onKeepScreenOnChange = useCallback((value: boolean) => {
     setKeepScreenOn(value);
-    AsyncStorage.setItem(KEEP_SCREEN_ON_KEY, value ? "true" : "false").catch(() => {});
+    AsyncStorage.setItem(MINI_MISSION_KEEP_SCREEN_ON_KEY, value ? "true" : "false").catch(() => {});
   }, []);
 
   // Tick only while at least one mission still has countdown > 0 (stops when all are failed or completed)
@@ -350,7 +351,7 @@ export default function MiniMissionsScreen() {
             Keep screen on
           </Text>
           <Text style={[styles.keepScreenHint, { color: theme.colors.textMuted, fontSize: theme.typography.micro }]}>
-            While this screen is open, don't auto-lock (uses more battery).
+            Mini mission timers won't auto-lock while running (uses more battery).
           </Text>
         </View>
         <Switch

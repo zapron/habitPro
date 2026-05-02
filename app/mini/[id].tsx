@@ -19,8 +19,10 @@ import {
   ScrollView,
   ActivityIndicator,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect, useIsFocused } from "@react-navigation/native";
+import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import {
   ArrowLeft,
@@ -66,6 +68,10 @@ import {
   postCommunityWin,
 } from "../../src/lib/communityWinsApi";
 import { MAX_RESERVE_FUEL_MINUTES } from "../../src/constants/miniMission";
+import {
+  MINI_MISSION_DETAIL_KEEP_AWAKE_TAG,
+  MINI_MISSION_KEEP_SCREEN_ON_KEY,
+} from "../../src/constants/miniMissionKeepAwake";
 import {
   canUseStreakMemoryUpload,
   shouldUploadLocalStreakImage,
@@ -138,6 +144,7 @@ export default function MiniMissionDetail() {
   const router = useRouter();
   const { theme, isDark } = useTheme();
   const insets = useSafeAreaInsets();
+  const isFocused = useIsFocused();
   const { session } = useAuth();
   const { isPremium, loading: premiumLoading } = usePremium();
   const { openUpsell } = usePlusUpsell();
@@ -181,6 +188,7 @@ export default function MiniMissionDetail() {
   const [missionDetailsOpen, setMissionDetailsOpen] = useState(false);
   const [completionImageAspect, setCompletionImageAspect] = useState<number | null>(null);
   const [completionImageOpen, setCompletionImageOpen] = useState(false);
+  const [keepScreenOn, setKeepScreenOn] = useState(false);
 
   const completionImageUri = useMemo(() => {
     return mission?.completionMemory?.imageUrl ?? mission?.completionMemory?.imageUri ?? null;
@@ -218,6 +226,20 @@ export default function MiniMissionDetail() {
     useCallback(() => {
       void refreshPremiumAccess();
     }, [refreshPremiumAccess]),
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+      AsyncStorage.getItem(MINI_MISSION_KEEP_SCREEN_ON_KEY)
+        .then((v) => {
+          if (active) setKeepScreenOn(v === "true");
+        })
+        .catch(() => {});
+      return () => {
+        active = false;
+      };
+    }, []),
   );
 
   const [now, setNow] = useState(Date.now());
@@ -282,6 +304,26 @@ export default function MiniMissionDetail() {
   }, [mission, now, totalMinutes, completeSheetOpen, timerFrozenAtMs]);
 
   const isTimerUp = mission?.status === "in_progress" && countdown === 0;
+
+  useEffect(() => {
+    let cancelled = false;
+    const shouldKeepAwake =
+      isFocused &&
+      keepScreenOn &&
+      mission?.status === "in_progress" &&
+      !isTimerUp;
+
+    (async () => {
+      await deactivateKeepAwake(MINI_MISSION_DETAIL_KEEP_AWAKE_TAG);
+      if (cancelled || !shouldKeepAwake) return;
+      await activateKeepAwakeAsync(MINI_MISSION_DETAIL_KEEP_AWAKE_TAG);
+    })();
+
+    return () => {
+      cancelled = true;
+      void deactivateKeepAwake(MINI_MISSION_DETAIL_KEEP_AWAKE_TAG);
+    };
+  }, [isFocused, keepScreenOn, mission?.status, isTimerUp]);
 
   const flightProgressive = useMemo(
     () => remainingMsToProgressiveCountdown(countdown),
