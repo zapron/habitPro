@@ -17,7 +17,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { ChevronRight, Eye, Medal, Swords, Trophy, Clock, X } from "lucide-react-native";
+import { ChevronRight, Crown, Eye, Medal, RefreshCw, Swords, Trophy, Clock, X, Zap } from "lucide-react-native";
 import { Screen } from "../../src/components/Screen";
 import { ConfirmDialog } from "../../src/components/ConfirmDialog";
 import { useTheme } from "../../src/context/ThemeContext";
@@ -52,8 +52,14 @@ import { subscribeSyncSuccess } from "../../src/lib/syncQueue";
 import { PlusBadge } from "../../src/components/PlusBadge";
 import { ShimmerBlock } from "../../src/components/ShimmerBlock";
 import { useRefreshPremiumAccess } from "../../src/hooks/useRefreshPremiumAccess";
+import { LevelXpRing } from "../../src/components/LevelXpRing";
+import {
+  fetchWeeklyLeaderboard,
+  type WeeklyLeaderboardEntry,
+} from "../../src/lib/weeklyLeaderboardApi";
 
 const INVITE_ACCEPT_TIMEOUT_MS = 45_000;
+const WEEKLY_RANK_PAGE_SIZE = 20;
 
 type CompeteSegment = "leaderboard" | "challenges";
 
@@ -250,6 +256,111 @@ function ActiveChallengeCard({
   );
 }
 
+function leaderboardAccent(rank: number, theme: ReturnType<typeof useTheme>["theme"]) {
+  if (rank === 1) return theme.colors.amber[500];
+  if (rank === 2) return theme.colors.cyan[400];
+  if (rank === 3) return theme.colors.indigo[400];
+  return theme.colors.textMuted;
+}
+
+function lifetimeLeagueForLevel(level: number, theme: ReturnType<typeof useTheme>["theme"]) {
+  if (level >= 25) return { label: "Mythic League", color: theme.colors.indigo[400] };
+  if (level >= 15) return { label: "Gold League", color: theme.colors.amber[500] };
+  if (level >= 8) return { label: "Silver League", color: theme.colors.cyan[400] };
+  if (level >= 3) return { label: "Bronze League", color: theme.colors.yellow[400] };
+  return { label: "Rookie League", color: theme.colors.textMuted };
+}
+
+function LeagueRow({
+  entry,
+  theme,
+  isDark,
+}: {
+  entry: WeeklyLeaderboardEntry;
+  theme: ReturnType<typeof useTheme>["theme"];
+  isDark: boolean;
+}) {
+  const accent = leaderboardAccent(entry.rankPosition, theme);
+  const xpInLevel = entry.xp % 100;
+  const displayName = entry.displayName ?? `@${entry.username}`;
+  const showHandle = Boolean(entry.displayName);
+  const playerLeague = lifetimeLeagueForLevel(entry.level, theme);
+  const podiumBg =
+    entry.rankPosition === 1
+      ? isDark
+        ? "rgba(245, 158, 11, 0.13)"
+        : "rgba(245, 158, 11, 0.10)"
+      : entry.rankPosition === 2
+        ? isDark
+          ? "rgba(34, 211, 238, 0.12)"
+          : "rgba(8, 145, 178, 0.08)"
+        : entry.rankPosition === 3
+          ? isDark
+            ? "rgba(168, 85, 247, 0.12)"
+            : "rgba(124, 58, 237, 0.08)"
+          : null;
+  return (
+    <View
+      style={[
+        styles.leagueRow,
+        {
+          backgroundColor: entry.isMe
+            ? isDark
+              ? "rgba(99, 102, 241, 0.16)"
+              : "rgba(79, 70, 229, 0.08)"
+            : podiumBg ?? theme.colors.surface,
+        },
+      ]}
+    >
+      <View style={styles.leagueRankSlot}>
+        {entry.rankPosition === 1 ? (
+          <Crown size={22} color={accent} fill={accent} />
+        ) : (
+          <Text style={[styles.leagueRankText, { color: accent }]}>#{entry.rankPosition}</Text>
+        )}
+      </View>
+
+      <LevelXpRing level={entry.level} xpInLevel={xpInLevel} size={50} strokeWidth={3}>
+        <View style={[styles.leagueLevelOrb, { borderColor: theme.colors.border }]}>
+          <Text style={[styles.leagueLevelNum, { color: theme.colors.textPrimary }]}>{entry.level}</Text>
+          <Text style={[styles.leagueLevelLabel, { color: theme.colors.textMuted }]}>LVL</Text>
+        </View>
+      </LevelXpRing>
+
+      <View style={styles.leaguePerson}>
+        <View style={styles.leagueNameRow}>
+          <Text style={[styles.leagueName, { color: theme.colors.textPrimary }]} numberOfLines={1}>
+            {displayName}
+          </Text>
+          {entry.isMe ? (
+            <View style={[styles.youPill, { backgroundColor: theme.colors.indigo[600] }]}>
+              <Text style={styles.youPillText}>YOU</Text>
+            </View>
+          ) : null}
+        </View>
+        <View style={styles.leagueMetaRow}>
+          <Text style={[styles.leagueTier, { color: playerLeague.color }]} numberOfLines={1}>
+            {playerLeague.label}
+          </Text>
+          {showHandle ? (
+            <Text style={[styles.leagueHandle, { color: theme.colors.textMuted }]} numberOfLines={1}>
+              - @{entry.username}
+            </Text>
+          ) : null}
+        </View>
+      </View>
+
+      <View style={styles.leagueXpCol}>
+        <Text style={[styles.leagueXp, { color: theme.colors.textPrimary }]}>{entry.points}</Text>
+        <View style={styles.leagueXpLabelRow}>
+          <Zap size={11} color={theme.colors.yellow[400]} fill={theme.colors.yellow[400]} />
+          <Text style={[styles.leagueXpLabel, { color: theme.colors.textMuted }]}>PTS</Text>
+        </View>
+      </View>
+    </View>
+  );
+}
+
 export default function CompeteScreen() {
   const { theme, isDark } = useTheme();
   const { showToast } = useToast();
@@ -278,6 +389,11 @@ export default function CompeteScreen() {
   const [leaveEnrollmentId, setLeaveEnrollmentId] = useState<string | null>(null);
   const [highlightInviteId, setHighlightInviteId] = useState<string | null>(null);
   const [highlightChallengeId, setHighlightChallengeId] = useState<string | null>(null);
+  const [leagueRows, setLeagueRows] = useState<WeeklyLeaderboardEntry[]>([]);
+  const [leagueLoading, setLeagueLoading] = useState(false);
+  const [leagueLoadingMore, setLeagueLoadingMore] = useState(false);
+  const [leagueHasMore, setLeagueHasMore] = useState(false);
+  const [leagueError, setLeagueError] = useState<string | null>(null);
   const deepLinkHandledRef = useRef(false);
 
   const xp = useHabitStore((s) => s.xp);
@@ -320,12 +436,82 @@ export default function CompeteScreen() {
     }
   }, [session?.user]);
 
+  const loadLeague = useCallback(async () => {
+    if (!isSupabaseConfigured() || !session?.user) {
+      setLeagueRows([]);
+      setLeagueHasMore(false);
+      setLeagueError("Sign in to view Weekly Ranks.");
+      return;
+    }
+    setLeagueLoading(true);
+    setLeagueError(null);
+    try {
+      const res = await fetchWeeklyLeaderboard(WEEKLY_RANK_PAGE_SIZE, 0);
+      if (res.ok === true) {
+        setLeagueRows(res.items);
+        setLeagueHasMore(res.hasMore);
+      } else {
+        setLeagueRows([]);
+        setLeagueHasMore(false);
+        setLeagueError(res.error);
+      }
+    } catch (e: unknown) {
+      console.warn("[habitPro] loadLeague", e);
+      setLeagueRows([]);
+      setLeagueHasMore(false);
+      setLeagueError("Couldn’t load Weekly Ranks.");
+    } finally {
+      setLeagueLoading(false);
+    }
+  }, [session?.user]);
+
+  const loadMoreLeague = useCallback(async () => {
+    if (leagueLoading || leagueLoadingMore || !leagueHasMore) return;
+    if (!isSupabaseConfigured() || !session?.user) return;
+
+    setLeagueLoadingMore(true);
+    setLeagueError(null);
+    try {
+      const res = await fetchWeeklyLeaderboard(WEEKLY_RANK_PAGE_SIZE, leagueRows.length);
+      if (res.ok === true) {
+        setLeagueRows((prev) => {
+          const seen = new Set(prev.map((row) => row.userId));
+          return [...prev, ...res.items.filter((row) => !seen.has(row.userId))];
+        });
+        setLeagueHasMore(res.hasMore);
+      } else {
+        setLeagueError(res.error);
+      }
+    } catch (e: unknown) {
+      console.warn("[habitPro] loadMoreLeague", e);
+      setLeagueError("Couldn’t load more players.");
+    } finally {
+      setLeagueLoadingMore(false);
+    }
+  }, [leagueHasMore, leagueLoading, leagueLoadingMore, leagueRows.length, session?.user]);
+
   useFocusEffect(
     useCallback(() => {
       void loadInvites();
+      if (segment === "leaderboard") {
+        void loadLeague();
+      }
       void refreshPremiumAccess();
-    }, [loadInvites, refreshPremiumAccess]),
+    }, [loadInvites, loadLeague, refreshPremiumAccess, segment]),
   );
+
+  useEffect(() => {
+    if (segment === "leaderboard") {
+      void loadLeague();
+    }
+  }, [loadLeague, segment]);
+
+  useEffect(() => {
+    if (segment !== "leaderboard") return undefined;
+    return subscribeSyncSuccess(() => {
+      void loadLeague();
+    });
+  }, [loadLeague, segment]);
 
   useEffect(() => {
     const inviteId = typeof params.inviteId === "string" ? params.inviteId.trim() : "";
@@ -459,10 +645,8 @@ export default function CompeteScreen() {
   };
 
   const level = Math.floor(xp / 100);
-  const completedMissions = useMemo(
-    () => habits.filter((h) => h.isCompleted).length + miniMissions.filter((m) => m.status === "completed").length,
-    [habits, miniMissions],
-  );
+  const xpInLevel = xp % 100;
+  const myWeeklyRank = useMemo(() => leagueRows.find((row) => row.isMe) ?? null, [leagueRows]);
 
   const bottomPad = Math.max(insets.bottom, 16) + 8;
 
@@ -639,47 +823,163 @@ export default function CompeteScreen() {
       >
         {segment === "leaderboard" ? (
           <>
-            <View>
-              <Text style={[styles.sectionLabel, { color: theme.colors.textMuted }]}>THIS WEEK</Text>
-              <View
-                style={[styles.card, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, ...theme.shadow.card }]}
-              >
-                <View style={styles.tierRow}>
-                  <Trophy size={28} color={theme.colors.amber[500]} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.tierTitle, { color: theme.colors.textPrimary }]}>{tier.label} tier</Text>
-                    <Text style={[styles.tierDetail, { color: theme.colors.textSecondary }]}>{tier.detail}</Text>
-                  </View>
-                  <Text style={[styles.scorePill, { color: theme.colors.indigo[400], borderColor: theme.colors.border }]}>
-                    {weeklyScore} pts
+            <View
+              style={[
+                styles.leagueHero,
+                {
+                  backgroundColor: theme.colors.surface,
+                  borderColor: theme.colors.border,
+                  ...theme.shadow.card,
+                },
+              ]}
+            >
+              <View style={styles.leagueHeroTop}>
+                <View style={styles.leagueHeroText}>
+                  <Text style={[styles.leagueTitle, { color: theme.colors.textPrimary }]}>Weekly Ranks</Text>
+                  <Text style={[styles.leagueBody, { color: theme.colors.textSecondary }]}>
+                    Ranked by habit days and mini missions completed this week.
                   </Text>
+                  <View style={styles.leagueHeroPills}>
+                    <View style={[styles.leagueHeroPill, { borderColor: theme.colors.border }]}>
+                      <Trophy size={13} color={theme.colors.amber[500]} />
+                      <Text style={[styles.leagueHeroPillText, { color: theme.colors.textSecondary }]}>
+                        {myWeeklyRank ? `Rank #${myWeeklyRank.rankPosition}` : "Enter with a username"}
+                      </Text>
+                    </View>
+                    <View style={[styles.leagueHeroPill, { borderColor: theme.colors.border }]}>
+                      <Medal size={13} color={theme.colors.indigo[400]} />
+                      <Text style={[styles.leagueHeroPillText, { color: theme.colors.textSecondary }]}>
+                        {tier.label} this week
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+                <LevelXpRing level={level} xpInLevel={xpInLevel} size={92} strokeWidth={5}>
+                  <View style={[styles.leagueHeroOrb, { borderColor: theme.colors.border }]}>
+                    <Text style={[styles.leagueHeroLevel, { color: theme.colors.textPrimary }]}>{level}</Text>
+                    <Text style={[styles.leagueHeroLevelLabel, { color: theme.colors.textMuted }]}>LVL</Text>
+                  </View>
+                </LevelXpRing>
+              </View>
+
+              <View style={[styles.leagueStatsBand, { borderColor: theme.colors.border }]}>
+                <View style={styles.leagueStatMini}>
+                  <Text style={[styles.leagueStatValue, { color: theme.colors.indigo[400] }]}>{weeklyScore}</Text>
+                  <Text style={[styles.leagueStatLabel, { color: theme.colors.textMuted }]}>week pts</Text>
+                </View>
+                <View style={[styles.leagueStatDivider, { backgroundColor: theme.colors.border }]} />
+                <View style={styles.leagueStatMini}>
+                  <Text style={[styles.leagueStatValue, { color: theme.colors.cyan[400] }]}>{habitDaysWeek}</Text>
+                  <Text style={[styles.leagueStatLabel, { color: theme.colors.textMuted }]}>habit days</Text>
+                </View>
+                <View style={[styles.leagueStatDivider, { backgroundColor: theme.colors.border }]} />
+                <View style={styles.leagueStatMini}>
+                  <Text style={[styles.leagueStatValue, { color: theme.colors.amber[500] }]}>{minisWeek}</Text>
+                  <Text style={[styles.leagueStatLabel, { color: theme.colors.textMuted }]}>minis/week</Text>
                 </View>
               </View>
             </View>
 
-            <View style={[styles.card, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, ...theme.shadow.card }]}>
-              <Text style={[styles.cardTitle, { color: theme.colors.textPrimary }]}>Your stats</Text>
-              <View style={[styles.statRow, { borderTopColor: theme.colors.border }]}>
-                <Text style={[styles.statLabel, { color: theme.colors.textMuted }]}>Level</Text>
-                <Text style={[styles.statValue, { color: theme.colors.yellow[400] }]}>{level}</Text>
-              </View>
-              <View style={[styles.statRow, { borderTopColor: theme.colors.border }]}>
-                <Text style={[styles.statLabel, { color: theme.colors.textMuted }]}>Total XP</Text>
-                <Text style={[styles.statValue, { color: theme.colors.indigo[400] }]}>{xp}</Text>
-              </View>
-              <View style={[styles.statRow, { borderTopColor: theme.colors.border }]}>
-                <Text style={[styles.statLabel, { color: theme.colors.textMuted }]}>Missions completed</Text>
-                <Text style={[styles.statValue, { color: theme.colors.cyan[400] }]}>{completedMissions}</Text>
-              </View>
-              <View style={[styles.statRow, { borderTopColor: theme.colors.border }]}>
-                <Text style={[styles.statLabel, { color: theme.colors.textMuted }]}>Habit days this week</Text>
-                <Text style={[styles.statValue, { color: theme.colors.cyan[400] }]}>{habitDaysWeek}</Text>
-              </View>
-              <View style={[styles.statRow, { borderTopColor: theme.colors.border }]}>
-                <Text style={[styles.statLabel, { color: theme.colors.textMuted }]}>Minis finished this week</Text>
-                <Text style={[styles.statValue, { color: theme.colors.amber[500] }]}>{minisWeek}</Text>
-              </View>
+            <View style={styles.leagueToolbar}>
+              <Text style={[styles.sectionLabel, { color: theme.colors.textMuted, marginBottom: 0 }]}>
+                THIS WEEK
+              </Text>
+              <TouchableOpacity
+                onPress={() => void loadLeague()}
+                disabled={leagueLoading || leagueLoadingMore}
+                activeOpacity={0.85}
+                style={[
+                  styles.leagueRefresh,
+                  {
+                    borderColor: theme.colors.border,
+                    backgroundColor: theme.colors.surface,
+                    opacity: leagueLoading || leagueLoadingMore ? 0.72 : 1,
+                  },
+                ]}
+              >
+                {leagueLoading ? (
+                  <ActivityIndicator size="small" color={theme.colors.indigo[400]} />
+                ) : (
+                  <RefreshCw size={15} color={theme.colors.textSecondary} />
+                )}
+              </TouchableOpacity>
             </View>
+
+            {leagueLoading && leagueRows.length === 0 ? (
+              <View style={{ gap: 10 }}>
+                {Array.from({ length: 6 }, (_, i) => (
+                  <View
+                    key={i}
+                    style={[
+                      styles.leagueRow,
+                      {
+                        backgroundColor: theme.colors.surface,
+                        borderColor: theme.colors.border,
+                        ...theme.shadow.card,
+                      },
+                    ]}
+                  >
+                    <ShimmerBlock isDark={isDark} height={22} radius={11} style={{ width: 34 }} />
+                    <ShimmerBlock isDark={isDark} height={50} radius={25} style={{ width: 50 }} />
+                    <View style={{ flex: 1, gap: 8 }}>
+                      <ShimmerBlock isDark={isDark} height={15} radius={8} style={{ width: i % 2 === 0 ? "64%" : "48%" }} />
+                      <ShimmerBlock isDark={isDark} height={11} radius={6} style={{ width: "38%" }} />
+                    </View>
+                    <ShimmerBlock isDark={isDark} height={18} radius={9} style={{ width: 52 }} />
+                  </View>
+                ))}
+              </View>
+            ) : leagueError ? (
+              <View
+                style={[
+                  styles.card,
+                  { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, ...theme.shadow.card },
+                ]}
+              >
+                <Text style={[styles.emptyTitle, { color: theme.colors.textPrimary }]}>Weekly Ranks unavailable</Text>
+                <Text style={[styles.emptyBody, { color: theme.colors.textSecondary }]}>{leagueError}</Text>
+              </View>
+            ) : leagueRows.length === 0 ? (
+              <View
+                style={[
+                  styles.card,
+                  { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, ...theme.shadow.card },
+                ]}
+              >
+                <Text style={[styles.emptyTitle, { color: theme.colors.textPrimary }]}>No weekly scores yet</Text>
+                <Text style={[styles.emptyBody, { color: theme.colors.textSecondary }]}>
+                  Create a username from Profile and complete habits or minis this week.
+                </Text>
+              </View>
+            ) : (
+              <View style={styles.leagueList}>
+                {leagueRows.map((entry) => (
+                  <LeagueRow key={entry.userId} entry={entry} theme={theme} isDark={isDark} />
+                ))}
+                {leagueHasMore ? (
+                  <TouchableOpacity
+                    onPress={() => void loadMoreLeague()}
+                    disabled={leagueLoadingMore}
+                    activeOpacity={0.85}
+                    style={[
+                      styles.loadMoreLeague,
+                      {
+                        backgroundColor: theme.colors.surface,
+                        opacity: leagueLoadingMore ? 0.72 : 1,
+                      },
+                    ]}
+                  >
+                    {leagueLoadingMore ? (
+                      <ActivityIndicator size="small" color={theme.colors.indigo[400]} />
+                    ) : (
+                      <Text style={[styles.loadMoreLeagueText, { color: theme.colors.textSecondary }]}>
+                        Load more
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+            )}
           </>
         ) : challengesSubTab === "invites" ? (
           <>
@@ -902,7 +1202,7 @@ export default function CompeteScreen() {
                 <Text style={[styles.catalogSub, { color: theme.colors.textSecondary }]}>{t.subtitle}</Text>
                 <Text style={[styles.catalogGoal, { color: theme.colors.textMuted }]}>{t.goalLine}</Text>
                 <Text style={[styles.catalogMeta, { color: theme.colors.textMuted }]}>
-                  {t.durationDays} days · {t.target} {t.metric === "min_streak" ? "goal" : "target"}
+                  {t.durationDays} days - {t.target} {t.metric === "min_streak" ? "goal" : "target"}
                 </Text>
                 <View style={[styles.joinCta, { backgroundColor: theme.colors.indigo[600], ...theme.shadow.glow }]}>
                   <Text style={styles.joinCtaText}>Join</Text>
@@ -1078,6 +1378,122 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     overflow: "hidden",
   },
+  leagueHero: {
+    borderRadius: 18,
+    borderWidth: 1,
+    padding: 16,
+    marginBottom: 14,
+  },
+  leagueHeroTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+  },
+  leagueHeroText: { flex: 1, minWidth: 0 },
+  leagueTitle: { fontSize: 18, lineHeight: 23, fontWeight: "900" },
+  leagueBody: { fontSize: 12, lineHeight: 17, marginTop: 4, fontWeight: "600" },
+  leagueHeroPills: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 12,
+  },
+  leagueHeroPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  leagueHeroPillText: { fontSize: 11, fontWeight: "800" },
+  leagueHeroOrb: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    borderWidth: 2,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  leagueHeroLevel: { fontSize: 24, fontWeight: "900", fontVariant: ["tabular-nums"], lineHeight: 27 },
+  leagueHeroLevelLabel: { fontSize: 9, fontWeight: "900", letterSpacing: 1 },
+  leagueToolbar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 2,
+    marginBottom: 10,
+  },
+  leagueRefresh: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  leagueList: { gap: 10 },
+  loadMoreLeague: {
+    minHeight: 48,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  loadMoreLeagueText: { fontSize: 13, fontWeight: "900" },
+  leagueRow: {
+    minHeight: 74,
+    borderRadius: 16,
+    borderWidth: 0,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  leagueRankSlot: {
+    width: 34,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  leagueRankText: { fontSize: 16, fontWeight: "900", fontVariant: ["tabular-nums"] },
+  leagueLevelOrb: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  leagueLevelNum: { fontSize: 15, lineHeight: 17, fontWeight: "900", fontVariant: ["tabular-nums"] },
+  leagueLevelLabel: { fontSize: 6, lineHeight: 8, fontWeight: "900", letterSpacing: 0.7 },
+  leaguePerson: { flex: 1, minWidth: 0 },
+  leagueNameRow: { flexDirection: "row", alignItems: "center", gap: 6, minWidth: 0 },
+  leagueName: { flexShrink: 1, minWidth: 0, fontSize: 15, lineHeight: 20, fontWeight: "900" },
+  leagueMetaRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 2, minWidth: 0 },
+  leagueTier: { fontSize: 11, lineHeight: 15, fontWeight: "900" },
+  leagueHandle: { flexShrink: 1, minWidth: 0, fontSize: 11, lineHeight: 15, fontWeight: "700" },
+  youPill: {
+    borderRadius: 999,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+  },
+  youPillText: { color: "#fff", fontSize: 8, fontWeight: "900", letterSpacing: 0.8 },
+  leagueXpCol: { width: 58, alignItems: "flex-end" },
+  leagueXp: { fontSize: 16, lineHeight: 20, fontWeight: "900", fontVariant: ["tabular-nums"] },
+  leagueXpLabelRow: { flexDirection: "row", alignItems: "center", gap: 3, marginTop: 2 },
+  leagueXpLabel: { fontSize: 9, fontWeight: "900", letterSpacing: 0.8 },
+  leagueStatsBand: {
+    marginTop: 14,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingTop: 14,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  leagueStatMini: { flex: 1, alignItems: "center", gap: 2 },
+  leagueStatDivider: { width: StyleSheet.hairlineWidth, height: 30 },
+  leagueStatValue: { fontSize: 18, fontWeight: "900", fontVariant: ["tabular-nums"] },
+  leagueStatLabel: { fontSize: 10, fontWeight: "800", letterSpacing: 0.6 },
   activeCard: {
     borderRadius: 16,
     borderWidth: 1,
@@ -1161,3 +1577,4 @@ const styles = StyleSheet.create({
   },
   acceptBtnText: { color: "#fff", fontWeight: "800", fontSize: 15 },
 });
+
