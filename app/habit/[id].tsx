@@ -61,6 +61,7 @@ import {
 import { useAuth } from '../../src/context/AuthContext';
 import { usePremium } from '../../src/context/PremiumContext';
 import { usePlusUpsell } from '../../src/context/PlusUpsellContext';
+import { useRefreshPremiumAccess } from "../../src/hooks/useRefreshPremiumAccess";
 import { useUsernameGate } from "../../src/context/UsernameGateContext";
 import { useNotificationGate } from "../../src/context/NotificationGateContext";
 import { isSupabaseConfigured } from '../../src/lib/env';
@@ -237,6 +238,7 @@ export default function HabitDetail() {
     const { session } = useAuth();
     const { isPremium, loading: premiumLoading } = usePremium();
     const { openUpsell } = usePlusUpsell();
+    const refreshPremiumAccess = useRefreshPremiumAccess();
     const { requireUsername } = useUsernameGate();
     const { requireNotifications } = useNotificationGate();
     const socialLocked = !isPremium || premiumLoading;
@@ -309,15 +311,18 @@ export default function HabitDetail() {
     const [repairSheetOpen, setRepairSheetOpen] = useState(false);
     const [repairStatus, setRepairStatus] = useState<"pending" | "approved" | "declined" | "applied" | null>(null);
 
-    const openRepair = useCallback(() => {
+    const openRepair = useCallback(async () => {
         if (!eligibleRepair || repairStatus === "pending") return;
         const isGroupRepair = Boolean(habit?.challengeGroupId);
-        if (isGroupRepair && (!isPremium || premiumLoading)) {
-          openUpsell("streak_repair");
-          return;
+        if (isGroupRepair) {
+          const freshPremium = await refreshPremiumAccess({ force: true });
+          if (freshPremium !== true) {
+            openUpsell("streak_repair");
+            return;
+          }
         }
         setRepairSheetOpen(true);
-    }, [eligibleRepair, repairStatus, habit?.challengeGroupId, isPremium, premiumLoading, openUpsell]);
+    }, [eligibleRepair, repairStatus, habit?.challengeGroupId, openUpsell, refreshPremiumAccess]);
 
     useEffect(() => {
       if (repair !== "1") return;
@@ -326,7 +331,7 @@ export default function HabitDetail() {
       if (typeof repairDate === "string" && repairDate.length > 0 && repairDate !== eligibleRepair.dateStr) {
         return;
       }
-      openRepair();
+      void openRepair();
     }, [repair, repairDate, eligibleRepair, repairStatus, openRepair]);
 
     useEffect(() => {
@@ -366,7 +371,8 @@ export default function HabitDetail() {
     useFocusEffect(
         useCallback(() => {
             setNow(Date.now());
-        }, []),
+            void refreshPremiumAccess();
+        }, [refreshPremiumAccess]),
     );
 
     const memoryGalleryEntries = useMemo(() => {
@@ -442,9 +448,12 @@ export default function HabitDetail() {
                     ]);
                     return;
                 }
-                if (socialLocked) {
-                    openUpsell('community_publish');
-                    return;
+                if (isSupabaseConfigured() && session?.user) {
+                    const freshPremium = await refreshPremiumAccess({ force: true });
+                    if (freshPremium !== true) {
+                        openUpsell('community_publish');
+                        return;
+                    }
                 }
             }
 
@@ -515,8 +524,8 @@ export default function HabitDetail() {
             milestones,
             fireCompletionCelebration,
             showToast,
-            socialLocked,
             openUpsell,
+            refreshPremiumAccess,
         ],
     );
 
@@ -527,7 +536,8 @@ export default function HabitDetail() {
             if (!mem || mem.communityFeedRevoked) return;
 
             if (next) {
-                if (socialLocked) {
+                const freshPremium = await refreshPremiumAccess({ force: true });
+                if (freshPremium !== true) {
                     openUpsell('community_publish');
                     return;
                 }
@@ -626,7 +636,7 @@ export default function HabitDetail() {
                 ],
             );
         },
-        [habit, habitId, session?.user, patchStreakMemory, showToast, socialLocked, openUpsell],
+        [habit, habitId, session?.user, patchStreakMemory, showToast, openUpsell, refreshPremiumAccess],
     );
 
     const configured = isSupabaseConfigured();
@@ -791,15 +801,20 @@ export default function HabitDetail() {
                     show: showSquadShare,
                     visibility: habit.visibility ?? 'solo',
                     onToggle: (nextPublic) => {
-                        const next = nextPublic ? 'public' : 'solo';
-                        const prev = habit.visibility ?? 'solo';
-                        if (prev === next) return;
-                        if (next === 'public' && socialLocked) {
-                            openUpsell('visibility');
-                            return;
-                        }
-                        lastVisibilityRef.current = { id: habit.id, prev };
-                        setHabitVisibility(habit.id, next);
+                        void (async () => {
+                            const next = nextPublic ? 'public' : 'solo';
+                            const prev = habit.visibility ?? 'solo';
+                            if (prev === next) return;
+                            if (next === 'public') {
+                                const freshPremium = await refreshPremiumAccess({ force: true });
+                                if (freshPremium !== true) {
+                                    openUpsell('visibility');
+                                    return;
+                                }
+                            }
+                            lastVisibilityRef.current = { id: habit.id, prev };
+                            setHabitVisibility(habit.id, next);
+                        })();
                     },
                 }}
                 habitViewCommunity={
@@ -976,15 +991,20 @@ export default function HabitDetail() {
                     <Switch
                         value={(habit.visibility ?? 'solo') === 'public'}
                         onValueChange={(v) => {
-                            const next = v ? 'public' : 'solo';
-                            const prev = habit.visibility ?? 'solo';
-                            if (prev === next) return;
-                            if (next === 'public' && socialLocked) {
-                                openUpsell('visibility');
-                                return;
-                            }
-                            lastVisibilityRef.current = { id: habit.id, prev };
-                            setHabitVisibility(habit.id, next);
+                            void (async () => {
+                                const next = v ? 'public' : 'solo';
+                                const prev = habit.visibility ?? 'solo';
+                                if (prev === next) return;
+                                if (next === 'public') {
+                                    const freshPremium = await refreshPremiumAccess({ force: true });
+                                    if (freshPremium !== true) {
+                                        openUpsell('visibility');
+                                        return;
+                                    }
+                                }
+                                lastVisibilityRef.current = { id: habit.id, prev };
+                                setHabitVisibility(habit.id, next);
+                            })();
                         }}
                         trackColor={{ false: theme.colors.border, true: theme.colors.indigo[600] }}
                         thumbColor={theme.colors.white}
@@ -1075,7 +1095,7 @@ export default function HabitDetail() {
                       </Text>
                     </View>
                     <TouchableOpacity
-                      onPress={openRepair}
+                      onPress={() => void openRepair()}
                       activeOpacity={0.86}
                       disabled={repairStatus === "pending"}
                       style={[

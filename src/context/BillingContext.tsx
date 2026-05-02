@@ -86,7 +86,7 @@ type BillingContextValue = {
   customerInfo: CustomerInfo | null;
   /** True when the entitlement is active in current CustomerInfo. */
   hasCommunityAccess: boolean;
-  refresh: () => Promise<void>;
+  refresh: () => Promise<CustomerInfo | null>;
   purchaseCommunity: (
     plan: PlanId,
   ) => Promise<{
@@ -407,12 +407,13 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
     };
   }, [configured, ready, userId]);
 
-  const refresh = async () => {
-    if (!ready || !configured || isExpoGo) return;
+  const refresh = useCallback(async () => {
+    if (!ready || !configured || isExpoGo) return null;
     await Purchases.invalidateCustomerInfoCache();
     const info = await Purchases.getCustomerInfo();
     setCustomerInfo(info);
-  };
+    return info;
+  }, [configured, isExpoGo, ready]);
 
   const restore = async () => {
     if (!ready || !configured || isExpoGo) return;
@@ -497,7 +498,7 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
       }
     });
     return () => sub.remove();
-  }, [configured, isExpoGo, ready]);
+  }, [configured, isExpoGo, ready, refresh]);
 
   const openManageSubscriptions = async () => {
     // Prefer RevenueCat helper if available; otherwise fall back to store URLs.
@@ -534,6 +535,7 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
       configured,
       customerInfo,
       hasCommunityAccess,
+      refresh,
       isExpoGo,
       ready,
       runBillingDiagnostics,

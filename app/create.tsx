@@ -30,6 +30,7 @@ import { PlusBadge } from "../src/components/PlusBadge";
 import { usePremium } from "../src/context/PremiumContext";
 import { usePlusUpsell } from "../src/context/PlusUpsellContext";
 import { useNotificationGate } from "../src/context/NotificationGateContext";
+import { useRefreshPremiumAccess } from "../src/hooks/useRefreshPremiumAccess";
 
 export default function CreateHabit() {
   const router = useRouter();
@@ -37,6 +38,7 @@ export default function CreateHabit() {
   const addHabit = useHabitStore((state) => state.addHabit);
   const { isPremium, loading: premiumLoading } = usePremium();
   const { openUpsell } = usePlusUpsell();
+  const refreshPremiumAccess = useRefreshPremiumAccess();
   const { suggestNotifications } = useNotificationGate();
   const plusOk = isPremium && !premiumLoading;
 
@@ -51,14 +53,17 @@ export default function CreateHabit() {
     setTotalDays((d) => Math.max(1, Math.min(365, d + delta)));
   };
 
-  const handleCreate = () => {
+  const handleCreate = async () => {
     if (!title.trim()) {
       Alert.alert("Error", "Please enter a mission title.");
       return;
     }
-    if (visibility === "public" && !plusOk) {
-      openUpsell("visibility");
-      return;
+    if (visibility === "public") {
+      const freshPremium = await refreshPremiumAccess({ force: true });
+      if (freshPremium !== true) {
+        openUpsell("visibility");
+        return;
+      }
     }
     if (mode === "manual") {
       const days = Math.max(1, Math.min(365, totalDays));
@@ -470,11 +475,14 @@ export default function CreateHabit() {
               !plusOk && { opacity: 0.72 },
             ]}
             onPress={() => {
-              if (!plusOk) {
-                openUpsell("visibility");
-                return;
-              }
-              setVisibility("public");
+              void (async () => {
+                const freshPremium = await refreshPremiumAccess({ force: true });
+                if (freshPremium !== true) {
+                  openUpsell("visibility");
+                  return;
+                }
+                setVisibility("public");
+              })();
             }}
             activeOpacity={0.85}
           >

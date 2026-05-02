@@ -28,6 +28,7 @@ import { useHabitStore } from "../store/habitStore";
 import { useAuth } from "../context/AuthContext";
 import { usePremium } from "../context/PremiumContext";
 import { usePlusUpsell } from "../context/PlusUpsellContext";
+import { useRefreshPremiumAccess } from "../hooks/useRefreshPremiumAccess";
 import { useUsernameGate } from "../context/UsernameGateContext";
 import type { ProfileSearchRow } from "../types/groupChallenge";
 import { Button } from "./Button";
@@ -48,6 +49,7 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
   const { session } = useAuth();
   const { isPremium, loading: premiumLoading } = usePremium();
   const { openUpsell } = usePlusUpsell();
+  const refreshPremiumAccess = useRefreshPremiumAccess();
   const { requireUsername } = useUsernameGate();
   const plusOk = isPremium && !premiumLoading;
   const myUsername = useHabitStore((s) => s.username);
@@ -65,6 +67,11 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
   const signedIn = Boolean(session?.user);
   const configured = isSupabaseConfigured();
   const inGroup = Boolean(habit.challengeGroupId);
+
+  useEffect(() => {
+    if (!visible || !configured || !signedIn) return;
+    void refreshPremiumAccess();
+  }, [visible, configured, signedIn, refreshPremiumAccess]);
 
   useEffect(() => {
     if (!visible || !habit.challengeGroupId || !configured || !signedIn) {
@@ -124,7 +131,8 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
 
   const handleCreateGroup = useCallback(async () => {
     if (!configured || !signedIn) return;
-    if (!plusOk) {
+    const freshPremium = await refreshPremiumAccess({ force: true });
+    if (freshPremium !== true) {
       openUpsell("group_mission");
       return;
     }
@@ -145,11 +153,12 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
     } finally {
       setCreating(false);
     }
-  }, [configured, signedIn, habit, showToast, plusOk, openUpsell, requireUsername]);
+  }, [configured, signedIn, habit, showToast, openUpsell, requireUsername, refreshPremiumAccess]);
 
   const handleInvite = useCallback(
     async (userId: string) => {
-      if (!plusOk) {
+      const freshPremium = await refreshPremiumAccess({ force: true });
+      if (freshPremium !== true) {
         openUpsell("group_mission");
         return;
       }
@@ -181,7 +190,7 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
         setInvitingId(null);
       }
     },
-    [habit.challengeGroupId, inviteeStatusById, myUsername, showToast, plusOk, openUpsell, requireUsername],
+    [habit.challengeGroupId, inviteeStatusById, myUsername, showToast, openUpsell, requireUsername, refreshPremiumAccess],
   );
 
   const openChallenge = () => {
@@ -266,8 +275,8 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
                     return (
                       <TouchableOpacity
                         style={[styles.row, { borderColor: theme.colors.border, opacity: blocked ? 0.75 : 1 }]}
-                        onPress={() => (plusOk ? void handleInvite(item.id) : openUpsell("group_mission"))}
-                        disabled={!plusOk ? false : invitingId === item.id || blocked}
+                        onPress={() => void handleInvite(item.id)}
+                        disabled={invitingId === item.id || blocked}
                       >
                         <View style={{ flex: 1 }}>
                           <Text style={{ color: theme.colors.textPrimary, fontWeight: "700" }}>
@@ -298,13 +307,7 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
               </Text>
               <Button
                 title={creating ? "Creating…" : "Start group mission"}
-                onPress={() => {
-                  if (!plusOk) {
-                    openUpsell("group_mission");
-                    return;
-                  }
-                  void handleCreateGroup();
-                }}
+                onPress={() => void handleCreateGroup()}
                 disabled={creating}
               />
               {!plusOk ? (

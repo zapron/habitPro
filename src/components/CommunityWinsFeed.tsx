@@ -43,6 +43,8 @@ type Props = {
   canCheer?: boolean;
   /** Called when the viewer tries to cheer while `canCheer` is false. */
   onCheerBlocked?: () => void;
+  /** Optional fresh entitlement check before sending the cheer API call. */
+  validateCheerAccess?: () => Promise<boolean>;
 };
 
 type ListRow =
@@ -54,6 +56,7 @@ export function CommunityWinsFeed({
   variant = "feed",
   canCheer = true,
   onCheerBlocked,
+  validateCheerAccess,
 }: Props) {
   const { theme, isDark } = useTheme();
   const { session } = useAuth();
@@ -155,6 +158,13 @@ export function CommunityWinsFeed({
         onCheerBlocked?.();
         return false;
       }
+      if (validateCheerAccess) {
+        const allowed = await validateCheerAccess();
+        if (!allowed) {
+          onCheerBlocked?.();
+          return false;
+        }
+      }
       const ok = await requireUsername("community_like");
       if (!ok) return false;
       const res = await toggleCheer(win.id, win.viewerHasCheered);
@@ -172,7 +182,7 @@ export function CommunityWinsFeed({
       );
       return true;
     },
-    [session?.user, canCheer, onCheerBlocked, requireUsername],
+    [session?.user, canCheer, onCheerBlocked, requireUsername, validateCheerAccess],
   );
 
   const renderItem: ListRenderItem<ListRow> = useCallback(

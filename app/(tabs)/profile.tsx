@@ -1,5 +1,6 @@
 import { Text } from "../../src/components/AppText";
 import {
+  useCallback,
   useMemo,
   useState } from "react";
 import type { ComponentType,
@@ -16,6 +17,7 @@ import {
 import type { ImageStyle } from "react-native";
 import Svg, { Circle, G } from "react-native-svg";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useFocusEffect } from "@react-navigation/native";
 import { Settings, Zap, Globe, User, Target, Flame, LogOut, Crown } from "lucide-react-native";
 import { Screen } from "../../src/components/Screen";
 import { useTheme } from "../../src/context/ThemeContext";
@@ -51,6 +53,7 @@ import { ProfileActivityChart } from "../../src/components/profile/ProfileActivi
 import { ProfileMiniWeekTrend } from "../../src/components/profile/ProfileMiniWeekTrend";
 import { ProfileStatChips } from "../../src/components/profile/ProfileStatChips";
 import { PlusBadge } from "../../src/components/PlusBadge";
+import { useRefreshPremiumAccess } from "../../src/hooks/useRefreshPremiumAccess";
 
 type HubSheetState =
   | null
@@ -331,12 +334,19 @@ export default function ProfileScreen() {
   const { session, signOut } = useAuth();
   const { isPremium } = usePremium();
   const { openUpsell } = usePlusUpsell();
+  const refreshPremiumAccess = useRefreshPremiumAccess();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [hubSheet, setHubSheet] = useState<HubSheetState>(null);
   const xp = useHabitStore((s) => s.xp);
   const username = useHabitStore((s) => s.username);
   const habits = useHabitStore((s) => s.habits);
   const miniMissions = useHabitStore((s) => s.miniMissions);
+
+  useFocusEffect(
+    useCallback(() => {
+      void refreshPremiumAccess();
+    }, [refreshPremiumAccess]),
+  );
 
   const level = Math.floor(xp / 100);
   const xpInLevel = xp % 100;

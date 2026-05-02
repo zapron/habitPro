@@ -20,6 +20,7 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useFocusEffect } from "@react-navigation/native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import {
   ArrowLeft,
@@ -54,6 +55,7 @@ import {
 import { useAuth } from "../../src/context/AuthContext";
 import { usePremium } from "../../src/context/PremiumContext";
 import { usePlusUpsell } from "../../src/context/PlusUpsellContext";
+import { useRefreshPremiumAccess } from "../../src/hooks/useRefreshPremiumAccess";
 import { useUsernameGate } from "../../src/context/UsernameGateContext";
 import { useNotificationGate } from "../../src/context/NotificationGateContext";
 import { isSupabaseConfigured } from "../../src/lib/env";
@@ -138,6 +140,7 @@ export default function MiniMissionDetail() {
   const { session } = useAuth();
   const { isPremium, loading: premiumLoading } = usePremium();
   const { openUpsell } = usePlusUpsell();
+  const refreshPremiumAccess = useRefreshPremiumAccess();
   const { requireUsername } = useUsernameGate();
   const socialLocked = !isPremium || premiumLoading;
   const missionId = Array.isArray(id) ? id[0] : id;
@@ -209,6 +212,12 @@ export default function MiniMissionDetail() {
       lastVisibilityRef.current = null;
     };
   }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      void refreshPremiumAccess();
+    }, [refreshPremiumAccess]),
+  );
 
   const [now, setNow] = useState(Date.now());
 
@@ -403,9 +412,12 @@ export default function MiniMissionDetail() {
 
     const completedAt = new Date(timerFrozenAtMs ?? Date.now()).toISOString();
     const wantsPublish = meta?.publishToCommunity === true;
-    let canPublish =
-      wantsPublish && isSupabaseConfigured() && session?.user != null && !socialLocked;
-    if (wantsPublish && socialLocked) {
+    const publishCloudReady = wantsPublish && isSupabaseConfigured() && session?.user != null;
+    const freshPremium = publishCloudReady
+      ? await refreshPremiumAccess({ force: true })
+      : null;
+    let canPublish = publishCloudReady && freshPremium === true;
+    if (publishCloudReady && freshPremium !== true) {
       openUpsell("community_publish");
     }
     if (canPublish) {
@@ -526,6 +538,11 @@ export default function MiniMissionDetail() {
         return;
       }
       void (async () => {
+        const freshPremium = await refreshPremiumAccess({ force: true });
+        if (freshPremium !== true) {
+          openUpsell("community_publish");
+          return;
+        }
         lastVisibilityRef.current = { id: mission.id, prev };
         const ok = await requireUsername("community_post");
         if (!ok) {

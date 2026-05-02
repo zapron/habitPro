@@ -14,7 +14,7 @@ type PremiumContextValue = {
   isPremium: boolean;
   /** True while waiting on profile fetch when RC has not already granted access. */
   loading: boolean;
-  refresh: () => Promise<void>;
+  refresh: () => Promise<boolean>;
 };
 
 const PremiumContext = createContext<PremiumContextValue | null>(null);
@@ -31,12 +31,14 @@ export function PremiumProvider({ children }: { children: React.ReactNode }) {
     if (!isSupabaseConfigured() || !userId) {
       setDbPremium(false);
       setDbLoading(false);
-      return;
+      return false;
     }
     setDbLoading(true);
     try {
       const v = await getMyProfileIsPremium();
-      setDbPremium(Boolean(v));
+      const next = Boolean(v);
+      setDbPremium(next);
+      return next;
     } finally {
       setDbLoading(false);
     }
@@ -103,4 +105,3 @@ export function usePremium(): PremiumContextValue {
   if (!v) throw new Error("usePremium must be used within PremiumProvider");
   return v;
 }
-

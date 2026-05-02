@@ -12,6 +12,9 @@ import { useTheme } from "../../src/context/ThemeContext";
 import { PlusBadge } from "../../src/components/PlusBadge";
 import { usePremium } from "../../src/context/PremiumContext";
 import { usePlusUpsell } from "../../src/context/PlusUpsellContext";
+import { useRefreshPremiumAccess } from "../../src/hooks/useRefreshPremiumAccess";
+import { useFocusEffect } from "@react-navigation/native";
+import { useCallback } from "react";
 
 export default function CommunityScreen() {
   const { theme, isDark } = useTheme();
@@ -19,7 +22,19 @@ export default function CommunityScreen() {
   const bottomPad = Math.max(insets.bottom, 16) + 8;
   const { isPremium, loading: premiumLoading } = usePremium();
   const { openUpsell } = usePlusUpsell();
+  const refreshPremiumAccess = useRefreshPremiumAccess();
   const socialLocked = !isPremium || premiumLoading;
+
+  useFocusEffect(
+    useCallback(() => {
+      void refreshPremiumAccess();
+    }, [refreshPremiumAccess]),
+  );
+
+  const validateCheerAccess = useCallback(async () => {
+    const freshPremium = await refreshPremiumAccess({ force: true });
+    return freshPremium === true;
+  }, [refreshPremiumAccess]);
 
   return (
     <Screen>
@@ -60,6 +75,7 @@ export default function CommunityScreen() {
           variant="feed"
           canCheer={!socialLocked}
           onCheerBlocked={() => openUpsell("community")}
+          validateCheerAccess={validateCheerAccess}
         />
       </View>
     </Screen>

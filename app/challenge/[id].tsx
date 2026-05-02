@@ -57,6 +57,7 @@ import { deleteAllCommunityWinsForHabit } from "../../src/lib/communityWinsApi";
 import { PlusBadge } from "../../src/components/PlusBadge";
 import { listChallengeStreakRepairs, voteStreakRepair, type StreakRepairRow, type StreakRepairVoteRow } from "../../src/lib/streakRepairApi";
 import { ShimmerBlock } from "../../src/components/ShimmerBlock";
+import { useRefreshPremiumAccess } from "../../src/hooks/useRefreshPremiumAccess";
 import type {
   ChallengeActivityRow,
   ChallengeGroupRow,
@@ -106,6 +107,7 @@ export default function ChallengeDetailScreen() {
   const { session } = useAuth();
   const { isPremium, loading: premiumLoading } = usePremium();
   const { openUpsell } = usePlusUpsell();
+  const refreshPremiumAccess = useRefreshPremiumAccess();
   const socialLocked = !isPremium || premiumLoading;
   const myUserId = session?.user?.id ?? null;
 
@@ -178,7 +180,8 @@ export default function ChallengeDetailScreen() {
       focusOnceRef.current = true;
       void load({ silent });
       void refreshCohortPeerHabits();
-    }, [load]),
+      void refreshPremiumAccess();
+    }, [load, refreshPremiumAccess]),
   );
 
   const onRefresh = useCallback(async () => {
@@ -193,7 +196,8 @@ export default function ChallengeDetailScreen() {
   const onSendNudge = useCallback(
     async (toUserId: string, kind: PresetChallengeNudgeKind) => {
       if (!challengeId || !myUserId || toUserId === myUserId) return;
-      if (socialLocked) {
+      const freshPremium = await refreshPremiumAccess({ force: true });
+      if (freshPremium !== true) {
         openUpsell("squad_nudge");
         return;
       }
@@ -218,13 +222,14 @@ export default function ChallengeDetailScreen() {
         setNudgeBusyKey(null);
       }
     },
-    [challengeId, myUserId, load, habits, showToast, socialLocked, openUpsell],
+    [challengeId, myUserId, load, habits, showToast, openUpsell, refreshPremiumAccess],
   );
 
   const onCongrats = useCallback(
     async (actorUserId: string, activityId: string) => {
       if (!challengeId || !myUserId || actorUserId === myUserId) return;
-      if (socialLocked) {
+      const freshPremium = await refreshPremiumAccess({ force: true });
+      if (freshPremium !== true) {
         openUpsell("squad_nudge");
         return;
       }
@@ -249,7 +254,7 @@ export default function ChallengeDetailScreen() {
         setNudgeBusyKey(null);
       }
     },
-    [challengeId, myUserId, load, habits, showToast, socialLocked, openUpsell],
+    [challengeId, myUserId, load, habits, showToast, openUpsell, refreshPremiumAccess],
   );
 
   const congratsSentActivityIds = useMemo(() => {
@@ -444,18 +449,26 @@ export default function ChallengeDetailScreen() {
 
   const onOpenCustomNote = useCallback(
     (toUserId: string) => {
-      if (socialLocked) {
-        openUpsell("squad_nudge");
-        return;
-      }
-      setCustomNoteToUserId(toUserId);
+      void (async () => {
+        const freshPremium = await refreshPremiumAccess({ force: true });
+        if (freshPremium !== true) {
+          openUpsell("squad_nudge");
+          return;
+        }
+        setCustomNoteToUserId(toUserId);
+      })();
     },
-    [socialLocked, openUpsell],
+    [openUpsell, refreshPremiumAccess],
   );
 
   const onSubmitCustomNote = useCallback(
     async (text: string) => {
       if (!challengeId || !customNoteToUserId || !myUserId) return;
+      const freshPremium = await refreshPremiumAccess({ force: true });
+      if (freshPremium !== true) {
+        openUpsell("squad_nudge");
+        return;
+      }
       const viewerHabit = habits.find((h) => h.challengeGroupId === challengeId);
       if (
         viewerHabit &&
@@ -478,7 +491,7 @@ export default function ChallengeDetailScreen() {
         setNudgeBusyKey(null);
       }
     },
-    [challengeId, customNoteToUserId, myUserId, habits, showToast, load],
+    [challengeId, customNoteToUserId, myUserId, habits, showToast, load, openUpsell, refreshPremiumAccess],
   );
 
   const bottomPad = 40;
@@ -747,11 +760,12 @@ export default function ChallengeDetailScreen() {
                             disabled={!canVote || repairBusyId === r.id}
                             onPress={() => {
                               if (!canVote) return;
-                              if (socialLocked) {
-                                openUpsell("streak_repair");
-                                return;
-                              }
                               void (async () => {
+                                const freshPremium = await refreshPremiumAccess({ force: true });
+                                if (freshPremium !== true) {
+                                  openUpsell("streak_repair");
+                                  return;
+                                }
                                 setRepairBusyId(r.id);
                                 const res = await voteStreakRepair({ repairId: r.id, vote: "approve" });
                                 setRepairBusyId(null);
@@ -782,11 +796,12 @@ export default function ChallengeDetailScreen() {
                             disabled={!canVote || repairBusyId === r.id}
                             onPress={() => {
                               if (!canVote) return;
-                              if (socialLocked) {
-                                openUpsell("streak_repair");
-                                return;
-                              }
                               void (async () => {
+                                const freshPremium = await refreshPremiumAccess({ force: true });
+                                if (freshPremium !== true) {
+                                  openUpsell("streak_repair");
+                                  return;
+                                }
                                 setRepairBusyId(r.id);
                                 const res = await voteStreakRepair({ repairId: r.id, vote: "decline" });
                                 setRepairBusyId(null);

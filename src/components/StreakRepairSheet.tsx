@@ -16,6 +16,7 @@ import { useHabitStore } from "../store/habitStore";
 import { useToast } from "../context/ToastContext";
 import { usePremium } from "../context/PremiumContext";
 import { usePlusUpsell } from "../context/PlusUpsellContext";
+import { useRefreshPremiumAccess } from "../hooks/useRefreshPremiumAccess";
 import {
   STREAK_REPAIR_ALLOW_GROUP_SELF_APPROVE,
   STREAK_REPAIR_SQUAD_APPROVALS_REQUIRED,
@@ -40,6 +41,7 @@ export function StreakRepairSheet({ visible, onClose, habit, eligible, onRequest
   const { showToast } = useToast();
   const { isPremium, loading: premiumLoading } = usePremium();
   const { openUpsell } = usePlusUpsell();
+  const refreshPremiumAccess = useRefreshPremiumAccess();
   const xp = useHabitStore((s) => s.xp);
   const addXp = useHabitStore((s) => s.addXp);
   const toggleCompletion = useHabitStore((s) => s.toggleCompletion);
@@ -78,12 +80,17 @@ export function StreakRepairSheet({ visible, onClose, habit, eligible, onRequest
   const cost = eligible.xpCost;
   const hasXp = xp >= cost;
   const trimmed = reason.trim();
-  const canSubmit = trimmed.length > 0 && !busy && (!isGroup ? hasXp : true) && plusOk;
+  const canSubmit = trimmed.length > 0 && !busy && (!isGroup ? hasXp : true);
 
   const primaryLabel = useMemo(() => {
     if (isGroup) return "Request squad approval";
     return "Pay XP & repair";
   }, [isGroup]);
+
+  useEffect(() => {
+    if (!visible || !isGroup) return;
+    void refreshPremiumAccess();
+  }, [visible, isGroup, refreshPremiumAccess]);
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
@@ -223,9 +230,12 @@ export function StreakRepairSheet({ visible, onClose, habit, eligible, onRequest
             activeOpacity={0.88}
             disabled={!canSubmit}
             onPress={async () => {
-              if (isGroup && !plusOk) {
-                openUpsell("streak_repair");
-                return;
+              if (isGroup) {
+                const freshPremium = await refreshPremiumAccess({ force: true });
+                if (freshPremium !== true) {
+                  openUpsell("streak_repair");
+                  return;
+                }
               }
               if (!trimmed) return;
               if (!isGroup && !hasXp) return;

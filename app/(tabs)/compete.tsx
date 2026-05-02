@@ -51,6 +51,7 @@ import {
 import { subscribeSyncSuccess } from "../../src/lib/syncQueue";
 import { PlusBadge } from "../../src/components/PlusBadge";
 import { ShimmerBlock } from "../../src/components/ShimmerBlock";
+import { useRefreshPremiumAccess } from "../../src/hooks/useRefreshPremiumAccess";
 
 const INVITE_ACCEPT_TIMEOUT_MS = 45_000;
 
@@ -262,6 +263,7 @@ export default function CompeteScreen() {
   const { session } = useAuth();
   const { isPremium, loading: premiumLoading } = usePremium();
   const { openUpsell } = usePlusUpsell();
+  const refreshPremiumAccess = useRefreshPremiumAccess();
   const { suggestNotifications } = useNotificationGate();
   /** True while we do not know premium yet — do not run accept API or open paywall. */
   const inviteAcceptPremiumUnknown = premiumLoading;
@@ -321,7 +323,8 @@ export default function CompeteScreen() {
   useFocusEffect(
     useCallback(() => {
       void loadInvites();
-    }, [loadInvites]),
+      void refreshPremiumAccess();
+    }, [loadInvites, refreshPremiumAccess]),
   );
 
   useEffect(() => {
@@ -360,8 +363,8 @@ export default function CompeteScreen() {
   }, [highlightInviteId, highlightChallengeId]);
 
   const handleAcceptGroupInvite = async (invite: ChallengeInviteRow) => {
-    if (inviteAcceptPremiumUnknown) return;
-    if (inviteNeedsCommunityForAccept) {
+    const freshPremium = await refreshPremiumAccess({ force: true });
+    if (freshPremium !== true) {
       openUpsell("invite_accept");
       return;
     }
