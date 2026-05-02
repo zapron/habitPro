@@ -11,8 +11,8 @@ WebBrowser.maybeCompleteAuthSession();
 import { ThemeProvider } from "../src/context/ThemeContext";
 import { ToastHost, ToastProvider } from "../src/context/ToastContext";
 import { AuthProvider, useAuth } from "../src/context/AuthContext";
-import { BillingProvider } from "../src/context/BillingContext";
-import { PremiumProvider } from "../src/context/PremiumContext";
+import { BillingProvider, useBilling } from "../src/context/BillingContext";
+import { PremiumProvider, usePremium } from "../src/context/PremiumContext";
 import { UsernameGateProvider } from "../src/context/UsernameGateContext";
 import { NotificationGateProvider } from "../src/context/NotificationGateContext";
 import { PlusUpsellProvider } from "../src/context/PlusUpsellContext";
@@ -29,6 +29,27 @@ import { isSupabaseConfigured } from "../src/lib/env";
 import { tryCompleteAuthFromUrl } from "../src/lib/oauthExchange";
 import { isPasswordRecoverySession } from "../src/lib/passwordRecovery";
 import { getSupabase } from "../src/lib/supabase";
+
+const PREMIUM_ROUTE_REFRESH_INTERVAL_MS = 30_000;
+
+function PremiumRouteRefresh() {
+  const { session, initializing } = useAuth();
+  const pathname = usePathname();
+  const { refresh: refreshBilling } = useBilling();
+  const { refresh: refreshPremium } = usePremium();
+  const lastRefreshAtRef = useRef(0);
+
+  useEffect(() => {
+    if (initializing || !session) return;
+    const now = Date.now();
+    if (now - lastRefreshAtRef.current < PREMIUM_ROUTE_REFRESH_INTERVAL_MS) return;
+    lastRefreshAtRef.current = now;
+
+    void Promise.allSettled([refreshBilling(), refreshPremium()]);
+  }, [initializing, pathname, refreshBilling, refreshPremium, session]);
+
+  return null;
+}
 
 function RootLayoutNav() {
   const { session, initializing, passwordRecoveryPending } = useAuth();
@@ -294,6 +315,7 @@ function RootLayoutNav() {
   return (
     <View style={{ flex: 1 }}>
       <AppLaunchNotificationNudge />
+      <PremiumRouteRefresh />
       <SyncManager />
       <Stack screenOptions={{ headerShown: false }} />
       <ToastHost />
