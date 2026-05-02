@@ -408,3 +408,6 @@ verify_jwt = false
 
 [functions.process-streak-reminders]
 verify_jwt = false
+
+[functions.revenuecat-webhook]
+verify_jwt = false
