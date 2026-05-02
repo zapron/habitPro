@@ -654,7 +654,7 @@ export default function Home() {
           >
             <View style={styles.miniBannerLeft}>
               <View style={styles.commandIconMini}>
-                {miniCount > 0 ? (
+                {miniMissionStats.live > 0 ? (
                   <FireLottie
                     source={{ uri: FIRE_LOTTIE_URI }}
                     size={28}
