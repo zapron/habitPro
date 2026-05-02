@@ -24,6 +24,7 @@ import { View,
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { ArrowLeft, Trash2, Lock, RotateCcw, Sparkles, Star, Plane, Gamepad2, Globe, User, Users, Info, Bell } from 'lucide-react-native';
+import Svg, { Circle, G } from 'react-native-svg';
 import { useHabitStore } from '../../src/store/habitStore';
 import { Button } from '../../src/components/Button';
 import { Timer } from '../../src/components/Timer';
@@ -98,6 +99,116 @@ function getMilestones(totalDays: number, mode: string): number[] {
     return [...new Set([m1, m2, m3])];
 }
 
+function HabitGridBrandRing({
+    day,
+    variant,
+    isMilestone,
+    hasMomentMedia = false,
+    repaired = false,
+    repairSource,
+}: {
+    day: number;
+    variant: 'completed' | 'current';
+    isMilestone: boolean;
+    hasMomentMedia?: boolean;
+    repaired?: boolean;
+    repairSource?: 'squad' | 'solo';
+}) {
+    const { theme, isDark } = useTheme();
+    const c = 21;
+    const outerR = 17.5;
+    const innerR = 14.1;
+    const outerCirc = 2 * Math.PI * outerR;
+    const innerCirc = 2 * Math.PI * innerR;
+    const current = variant === 'current';
+    const strokeOpacity = current ? 0.72 : 1;
+    const track = isDark ? 'rgba(148, 163, 184, 0.24)' : 'rgba(100, 116, 139, 0.18)';
+
+    return (
+        <View style={styles.brandRingWrap}>
+            <Svg width="100%" height="100%" viewBox="0 0 42 42" style={StyleSheet.absoluteFill}>
+                <G transform={`rotate(-92 ${c} ${c})`}>
+                    <Circle cx={c} cy={c} r={outerR} stroke={track} strokeWidth={3.6} fill="none" />
+                    <Circle
+                        cx={c}
+                        cy={c}
+                        r={outerR}
+                        stroke={theme.colors.cyan[400]}
+                        strokeWidth={3.8}
+                        fill="none"
+                        strokeLinecap="round"
+                        strokeOpacity={strokeOpacity}
+                        strokeDasharray={`${outerCirc * 0.58} ${outerCirc}`}
+                        strokeDashoffset={outerCirc * 0.02}
+                    />
+                    <Circle
+                        cx={c}
+                        cy={c}
+                        r={innerR}
+                        stroke={theme.colors.indigo[500]}
+                        strokeWidth={3.8}
+                        fill="none"
+                        strokeLinecap="round"
+                        strokeOpacity={strokeOpacity}
+                        strokeDasharray={`${innerCirc * 0.62} ${innerCirc}`}
+                        strokeDashoffset={-innerCirc * 0.24}
+                    />
+                    <Circle
+                        cx={c}
+                        cy={c}
+                        r={outerR}
+                        stroke={isMilestone ? theme.colors.yellow[400] : theme.colors.amber[500]}
+                        strokeWidth={3.8}
+                        fill="none"
+                        strokeLinecap="round"
+                        strokeOpacity={current ? 0.68 : 1}
+                        strokeDasharray={`${outerCirc * 0.16} ${outerCirc}`}
+                        strokeDashoffset={-outerCirc * 0.72}
+                    />
+                </G>
+            </Svg>
+            <View
+                style={[
+                    styles.brandRingCore,
+                    {
+                        backgroundColor: isDark ? '#0b1020' : '#ffffff',
+                        borderColor: current ? theme.colors.cyan[400] : theme.colors.border,
+                    },
+                ]}
+            >
+                <Text
+                    style={[
+                        styles.brandRingDayText,
+                        { color: current ? theme.colors.cyan[400] : theme.colors.textPrimary },
+                        day >= 10 && styles.brandRingDayTextTwoDigit,
+                    ]}
+                >
+                    {day}
+                </Text>
+            </View>
+            {isMilestone ? (
+                <Star size={8} color={theme.colors.yellow[400]} fill={theme.colors.yellow[400]} style={styles.brandRingAccent} />
+            ) : current ? (
+                <Sparkles size={8} color={theme.colors.cyan[400]} style={styles.brandRingAccent} />
+            ) : null}
+            {hasMomentMedia ? (
+                <View style={[styles.memoryDot, { backgroundColor: theme.colors.amber[500], borderColor: theme.colors.surface }]} />
+            ) : null}
+            {repaired ? (
+                <View
+                    style={[
+                        styles.repairDot,
+                        {
+                            backgroundColor: repairSource === 'solo' ? theme.colors.amber[500] : theme.colors.cyan[400],
+                            borderColor: theme.colors.surface,
+                        },
+                    ]}
+                />
+            ) : null}
+        </View>
+    );
+}
+
 function AnimatedDayCell({
     day,
     isCompleted,
@@ -128,7 +239,7 @@ function AnimatedDayCell({
     repairSource?: "squad" | "solo";
     onPress: () => void;
 }) {
-    const { theme } = useTheme();
+    const { theme, isDark } = useTheme();
     const reduceMotion = useReducedMotion();
     const scale = useRef(new Animated.Value(1)).current;
     const shimmer = useRef(new Animated.Value(0)).current;
@@ -171,7 +282,14 @@ function AnimatedDayCell({
     const dayButtonStyle = [
         styles.dayButton,
         isCompleted
-            ? [styles.dayButtonCompleted, { backgroundColor: theme.colors.indigo[600], ...theme.shadow.glow }]
+            ? [
+                styles.dayButtonCompleted,
+                {
+                    backgroundColor: isDark ? 'rgba(79, 70, 229, 0.12)' : 'rgba(99, 102, 241, 0.08)',
+                    borderColor: isMilestone ? theme.colors.amber[500] : theme.colors.indigo[500],
+                    ...theme.shadow.glow,
+                },
+            ]
             : [styles.dayButtonIncomplete, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }],
         isCompleted && isMilestone && styles.dayButtonMilestone,
         isCurrentMissionDay && !isCompleted && { borderColor: theme.colors.cyan[400], borderWidth: 2 },
@@ -190,33 +308,19 @@ function AnimatedDayCell({
             >
                 {isCompleted ? (
                     <Animated.View style={[styles.badgeWrap, isMilestone && { opacity: shimmerOpacity }]}>
-                        {isMilestone ? <View style={styles.milestoneHalo} /> : null}
-                        <View style={[styles.badgeCore, isMilestone ? styles.badgeCoreMilestone : null]}>
-                            <Text style={[styles.completedDayText, isMilestone ? styles.completedDayTextMilestone : null]}>{day}</Text>
-                        </View>
-                        {isMilestone ? (
-                            <Star size={9} color={theme.colors.yellow[400]} fill={theme.colors.yellow[400]} style={styles.badgeAccent} />
-                        ) : (
-                            <Sparkles size={9} color={theme.colors.cyan[400]} style={styles.badgeAccent} />
-                        )}
-                        {hasMomentMedia ? (
-                            <View style={[styles.memoryDot, { backgroundColor: theme.colors.amber[500], borderColor: theme.colors.surface }]} />
-                        ) : null}
-                        {repaired ? (
-                          <View
-                            style={[
-                              styles.repairDot,
-                              {
-                                backgroundColor:
-                                  repairSource === "solo" ? theme.colors.amber[500] : theme.colors.cyan[400],
-                                borderColor: theme.colors.surface,
-                              },
-                            ]}
-                          />
-                        ) : null}
+                        <HabitGridBrandRing
+                            day={day}
+                            variant="completed"
+                            isMilestone={isMilestone}
+                            hasMomentMedia={hasMomentMedia}
+                            repaired={repaired}
+                            repairSource={repairSource}
+                        />
                     </Animated.View>
                 ) : locked ? (
                     <Lock size={15} color={theme.colors.textMuted} />
+                ) : isCurrentMissionDay ? (
+                    <HabitGridBrandRing day={day} variant="current" isMilestone={isMilestone} />
                 ) : (
                     <Text style={[styles.dayText, isCurrentMissionDay ? { color: theme.colors.cyan[400] } : { color: theme.colors.textMuted }]}>{day}</Text>
                 )}
@@ -1507,8 +1611,8 @@ const styles = StyleSheet.create({
     gridTitle: { fontWeight: '700', marginBottom: 14 },
     grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', paddingBottom: 24, position: 'relative' },
     dayButton: { width: '100%', height: '100%', borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-    dayButtonCompleted: {},
-    dayButtonMilestone: { backgroundColor: '#4b3dc2', shadowColor: '#fbbf24', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.45, shadowRadius: 14, elevation: 8 },
+    dayButtonCompleted: { borderWidth: 1 },
+    dayButtonMilestone: { shadowColor: '#fbbf24', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.45, shadowRadius: 14, elevation: 8 },
     dayButtonIncomplete: { borderWidth: 1 },
     dayButtonFuture: { opacity: 0.45 },
     dayText: { fontWeight: '700', fontSize: 16 },
@@ -1521,6 +1625,11 @@ const styles = StyleSheet.create({
     badgeAccent: { position: 'absolute', top: 6, right: 6 },
     memoryDot: { position: 'absolute', bottom: 5, width: 7, height: 7, borderRadius: 4, borderWidth: 1.5 },
     repairDot: { position: 'absolute', bottom: 5, right: 5, width: 7, height: 7, borderRadius: 4, borderWidth: 1.5 },
+    brandRingWrap: { width: '82%', height: '82%', alignItems: 'center', justifyContent: 'center' },
+    brandRingCore: { width: 24, height: 24, borderRadius: 9999, alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
+    brandRingDayText: { fontSize: 14, fontWeight: '900' },
+    brandRingDayTextTwoDigit: { fontSize: 12 },
+    brandRingAccent: { position: 'absolute', top: 2, right: 2 },
     dayButtonPlaceholder: { width: '13%', aspectRatio: 1, marginBottom: 14 },
     missionTimerSlot: {
         padding: 20,
