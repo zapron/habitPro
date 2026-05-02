@@ -40,6 +40,7 @@ import { clearMiniMissionNotifications } from "../../src/utils/miniMissionNotifi
 import { Screen } from "../../src/components/Screen";
 import { ConfirmDialog } from "../../src/components/ConfirmDialog";
 import { Button } from "../../src/components/Button";
+import { CoachMarkTarget, useCoachMark } from "../../src/context/CoachMarkContext";
 import { MissionDetailsSheet } from "../../src/components/MissionDetailsSheet";
 import { StreakMemorySheet } from "../../src/components/StreakMemorySheet";
 import { MiniMissionFireProgressBar } from "../../src/components/MiniMissionFireProgressBar";
@@ -360,6 +361,32 @@ export default function MiniMissionDetail() {
       router.replace("/mini");
     })();
   }, [mission, router, deleteMiniMission]);
+
+  useCoachMark(
+    "mini_start_timer",
+    {
+      title: "Start the timer",
+      body: "Begin when you can stay with this task until it is done.",
+      placement: "above",
+    },
+    Boolean(
+      mission &&
+        mission.status !== "in_progress" &&
+        mission.status !== "completed" &&
+        mission.status !== "cancelled",
+    ),
+    700,
+  );
+  useCoachMark(
+    "mini_mark_complete",
+    {
+      title: "Finish before zero",
+      body: "Mark complete while the timer is still alive to save the win.",
+      placement: "above",
+    },
+    Boolean(mission?.status === "in_progress" && !isTimerUp && !completeSheetOpen),
+    900,
+  );
 
   if (!mission) {
     return (
@@ -778,18 +805,22 @@ export default function MiniMissionDetail() {
           {mission.status !== "in_progress" &&
             mission.status !== "completed" &&
             mission.status !== "cancelled" && (
-              <Button title="Start Now" onPress={handleStart} />
+              <CoachMarkTarget id="mini_start_timer">
+                <Button title="Start Now" onPress={handleStart} />
+              </CoachMarkTarget>
             )}
 
           {mission.status === "in_progress" && !isTimerUp && (
             <>
-              <Button
-                title="Mark Complete"
-                onPress={() => {
-                  setTimerFrozenAtMs(Date.now());
-                  setCompleteSheetOpen(true);
-                }}
-              />
+              <CoachMarkTarget id="mini_mark_complete">
+                <Button
+                  title="Mark Complete"
+                  onPress={() => {
+                    setTimerFrozenAtMs(Date.now());
+                    setCompleteSheetOpen(true);
+                  }}
+                />
+              </CoachMarkTarget>
               {reserveFull ? (
                 <View
                   style={[

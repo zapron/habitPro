@@ -18,6 +18,7 @@ import type { CommunityWinFeedItem } from "../lib/communityWinsApi";
 import { buildStreakCelebrationKicker } from "../lib/communityStreakFeedCopy";
 import { formatCompletedAt, formatRelativeTime } from "../lib/communityWinFeedFormat";
 import type { AppTheme } from "../styles/theme";
+import { CoachMarkTarget, type CoachMarkId } from "../context/CoachMarkContext";
 
 const SCREEN_W = Dimensions.get("window").width;
 /** Second tap within this gap counts as double-tap (cheer + burst). */
@@ -42,6 +43,7 @@ type Props = {
   canCheer?: boolean;
   /** Optional; parent may already handle via `onCheer`. Used for accessibility copy. */
   onCheerBlocked?: () => void;
+  cheerCoachId?: CoachMarkId | null;
 };
 
 function CheerBurstOverlay({
@@ -116,6 +118,7 @@ export function CommunityWinFeedPost({
   onOpenCheerers,
   canCheer = true,
   onCheerBlocked,
+  cheerCoachId,
 }: Props) {
   const isOwn = sessionUserId === win.user_id;
   const handle = win.username ? `@${win.username}` : "Someone";
@@ -230,6 +233,27 @@ export function CommunityWinFeedPost({
     backgroundColor: theme.colors.background,
   };
 
+  const cheerButton = (
+    <Pressable
+      onPress={() => void runCheer()}
+      disabled={isOwn}
+      style={({ pressed }) => [styles.cheerTap, { opacity: isOwn ? 0.55 : pressed ? 0.7 : 1 }]}
+      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+      accessibilityRole="button"
+      accessibilityLabel={isOwn ? "Cheer" : win.viewerHasCheered ? "Unlike, remove cheer" : "Cheer"}
+      accessibilityState={{ disabled: isOwn, selected: win.viewerHasCheered }}
+    >
+      <Animated.View style={{ transform: [{ scale: cheerScale }] }}>
+        <ThumbsUp
+          size={17}
+          color={win.viewerHasCheered ? theme.colors.indigo[400] : theme.colors.textMuted}
+          fill={win.viewerHasCheered ? theme.colors.indigo[400] : "transparent"}
+          strokeWidth={2}
+        />
+      </Animated.View>
+    </Pressable>
+  );
+
   const wrapStyle = isFeed
     ? [styles.feedTile, tileBorder, { marginBottom: 12 }]
     : [
@@ -310,24 +334,7 @@ export function CommunityWinFeedPost({
         <View style={styles.cheerTimeRow}>
           <View style={styles.cheerTimeLeft}>
             <View style={styles.cheerIconRow}>
-              <Pressable
-                onPress={() => void runCheer()}
-                disabled={isOwn}
-                style={({ pressed }) => [styles.cheerTap, { opacity: isOwn ? 0.55 : pressed ? 0.7 : 1 }]}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                accessibilityRole="button"
-                accessibilityLabel={isOwn ? "Cheer" : win.viewerHasCheered ? "Unlike, remove cheer" : "Cheer"}
-                accessibilityState={{ disabled: isOwn, selected: win.viewerHasCheered }}
-              >
-                <Animated.View style={{ transform: [{ scale: cheerScale }] }}>
-                  <ThumbsUp
-                    size={17}
-                    color={win.viewerHasCheered ? theme.colors.indigo[400] : theme.colors.textMuted}
-                    fill={win.viewerHasCheered ? theme.colors.indigo[400] : "transparent"}
-                    strokeWidth={2}
-                  />
-                </Animated.View>
-              </Pressable>
+              {cheerCoachId ? <CoachMarkTarget id={cheerCoachId}>{cheerButton}</CoachMarkTarget> : cheerButton}
 
               <Pressable
                 onPress={() => onOpenCheerers?.(win)}

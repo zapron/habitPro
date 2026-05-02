@@ -40,6 +40,7 @@ import { Button } from "../../src/components/Button";
 import { HabitCard } from "../../src/components/HabitCard";
 import { Screen } from "../../src/components/Screen";
 import { useTheme } from "../../src/context/ThemeContext";
+import { CoachMarkTarget, useCoachMark } from "../../src/context/CoachMarkContext";
 import { useReducedMotion } from "../../src/hooks/useReducedMotion";
 import { AnimatedFire } from "../../src/components/AnimatedFire";
 import { FireLottie, FIRE_LOTTIE_URI } from "../../src/components/FireLottie";
@@ -448,6 +449,28 @@ export default function Home() {
     />
   );
 
+  const readyForCoachMarks = storeHydrated && !waitingForFirstSync;
+  useCoachMark(
+    "home_create_mission",
+    {
+      title: "Start with one mission",
+      body: "Tap here when you are ready to build your first streak.",
+      placement: "above",
+    },
+    readyForCoachMarks && activeTab === "missions" && habits.length === 0,
+    900,
+  );
+  useCoachMark(
+    "home_mini_missions",
+    {
+      title: "Use mini missions for quick focus",
+      body: "Short timers are best for a task you can finish right now.",
+      placement: "below",
+    },
+    readyForCoachMarks && habits.length > 0 && miniMissions.length === 0,
+    900,
+  );
+
   return (
     <Screen>
       <StatusBar
@@ -616,43 +639,45 @@ export default function Home() {
           </View>
         </View>
 
-        <TouchableOpacity
-          style={[
-            styles.miniBanner,
-            {
-              backgroundColor: theme.colors.surface,
-              borderColor: isDark ? "rgba(245, 158, 11, 0.3)" : "rgba(217, 119, 6, 0.25)",
-              borderRadius: theme.radius.lg,
-            },
-          ]}
-          activeOpacity={0.85}
-          onPress={() => router.push("/mini")}
-        >
-          <View style={styles.miniBannerLeft}>
-            <View style={styles.commandIconMini}>
-              {miniCount > 0 ? (
-                <FireLottie
-                  source={{ uri: FIRE_LOTTIE_URI }}
-                  size={28}
-                />
-              ) : (
-                <Bolt size={18} color={theme.colors.yellow[400]} />
-              )}
+        <CoachMarkTarget id="home_mini_missions">
+          <TouchableOpacity
+            style={[
+              styles.miniBanner,
+              {
+                backgroundColor: theme.colors.surface,
+                borderColor: isDark ? "rgba(245, 158, 11, 0.3)" : "rgba(217, 119, 6, 0.25)",
+                borderRadius: theme.radius.lg,
+              },
+            ]}
+            activeOpacity={0.85}
+            onPress={() => router.push("/mini")}
+          >
+            <View style={styles.miniBannerLeft}>
+              <View style={styles.commandIconMini}>
+                {miniCount > 0 ? (
+                  <FireLottie
+                    source={{ uri: FIRE_LOTTIE_URI }}
+                    size={28}
+                  />
+                ) : (
+                  <Bolt size={18} color={theme.colors.yellow[400]} />
+                )}
+              </View>
+              <View style={{ marginLeft: 10 }}>
+                <Text style={{ color: theme.colors.textPrimary, fontWeight: "700", fontSize: 15 }}>Mini Missions</Text>
+                {miniMissionStats.live === 0 ? (
+                  <Text style={{ color: theme.colors.textMuted, fontSize: 11 }}>Browse side-quests</Text>
+                ) : null}
+              </View>
             </View>
-            <View style={{ marginLeft: 10 }}>
-              <Text style={{ color: theme.colors.textPrimary, fontWeight: "700", fontSize: 15 }}>Mini Missions</Text>
-              {miniMissionStats.live === 0 ? (
-                <Text style={{ color: theme.colors.textMuted, fontSize: 11 }}>Browse side-quests</Text>
+            <View style={styles.miniBannerRight}>
+              {miniMissionStats.live > 0 ? (
+                <MiniMissionLiveGradientLabel count={miniMissionStats.live} reduceMotion={reduceMotion} />
               ) : null}
+              <ChevronRight size={20} color={theme.colors.textMuted} />
             </View>
-          </View>
-          <View style={styles.miniBannerRight}>
-            {miniMissionStats.live > 0 ? (
-              <MiniMissionLiveGradientLabel count={miniMissionStats.live} reduceMotion={reduceMotion} />
-            ) : null}
-            <ChevronRight size={20} color={theme.colors.textMuted} />
-          </View>
-        </TouchableOpacity>
+          </TouchableOpacity>
+        </CoachMarkTarget>
 
         <Text style={[styles.missionsLabel, { color: theme.colors.textMuted }]}>
           MAIN MISSIONS
@@ -871,13 +896,15 @@ export default function Home() {
           },
         ]}
       >
-        <TouchableOpacity
-          onPress={() => router.push("/create")}
-          activeOpacity={0.8}
-          style={styles.fabInner}
-        >
-          <Plus size={24} color="#fff" strokeWidth={3} />
-        </TouchableOpacity>
+        <CoachMarkTarget id="home_create_mission" style={styles.fabInner}>
+          <TouchableOpacity
+            onPress={() => router.push("/create")}
+            activeOpacity={0.8}
+            style={styles.fabInner}
+          >
+            <Plus size={24} color="#fff" strokeWidth={3} />
+          </TouchableOpacity>
+        </CoachMarkTarget>
       </Animated.View>
     </Screen>
   );

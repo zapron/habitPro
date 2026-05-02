@@ -26,6 +26,7 @@ import * as ImagePicker from "expo-image-picker";
 import { Flag, Globe, ImageIcon, Lock, Quote, Users, X } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import { useTheme } from "../context/ThemeContext";
+import { CoachMarkTarget, useCoachMark } from "../context/CoachMarkContext";
 import type { StreakMemory } from "../types/habit";
 
 type StreakMemorySheetProps = {
@@ -132,6 +133,17 @@ export function StreakMemorySheet({
       }).start();
     }
   }, [visible, slideY, isView]);
+
+  useCoachMark(
+    "mini_complete_memory",
+    {
+      title: "Save the win",
+      body: "Add a photo or note when the moment is worth remembering.",
+      placement: "above",
+    },
+    visible && !isView && isMini,
+    760,
+  );
 
   const pickerOptions = {
     mediaTypes: ImagePicker.MediaTypeOptions.Images,
@@ -819,33 +831,35 @@ export function StreakMemorySheet({
                         {isMini ? "Just Mark Complete" : "Just mark done"}
                       </Text>
                     </Pressable>
-                    <Pressable
-                      onPress={() => void handleSave()}
-                      disabled={submitting}
-                      style={[
-                        styles.btnPrimary,
-                        styles.btnPrimaryMemory,
-                        { backgroundColor: theme.colors.indigo[600], ...theme.shadow.glow, opacity: submitting ? 0.92 : 1 },
-                      ]}
-                    >
-                      {submitting ? (
-                        <ActivityIndicator color={theme.colors.white} />
-                      ) : (
-                        <Text
-                          style={[
-                            styles.btnPrimaryText,
-                            styles.btnPrimaryTextMemory,
-                            { color: theme.colors.white },
-                            Platform.OS === "android" ? styles.btnTextAndroid : null,
-                          ]}
-                          numberOfLines={2}
-                          adjustsFontSizeToFit={false}
-                          minimumFontScale={0.85}
-                        >
-                          {isMini ? "Complete with Memory" : "Save moment"}
-                        </Text>
-                      )}
-                    </Pressable>
+                    <CoachMarkTarget id="mini_complete_memory" style={styles.memoryCoachTarget}>
+                      <Pressable
+                        onPress={() => void handleSave()}
+                        disabled={submitting}
+                        style={[
+                          styles.btnPrimary,
+                          styles.btnPrimaryMemory,
+                          { backgroundColor: theme.colors.indigo[600], ...theme.shadow.glow, opacity: submitting ? 0.92 : 1 },
+                        ]}
+                      >
+                        {submitting ? (
+                          <ActivityIndicator color={theme.colors.white} />
+                        ) : (
+                          <Text
+                            style={[
+                              styles.btnPrimaryText,
+                              styles.btnPrimaryTextMemory,
+                              { color: theme.colors.white },
+                              Platform.OS === "android" ? styles.btnTextAndroid : null,
+                            ]}
+                            numberOfLines={2}
+                            adjustsFontSizeToFit={false}
+                            minimumFontScale={0.85}
+                          >
+                            {isMini ? "Complete with Memory" : "Save moment"}
+                          </Text>
+                        )}
+                      </Pressable>
+                    </CoachMarkTarget>
                   </View>
                 </View>
               )}
@@ -1096,6 +1110,7 @@ const styles = StyleSheet.create({
   actionsMemory: {
     gap: 8,
   },
+  memoryCoachTarget: { flex: 1 },
   btnSecondary: {
     flex: 1,
     minHeight: 48,

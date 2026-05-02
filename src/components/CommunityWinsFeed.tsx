@@ -32,6 +32,7 @@ import { CommunityWinFeedPost } from "./CommunityWinFeedPost";
 import { CommunityWinFeedSkeletonRow } from "./CommunityWinFeedSkeleton";
 import { CommunityWinImageLightbox } from "./CommunityWinImageLightbox";
 import { CommunityWinCheerersModal } from "./CommunityWinCheerersModal";
+import { useCoachMark } from "../context/CoachMarkContext";
 
 type CheerersSheetState = { winId: string; totalLikes: number };
 
@@ -85,6 +86,21 @@ export function CommunityWinsFeed({
   }, [items]);
 
   const feedBleed = variant === "feed" ? theme.spacing.sm : 0;
+  const cheerCoachWinId = useMemo(() => {
+    if (!canCheer || !session?.user?.id) return null;
+    return items.find((w) => w.user_id !== session.user.id)?.id ?? null;
+  }, [canCheer, items, session?.user?.id]);
+
+  useCoachMark(
+    "community_cheer",
+    {
+      title: "Cheer someone on",
+      body: "A small cheer makes Community feel alive.",
+      placement: "below",
+    },
+    Boolean(cheerCoachWinId),
+    850,
+  );
 
   const listRows: ListRow[] = useMemo(() => {
     if (loading && items.length === 0 && session && isSupabaseConfigured()) {
@@ -206,10 +222,23 @@ export function CommunityWinsFeed({
           onOpenCheerers={(w) => setCheerersSheet({ winId: w.id, totalLikes: w.cheerCount })}
           canCheer={canCheer}
           onCheerBlocked={onCheerBlocked}
+          cheerCoachId={win.id === cheerCoachWinId ? "community_cheer" : null}
         />
       );
     },
-    [session?.user?.id, theme, isDark, variant, expandedById, toggleExpanded, handleCheer, reduceMotion, canCheer, onCheerBlocked],
+    [
+      session?.user?.id,
+      theme,
+      isDark,
+      variant,
+      expandedById,
+      toggleExpanded,
+      handleCheer,
+      reduceMotion,
+      canCheer,
+      onCheerBlocked,
+      cheerCoachWinId,
+    ],
   );
 
   if (!isSupabaseConfigured()) {
