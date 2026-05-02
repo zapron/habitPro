@@ -12,10 +12,10 @@ import { Bell, ExternalLink, X, Monitor, Sun, Moon, type LucideIcon } from 'luci
 import { useTheme, type ThemePreference } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { isSupabaseConfigured } from '../lib/env';
-import { useBilling } from "../context/BillingContext";
 import { useHabitStore } from '../store/habitStore';
 import { UsernameSetupFields } from './UsernameSetupFields';
 import { Linking } from "react-native";
+import { useRouter } from "expo-router";
 import { getRemotePushPermissionStatus, registerPushTokenForCurrentUser, requestRemotePushPermission } from "../lib/pushTokens";
 import { useEffect, useMemo, useState } from "react";
 import { ShimmerBlock } from "./ShimmerBlock";
@@ -32,9 +32,9 @@ interface SettingsModalProps {
 }
 
 export function SettingsModal({ visible, onClose }: SettingsModalProps) {
+    const router = useRouter();
     const { theme, isDark, preference, setPreference } = useTheme();
     const { session } = useAuth();
-    const { configured: billingConfigured, ready: billingReady, isExpoGo, openManageSubscriptions } = useBilling();
     const showAccount = isSupabaseConfigured();
     const username = useHabitStore((s) => s.username);
     const uid = session?.user?.id ?? null;
@@ -124,18 +124,19 @@ export function SettingsModal({ visible, onClose }: SettingsModalProps) {
                             {
                                 borderColor: theme.colors.border,
                                 backgroundColor: theme.colors.surfaceElevated,
-                                opacity: billingConfigured && billingReady && !isExpoGo ? 1 : 0.65,
                             },
                         ]}
-                        onPress={() => void openManageSubscriptions()}
+                        onPress={() => {
+                            onClose();
+                            router.push("/membership");
+                        }}
                         activeOpacity={0.85}
-                        disabled={!billingConfigured || !billingReady || isExpoGo}
                         accessibilityRole="button"
-                        accessibilityLabel="Manage subscription"
+                        accessibilityLabel="Membership and billing"
                     >
-                        <Text style={[styles.rowBtnText, { color: theme.colors.textPrimary }]}>Manage subscription</Text>
+                        <Text style={[styles.rowBtnText, { color: theme.colors.textPrimary }]}>Membership</Text>
                         <Text style={[styles.rowBtnHint, { color: theme.colors.textMuted }]}>
-                            Open Google Play subscriptions
+                            Plan, renewal date, cancel in store
                         </Text>
                     </TouchableOpacity>
 

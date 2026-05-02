@@ -16,7 +16,7 @@ import {
 import type { ImageStyle } from "react-native";
 import Svg, { Circle, G } from "react-native-svg";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Settings, Zap, Globe, User, Target, Flame, LogOut } from "lucide-react-native";
+import { Settings, Zap, Globe, User, Target, Flame, LogOut, Crown } from "lucide-react-native";
 import { Screen } from "../../src/components/Screen";
 import { useTheme } from "../../src/context/ThemeContext";
 import { useAuth } from "../../src/context/AuthContext";
@@ -25,6 +25,7 @@ import { usePlusUpsell } from "../../src/context/PlusUpsellContext";
 import { useHabitStore } from "../../src/store/habitStore";
 import { isSupabaseConfigured } from "../../src/lib/env";
 import { useAppVersion } from "../../src/context/AppVersionContext";
+import { useRouter } from "expo-router";
 import { SettingsModal } from "../../src/components/SettingsModal";
 import { UsernameSetupFields } from "../../src/components/UsernameSetupFields";
 import { HubListModal } from "../../src/components/HubListModal";
@@ -488,6 +489,7 @@ export default function ProfileScreen() {
   const bottomPad = Math.max(insets.bottom, 16) + 8;
   const showAccount = isSupabaseConfigured();
   const appVersion = useAppVersion();
+  const router = useRouter();
 
   return (
     <Screen>
@@ -517,6 +519,16 @@ export default function ProfileScreen() {
               accessibilityLabel="Sign out"
             >
               <LogOut size={20} color={theme.colors.red[500]} />
+            </TouchableOpacity>
+          ) : null}
+          {showAccount && session?.user ? (
+            <TouchableOpacity
+              onPress={() => router.push("/membership")}
+              style={[styles.gearBtn, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}
+              activeOpacity={0.85}
+              accessibilityLabel="Membership"
+            >
+              <Crown size={20} color={theme.colors.indigo[400]} />
             </TouchableOpacity>
           ) : null}
           <TouchableOpacity
