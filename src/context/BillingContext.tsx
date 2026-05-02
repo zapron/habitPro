@@ -1,7 +1,8 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { Linking, Platform } from "react-native";
+import { AppState, Linking, Platform } from "react-native";
 import Constants from "expo-constants";
 import Purchases, { type CustomerInfo, LOG_LEVEL } from "react-native-purchases";
+import { HABITPRO_COMMUNITY_ENTITLEMENT_ID } from "../constants/revenueCat";
 import { getRevenueCatConfig, logRevenueCatEnvHint } from "../lib/env";
 import { useAuth } from "./AuthContext";
 
@@ -111,7 +112,7 @@ const BillingContext = createContext<BillingContextValue | null>(null);
  * - Create an Offering in RevenueCat and set it as the current offering
  * - Ensure monthly/yearly packages exist (RevenueCat default IDs: `$rc_monthly`, `$rc_annual`)
  */
-const ENTITLEMENT_ID = "habitpro_community";
+const ENTITLEMENT_ID = HABITPRO_COMMUNITY_ENTITLEMENT_ID;
 const PACKAGE_BY_PLAN: Record<PlanId, string> = {
   monthly: "$rc_monthly",
   yearly: "$rc_annual",
@@ -327,6 +328,7 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
       }
 
       try {
+        await Purchases.invalidateCustomerInfoCache();
         const info = await Purchases.getCustomerInfo();
         next.customerInfo = summarizeCustomerInfo(info);
       } catch (e) {
@@ -407,6 +409,7 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
 
   const refresh = async () => {
     if (!ready || !configured || isExpoGo) return;
+    await Purchases.invalidateCustomerInfoCache();
     const info = await Purchases.getCustomerInfo();
     setCustomerInfo(info);
   };
@@ -449,6 +452,7 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
         throw new Error(`RevenueCat package not found: ${pkgId} (set current offering + packages).`);
       }
       stage = "start purchase";
+      await Purchases.invalidateCustomerInfoCache();
       const { customerInfo: info } = await Purchases.purchasePackage(pkg);
       setCustomerInfo(info);
       snapshot.customerInfo = summarizeCustomerInfo(info);
@@ -484,6 +488,16 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
   };
 
   const hasCommunityAccess = Boolean(customerInfo?.entitlements?.active?.[ENTITLEMENT_ID]);
+
+  useEffect(() => {
+    if (!ready || !configured || isExpoGo) return;
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state === "active") {
+        void refresh();
+      }
+    });
+    return () => sub.remove();
+  }, [configured, isExpoGo, ready]);
 
   const openManageSubscriptions = async () => {
     // Prefer RevenueCat helper if available; otherwise fall back to store URLs.

@@ -199,7 +199,8 @@ function BillingUpsellModal({
   if (!visible) return null;
 
   const canBuy = configured && ready && busy === null;
-  const debugLines = billingDebug ? billingDebugLines(billingDebug) : [];
+  const showBillingDebug = __DEV__ && Boolean(purchaseError || billingDebug);
+  const debugLines = showBillingDebug && billingDebug ? billingDebugLines(billingDebug) : [];
 
   const shareBillingDebug = async () => {
     if (!billingDebug) return;
@@ -232,7 +233,7 @@ function BillingUpsellModal({
       }
       const res = await purchaseCommunity(kind);
       if (!res.cancelled) {
-        showToast("Trial started. Welcome to HabitPro Community.", "success");
+        showToast("Subscription active. Welcome to HabitPro Community.", "success");
         onClose();
       } else if (res.purchaseFailed) {
         const msg = res.message?.trim();
@@ -336,8 +337,8 @@ function BillingUpsellModal({
         </View>
 
         <Text style={[styles.disclaimer, { color: theme.colors.textMuted }]}>
-          7-day free trial, then ₹149/month or ₹999/year. Cancel anytime in
-          Google Play.
+          Monthly and yearly plans are shown by Google Play before purchase.
+          Cancel anytime in Google Play.
         </Text>
 
         {!configured ? (
@@ -361,7 +362,7 @@ function BillingUpsellModal({
           </Text>
         ) : null}
 
-        {purchaseError || billingDebug ? (
+        {showBillingDebug ? (
           <View style={styles.debugActions}>
             <Button
               title={
@@ -416,7 +417,7 @@ function BillingUpsellModal({
 
         <Button
           title={
-            busy === "monthly" ? "Starting trial…" : "7 day trial then Monthly"
+            busy === "monthly" ? "Opening Google Play..." : "Subscribe monthly"
           }
           onPress={() => void run("monthly")}
           disabled={!canBuy}
@@ -424,7 +425,7 @@ function BillingUpsellModal({
         />
         <Button
           title={
-            busy === "yearly" ? "Starting trial…" : "7 day trial then Yearly"
+            busy === "yearly" ? "Opening Google Play..." : "Subscribe yearly"
           }
           onPress={() => void run("yearly")}
           disabled={!canBuy}
