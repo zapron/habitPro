@@ -19,6 +19,7 @@ import { PlusUpsellProvider } from "../src/context/PlusUpsellContext";
 import { AppVersionProvider, useAppVersion } from "../src/context/AppVersionContext";
 import { ForceUpdateModal } from "../src/components/ForceUpdateModal";
 import { SplashGate } from "../src/components/SplashGate";
+import { AppLaunchNotificationNudge } from "../src/components/AppLaunchNotificationNudge";
 import { SyncManager } from "../src/components/SyncManager";
 import { SyncToast } from "../src/components/SyncToast";
 import { setupNotifications } from "../src/utils/notifications";
@@ -292,6 +293,7 @@ function RootLayoutNav() {
 
   return (
     <View style={{ flex: 1 }}>
+      <AppLaunchNotificationNudge />
       <SyncManager />
       <Stack screenOptions={{ headerShown: false }} />
       <ToastHost />

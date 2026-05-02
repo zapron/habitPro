@@ -1,7 +1,10 @@
-import React, { createContext, useContext, useMemo, useRef, useState } from "react";
-import { Modal, Pressable, StyleSheet, View } from "react-native";
+import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { Animated, Easing, Modal, Pressable, StyleSheet, View } from "react-native";
+import { Bell } from "lucide-react-native";
 import { Text } from "../components/AppText";
 import { Button } from "../components/Button";
+import { useReducedMotion } from "../hooks/useReducedMotion";
+import type { AppTheme } from "../styles/theme";
 import { useTheme } from "./ThemeContext";
 import {
   getRemotePushPermissionStatus,
@@ -15,7 +18,8 @@ export type NotificationGateReason =
   | "mini_timer"
   | "daily_reminder"
   | "mission_create"
-  | "invite_accept";
+  | "invite_accept"
+  | "app_launch";
 
 type NotificationGateContextValue = {
   /**
@@ -27,7 +31,7 @@ type NotificationGateContextValue = {
    * Non-blocking soft ask. Only shows when notifications are not granted and this reason
    * hasn't been shown on this device yet.
    */
-  suggestNotifications: (reason: "mission_create" | "invite_accept") => Promise<boolean>;
+  suggestNotifications: (reason: "mission_create" | "invite_accept" | "app_launch") => Promise<boolean>;
 };
 
 const NotificationGateContext = createContext<NotificationGateContextValue | null>(null);
@@ -42,6 +46,8 @@ function titleForReason(reason: NotificationGateReason): string {
       return "Turn on notifications?";
     case "invite_accept":
       return "Turn on notifications?";
+    case "app_launch":
+      return "Stay on track with HabitPro";
   }
 }
 
@@ -55,6 +61,8 @@ function bodyForReason(reason: NotificationGateReason): string {
       return "For a better experience, enable notifications so we can remind you to check in on this mission.";
     case "invite_accept":
       return "Enable notifications to get updates and reminders for your group mission.";
+    case "app_launch":
+      return "For the best experience, turn on notifications for streak check-ins, mission reminders, and squad updates. You can change this anytime in Settings.";
   }
 }
 
@@ -63,8 +71,129 @@ function primaryLabelForStatus(status: RemotePushPermissionStatus): string {
   return "Enable notifications";
 }
 
-function softAskStorageKey(reason: "mission_create" | "invite_accept"): string {
+function softAskStorageKey(reason: "mission_create" | "invite_accept" | "app_launch"): string {
   return `@habitpro_notif_softask_${reason}_v1`;
+}
+
+function NotificationPermissionSheet({
+  reason,
+  status,
+  busy,
+  theme,
+  isDark,
+  onClose,
+  onPrimary,
+}: {
+  reason: NotificationGateReason;
+  status: RemotePushPermissionStatus;
+  busy: boolean;
+  theme: AppTheme;
+  isDark: boolean;
+  onClose: () => void;
+  onPrimary: () => void;
+}) {
+  const reduceMotion = useReducedMotion();
+  const backdropOp = useRef(new Animated.Value(0)).current;
+  const sheetOp = useRef(new Animated.Value(0)).current;
+  const sheetY = useRef(new Animated.Value(28)).current;
+
+  useEffect(() => {
+    if (reduceMotion) {
+      backdropOp.setValue(1);
+      sheetOp.setValue(1);
+      sheetY.setValue(0);
+      return;
+    }
+    backdropOp.setValue(0);
+    sheetOp.setValue(0);
+    sheetY.setValue(28);
+    Animated.parallel([
+      Animated.timing(backdropOp, {
+        toValue: 1,
+        duration: 240,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.timing(sheetOp, {
+        toValue: 1,
+        duration: 280,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.spring(sheetY, {
+        toValue: 0,
+        friction: 9,
+        tension: 68,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [backdropOp, reduceMotion, sheetOp, sheetY]);
+
+  const accent = theme.colors.indigo[500];
+  const accentSoft = isDark ? "rgba(99, 102, 241, 0.22)" : "rgba(79, 70, 229, 0.12)";
+
+  return (
+    <View style={styles.modalRoot} pointerEvents="box-none">
+      <Animated.View
+        pointerEvents="box-none"
+        style={[
+          styles.backdrop,
+          {
+            opacity: backdropOp,
+            backgroundColor: isDark ? "rgba(0,0,0,0.62)" : "rgba(15,23,42,0.45)",
+          },
+        ]}
+      >
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityRole="button" accessibilityLabel="Dismiss" />
+      </Animated.View>
+      <Animated.View
+        style={{
+          width: "100%",
+          maxWidth: 440,
+          alignSelf: "center",
+          opacity: sheetOp,
+          transform: [{ translateY: sheetY }],
+        }}
+      >
+        <Pressable
+          onPress={(e) => e.stopPropagation()}
+          style={[
+            styles.sheet,
+            {
+              backgroundColor: theme.colors.surface,
+              borderColor: accent,
+              borderRadius: theme.radius.lg,
+              ...theme.shadow.card,
+              shadowColor: accent,
+            },
+          ]}
+        >
+          <View style={[styles.sheetAccentBar, { backgroundColor: accent }]} />
+          <View style={[styles.iconWrap, { backgroundColor: accentSoft }]}>
+            <Bell size={26} color={accent} strokeWidth={2.2} />
+          </View>
+          {reason === "app_launch" ? (
+            <Text style={[styles.title, { color: theme.colors.textPrimary }]}>
+              <Text style={{ fontWeight: "900" }}>Stay on track with </Text>
+              <Text style={{ fontWeight: "900", color: theme.colors.indigo[400] }}>HabitPro</Text>
+            </Text>
+          ) : (
+            <Text style={[styles.title, { color: theme.colors.textPrimary }]}>{titleForReason(reason)}</Text>
+          )}
+          <Text style={[styles.body, { color: theme.colors.textSecondary }]}>{bodyForReason(reason)}</Text>
+          {status === "denied" ? (
+            <Text style={[styles.note, { color: theme.colors.amber[500] }]}>
+              You previously denied notifications. On Android, turn them back on from Settings.
+            </Text>
+          ) : null}
+          <View style={styles.actions}>
+            <Button title={primaryLabelForStatus(status)} onPress={onPrimary} disabled={busy} />
+            <Button title="Not now" variant="secondary" onPress={onClose} disabled={busy} />
+          </View>
+        </Pressable>
+      </Animated.View>
+    </View>
+  );
 }
 
 export function NotificationGateProvider({ children }: { children: React.ReactNode }) {
@@ -129,7 +258,7 @@ export function NotificationGateProvider({ children }: { children: React.ReactNo
           resolverRef.current = resolve;
         });
       },
-      suggestNotifications: async (nextReason: "mission_create" | "invite_accept") => {
+      suggestNotifications: async (nextReason: "mission_create" | "invite_accept" | "app_launch") => {
         const s = await getRemotePushPermissionStatus();
         if (s === "granted") return true;
         try {
@@ -155,47 +284,18 @@ export function NotificationGateProvider({ children }: { children: React.ReactNo
   return (
     <NotificationGateContext.Provider value={value}>
       {children}
-      <Modal transparent visible={visible} animationType="fade" statusBarTranslucent onRequestClose={() => close(false)}>
-        <View style={styles.modalRoot}>
-          <Pressable
-            style={[styles.backdrop, { backgroundColor: isDark ? "rgba(0,0,0,0.62)" : "rgba(15,23,42,0.45)" }]}
-            onPress={() => close(false)}
-            accessibilityRole="button"
-            accessibilityLabel="Dismiss"
+      <Modal transparent visible={visible} animationType="none" statusBarTranslucent onRequestClose={() => close(false)}>
+        {visible ? (
+          <NotificationPermissionSheet
+            reason={reason}
+            status={status}
+            busy={busy}
+            theme={theme}
+            isDark={isDark}
+            onClose={() => close(false)}
+            onPrimary={() => void runPrimary()}
           />
-          <View
-            style={[
-              styles.sheet,
-              {
-                backgroundColor: theme.colors.surface,
-                borderColor: theme.colors.border,
-                borderRadius: theme.radius.lg,
-                ...theme.shadow.card,
-              },
-            ]}
-          >
-            <Text style={[styles.title, { color: theme.colors.textPrimary }]}>{titleForReason(reason)}</Text>
-            <Text style={[styles.body, { color: theme.colors.textSecondary }]}>{bodyForReason(reason)}</Text>
-            {status === "denied" ? (
-              <Text style={[styles.note, { color: theme.colors.textMuted }]}>
-                You previously denied notifications. Android only lets you re-enable it from Settings.
-              </Text>
-            ) : null}
-            <View style={styles.actions}>
-              <Button
-                title={primaryLabelForStatus(status)}
-                onPress={() => void runPrimary()}
-                disabled={busy}
-              />
-              <Button
-                title="Not now"
-                variant="secondary"
-                onPress={() => close(false)}
-                disabled={busy}
-              />
-            </View>
-          </View>
-        </View>
+        ) : null}
       </Modal>
     </NotificationGateContext.Provider>
   );
@@ -212,14 +312,30 @@ const styles = StyleSheet.create({
   backdrop: { ...StyleSheet.absoluteFillObject },
   sheet: {
     width: "100%",
-    maxWidth: 440,
-    alignSelf: "center",
-    borderWidth: 1,
-    padding: 18,
+    borderWidth: 1.5,
+    paddingHorizontal: 18,
+    paddingTop: 16,
+    paddingBottom: 18,
+    overflow: "hidden",
   },
-  title: { fontSize: 18, fontWeight: "900", letterSpacing: -0.2, marginBottom: 6 },
-  body: { fontSize: 13.5, lineHeight: 18, fontWeight: "600" },
-  note: { fontSize: 12.5, lineHeight: 17, fontWeight: "600", marginTop: 10 },
-  actions: { gap: 10, marginTop: 14 },
+  sheetAccentBar: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 3,
+  },
+  iconWrap: {
+    width: 52,
+    height: 52,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 12,
+  },
+  title: { fontSize: 18, fontWeight: "900", letterSpacing: -0.2, marginBottom: 8, lineHeight: 24 },
+  body: { fontSize: 14, lineHeight: 20, fontWeight: "600" },
+  note: { fontSize: 12.5, lineHeight: 17, fontWeight: "700", marginTop: 10 },
+  actions: { gap: 10, marginTop: 16 },
 });
 
