@@ -3,8 +3,7 @@ import {
   useCallback,
   useMemo,
   useState } from "react";
-import type { ComponentType,
-  ReactNode } from "react";
+import type { ComponentType } from "react";
 import {
   View,
   ScrollView,
@@ -15,7 +14,6 @@ import {
   Image,
 } from "react-native";
 import type { ImageStyle } from "react-native";
-import Svg, { Circle, G } from "react-native-svg";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
 import { Settings, Zap, Globe, User, Target, Flame, LogOut, Crown } from "lucide-react-native";
@@ -31,6 +29,7 @@ import { useRouter } from "expo-router";
 import { SettingsModal } from "../../src/components/SettingsModal";
 import { UsernameSetupFields } from "../../src/components/UsernameSetupFields";
 import { HubListModal } from "../../src/components/HubListModal";
+import { LevelXpRing } from "../../src/components/LevelXpRing";
 import type { AppTheme } from "../../src/styles/theme";
 import type { MissionVisibility, MiniMission } from "../../src/types/habit";
 import {
@@ -263,71 +262,6 @@ const hubVisStyles = StyleSheet.create({
   figureNum: { fontSize: 20, fontWeight: "900", fontVariant: ["tabular-nums"] },
 });
 
-const RING_SIZE = 102;
-const RING_STROKE = 4;
-
-function hexToRgba(hex: string | undefined | null, a: number): string {
-  const raw = typeof hex === "string" ? hex : "#6366f1";
-  const h = raw.replace("#", "").trim();
-  if (h.length !== 6) return `rgba(99,102,241,${a})`;
-  const r = parseInt(h.slice(0, 2), 16);
-  const g = parseInt(h.slice(2, 4), 16);
-  const b = parseInt(h.slice(4, 6), 16);
-  return `rgba(${r},${g},${b},${a})`;
-}
-
-function LevelXpRing({
-  level,
-  xpInLevel,
-  theme,
-  isDark,
-  children,
-}: {
-  level: number;
-  xpInLevel: number;
-  theme: AppTheme;
-  isDark: boolean;
-  children: ReactNode;
-}) {
-  const c = RING_SIZE / 2;
-  const r = (RING_SIZE - RING_STROKE) / 2 - 1;
-  const circ = 2 * Math.PI * r;
-  const pct = Math.min(1, Math.max(0, xpInLevel / 100));
-
-  const levelPalette = [
-    theme.colors.indigo[500],
-    theme.colors.cyan[400],
-    theme.colors.amber[500],
-    theme.colors.green[500],
-    theme.colors.red[500],
-    theme.colors.yellow[400],
-  ] as const;
-  const levelColor =
-    levelPalette[Math.abs(level) % levelPalette.length] ?? theme.colors.indigo[500];
-  const track = hexToRgba(levelColor, isDark ? 0.22 : 0.16);
-  return (
-    <View style={{ width: RING_SIZE, height: RING_SIZE, alignItems: "center", justifyContent: "center" }}>
-      <Svg width={RING_SIZE} height={RING_SIZE} style={StyleSheet.absoluteFill}>
-        <G transform={`rotate(-90 ${c} ${c})`}>
-          <Circle cx={c} cy={c} r={r} stroke={track} strokeWidth={RING_STROKE} fill="none" />
-          <Circle
-            cx={c}
-            cy={c}
-            r={r}
-            stroke={levelColor}
-            strokeWidth={RING_STROKE}
-            fill="none"
-            strokeLinecap="round"
-            strokeDasharray={`${circ} ${circ}`}
-            strokeDashoffset={circ * (1 - pct)}
-          />
-        </G>
-      </Svg>
-      {children}
-    </View>
-  );
-}
-
 export default function ProfileScreen() {
   const { theme, isDark } = useTheme();
   const insets = useSafeAreaInsets();
@@ -553,7 +487,7 @@ export default function ProfileScreen() {
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: bottomPad }}>
         <View style={[styles.hero, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, ...theme.shadow.card }]}>
-          <LevelXpRing level={level} xpInLevel={xpInLevel} theme={theme} isDark={isDark}>
+          <LevelXpRing level={level} xpInLevel={xpInLevel}>
             <View
               style={[
                 styles.levelOrb,
