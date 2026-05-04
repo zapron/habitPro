@@ -13,6 +13,7 @@ import { PlusBadge } from "../components/PlusBadge";
 import { useTheme } from "./ThemeContext";
 import { useBilling, type BillingDebugSnapshot } from "./BillingContext";
 import { useToast } from "./ToastContext";
+import { getPublicLinks } from "../lib/env";
 
 export type PlusUpsellReason =
   | "generic"
@@ -191,6 +192,7 @@ function BillingUpsellModal({
     runBillingDiagnostics,
   } = useBilling();
   const { showToast } = useToast();
+  const publicLinks = useMemo(() => getPublicLinks(), []);
   const [busy, setBusy] = useState<
     null | "monthly" | "yearly" | "restore" | "diagnostics"
   >(null);
@@ -259,13 +261,11 @@ function BillingUpsellModal({
   };
 
   const onOpenPrivacy = async () => {
-    // Replace with your real URL when ready.
-    await Linking.openURL("https://example.com/privacy");
+    await Linking.openURL(publicLinks.privacy);
   };
 
   const onOpenTerms = async () => {
-    // Replace with your real URL when ready.
-    await Linking.openURL("https://example.com/terms");
+    await Linking.openURL(publicLinks.terms);
   };
 
   return (

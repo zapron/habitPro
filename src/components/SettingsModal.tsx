@@ -6,12 +6,13 @@ import {
   Modal,
   StyleSheet,
   Pressable,
+  ScrollView,
 } from "react-native";
 import { BlurView } from 'expo-blur';
 import { Bell, ExternalLink, X, Monitor, Sun, Moon, type LucideIcon } from 'lucide-react-native';
 import { useTheme, type ThemePreference } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
-import { isSupabaseConfigured } from '../lib/env';
+import { getPublicLinks, isSupabaseConfigured } from '../lib/env';
 import { useHabitStore } from '../store/habitStore';
 import { UsernameSetupFields } from './UsernameSetupFields';
 import { Linking } from "react-native";
@@ -37,6 +38,7 @@ export function SettingsModal({ visible, onClose }: SettingsModalProps) {
     const { session } = useAuth();
     const showAccount = isSupabaseConfigured();
     const username = useHabitStore((s) => s.username);
+    const publicLinks = useMemo(() => getPublicLinks(), []);
     const uid = session?.user?.id ?? null;
     const [notifStatus, setNotifStatus] = useState<"loading" | "on" | "off" | "unavailable">("loading");
 
@@ -85,6 +87,10 @@ export function SettingsModal({ visible, onClose }: SettingsModalProps) {
         setNotifStatus("off");
     };
 
+    const onOpenPublicLink = async (url: string) => {
+        await Linking.openURL(url);
+    };
+
     return (
         <Modal
             visible={visible}
@@ -106,6 +112,11 @@ export function SettingsModal({ visible, onClose }: SettingsModalProps) {
                             <X size={18} color={theme.colors.textSecondary} />
                         </TouchableOpacity>
                     </View>
+
+                    <ScrollView
+                        showsVerticalScrollIndicator={false}
+                        contentContainerStyle={styles.contentScroll}
+                    >
 
                     {showAccount && session && (
                         <>
@@ -233,6 +244,68 @@ export function SettingsModal({ visible, onClose }: SettingsModalProps) {
                             </TouchableOpacity>
                         </>
                     ) : null}
+
+                    <Text style={[styles.sectionLabel, { color: theme.colors.textMuted, marginTop: 14 }]}>LEGAL</Text>
+                    <TouchableOpacity
+                        style={[
+                            styles.rowBtn,
+                            styles.legalLinkRow,
+                            {
+                                borderColor: theme.colors.border,
+                                backgroundColor: theme.colors.surfaceElevated,
+                            },
+                        ]}
+                        onPress={() => void onOpenPublicLink(publicLinks.privacy)}
+                        activeOpacity={0.85}
+                        accessibilityRole="link"
+                        accessibilityLabel="Privacy policy"
+                    >
+                        <View style={styles.rowBtnTop}>
+                            <Text style={[styles.rowBtnText, { color: theme.colors.textPrimary }]}>Privacy Policy</Text>
+                            <ExternalLink size={14} color={theme.colors.textMuted} />
+                        </View>
+                        <Text style={[styles.rowBtnHint, { color: theme.colors.textMuted }]}>How HabitPro handles account and app data</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        style={[
+                            styles.rowBtn,
+                            styles.legalLinkRow,
+                            {
+                                borderColor: theme.colors.border,
+                                backgroundColor: theme.colors.surfaceElevated,
+                            },
+                        ]}
+                        onPress={() => void onOpenPublicLink(publicLinks.terms)}
+                        activeOpacity={0.85}
+                        accessibilityRole="link"
+                        accessibilityLabel="Terms of use"
+                    >
+                        <View style={styles.rowBtnTop}>
+                            <Text style={[styles.rowBtnText, { color: theme.colors.textPrimary }]}>Terms of Use</Text>
+                            <ExternalLink size={14} color={theme.colors.textMuted} />
+                        </View>
+                        <Text style={[styles.rowBtnHint, { color: theme.colors.textMuted }]}>Rules for using missions, community, and membership</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        style={[
+                            styles.rowBtn,
+                            {
+                                borderColor: theme.colors.border,
+                                backgroundColor: theme.colors.surfaceElevated,
+                            },
+                        ]}
+                        onPress={() => void onOpenPublicLink(publicLinks.support)}
+                        activeOpacity={0.85}
+                        accessibilityRole="link"
+                        accessibilityLabel="Support"
+                    >
+                        <View style={styles.rowBtnTop}>
+                            <Text style={[styles.rowBtnText, { color: theme.colors.textPrimary }]}>Support</Text>
+                            <ExternalLink size={14} color={theme.colors.textMuted} />
+                        </View>
+                        <Text style={[styles.rowBtnHint, { color: theme.colors.textMuted }]}>Help with reminders, purchases, and app access</Text>
+                    </TouchableOpacity>
+                    </ScrollView>
                 </Pressable>
             </Pressable>
         </Modal>
@@ -250,8 +323,12 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderBottomWidth: 0,
         paddingHorizontal: 20,
-        paddingBottom: 28,
+        paddingBottom: 14,
         paddingTop: 10,
+        maxHeight: "92%",
+    },
+    contentScroll: {
+        paddingBottom: 14,
     },
     handle: {
         width: 40,
@@ -332,5 +409,8 @@ const styles = StyleSheet.create({
     rowBtnHint: {
         fontSize: 12,
         fontWeight: "600",
+    },
+    legalLinkRow: {
+        marginBottom: 8,
     },
 });
