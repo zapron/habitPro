@@ -320,7 +320,7 @@ function AnimatedDayCell({
                 ) : locked ? (
                     <Lock size={15} color={theme.colors.textMuted} />
                 ) : isCurrentMissionDay ? (
-                    <HabitGridBrandRing day={day} variant="current" isMilestone={isMilestone} />
+                    <Text style={[styles.dayText, styles.currentDayText, { color: theme.colors.cyan[400] }]}>{day}</Text>
                 ) : (
                     <Text style={[styles.dayText, isCurrentMissionDay ? { color: theme.colors.cyan[400] } : { color: theme.colors.textMuted }]}>{day}</Text>
                 )}
@@ -1616,6 +1616,7 @@ const styles = StyleSheet.create({
     dayButtonIncomplete: { borderWidth: 1 },
     dayButtonFuture: { opacity: 0.45 },
     dayText: { fontWeight: '700', fontSize: 16 },
+    currentDayText: { fontSize: 18, fontWeight: '800' },
     badgeWrap: { width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center' },
     milestoneHalo: { position: 'absolute', width: '90%', height: '90%', borderRadius: 10, backgroundColor: 'rgba(251, 191, 36, 0.16)' },
     badgeCore: { width: '72%', height: '72%', borderRadius: 9999, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255, 255, 255, 0.16)', borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.26)' },
