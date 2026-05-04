@@ -74,7 +74,9 @@ Remote pushes use **Expo’s service**, which talks to **FCM** on Android. You d
 
 3. **Rebuild** an APK/AAB with EAS after `google-services.json` is in place.
 
-4. **Test** — [expo.dev/notifications](https://expo.dev/notifications) with a device **ExpoPushToken** from your dev/production build, or trigger a real `notifications` insert + webhook.
+4. **Runtime permission** — Android 13+ requires the native `android.permission.POST_NOTIFICATIONS` manifest permission plus a user-approved runtime prompt. `app.json` declares the manifest permission; the app asks from HabitPro UI before calling the OS prompt.
+
+5. **Test** — [expo.dev/notifications](https://expo.dev/notifications) with a device **ExpoPushToken** from your dev/production build, or trigger a real `notifications` insert + webhook.
 
 The app registers a **`default`** notification channel (high importance) and `notify-push` sends `channelId: "default"` so remote pushes use that channel.
 
