@@ -1,5 +1,6 @@
 import { Text } from "../../src/components/AppText";
 import {
+  memo,
   useCallback,
   useEffect,
   useMemo,
@@ -13,11 +14,13 @@ import {
   Alert,
   Vibration,
   Animated,
+  Easing,
   Image,
   Modal,
   Pressable,
   ScrollView,
   ActivityIndicator,
+  useWindowDimensions,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -35,6 +38,8 @@ import {
   Flame,
   Sparkles,
   Info,
+  Maximize2,
+  Minimize2,
 } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import { fireImmediateNotification } from "../../src/utils/notifications";
@@ -60,7 +65,6 @@ import { usePremium } from "../../src/context/PremiumContext";
 import { usePlusUpsell } from "../../src/context/PlusUpsellContext";
 import { useRefreshPremiumAccess } from "../../src/hooks/useRefreshPremiumAccess";
 import { useUsernameGate } from "../../src/context/UsernameGateContext";
-import { useNotificationGate } from "../../src/context/NotificationGateContext";
 import { isSupabaseConfigured } from "../../src/lib/env";
 import { MiniVisibilityRow } from "../../src/components/MiniVisibilityRow";
 import {
@@ -139,6 +143,577 @@ function getPlannedEndMs(m: {
   return new Date(m.startedAt).getTime() + totalMinutes * 60 * 1000;
 }
 
+function buildSpiralRanks(
+  rows: number,
+  columns: number,
+  totalCells: number,
+): number[] {
+  const ranks = Array(totalCells).fill(totalCells);
+  let rank = 0;
+  let top = 0;
+  let bottom = rows - 1;
+  let left = 0;
+  let right = columns - 1;
+
+  const addCell = (row: number, column: number) => {
+    const index = row * columns + column;
+    if (index < 0 || index >= totalCells) return;
+    ranks[index] = rank;
+    rank += 1;
+  };
+
+  while (top <= bottom && left <= right) {
+    for (let column = left; column <= right; column += 1) {
+      addCell(top, column);
+    }
+    top += 1;
+
+    for (let row = top; row <= bottom; row += 1) {
+      addCell(row, right);
+    }
+    right -= 1;
+
+    if (top <= bottom) {
+      for (let column = right; column >= left; column -= 1) {
+        addCell(bottom, column);
+      }
+      bottom -= 1;
+    }
+
+    if (left <= right) {
+      for (let row = bottom; row >= top; row -= 1) {
+        addCell(row, left);
+      }
+      left += 1;
+    }
+  }
+
+  return ranks;
+}
+
+function getFocusMatrixCellCount(totalSeconds: number): number {
+  if (totalSeconds <= 720) return totalSeconds;
+  if (totalSeconds <= 60 * 60) return 720;
+  if (totalSeconds <= 4 * 60 * 60) return 600;
+  return 420;
+}
+
+type FocusSecondCellProps = {
+  active: boolean;
+  color: string;
+  size: number;
+  shadowColor: string;
+  animate: boolean;
+  glow: boolean;
+};
+
+const FocusSecondCell = memo(function FocusSecondCell({
+  active,
+  color,
+  size,
+  shadowColor,
+  animate,
+  glow,
+}: FocusSecondCellProps) {
+  const visibility = useRef(new Animated.Value(active ? 1 : 0)).current;
+
+  useEffect(() => {
+    if (!animate) {
+      visibility.setValue(active ? 1 : 0);
+      return;
+    }
+    Animated.timing(visibility, {
+      toValue: active ? 1 : 0,
+      duration: active ? 720 : 620,
+      easing: active ? Easing.out(Easing.cubic) : Easing.inOut(Easing.quad),
+      useNativeDriver: true,
+    }).start();
+  }, [active, animate, visibility]);
+
+  const opacity = visibility.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.16, 0.9],
+  });
+  const scale = visibility.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.72, 1],
+  });
+
+  return (
+    <Animated.View
+      style={[
+        focusStyles.secondCell,
+        {
+          width: size,
+          height: size,
+          borderRadius: Math.max(3, size * 0.28),
+          borderColor: color,
+          backgroundColor: color,
+          shadowColor,
+          shadowOpacity: active && glow ? 0.12 : 0,
+          elevation: active && glow ? 2 : 0,
+          opacity,
+          transform: [{ scale }],
+        },
+      ]}
+    />
+  );
+});
+
+type FocusSecondsMatrixProps = {
+  countdownMs: number;
+  totalMissionSeconds: number;
+  baseMissionSeconds: number;
+  totalMinutes: number;
+  reserveUsed: number;
+  isTimerUp: boolean;
+  isWide: boolean;
+};
+
+function FocusSecondsMatrix({
+  countdownMs,
+  totalMissionSeconds,
+  baseMissionSeconds,
+  totalMinutes,
+  reserveUsed,
+  isTimerUp,
+  isWide,
+}: FocusSecondsMatrixProps) {
+  const { isDark } = useTheme();
+  const { width, height } = useWindowDimensions();
+  const remainingSeconds = Math.max(0, Math.ceil(countdownMs / 1000));
+  // Keep the grid as the original mission container. Reserve fuel refills
+  // vanished dots instead of adding new cells or changing the layout.
+  const matrixSeconds = Math.max(1, baseMissionSeconds);
+  const totalCells = Math.min(
+    matrixSeconds,
+    getFocusMatrixCellCount(matrixSeconds),
+  );
+  const secondsPerCell = Math.ceil(matrixSeconds / totalCells);
+  const activeCells = Math.min(
+    totalCells,
+    Math.ceil(remainingSeconds / secondsPerCell),
+  );
+  const cellColor = isTimerUp
+    ? isDark
+      ? "#ef4444"
+      : "#dc2626"
+    : remainingSeconds <= 10
+      ? isDark
+        ? "#fb7185"
+        : "#e11d48"
+        : remainingSeconds <= 30
+          ? isDark
+            ? "#f59e0b"
+            : "#d97706"
+          : isDark
+            ? "#5eead4"
+            : "#0d9488";
+  const gap = totalCells <= 120 ? 5 : totalCells <= 300 ? 4 : 3;
+  const animateCells = totalCells <= 300;
+  const maxGridWidth = isWide
+    ? Math.min(Math.max(width - 360, 320), 760)
+    : Math.min(Math.max(width - 60, 280), 390);
+  const maxGridHeight = isWide
+    ? Math.max(height - 180, 220)
+    : Math.min(Math.max(height - 250, 280), 560);
+  const gridLayout = useMemo(() => {
+    const minColumns = Math.min(totalCells, isWide ? 12 : 10);
+    const maxColumns = Math.min(totalCells, isWide ? 60 : 48);
+    let best = {
+      columns: minColumns,
+      rows: Math.ceil(totalCells / Math.max(1, minColumns)),
+      cellSize: 4,
+    };
+
+    for (let candidate = minColumns; candidate <= maxColumns; candidate += 1) {
+      const candidateRows = Math.ceil(totalCells / candidate);
+      const byWidth = Math.floor(
+        (maxGridWidth - (candidate - 1) * gap) / candidate,
+      );
+      const byHeight = Math.floor(
+        (maxGridHeight - (candidateRows - 1) * gap) / candidateRows,
+      );
+      const candidateSize = Math.max(4, Math.min(byWidth, byHeight));
+      const bestArea = best.cellSize * best.cellSize;
+      const candidateArea = candidateSize * candidateSize;
+      const candidateGridHeight =
+        candidateRows * candidateSize + (candidateRows - 1) * gap;
+      const bestGridHeight = best.rows * best.cellSize + (best.rows - 1) * gap;
+      const candidateGridWidth =
+        candidate * candidateSize + (candidate - 1) * gap;
+      const bestGridWidth =
+        best.columns * best.cellSize + (best.columns - 1) * gap;
+      const widthFillDelta = maxGridWidth - candidateGridWidth;
+      const bestWidthFillDelta = maxGridWidth - bestGridWidth;
+
+      if (
+        candidateArea > bestArea ||
+        (candidateArea === bestArea &&
+          (widthFillDelta < bestWidthFillDelta ||
+            (widthFillDelta === bestWidthFillDelta &&
+              candidateGridHeight > bestGridHeight)))
+      ) {
+        best = {
+          columns: candidate,
+          rows: candidateRows,
+          cellSize: candidateSize,
+        };
+      }
+    }
+
+    return {
+      ...best,
+      width: best.columns * best.cellSize + (best.columns - 1) * gap,
+    };
+  }, [gap, isWide, maxGridHeight, maxGridWidth, totalCells]);
+  const columns = gridLayout.columns;
+  const rows = gridLayout.rows;
+  const spiralRanks = useMemo(
+    () => buildSpiralRanks(rows, columns, totalCells),
+    [rows, columns, totalCells],
+  );
+  const elapsedCells = totalCells - activeCells;
+  const cellSize = gridLayout.cellSize;
+  const glowCells = totalCells <= 240 && cellSize >= 5;
+  const displaySeconds = Math.max(1, totalMissionSeconds);
+  const remainingLabel =
+    displaySeconds <= 999
+      ? `${remainingSeconds}`
+      : `${Math.ceil(remainingSeconds / 60)}m`;
+  const totalLabel =
+    displaySeconds <= 999
+      ? `${displaySeconds}`
+      : `${Math.ceil(displaySeconds / 60)}m`;
+  const cardColors = isDark
+    ? {
+        bg: "#0b1f27",
+        border: "rgba(94, 234, 212, 0.22)",
+        label: "rgba(153, 246, 228, 0.76)",
+        detail: "rgba(203, 213, 225, 0.72)",
+        detailValue: "#e2e8f0",
+        valueMuted: "rgba(203, 213, 225, 0.52)",
+        shadow: "#5eead4",
+      }
+    : {
+        bg: "#ffffff",
+        border: "#cfede7",
+        label: "rgba(15, 118, 110, 0.78)",
+        detail: "rgba(71, 85, 105, 0.72)",
+        detailValue: "#334155",
+        valueMuted: "rgba(71, 85, 105, 0.45)",
+        shadow: "#0d9488",
+      };
+
+  return (
+    <View
+      style={[
+        focusStyles.secondsDeck,
+        {
+          backgroundColor: cardColors.bg,
+          borderColor: cardColors.border,
+        },
+      ]}
+    >
+      <View style={focusStyles.secondsHeader}>
+        <View style={focusStyles.secondsTitleCol}>
+          <Text style={[focusStyles.secondsKicker, { color: cardColors.label }]}>
+            Time
+          </Text>
+          <Text style={focusStyles.secondsValue}>
+            <Text style={{ color: cellColor }}>{remainingLabel}</Text>
+            <Text style={{ color: cardColors.valueMuted }}>/{totalLabel}</Text>
+          </Text>
+        </View>
+        <View style={focusStyles.secondsMeta}>
+          <View style={focusStyles.secondsMetaItem}>
+            <Text style={[focusStyles.secondsMetaValue, { color: cardColors.detailValue }]}>
+              {totalMinutes}
+            </Text>
+            <Text style={[focusStyles.secondsMetaLabel, { color: cardColors.detail }]}>
+              MIN
+            </Text>
+          </View>
+          <View
+            style={[
+              focusStyles.secondsMetaDivider,
+              { backgroundColor: cardColors.valueMuted },
+            ]}
+          />
+          <View style={focusStyles.secondsMetaItem}>
+            <Text style={[focusStyles.secondsMetaValue, { color: cardColors.detailValue }]}>
+              {reserveUsed}/{MAX_RESERVE_FUEL_MINUTES}
+            </Text>
+            <Text style={[focusStyles.secondsMetaLabel, { color: cardColors.detail }]}>
+              RSV
+            </Text>
+          </View>
+        </View>
+      </View>
+      <View style={[focusStyles.secondsGrid, { width: gridLayout.width }]}>
+        {Array.from({ length: rows }, (_, row) => (
+          <View
+            key={row}
+            style={[
+              focusStyles.secondsGridRow,
+              row < rows - 1 ? { marginBottom: gap } : null,
+            ]}
+          >
+            {Array.from({ length: columns }, (_, column) => {
+              const index = row * columns + column;
+              if (index >= totalCells) {
+                return (
+                  <View
+                    key={column}
+                    style={[
+                      {
+                        width: cellSize,
+                        height: cellSize,
+                      },
+                      column < columns - 1 ? { marginRight: gap } : null,
+                    ]}
+                  />
+                );
+              }
+              return (
+                <View
+                  key={column}
+                  style={column < columns - 1 ? { marginRight: gap } : null}
+                >
+                  <FocusSecondCell
+                    active={spiralRanks[index] >= elapsedCells}
+                    color={cellColor}
+                    size={cellSize}
+                    shadowColor={cardColors.shadow}
+                    animate={animateCells}
+                    glow={glowCells}
+                  />
+                </View>
+              );
+            })}
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+type FocusMissionControlModalProps = {
+  visible: boolean;
+  title: string;
+  countdownMs: number;
+  totalMinutes: number;
+  baseMissionSeconds: number;
+  reserveSlotsAvailable: number;
+  reserveUsed: number;
+  reserveFull: boolean;
+  isTimerUp: boolean;
+  onClose: () => void;
+  onReserveFuel: () => void;
+  onMarkComplete: () => void;
+};
+
+function FocusMissionControlModal({
+  visible,
+  title,
+  countdownMs,
+  totalMinutes,
+  baseMissionSeconds,
+  reserveSlotsAvailable,
+  reserveUsed,
+  reserveFull,
+  isTimerUp,
+  onClose,
+  onReserveFuel,
+  onMarkComplete,
+}: FocusMissionControlModalProps) {
+  const { isDark } = useTheme();
+  const insets = useSafeAreaInsets();
+  const { width, height } = useWindowDimensions();
+  const isWide = width > height && width >= 680;
+  const actionDisabled = isTimerUp;
+  const focusColors = isDark
+    ? {
+        bg: "#07111a",
+        title: "#f8fafc",
+        closeBg: "rgba(15, 23, 42, 0.78)",
+        closeBorder: "rgba(148, 163, 184, 0.28)",
+        closeIcon: "#f8fafc",
+        reserveBg: "rgba(251, 191, 36, 0.12)",
+        reserveBorder: "rgba(251, 191, 36, 0.38)",
+        reserveText: "#fbbf24",
+        completeBg: "rgba(34, 197, 94, 0.16)",
+        completeBorder: "rgba(34, 197, 94, 0.38)",
+        completeIcon: "#22c55e",
+        disabled: "#94a3b8",
+      }
+    : {
+        bg: "#f6faf8",
+        title: "#0f172a",
+        closeBg: "rgba(255, 255, 255, 0.88)",
+        closeBorder: "rgba(100, 116, 139, 0.24)",
+        closeIcon: "#334155",
+        reserveBg: "rgba(245, 158, 11, 0.11)",
+        reserveBorder: "rgba(217, 119, 6, 0.34)",
+        reserveText: "#d97706",
+        completeBg: "rgba(22, 163, 74, 0.12)",
+        completeBorder: "rgba(22, 163, 74, 0.32)",
+        completeIcon: "#16a34a",
+        disabled: "#94a3b8",
+      };
+  const reserveDisabled = reserveFull || isTimerUp || reserveSlotsAvailable <= 0;
+
+  return (
+    <Modal
+      visible={visible}
+      animationType="fade"
+      presentationStyle="fullScreen"
+      statusBarTranslucent
+      supportedOrientations={[
+        "portrait",
+        "landscape",
+        "landscape-left",
+        "landscape-right",
+      ]}
+      onRequestClose={onClose}
+    >
+      <StatusBar
+        hidden
+        barStyle={isDark ? "light-content" : "dark-content"}
+        backgroundColor={focusColors.bg}
+      />
+      <View
+        style={[
+          focusStyles.root,
+          {
+            backgroundColor: focusColors.bg,
+            paddingTop: Math.max(insets.top, 12),
+            paddingBottom: Math.max(insets.bottom, 14),
+            paddingHorizontal: isWide ? 22 : 16,
+          },
+        ]}
+      >
+        <View style={focusStyles.titleLine}>
+          <View style={focusStyles.topCopy}>
+            <Text
+              style={[
+                focusStyles.focusTitle,
+                isWide && focusStyles.focusTitleWide,
+                { color: focusColors.title },
+              ]}
+              numberOfLines={1}
+            >
+              {title}
+            </Text>
+          </View>
+          <TouchableOpacity
+            style={[
+              focusStyles.topReserveButton,
+              {
+                backgroundColor: focusColors.reserveBg,
+                borderColor: focusColors.reserveBorder,
+              },
+              reserveDisabled && focusStyles.actionDisabled,
+            ]}
+            onPress={onReserveFuel}
+            disabled={reserveDisabled}
+            activeOpacity={0.86}
+            accessibilityRole="button"
+            accessibilityLabel="Add one minute reserve fuel"
+          >
+            <Fuel
+              size={17}
+              color={
+                reserveDisabled
+                  ? focusColors.disabled
+                  : focusColors.reserveText
+              }
+            />
+            <Text
+              style={[
+                focusStyles.topReserveText,
+                {
+                  color:
+                    reserveDisabled
+                      ? focusColors.disabled
+                      : focusColors.reserveText,
+                },
+              ]}
+            >
+              +1
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              focusStyles.completeIconButton,
+              {
+                backgroundColor: focusColors.completeBg,
+                borderColor: focusColors.completeBorder,
+              },
+              actionDisabled && focusStyles.actionDisabled,
+            ]}
+            onPress={onMarkComplete}
+            disabled={actionDisabled}
+            activeOpacity={0.86}
+            accessibilityRole="button"
+            accessibilityLabel="Mark mission complete"
+          >
+            <Check size={22} color={focusColors.completeIcon} strokeWidth={3} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              focusStyles.closeButton,
+              {
+                backgroundColor: focusColors.closeBg,
+                borderColor: focusColors.closeBorder,
+              },
+            ]}
+            onPress={onClose}
+            activeOpacity={0.82}
+            accessibilityRole="button"
+            accessibilityLabel="Close focus mode"
+          >
+            <Minimize2 size={20} color={focusColors.closeIcon} />
+          </TouchableOpacity>
+        </View>
+
+        <ScrollView
+          style={focusStyles.focusScroll}
+          contentContainerStyle={[
+            focusStyles.body,
+            isWide && focusStyles.bodyWide,
+            {
+              minHeight: Math.max(
+                0,
+                height -
+                  Math.max(insets.top, 12) -
+                  Math.max(insets.bottom, 14) -
+                  (isWide ? 82 : 120),
+              ),
+            },
+          ]}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          {/* Dots-only Focus Mode test: big timer render is temporarily disabled. */}
+
+          <View style={[focusStyles.rail, isWide && focusStyles.railWide]}>
+            <FocusSecondsMatrix
+              countdownMs={countdownMs}
+              totalMissionSeconds={Math.max(1, totalMinutes * 60)}
+              baseMissionSeconds={baseMissionSeconds}
+              totalMinutes={totalMinutes}
+              reserveUsed={reserveUsed}
+              isTimerUp={isTimerUp}
+              isWide={isWide}
+            />
+          </View>
+        </ScrollView>
+      </View>
+    </Modal>
+  );
+}
+
 export default function MiniMissionDetail() {
   const { id } = useLocalSearchParams<{ id?: string | string[] }>();
   const router = useRouter();
@@ -158,7 +733,6 @@ export default function MiniMissionDetail() {
     missionId ? state.getMiniMission(missionId) : undefined,
   );
   const startMiniMission = useHabitStore((state) => state.startMiniMission);
-  const { requireNotifications } = useNotificationGate();
   const completeMiniMission = useHabitStore(
     (state) => state.completeMiniMission,
   );
@@ -189,6 +763,7 @@ export default function MiniMissionDetail() {
   const [completionImageAspect, setCompletionImageAspect] = useState<number | null>(null);
   const [completionImageOpen, setCompletionImageOpen] = useState(false);
   const [keepScreenOn, setKeepScreenOn] = useState(false);
+  const [focusModeOpen, setFocusModeOpen] = useState(false);
 
   const completionImageUri = useMemo(() => {
     return mission?.completionMemory?.imageUrl ?? mission?.completionMemory?.imageUri ?? null;
@@ -243,6 +818,9 @@ export default function MiniMissionDetail() {
   );
 
   const [now, setNow] = useState(Date.now());
+  const totalMinutes = mission
+    ? mission.estimatedMinutes + (mission.extendedMinutes ?? 0)
+    : 0;
 
   // Motivational quotes
   const [quoteIdx, setQuoteIdx] = useState(() =>
@@ -282,13 +860,39 @@ export default function MiniMissionDetail() {
 
   useEffect(() => {
     if (mission?.status !== "in_progress" || completeSheetOpen) return;
-    const timer = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(timer);
-  }, [mission?.status, completeSheetOpen]);
+    let cancelled = false;
+    let timeout: ReturnType<typeof setTimeout> | null = null;
+    const plannedEndMs = mission.startedAt
+      ? new Date(mission.startedAt).getTime() + totalMinutes * 60 * 1000
+      : Date.now() + totalMinutes * 60 * 1000;
 
-  const totalMinutes = mission
-    ? mission.estimatedMinutes + (mission.extendedMinutes ?? 0)
-    : 0;
+    const tick = () => {
+      if (cancelled) return;
+      const current = Date.now();
+      setNow(current);
+
+      const remaining = Math.max(0, plannedEndMs - current);
+      if (remaining <= 0) return;
+
+      const untilDisplayedSecondChanges = remaining % 1000 || 1000;
+      timeout = setTimeout(
+        tick,
+        Math.max(16, untilDisplayedSecondChanges),
+      );
+    };
+
+    tick();
+    return () => {
+      cancelled = true;
+      if (timeout) clearTimeout(timeout);
+    };
+  }, [
+    mission?.id,
+    mission?.status,
+    mission?.startedAt,
+    totalMinutes,
+    completeSheetOpen,
+  ]);
 
   const countdown = useMemo(() => {
     if (!mission?.startedAt) return totalMinutes * 60 * 1000;
@@ -324,6 +928,28 @@ export default function MiniMissionDetail() {
       void deactivateKeepAwake(MINI_MISSION_DETAIL_KEEP_AWAKE_TAG);
     };
   }, [isFocused, keepScreenOn, mission?.status, isTimerUp]);
+
+  useEffect(() => {
+    const focusKeepAwakeTag = `${MINI_MISSION_DETAIL_KEEP_AWAKE_TAG}:focus`;
+    const shouldKeepAwake =
+      focusModeOpen && mission?.status === "in_progress" && !isTimerUp;
+
+    if (!shouldKeepAwake) {
+      void deactivateKeepAwake(focusKeepAwakeTag);
+      return;
+    }
+
+    void activateKeepAwakeAsync(focusKeepAwakeTag);
+    return () => {
+      void deactivateKeepAwake(focusKeepAwakeTag);
+    };
+  }, [focusModeOpen, mission?.status, isTimerUp]);
+
+  useEffect(() => {
+    if (focusModeOpen && mission?.status !== "in_progress") {
+      setFocusModeOpen(false);
+    }
+  }, [focusModeOpen, mission?.status]);
 
   const flightProgressive = useMemo(
     () => remainingMsToProgressiveCountdown(countdown),
@@ -449,11 +1075,16 @@ export default function MiniMissionDetail() {
     );
   }
 
-  const handleStart = async () => {
-    const ok = await requireNotifications("mini_timer");
-    if (!ok) return;
+  const handleStart = () => {
+    // Expo test bypass: mini mission notification gate is temporarily disabled.
     startMiniMission(mission.id);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+  };
+
+  const handleMarkComplete = () => {
+    setFocusModeOpen(false);
+    setTimerFrozenAtMs(Date.now());
+    setCompleteSheetOpen(true);
   };
 
   const handleCompleteCommit = async (
@@ -639,6 +1270,17 @@ export default function MiniMissionDetail() {
 
   const reserveUsed = mission.extendedMinutes ?? 0;
   const reserveFull = reserveUsed >= MAX_RESERVE_FUEL_MINUTES;
+  const reserveSlotsAvailable = (() => {
+    if (mission.status !== "in_progress" || !mission.startedAt) return 0;
+    const elapsedMs = Math.max(0, now - new Date(mission.startedAt).getTime());
+    const earnedSlots = Math.min(
+      MAX_RESERVE_FUEL_MINUTES,
+      Math.floor(elapsedMs / 60_000),
+    );
+    return Math.max(0, earnedSlots - reserveUsed);
+  })();
+  const reserveCanAdd =
+    reserveSlotsAvailable > 0 && !reserveFull && !isTimerUp;
 
   const handleReserveFuel = () => {
     if (reserveFull) {
@@ -647,6 +1289,10 @@ export default function MiniMissionDetail() {
         "Reserve fuel maxed",
         `You can add at most ${MAX_RESERVE_FUEL_MINUTES} minutes of reserve fuel for this mission. Mark complete or risk running out of time.`,
       );
+      return;
+    }
+    if (!reserveCanAdd) {
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
       return;
     }
     extendMiniMission(mission.id, 1);
@@ -694,6 +1340,20 @@ export default function MiniMissionDetail() {
         onCommit={handleCompleteCommit}
         miniPublishAvailable={isSupabaseConfigured() && !!session?.user}
         plusCommunityOk={!socialLocked}
+      />
+      <FocusMissionControlModal
+        visible={focusModeOpen}
+        title={mission.title}
+        countdownMs={countdown}
+        totalMinutes={totalMinutes}
+        baseMissionSeconds={Math.max(1, mission.estimatedMinutes * 60)}
+        reserveSlotsAvailable={reserveSlotsAvailable}
+        reserveUsed={reserveUsed}
+        reserveFull={reserveFull}
+        isTimerUp={isTimerUp}
+        onClose={() => setFocusModeOpen(false)}
+        onReserveFuel={handleReserveFuel}
+        onMarkComplete={handleMarkComplete}
       />
       <StatusBar
         barStyle={isDark ? "light-content" : "dark-content"}
@@ -829,6 +1489,35 @@ export default function MiniMissionDetail() {
           </View>
         )}
 
+        {mission.status === "in_progress" && !isTimerUp ? (
+          <TouchableOpacity
+            style={[
+              styles.focusLauncher,
+              {
+                borderRadius: theme.radius.md,
+                borderColor: isDark
+                  ? "rgba(34, 211, 238, 0.35)"
+                  : "rgba(8, 145, 178, 0.28)",
+                backgroundColor: isDark
+                  ? "rgba(34, 211, 238, 0.1)"
+                  : "rgba(8, 145, 178, 0.08)",
+              },
+            ]}
+            activeOpacity={0.86}
+            onPress={() => {
+              void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              setFocusModeOpen(true);
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Open focus mode"
+          >
+            <Maximize2 size={18} color={theme.colors.cyan[400]} />
+            <Text style={[styles.focusLauncherText, { color: theme.colors.textPrimary }]}>
+              Focus Mode
+            </Text>
+          </TouchableOpacity>
+        ) : null}
+
         {mission.status === "completed" ? (
           <MiniVisibilityRow
             theme={theme}
@@ -857,13 +1546,10 @@ export default function MiniMissionDetail() {
               <CoachMarkTarget id="mini_mark_complete">
                 <Button
                   title="Mark Complete"
-                  onPress={() => {
-                    setTimerFrozenAtMs(Date.now());
-                    setCompleteSheetOpen(true);
-                  }}
+                  onPress={handleMarkComplete}
                 />
               </CoachMarkTarget>
-              {reserveFull ? (
+              {reserveFull || !reserveCanAdd ? (
                 <View
                   style={[
                     styles.extendButton,
@@ -876,7 +1562,9 @@ export default function MiniMissionDetail() {
                     style={[styles.extendButtonText, { color: theme.colors.textMuted }]}
                     numberOfLines={1}
                   >
-                    Reserve fuel max ({MAX_RESERVE_FUEL_MINUTES} min)
+                    {reserveFull
+                      ? `Reserve fuel max (${MAX_RESERVE_FUEL_MINUTES} min)`
+                      : `Reserve slot opens each minute - ${reserveUsed}/${MAX_RESERVE_FUEL_MINUTES}`}
                   </Text>
                 </View>
               ) : (
@@ -1202,7 +1890,21 @@ const styles = StyleSheet.create({
   },
   metaText: { fontWeight: "700" },
   actions: { gap: 10 },
-  progressBarWrap: { marginBottom: 24 },
+  progressBarWrap: { marginBottom: 14 },
+  focusLauncher: {
+    marginBottom: 18,
+    borderWidth: 1,
+    paddingVertical: 13,
+    paddingHorizontal: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 9,
+  },
+  focusLauncherText: {
+    fontSize: 15,
+    fontWeight: "800",
+  },
   failedRow: {
     flexDirection: "row",
     alignItems: "flex-start",
@@ -1299,6 +2001,309 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   cancelledText: { fontWeight: "700" },
+});
+
+const focusStyles = StyleSheet.create({
+  root: {
+    flex: 1,
+    backgroundColor: "#020617",
+    overflow: "hidden",
+  },
+  titleLine: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: 14,
+  },
+  topCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  topReserveButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    borderWidth: 1,
+    borderColor: "rgba(251, 191, 36, 0.38)",
+    backgroundColor: "rgba(251, 191, 36, 0.12)",
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  topReserveText: {
+    color: "#fbbf24",
+    fontSize: 16,
+    fontWeight: "900",
+  },
+  focusTitle: {
+    color: "#f8fafc",
+    fontSize: 28,
+    lineHeight: 34,
+    fontWeight: "900",
+  },
+  focusTitleWide: {
+    fontSize: 24,
+    lineHeight: 30,
+  },
+  completeIconButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(34, 197, 94, 0.16)",
+    borderWidth: 1,
+    borderColor: "rgba(34, 197, 94, 0.38)",
+  },
+  closeButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(148, 163, 184, 0.28)",
+    backgroundColor: "rgba(15, 23, 42, 0.78)",
+  },
+  focusScroll: {
+    flex: 1,
+  },
+  body: {
+    flexGrow: 1,
+    gap: 14,
+  },
+  bodyWide: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    gap: 16,
+  },
+  timerDeck: {
+    borderWidth: 1,
+    borderColor: "rgba(34, 211, 238, 0.24)",
+    borderRadius: 24,
+    backgroundColor: "#061423",
+    paddingTop: 8,
+    paddingBottom: 8,
+    paddingHorizontal: 10,
+    shadowColor: "#22d3ee",
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.14,
+    shadowRadius: 24,
+    elevation: 8,
+  },
+  timerDeckWide: {
+    flex: 1.6,
+    paddingTop: 10,
+    paddingBottom: 10,
+    paddingHorizontal: 14,
+  },
+  deckHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 30,
+  },
+  timerReadout: {
+    alignItems: "stretch",
+    justifyContent: "center",
+    paddingTop: 4,
+    paddingBottom: 0,
+    backgroundColor: "#061423",
+  },
+  statusStrip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(148, 163, 184, 0.22)",
+    backgroundColor: "rgba(2, 6, 23, 0.48)",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  statusText: {
+    color: "#cbd5e1",
+    fontSize: 12,
+    fontWeight: "800",
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+  },
+  rail: {
+    flex: 1,
+    gap: 12,
+    minHeight: 0,
+  },
+  railWide: {
+    flex: 1,
+  },
+  secondsDeck: {
+    borderWidth: 1,
+    borderColor: "rgba(34, 211, 238, 0.24)",
+    borderRadius: 20,
+    backgroundColor: "rgba(4, 18, 31, 0.9)",
+    padding: 14,
+    gap: 14,
+  },
+  secondsHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  secondsTitleCol: {
+    flexShrink: 0,
+  },
+  secondsKicker: {
+    color: "rgba(165, 243, 252, 0.78)",
+    fontSize: 12,
+    fontWeight: "900",
+    letterSpacing: 1.1,
+    textTransform: "uppercase",
+  },
+  secondsValue: {
+    fontSize: 22,
+    fontWeight: "900",
+    fontVariant: ["tabular-nums"],
+  },
+  secondsMeta: {
+    flexShrink: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: 9,
+  },
+  secondsMetaItem: {
+    alignItems: "center",
+    minWidth: 34,
+  },
+  secondsMetaValue: {
+    fontSize: 13,
+    fontWeight: "900",
+    fontVariant: ["tabular-nums"],
+  },
+  secondsMetaLabel: {
+    marginTop: 2,
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 0.8,
+  },
+  secondsMetaDivider: {
+    width: 1,
+    height: 24,
+    opacity: 0.8,
+  },
+  secondsGrid: {
+    alignSelf: "center",
+  },
+  secondsGridRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  secondCell: {
+    borderWidth: 1,
+    shadowOffset: { width: 0, height: 0 },
+    shadowRadius: 6,
+  },
+  statsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(148, 163, 184, 0.18)",
+    borderRadius: 18,
+    backgroundColor: "rgba(15, 23, 42, 0.68)",
+    paddingVertical: 13,
+  },
+  statCell: {
+    flex: 1,
+    alignItems: "center",
+    gap: 3,
+  },
+  statDivider: {
+    width: 1,
+    alignSelf: "stretch",
+    backgroundColor: "rgba(148, 163, 184, 0.18)",
+  },
+  statValue: {
+    color: "#f8fafc",
+    fontSize: 20,
+    fontWeight: "900",
+    fontVariant: ["tabular-nums"],
+  },
+  statLabel: {
+    color: "rgba(148, 163, 184, 0.82)",
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 0.8,
+  },
+  focusActions: {
+    gap: 10,
+  },
+  completeButton: {
+    minHeight: 56,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 10,
+    backgroundColor: "#4f46e5",
+    shadowColor: "#6366f1",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.32,
+    shadowRadius: 18,
+    elevation: 8,
+  },
+  completeButtonText: {
+    color: "#ffffff",
+    fontSize: 16,
+    fontWeight: "900",
+  },
+  secondaryActions: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  reserveButton: {
+    flex: 1,
+    minHeight: 50,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 8,
+    borderWidth: 1,
+    borderColor: "rgba(251, 191, 36, 0.32)",
+    backgroundColor: "rgba(251, 191, 36, 0.1)",
+  },
+  reserveButtonText: {
+    color: "#fbbf24",
+    fontSize: 13,
+    fontWeight: "900",
+  },
+  exitButton: {
+    minWidth: 92,
+    minHeight: 50,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 8,
+    borderWidth: 1,
+    borderColor: "rgba(148, 163, 184, 0.22)",
+    backgroundColor: "rgba(15, 23, 42, 0.72)",
+  },
+  exitButtonText: {
+    color: "#cbd5e1",
+    fontSize: 13,
+    fontWeight: "900",
+  },
+  actionDisabled: {
+    opacity: 0.58,
+  },
 });
 
 const quoteStyles = StyleSheet.create({

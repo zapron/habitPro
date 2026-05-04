@@ -154,7 +154,7 @@ type SplitFlapTimeDisplayProps = {
   display: string;
   phase: ProgressivePhase;
   timeColor: string;
-  size?: "normal" | "large";
+  size?: "normal" | "large" | "hero";
   unitLabels?: readonly string[];
   unitColor?: string;
   digitTextShadow?: Pick<
@@ -177,6 +177,8 @@ export function SplitFlapTimeDisplay({
 
   const { fontSize, lineHeight, digitWidth } = useMemo(() => {
     const narrow = windowW < 380;
+    const wide = windowW >= 700;
+    const medium = windowW >= 520;
     let fs = narrow ? 20 : 23;
     let lh = narrow ? 22 : 25;
 
@@ -194,9 +196,23 @@ export function SplitFlapTimeDisplay({
         fs = narrow ? 30 : 36;
         lh = narrow ? 36 : 42;
       }
+    } else if (size === "hero") {
+      if (pairs.length <= 1) {
+        fs = wide ? 204 : medium ? 172 : 128;
+        lh = wide ? 224 : medium ? 190 : 144;
+      } else if (pairs.length === 2) {
+        fs = wide ? 184 : medium ? 154 : narrow ? 96 : 116;
+        lh = wide ? 204 : medium ? 172 : narrow ? 122 : 148;
+      } else if (pairs.length === 3) {
+        fs = wide ? 98 : medium ? 78 : 54;
+        lh = wide ? 112 : medium ? 90 : 64;
+      } else {
+        fs = wide ? 72 : medium ? 56 : 42;
+        lh = wide ? 84 : medium ? 66 : 50;
+      }
     }
 
-    const dw = Math.max(16, Math.round(fs * 0.68));
+    const dw = Math.max(16, Math.round(fs * (size === "hero" ? 0.66 : 0.68)));
     return { fontSize: fs, lineHeight: lh, digitWidth: dw };
   }, [pairs.length, size, windowW]);
 
@@ -246,6 +262,7 @@ export function SplitFlapTimeDisplay({
           style={[
             styles.unitRow,
             size === "large" && styles.unitRowLarge,
+            size === "hero" && styles.unitRowHero,
             compact && styles.rowCompact,
           ]}
         >
@@ -259,6 +276,7 @@ export function SplitFlapTimeDisplay({
                   style={[
                     styles.unitText,
                     size === "large" && styles.unitTextLarge,
+                    size === "hero" && styles.unitTextHero,
                     { color: unitColor ?? timeColor },
                   ]}
                   numberOfLines={1}
@@ -345,6 +363,9 @@ const styles = StyleSheet.create({
   unitRowLarge: {
     marginTop: 4,
   },
+  unitRowHero: {
+    marginTop: 6,
+  },
   unitCol: {
     flex: 1,
     minWidth: 0,
@@ -364,5 +385,10 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "800",
     letterSpacing: 0.8,
+  },
+  unitTextHero: {
+    fontSize: 13,
+    fontWeight: "800",
+    letterSpacing: 1.1,
   },
 });
