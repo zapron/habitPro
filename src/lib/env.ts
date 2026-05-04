@@ -12,6 +12,21 @@ function getManifestExtra(): Record<string, unknown> | undefined {
   return undefined;
 }
 
+const DEFAULT_HABITPRO_WEB_URL = "https://habitpro-web.vercel.app";
+
+function normalizeOrigin(origin: string | null | undefined): string | null {
+  if (!origin) return null;
+  const normalized = origin.trim().replace(/\/+$/, "");
+  if (!normalized) return null;
+  try {
+    const url = new URL(normalized);
+    if (url.protocol !== "https:" && url.protocol !== "http:") return null;
+    return normalized;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY in a .env file
  * at the project root, or add supabaseUrl / supabaseAnonKey under expo.extra (see app.config.js).
@@ -62,6 +77,29 @@ export function getRevenueCatConfig(): { androidApiKey: string; iosApiKey: strin
 export function isRevenueCatConfigured(): boolean {
   const { androidApiKey, iosApiKey } = getRevenueCatConfig();
   return Boolean(androidApiKey || iosApiKey);
+}
+
+export function getHabitProWebUrl(): string {
+  const extra = getManifestExtra();
+  return (
+    normalizeOrigin(process.env.EXPO_PUBLIC_HABITPRO_WEB_URL) ??
+    normalizeOrigin(String(extra?.habitProWebUrl ?? "")) ??
+    normalizeOrigin(process.env.EXPO_PUBLIC_SITE_URL) ??
+    DEFAULT_HABITPRO_WEB_URL
+  );
+}
+
+export function getPublicLinks(): {
+  privacy: string;
+  terms: string;
+  support: string;
+} {
+  const base = getHabitProWebUrl();
+  return {
+    privacy: `${base}/privacy`,
+    terms: `${base}/terms`,
+    support: `${base}/support`,
+  };
 }
 
 /** Dev-only hint when env looks wrong (does not log secrets). */

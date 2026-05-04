@@ -21,6 +21,11 @@ const supabaseUrl = (process.env.EXPO_PUBLIC_SUPABASE_URL ?? "").trim();
 const supabaseAnonKey = (process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? "").trim();
 const revenuecatAndroidApiKey = (process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY ?? "").trim();
 const revenuecatIosApiKey = (process.env.EXPO_PUBLIC_REVENUECAT_IOS_API_KEY ?? "").trim();
+const habitProWebUrl = (
+  process.env.EXPO_PUBLIC_HABITPRO_WEB_URL ??
+  process.env.EXPO_PUBLIC_SITE_URL ??
+  ""
+).trim();
 
 if (process.env.EAS_BUILD === "true" && (!supabaseUrl || !supabaseAnonKey)) {
   console.warn(
@@ -45,6 +50,11 @@ if (process.env.EAS_BUILD === "true" && !hasGoogleServices) {
     "[habitPro] EAS build: google-services.json not found. Android remote push (FCM) will not work until you add it (see docs/PUSH_NOTIFICATIONS.md).",
   );
 }
+if (process.env.EAS_BUILD === "true" && !habitProWebUrl) {
+  console.warn(
+    "[habitPro] EAS build: EXPO_PUBLIC_HABITPRO_WEB_URL is missing. Legal links will use the default Vercel URL until you set it.",
+  );
+}
 
 module.exports = {
   expo: {
@@ -59,6 +69,7 @@ module.exports = {
       supabaseAnonKey,
       revenuecatAndroidApiKey,
       revenuecatIosApiKey,
+      habitProWebUrl,
     },
   },
 };
