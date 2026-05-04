@@ -65,6 +65,7 @@ import { usePremium } from "../../src/context/PremiumContext";
 import { usePlusUpsell } from "../../src/context/PlusUpsellContext";
 import { useRefreshPremiumAccess } from "../../src/hooks/useRefreshPremiumAccess";
 import { useUsernameGate } from "../../src/context/UsernameGateContext";
+import { useNotificationGate } from "../../src/context/NotificationGateContext";
 import { isSupabaseConfigured } from "../../src/lib/env";
 import { MiniVisibilityRow } from "../../src/components/MiniVisibilityRow";
 import {
@@ -725,6 +726,7 @@ export default function MiniMissionDetail() {
   const { openUpsell } = usePlusUpsell();
   const refreshPremiumAccess = useRefreshPremiumAccess();
   const { requireUsername } = useUsernameGate();
+  const { softAskNotifications } = useNotificationGate();
   const socialLocked = !isPremium || premiumLoading;
   const missionId = Array.isArray(id) ? id[0] : id;
   const scrollBottomPad = Math.max(insets.bottom, 16) + 16;
@@ -753,6 +755,7 @@ export default function MiniMissionDetail() {
     id: string;
     prev: MissionVisibility;
   } | null>(null);
+  const startPromptBusyRef = useRef(false);
   const [completeSheetOpen, setCompleteSheetOpen] = useState(false);
   /** Wall time when user tapped Mark Complete — freezes countdown until sheet closes or mission completes. */
   const [timerFrozenAtMs, setTimerFrozenAtMs] = useState<number | null>(null);
@@ -1076,9 +1079,19 @@ export default function MiniMissionDetail() {
   }
 
   const handleStart = () => {
-    // Expo test bypass: mini mission notification gate is temporarily disabled.
-    startMiniMission(mission.id);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    if (startPromptBusyRef.current) return;
+    startPromptBusyRef.current = true;
+    void (async () => {
+      try {
+        const notificationResult = await softAskNotifications("mini_timer");
+        if (notificationResult === "settings") return;
+
+        startMiniMission(mission.id);
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      } finally {
+        startPromptBusyRef.current = false;
+      }
+    })();
   };
 
   const handleMarkComplete = () => {
