@@ -1156,7 +1156,7 @@ export default function CompeteScreen() {
                       </Text>
                       {inviteNeedsCommunityForAccept ? (
                         <Text style={[styles.invitePlusHint, { color: theme.colors.textMuted }]}>
-                          Group missions need Community. Tap Accept to start your trial or subscribe.
+                          Group missions need Community. Tap Accept to view your Play Store options.
                         </Text>
                       ) : null}
                       <View style={styles.inviteActions}>
