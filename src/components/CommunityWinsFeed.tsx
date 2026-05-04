@@ -32,6 +32,7 @@ import { CommunityWinFeedPost } from "./CommunityWinFeedPost";
 import { CommunityWinFeedSkeletonRow } from "./CommunityWinFeedSkeleton";
 import { CommunityWinImageLightbox } from "./CommunityWinImageLightbox";
 import { CommunityWinCheerersModal } from "./CommunityWinCheerersModal";
+import { CommunityPlayerDrawer, type CommunityPlayerDrawerSeed } from "./CommunityPlayerDrawer";
 import { useCoachMark } from "../context/CoachMarkContext";
 
 type CheerersSheetState = { winId: string; totalLikes: number };
@@ -71,6 +72,7 @@ export function CommunityWinsFeed({
   const [expandedById, setExpandedById] = useState<Record<string, boolean>>({});
   const [lightboxUri, setLightboxUri] = useState<string | null>(null);
   const [cheerersSheet, setCheerersSheet] = useState<CheerersSheetState | null>(null);
+  const [playerDrawerWin, setPlayerDrawerWin] = useState<CommunityPlayerDrawerSeed | null>(null);
   const itemsRef = useRef<CommunityWinFeedItem[]>([]);
   const loadMoreInFlight = useRef(false);
 
@@ -218,6 +220,14 @@ export function CommunityWinsFeed({
           reduceMotion={reduceMotion}
           onToggleExpanded={() => toggleExpanded(win.id)}
           onOpenLightbox={(uri) => setLightboxUri(uri)}
+          onOpenPlayer={(w) =>
+            setPlayerDrawerWin({
+              userId: w.user_id,
+              username: w.username,
+              displayName: w.displayName,
+              xp: w.xp,
+            })
+          }
           onCheer={handleCheer}
           onOpenCheerers={(w) => setCheerersSheet({ winId: w.id, totalLikes: w.cheerCount })}
           canCheer={canCheer}
@@ -309,6 +319,11 @@ export function CommunityWinsFeed({
         winId={cheerersSheet?.winId ?? null}
         totalLikes={cheerersSheet?.totalLikes}
         onClose={() => setCheerersSheet(null)}
+      />
+      <CommunityPlayerDrawer
+        visible={playerDrawerWin !== null}
+        player={playerDrawerWin}
+        onClose={() => setPlayerDrawerWin(null)}
       />
     </>
   );

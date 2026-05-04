@@ -26,14 +26,38 @@ export type CommunityWinRow = {
 
 export type CommunityWinFeedItem = CommunityWinRow & {
   username: string | null;
+  displayName: string | null;
+  xp: number;
   cheerCount: number;
   viewerHasCheered: boolean;
+};
+
+export type CommunityPlayerRecentWin = {
+  id: string;
+  title: string;
+  createdAt: string;
+  completedAt: string;
+  feedSource: CommunityWinFeedSource;
+  streakMissionDay: number | null;
+  streakCountAtPost: number | null;
+};
+
+export type CommunityPlayerProfile = {
+  userId: string;
+  username: string | null;
+  displayName: string | null;
+  xp: number;
+  publicWins: number;
+  miniWins: number;
+  habitStreakWins: number;
+  cheersReceived: number;
+  recentWins: CommunityPlayerRecentWin[];
 };
 
 export type CommunityWinCheerer = {
   userId: string;
   username: string | null;
-  /** Total XP from profile; used for level display (100 XP per level). */
+  /** Total XP from profile; used for level display. */
   xp: number;
   cheeredAt: string | null;
 };
@@ -147,18 +171,21 @@ async function enrichWinsWithProfilesAndCheers(
   const userIds = [...new Set(wins.map((w) => w.user_id))];
 
   const [{ data: profiles }, { data: allCheers }] = await Promise.all([
-    supabase.from("profiles").select("id, username").in("id", userIds),
+    supabase.from("profiles").select("id, username, display_name, xp").in("id", userIds),
     supabase.from("community_win_cheers").select("win_id, user_id").in("win_id", winIds),
   ]);
 
-  const usernameByUserId = new Map<string, string | null>();
+  const profileByUserId = new Map<string, { username: string | null; displayName: string | null; xp: number }>();
   for (const p of profiles ?? []) {
     const id = p.id as string;
     const u = p.username;
-    usernameByUserId.set(
-      id,
-      typeof u === "string" && u.trim().length > 0 ? u.trim().toLowerCase() : null,
-    );
+    const dn = p.display_name;
+    const xpRaw = p.xp;
+    profileByUserId.set(id, {
+      username: typeof u === "string" && u.trim().length > 0 ? u.trim().toLowerCase() : null,
+      displayName: typeof dn === "string" && dn.trim().length > 0 ? dn.trim() : null,
+      xp: typeof xpRaw === "number" && Number.isFinite(xpRaw) ? Math.max(0, xpRaw) : 0,
+    });
   }
 
   const countByWin = new Map<string, number>();
@@ -172,12 +199,15 @@ async function enrichWinsWithProfilesAndCheers(
 
   return wins.map((row) => {
     const r = row as CommunityWinRow;
+    const prof = profileByUserId.get(row.user_id);
     return {
       ...r,
       feed_source: (r.feed_source ?? "mini") as CommunityWinFeedSource,
       streak_mission_day: r.streak_mission_day ?? null,
       streak_count_at_post: r.streak_count_at_post ?? null,
-      username: usernameByUserId.get(row.user_id) ?? null,
+      username: prof?.username ?? null,
+      displayName: prof?.displayName ?? null,
+      xp: prof?.xp ?? 0,
       cheerCount: countByWin.get(row.id) ?? 0,
       viewerHasCheered: viewerCheered.has(row.id),
     };
@@ -251,6 +281,109 @@ export async function toggleCheer(winId: string, currentlyCheered: boolean): Pro
     if (error) return { ok: false, error: error.message };
   }
   return { ok: true };
+}
+
+export async function fetchCommunityPlayerProfile(
+  userId: string,
+): Promise<{ ok: true; profile: CommunityPlayerProfile } | { ok: false; error: string }> {
+  const supabase = getSupabase();
+  if (!supabase) return { ok: false, error: "Cloud sync not configured." };
+
+  const [
+    { data: profile, error: profileErr },
+    { data: wins, error: winsErr },
+    publicWinsRes,
+    miniWinsRes,
+    habitStreakWinsRes,
+    cheersReceivedCount,
+  ] = await Promise.all([
+    supabase
+      .from("profiles")
+      .select("id, username, display_name, xp")
+      .eq("id", userId)
+      .maybeSingle(),
+    supabase
+      .from("community_wins")
+      .select("id, title, created_at, completed_at, feed_source, streak_mission_day, streak_count_at_post")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(5),
+    supabase
+      .from("community_wins")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userId),
+    supabase
+      .from("community_wins")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .eq("feed_source", "mini"),
+    supabase
+      .from("community_wins")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .eq("feed_source", "habit_streak"),
+    countCheersReceivedForUser(userId),
+  ]);
+
+  if (profileErr) return { ok: false, error: profileErr.message };
+  if (winsErr) return { ok: false, error: winsErr.message };
+  if (publicWinsRes.error) return { ok: false, error: publicWinsRes.error.message };
+  if (miniWinsRes.error) return { ok: false, error: miniWinsRes.error.message };
+  if (habitStreakWinsRes.error) return { ok: false, error: habitStreakWinsRes.error.message };
+  if (!profile) return { ok: false, error: "Player not found." };
+
+  const winRows = (wins ?? []) as Array<{
+    id: string;
+    title: string;
+    created_at: string;
+    completed_at: string;
+    feed_source: CommunityWinFeedSource | null;
+    streak_mission_day: number | null;
+    streak_count_at_post: number | null;
+  }>;
+
+  const u = profile.username;
+  const dn = profile.display_name;
+  const xpRaw = profile.xp;
+  const publicWins = publicWinsRes.count ?? 0;
+  const habitStreakWins = habitStreakWinsRes.count ?? 0;
+  const miniWins = Math.max(0, miniWinsRes.count ?? publicWins - habitStreakWins);
+
+  return {
+    ok: true,
+    profile: {
+      userId,
+      username: typeof u === "string" && u.trim().length > 0 ? u.trim().toLowerCase() : null,
+      displayName: typeof dn === "string" && dn.trim().length > 0 ? dn.trim() : null,
+      xp: typeof xpRaw === "number" && Number.isFinite(xpRaw) ? Math.max(0, xpRaw) : 0,
+      publicWins,
+      miniWins,
+      habitStreakWins,
+      cheersReceived: cheersReceivedCount,
+      recentWins: winRows.map((w) => ({
+        id: w.id,
+        title: w.title,
+        createdAt: w.created_at,
+        completedAt: w.completed_at,
+        feedSource: (w.feed_source ?? "mini") as CommunityWinFeedSource,
+        streakMissionDay: w.streak_mission_day ?? null,
+        streakCountAtPost: w.streak_count_at_post ?? null,
+      })),
+    },
+  };
+}
+
+async function countCheersReceivedForUser(userId: string): Promise<number> {
+  const supabase = getSupabase();
+  if (!supabase) return 0;
+
+  const { count, error } = await supabase
+    .from("community_win_cheers")
+    .select("win_id, community_wins!inner(user_id)", { count: "exact", head: true })
+    .eq("community_wins.user_id", userId);
+
+  if (error) return 0;
+  return count ?? 0;
 }
 
 export async function listCommunityWinCheerers(

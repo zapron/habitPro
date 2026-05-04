@@ -2,7 +2,7 @@ import { Text } from "./AppText";
 import { Image, StyleSheet, View } from "react-native";
 import { useTheme } from "../context/ThemeContext";
 
-const FLAME = require("../../assets/swirling-gradient-flame-logo.png");
+const COMMUNITY_MARK = require("../../assets/habitpro-logo-transparent-v3.png");
 
 type Props = {
   /**
@@ -12,7 +12,7 @@ type Props = {
   /** Smaller badge for inline placements. */
   size?: "sm" | "md";
   /**
-   * HabitPro Community tier: shows the app flame mark + short label (compact vs full name).
+   * HabitPro Community tier: shows the transparent Habit Ring mark + short label.
    */
   withFlame?: boolean;
 };
@@ -30,14 +30,14 @@ export function PlusBadge({ label, size = "sm", withFlame = false }: Props) {
           padH: 8,
           fontSize: 10,
           letter: 0.85,
-          flame: 15,
+          mark: 16,
         }
       : {
           padV: 3,
           padH: 7,
           fontSize: 9,
           letter: 0.75,
-          flame: 13,
+          mark: 14,
         };
 
   const resolvedLabel = withFlame ? (label ?? "Community") : (label ?? "PLUS");
@@ -59,8 +59,9 @@ export function PlusBadge({ label, size = "sm", withFlame = false }: Props) {
     >
       {withFlame ? (
         <Image
-          source={FLAME}
-          style={{ width: cfg.flame, height: cfg.flame, borderRadius: cfg.flame / 3 }}
+          source={COMMUNITY_MARK}
+          style={{ width: cfg.mark, height: cfg.mark }}
+          resizeMode="contain"
           accessibilityIgnoresInvertColors
         />
       ) : null}

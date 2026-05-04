@@ -13,12 +13,23 @@ import {
   Animated,
 } from "react-native";
 import * as Haptics from "expo-haptics";
-import { ChevronDown, ChevronUp, Sparkles, ThumbsUp } from "lucide-react-native";
+import {
+  Camera,
+  ChevronDown,
+  ChevronUp,
+  Flame,
+  Sparkles,
+  ThumbsUp,
+  Trophy,
+  Zap,
+} from "lucide-react-native";
 import type { CommunityWinFeedItem } from "../lib/communityWinsApi";
 import { buildStreakCelebrationKicker } from "../lib/communityStreakFeedCopy";
 import { formatCompletedAt, formatRelativeTime } from "../lib/communityWinFeedFormat";
 import type { AppTheme } from "../styles/theme";
 import { CoachMarkTarget, type CoachMarkId } from "../context/CoachMarkContext";
+import { levelFromTotalXp } from "../utils/xpLevel";
+import { playerLeagueForLevel } from "../utils/playerLeague";
 
 const SCREEN_W = Dimensions.get("window").width;
 /** Second tap within this gap counts as double-tap (cheer + burst). */
@@ -36,6 +47,7 @@ type Props = {
   reduceMotion: boolean;
   onToggleExpanded: () => void;
   onOpenLightbox: (uri: string) => void;
+  onOpenPlayer?: (win: CommunityWinFeedItem) => void;
   /** Returns whether the cheer API succeeded (optimistic list update in parent). */
   onCheer: (win: CommunityWinFeedItem) => Promise<boolean>;
   onOpenCheerers?: (win: CommunityWinFeedItem) => void;
@@ -114,6 +126,7 @@ export function CommunityWinFeedPost({
   reduceMotion,
   onToggleExpanded,
   onOpenLightbox,
+  onOpenPlayer,
   onCheer,
   onOpenCheerers,
   canCheer = true,
@@ -122,6 +135,11 @@ export function CommunityWinFeedPost({
 }: Props) {
   const isOwn = sessionUserId === win.user_id;
   const handle = win.username ? `@${win.username}` : "Someone";
+  const displayName = win.displayName?.trim() || null;
+  const normalizedDisplayName = displayName?.replace(/^@/, "").trim().toLowerCase();
+  const normalizedHandle = win.username?.trim().toLowerCase() ?? null;
+  const showHandle = Boolean(displayName && normalizedDisplayName !== normalizedHandle);
+  const primaryName = displayName ?? handle;
   const isFeed = variant === "feed";
   const hasNote = Boolean((win.memory_note ?? "").trim());
   /** Older rows used synthetic id before feed_source existed */
@@ -145,6 +163,10 @@ export function CommunityWinFeedPost({
             missionLine: legacyMissionTitle.length > 0 ? legacyMissionTitle : win.title,
           }
         : null;
+  const level = levelFromTotalXp(win.xp);
+  const playerLeague = playerLeagueForLevel(level, theme, isDark);
+  const sourceLabel = isHabitStreak ? "Habit streak" : "Mini win";
+  const hasMoment = Boolean(win.memory_image_url || hasNote);
 
   const lastTapRef = useRef(0);
   const lightboxTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -302,6 +324,67 @@ export function CommunityWinFeedPost({
 
   return (
     <View style={wrapStyle}>
+      <View
+        style={[
+          styles.postHeader,
+          isFeed ? styles.padHFeed : styles.padCardInner,
+          { borderBottomColor: theme.colors.border },
+        ]}
+      >
+        <Pressable
+          onPress={() => {
+            void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            onOpenPlayer?.(win);
+          }}
+          style={({ pressed }) => [styles.playerTap, { opacity: pressed ? 0.76 : 1 }]}
+          accessibilityRole="button"
+          accessibilityLabel={`Open ${primaryName} player card`}
+        >
+          <View style={styles.playerTextCol}>
+            <Text style={[styles.playerName, { color: theme.colors.textPrimary }]} numberOfLines={1}>
+              {primaryName}
+            </Text>
+            <View style={styles.playerLeagueRow}>
+              {showHandle ? (
+                <>
+                  <Text style={[styles.playerHandle, { color: theme.colors.cyan[400] }]} numberOfLines={1}>
+                    {handle}
+                  </Text>
+                  <Text style={[styles.playerDot, { color: theme.colors.textMuted }]}>/</Text>
+                </>
+              ) : null}
+              <Text style={[styles.playerLeague, { color: playerLeague.color }]} numberOfLines={1}>
+                {playerLeague.label}
+              </Text>
+            </View>
+          </View>
+        </Pressable>
+        <View
+          style={[
+            styles.sourcePill,
+            {
+              backgroundColor: playerLeague.backgroundColor,
+              borderColor: isHabitStreak ? theme.colors.amber[500] : theme.colors.indigo[400],
+            },
+          ]}
+        >
+          {isHabitStreak ? (
+            <Flame size={12} color={theme.colors.amber[500]} />
+          ) : (
+            <Trophy size={12} color={theme.colors.indigo[400]} />
+          )}
+          <Text
+            style={[
+              styles.sourcePillText,
+              { color: isHabitStreak ? theme.colors.amber[500] : theme.colors.indigo[400] },
+            ]}
+            numberOfLines={1}
+          >
+            {sourceLabel}
+          </Text>
+        </View>
+      </View>
+
       {imageBlock}
 
       {streakKicker ? (
@@ -353,9 +436,16 @@ export function CommunityWinFeedPost({
                 </Text>
               </Pressable>
             </View>
-            <Text style={[styles.handleInline, { color: theme.colors.cyan[400] }]} numberOfLines={1}>
-              {handle}
-            </Text>
+            <View style={[styles.winMetricPill, { backgroundColor: theme.colors.surfaceElevated, borderColor: theme.colors.border }]}>
+              <Zap size={11} color={theme.colors.yellow[400]} fill={theme.colors.yellow[400]} />
+              <Text style={[styles.winMetricPillText, { color: theme.colors.textSecondary }]}>{win.xp} XP</Text>
+            </View>
+            <View style={[styles.winMetricPill, { backgroundColor: theme.colors.surfaceElevated, borderColor: theme.colors.border }]}>
+              <Camera size={11} color={hasMoment ? theme.colors.amber[500] : theme.colors.textMuted} />
+              <Text style={[styles.winMetricPillText, { color: theme.colors.textSecondary }]}>
+                {hasMoment ? "Moment" : "Win"}
+              </Text>
+            </View>
             {isOwn ? (
               <Text style={[styles.ownHint, { color: theme.colors.textMuted }]}>Your win</Text>
             ) : !canCheer ? (
@@ -406,7 +496,11 @@ export function CommunityWinFeedPost({
           </Pressable>
         </View>
 
-        {!hasNote && !expanded ? (
+        {hasNote && !expanded ? (
+          <Text style={[styles.memNotePreview, { color: theme.colors.textSecondary }]} numberOfLines={2}>
+            {win.memory_note}
+          </Text>
+        ) : !hasNote && !expanded ? (
           <Text style={[styles.captionHint, { color: theme.colors.textMuted }]} numberOfLines={2}>
             {isHabitStreak
               ? "Streak moment from a main mission. Open View More for time and caption."
@@ -475,6 +569,40 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  postHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+    paddingTop: 12,
+    paddingBottom: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  playerTap: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 0,
+  },
+  playerTextCol: { flex: 1, minWidth: 0 },
+  playerName: { fontSize: 15, lineHeight: 19, fontWeight: "900" },
+  playerLeagueRow: { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 2, minWidth: 0 },
+  playerHandle: { flexShrink: 1, minWidth: 0, fontSize: 12, lineHeight: 16, fontWeight: "800" },
+  playerDot: { fontSize: 11, fontWeight: "900" },
+  playerLeague: { flexShrink: 1, minWidth: 0, fontSize: 11, lineHeight: 15, fontWeight: "900" },
+  sourcePill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    borderWidth: 1,
+    borderRadius: 9999,
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+    maxWidth: 112,
+    flexShrink: 0,
+  },
+  sourcePillText: { fontSize: 10, lineHeight: 13, fontWeight: "900", letterSpacing: 0.2 },
   streakBanner: {
     paddingVertical: 12,
     borderLeftWidth: 4,
@@ -508,6 +636,16 @@ const styles = StyleSheet.create({
   },
   cheerTimeLeft: { flexDirection: "row", alignItems: "center", gap: 8, flex: 1, minWidth: 0 },
   cheerIconRow: { flexDirection: "row", alignItems: "center", gap: 5 },
+  winMetricPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    borderWidth: 1,
+    borderRadius: 9999,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  winMetricPillText: { fontSize: 10, lineHeight: 13, fontWeight: "900", fontVariant: ["tabular-nums"] },
   handleInline: { fontSize: 14, fontWeight: "700", flex: 1, minWidth: 0, marginLeft: 2, letterSpacing: 0.1 },
   timeInline: {
     fontSize: 12,
@@ -539,6 +677,12 @@ const styles = StyleSheet.create({
     marginTop: 8,
     fontStyle: "italic",
     opacity: 0.88,
+  },
+  memNotePreview: {
+    fontSize: 14,
+    fontWeight: "600",
+    lineHeight: 20,
+    marginTop: 8,
   },
   viewMorePill: {
     flexShrink: 0,
