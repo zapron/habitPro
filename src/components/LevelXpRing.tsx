@@ -3,6 +3,7 @@ import { StyleSheet, View } from "react-native";
 import Svg, { Circle, G } from "react-native-svg";
 
 import { useTheme } from "../context/ThemeContext";
+import { XP_PER_LEVEL } from "../utils/xpLevel";
 
 type LevelXpRingProps = {
   level: number;
@@ -33,7 +34,7 @@ export function LevelXpRing({
   const c = size / 2;
   const r = (size - strokeWidth) / 2 - 1;
   const circ = 2 * Math.PI * r;
-  const pct = Math.min(1, Math.max(0, xpInLevel / 100));
+  const pct = Math.min(1, Math.max(0, xpInLevel / XP_PER_LEVEL));
 
   const levelPalette = [
     theme.colors.indigo[500],

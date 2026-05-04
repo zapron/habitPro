@@ -53,6 +53,7 @@ import { ProfileMiniWeekTrend } from "../../src/components/profile/ProfileMiniWe
 import { ProfileStatChips } from "../../src/components/profile/ProfileStatChips";
 import { PlusBadge } from "../../src/components/PlusBadge";
 import { useRefreshPremiumAccess } from "../../src/hooks/useRefreshPremiumAccess";
+import { XP_PER_LEVEL, levelFromTotalXp, xpInCurrentLevel } from "../../src/utils/xpLevel";
 
 type HubSheetState =
   | null
@@ -282,8 +283,8 @@ export default function ProfileScreen() {
     }, [refreshPremiumAccess]),
   );
 
-  const level = Math.floor(xp / 100);
-  const xpInLevel = xp % 100;
+  const level = levelFromTotalXp(xp);
+  const xpInLevel = xpInCurrentLevel(xp);
 
   const missionStats = useMemo(() => {
     const visibilityBucket = (v: string | undefined): "public" | "solo" =>
@@ -523,7 +524,7 @@ export default function ProfileScreen() {
             <View style={styles.xpLine}>
               <Zap size={16} color={theme.colors.yellow[400]} fill={theme.colors.yellow[400]} />
               <Text style={[styles.xpBig, { color: theme.colors.textPrimary }]}>
-                {xpInLevel} / 100 <Text style={{ color: theme.colors.textMuted, fontWeight: "600" }}>XP this level</Text>
+                {xpInLevel} / {XP_PER_LEVEL} <Text style={{ color: theme.colors.textMuted, fontWeight: "600" }}>XP this level</Text>
               </Text>
             </View>
             <Text style={[styles.totalXp, { color: theme.colors.textSecondary }]}>Total XP: {xp}</Text>

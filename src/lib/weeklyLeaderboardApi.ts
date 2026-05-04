@@ -1,4 +1,5 @@
 import { getSupabase } from "./supabase";
+import { levelFromTotalXp } from "../utils/xpLevel";
 
 export type WeeklyLeaderboardEntry = {
   rankPosition: number;
@@ -74,7 +75,7 @@ export async function fetchWeeklyLeaderboard(
         level:
           typeof row.level === "number" && Number.isFinite(row.level)
             ? Math.max(0, row.level)
-            : Math.floor(xp / 100),
+            : levelFromTotalXp(xp),
         points,
         habitDays:
           typeof row.habit_days === "number" && Number.isFinite(row.habit_days)

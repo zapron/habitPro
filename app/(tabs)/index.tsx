@@ -49,6 +49,12 @@ import {
   isMainMissionPlayableOnHome,
   needsMainMissionOutcome,
 } from "../../src/utils/mainMissionUi";
+import {
+  XP_PER_LEVEL,
+  levelFromTotalXp,
+  xpInCurrentLevel,
+  xpProgressInCurrentLevel,
+} from "../../src/utils/xpLevel";
 
 function getGreeting(): string {
   const hour = new Date().getHours();
@@ -284,9 +290,9 @@ export default function Home() {
 
   const listBottomPad = Math.max(insets.bottom, 12) + 48;
 
-  const level = Math.floor(xp / 100);
-  const xpInLevel = xp % 100;
-  const xpProgress = xpInLevel / 100;
+  const level = levelFromTotalXp(xp);
+  const xpInLevel = xpInCurrentLevel(xp);
+  const xpProgress = xpProgressInCurrentLevel(xp);
 
   const filteredHabits = useMemo(() => {
     if (activeTab === "missions") {
@@ -612,7 +618,7 @@ export default function Home() {
               </Text>
             </View>
             <Text style={[styles.xpValue, { color: theme.colors.textMuted }]}>
-              {xpInLevel} / 100 XP
+              {xpInLevel} / {XP_PER_LEVEL} XP
             </Text>
           </View>
           <View

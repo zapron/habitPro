@@ -46,12 +46,12 @@ export function countMiniCompletionsThisWeek(missions: MiniMission[], now: Date 
 export function weeklyCompeteScore(
   habits: Habit[],
   miniMissions: MiniMission[],
-  level: number,
+  _level: number,
   now: Date = new Date(),
 ): number {
   const days = countDistinctHabitDaysThisWeek(habits, now);
   const minis = countMiniCompletionsThisWeek(miniMissions, now);
-  return days * 18 + minis * 22 + level * 6;
+  return days * 25 + minis * 12;
 }
 
 export function weeklyTierLabel(score: number): { label: string; detail: string } {

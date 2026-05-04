@@ -53,10 +53,12 @@ import { PlusBadge } from "../../src/components/PlusBadge";
 import { ShimmerBlock } from "../../src/components/ShimmerBlock";
 import { useRefreshPremiumAccess } from "../../src/hooks/useRefreshPremiumAccess";
 import { LevelXpRing } from "../../src/components/LevelXpRing";
+import { CommunityPlayerDrawer, type CommunityPlayerDrawerSeed } from "../../src/components/CommunityPlayerDrawer";
 import {
   fetchWeeklyLeaderboard,
   type WeeklyLeaderboardEntry,
 } from "../../src/lib/weeklyLeaderboardApi";
+import { levelFromTotalXp, xpInCurrentLevel } from "../../src/utils/xpLevel";
 
 const INVITE_ACCEPT_TIMEOUT_MS = 45_000;
 const WEEKLY_RANK_PAGE_SIZE = 20;
@@ -307,18 +309,24 @@ function LeagueRow({
   entry,
   theme,
   isDark,
+  onPress,
 }: {
   entry: WeeklyLeaderboardEntry;
   theme: ReturnType<typeof useTheme>["theme"];
   isDark: boolean;
+  onPress: () => void;
 }) {
   const accent = leaderboardAccent(entry.rankPosition, theme);
-  const xpInLevel = entry.xp % 100;
+  const xpInLevel = xpInCurrentLevel(entry.xp);
   const displayName = entry.displayName ?? `@${entry.username}`;
   const showHandle = Boolean(entry.displayName);
   const playerLeague = lifetimeLeagueForLevel(entry.level, theme, isDark);
   return (
-    <View
+    <TouchableOpacity
+      onPress={onPress}
+      activeOpacity={0.82}
+      accessibilityRole="button"
+      accessibilityLabel={`Open ${displayName} player stats`}
       style={[
         styles.leagueRow,
         {
@@ -371,7 +379,7 @@ function LeagueRow({
           <Text style={[styles.leagueXpLabel, { color: theme.colors.textMuted }]}>PTS</Text>
         </View>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 }
 
@@ -408,6 +416,7 @@ export default function CompeteScreen() {
   const [leagueLoadingMore, setLeagueLoadingMore] = useState(false);
   const [leagueHasMore, setLeagueHasMore] = useState(false);
   const [leagueError, setLeagueError] = useState<string | null>(null);
+  const [leaguePlayerDrawer, setLeaguePlayerDrawer] = useState<CommunityPlayerDrawerSeed | null>(null);
   const deepLinkHandledRef = useRef(false);
 
   const xp = useHabitStore((s) => s.xp);
@@ -658,8 +667,8 @@ export default function CompeteScreen() {
     }
   };
 
-  const level = Math.floor(xp / 100);
-  const xpInLevel = xp % 100;
+  const level = levelFromTotalXp(xp);
+  const xpInLevel = xpInCurrentLevel(xp);
   const myWeeklyRank = useMemo(() => leagueRows.find((row) => row.isMe) ?? null, [leagueRows]);
 
   const bottomPad = Math.max(insets.bottom, 16) + 8;
@@ -968,7 +977,27 @@ export default function CompeteScreen() {
             ) : (
               <View style={styles.leagueList}>
                 {leagueRows.map((entry) => (
-                  <LeagueRow key={entry.userId} entry={entry} theme={theme} isDark={isDark} />
+                  <LeagueRow
+                    key={entry.userId}
+                    entry={entry}
+                    theme={theme}
+                    isDark={isDark}
+                    onPress={() =>
+                      setLeaguePlayerDrawer({
+                        userId: entry.userId,
+                        username: entry.username,
+                        displayName: entry.displayName,
+                        xp: entry.xp,
+                        weekly: {
+                          rankPosition: entry.rankPosition,
+                          points: entry.points,
+                          habitDays: entry.habitDays,
+                          miniCompletions: entry.miniCompletions,
+                          isMe: entry.isMe,
+                        },
+                      })
+                    }
+                  />
                 ))}
                 {leagueHasMore ? (
                   <TouchableOpacity
@@ -994,6 +1023,11 @@ export default function CompeteScreen() {
                 ) : null}
               </View>
             )}
+            <CommunityPlayerDrawer
+              visible={leaguePlayerDrawer !== null}
+              player={leaguePlayerDrawer}
+              onClose={() => setLeaguePlayerDrawer(null)}
+            />
           </>
         ) : challengesSubTab === "invites" ? (
           <>
