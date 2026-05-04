@@ -16,7 +16,7 @@ import { useHabitStore } from '../store/habitStore';
 import { UsernameSetupFields } from './UsernameSetupFields';
 import { Linking } from "react-native";
 import { useRouter } from "expo-router";
-import { getRemotePushPermissionStatus, registerPushTokenForCurrentUser, requestRemotePushPermission } from "../lib/pushTokens";
+import { getRemotePushPermissionDetails, registerPushTokenForCurrentUser, requestRemotePushPermissionDetails } from "../lib/pushTokens";
 import { useEffect, useMemo, useState } from "react";
 import { ShimmerBlock } from "./ShimmerBlock";
 
@@ -47,8 +47,8 @@ export function SettingsModal({ visible, onClose }: SettingsModalProps) {
             setNotifStatus("unavailable");
             return;
         }
-        const s = await getRemotePushPermissionStatus();
-        setNotifStatus(s === "granted" ? "on" : s === "unavailable" ? "unavailable" : "off");
+        const details = await getRemotePushPermissionDetails();
+        setNotifStatus(details.status === "granted" ? "on" : details.status === "unavailable" ? "unavailable" : "off");
     };
 
     useEffect(() => {
@@ -65,14 +65,14 @@ export function SettingsModal({ visible, onClose }: SettingsModalProps) {
 
     const onPressNotifications = async () => {
         if (!uid) return;
-        const s = await getRemotePushPermissionStatus();
-        if (s === "granted") {
+        const details = await getRemotePushPermissionDetails();
+        if (details.status === "granted") {
             setNotifStatus("on");
             return;
         }
-        if (s === "undetermined") {
-            const next = await requestRemotePushPermission();
-            if (next === "granted") {
+        if (details.status === "undetermined" || (details.status === "denied" && details.canAskAgain)) {
+            const next = await requestRemotePushPermissionDetails();
+            if (next.status === "granted") {
                 setNotifStatus("on");
                 await registerPushTokenForCurrentUser(uid);
                 return;

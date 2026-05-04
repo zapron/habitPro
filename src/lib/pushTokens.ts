@@ -24,28 +24,52 @@ export type RemotePushPermissionStatus =
   | "undetermined"
   | "unavailable";
 
-export async function getRemotePushPermissionStatus(): Promise<RemotePushPermissionStatus> {
+export type RemotePushPermissionDetails = {
+  status: RemotePushPermissionStatus;
+  canAskAgain: boolean;
+};
+
+const unavailablePermissionDetails: RemotePushPermissionDetails = {
+  status: "unavailable",
+  canAskAgain: false,
+};
+
+function mapPermissionDetails(res: {
+  status: string;
+  canAskAgain?: boolean;
+}): RemotePushPermissionDetails {
+  const canAskAgain = res.canAskAgain ?? false;
+  if (res.status === "granted") return { status: "granted", canAskAgain };
+  if (res.status === "denied") return { status: "denied", canAskAgain };
+  return { status: "undetermined", canAskAgain: true };
+}
+
+export async function getRemotePushPermissionDetails(): Promise<RemotePushPermissionDetails> {
   const Notifications = await getNotificationsModule();
-  if (!Notifications) return "unavailable";
+  if (!Notifications) return unavailablePermissionDetails;
   const res = await Notifications.getPermissionsAsync();
-  const status = res.status;
-  if (status === "granted") return "granted";
-  if (status === "denied") return "denied";
-  return "undetermined";
+  return mapPermissionDetails(res);
+}
+
+export async function getRemotePushPermissionStatus(): Promise<RemotePushPermissionStatus> {
+  const details = await getRemotePushPermissionDetails();
+  return details.status;
 }
 
 /**
  * User-initiated permission request. Returns final status after the OS prompt.
  * If the user previously denied (or blocked), this will usually remain denied.
  */
-export async function requestRemotePushPermission(): Promise<RemotePushPermissionStatus> {
+export async function requestRemotePushPermissionDetails(): Promise<RemotePushPermissionDetails> {
   const Notifications = await getNotificationsModule();
-  if (!Notifications) return "unavailable";
+  if (!Notifications) return unavailablePermissionDetails;
   const res = await Notifications.requestPermissionsAsync();
-  const status = res.status;
-  if (status === "granted") return "granted";
-  if (status === "denied") return "denied";
-  return "undetermined";
+  return mapPermissionDetails(res);
+}
+
+export async function requestRemotePushPermission(): Promise<RemotePushPermissionStatus> {
+  const details = await requestRemotePushPermissionDetails();
+  return details.status;
 }
 
 function getEasProjectId(): string | undefined {

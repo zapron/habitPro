@@ -7,12 +7,14 @@ import { useReducedMotion } from "../hooks/useReducedMotion";
 import type { AppTheme } from "../styles/theme";
 import { useTheme } from "./ThemeContext";
 import {
-  getRemotePushPermissionStatus,
-  requestRemotePushPermission,
+  getRemotePushPermissionDetails,
+  registerPushTokenForCurrentUser,
+  requestRemotePushPermissionDetails,
   type RemotePushPermissionStatus,
 } from "../lib/pushTokens";
 import * as Linking from "expo-linking";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useAuth } from "./AuthContext";
 
 export type NotificationGateReason =
   | "mini_timer"
@@ -21,12 +23,18 @@ export type NotificationGateReason =
   | "invite_accept"
   | "app_launch";
 
+export type NotificationGateResult = "granted" | "skipped" | "settings";
+
 type NotificationGateContextValue = {
   /**
    * Prompts for notification permission when needed.
    * Resolves true when permission is granted; false if user cancels / skips.
    */
   requireNotifications: (reason: NotificationGateReason) => Promise<boolean>;
+  /**
+   * Soft prompt variant. Useful when the feature can continue without notifications.
+   */
+  softAskNotifications: (reason: NotificationGateReason) => Promise<NotificationGateResult>;
   /**
    * Non-blocking soft ask. Only shows when notifications are not granted and this reason
    * hasn't been shown on this device yet.
@@ -39,7 +47,7 @@ const NotificationGateContext = createContext<NotificationGateContextValue | nul
 function titleForReason(reason: NotificationGateReason): string {
   switch (reason) {
     case "mini_timer":
-      return "Enable notifications for mini timers";
+      return "Protect this mini mission";
     case "daily_reminder":
       return "Enable notifications for reminders";
     case "mission_create":
@@ -54,7 +62,7 @@ function titleForReason(reason: NotificationGateReason): string {
 function bodyForReason(reason: NotificationGateReason): string {
   switch (reason) {
     case "mini_timer":
-      return "So we can alert you when your mini mission is about to end (and when it fails).";
+      return "Allow timer alerts so HabitPro can warn you near the end, even if your screen locks or you switch apps.";
     case "daily_reminder":
       return "So we can notify you at your chosen daily reminder time.";
     case "mission_create":
@@ -66,9 +74,19 @@ function bodyForReason(reason: NotificationGateReason): string {
   }
 }
 
-function primaryLabelForStatus(status: RemotePushPermissionStatus): string {
-  if (status === "denied") return "Open Settings";
+function primaryLabelForStatus(
+  status: RemotePushPermissionStatus,
+  reason: NotificationGateReason,
+  canAskAgain: boolean,
+): string {
+  if (status === "denied" && !canAskAgain) return "Open Settings";
+  if (reason === "mini_timer") return "Enable timer alerts";
   return "Enable notifications";
+}
+
+function secondaryLabelForReason(reason: NotificationGateReason): string {
+  if (reason === "mini_timer") return "Start anyway";
+  return "Not now";
 }
 
 function softAskStorageKey(reason: "mission_create" | "invite_accept" | "app_launch"): string {
@@ -78,6 +96,7 @@ function softAskStorageKey(reason: "mission_create" | "invite_accept" | "app_lau
 function NotificationPermissionSheet({
   reason,
   status,
+  canAskAgain,
   busy,
   theme,
   isDark,
@@ -86,6 +105,7 @@ function NotificationPermissionSheet({
 }: {
   reason: NotificationGateReason;
   status: RemotePushPermissionStatus;
+  canAskAgain: boolean;
   busy: boolean;
   theme: AppTheme;
   isDark: boolean;
@@ -181,14 +201,14 @@ function NotificationPermissionSheet({
             <Text style={[styles.title, { color: theme.colors.textPrimary }]}>{titleForReason(reason)}</Text>
           )}
           <Text style={[styles.body, { color: theme.colors.textSecondary }]}>{bodyForReason(reason)}</Text>
-          {status === "denied" ? (
+          {status === "denied" && !canAskAgain ? (
             <Text style={[styles.note, { color: theme.colors.amber[500] }]}>
               You previously denied notifications. On Android, turn them back on from Settings.
             </Text>
           ) : null}
           <View style={styles.actions}>
-            <Button title={primaryLabelForStatus(status)} onPress={onPrimary} disabled={busy} />
-            <Button title="Not now" variant="secondary" onPress={onClose} disabled={busy} />
+            <Button title={primaryLabelForStatus(status, reason, canAskAgain)} onPress={onPrimary} disabled={busy} />
+            <Button title={secondaryLabelForReason(reason)} variant="secondary" onPress={onClose} disabled={busy} />
           </View>
         </Pressable>
       </Animated.View>
@@ -198,34 +218,47 @@ function NotificationPermissionSheet({
 
 export function NotificationGateProvider({ children }: { children: React.ReactNode }) {
   const { theme, isDark } = useTheme();
+  const { session } = useAuth();
   const resolverRef = useRef<((ok: boolean) => void) | null>(null);
+  const resultResolverRef = useRef<((result: NotificationGateResult) => void) | null>(null);
   const [visible, setVisible] = useState(false);
   const [reason, setReason] = useState<NotificationGateReason>("mini_timer");
   const [status, setStatus] = useState<RemotePushPermissionStatus>("undetermined");
+  const [canAskAgain, setCanAskAgain] = useState(true);
   const [busy, setBusy] = useState(false);
+  const uid = session?.user?.id ?? null;
 
-  const close = (result: boolean) => {
+  const close = (result: NotificationGateResult) => {
     setVisible(false);
     setBusy(false);
-    const resolve = resolverRef.current;
+    const resolveBoolean = resolverRef.current;
+    const resolveResult = resultResolverRef.current;
     resolverRef.current = null;
-    resolve?.(result);
+    resultResolverRef.current = null;
+    resolveBoolean?.(result === "granted");
+    resolveResult?.(result);
   };
 
   const runPrimary = async () => {
     if (busy) return;
     setBusy(true);
-    const current = await getRemotePushPermissionStatus();
-    setStatus(current);
-    if (current === "granted") {
-      close(true);
+    const current = await getRemotePushPermissionDetails();
+    setStatus(current.status);
+    setCanAskAgain(current.canAskAgain);
+    if (current.status === "granted") {
+      if (uid) void registerPushTokenForCurrentUser(uid);
+      close("granted");
       return;
     }
-    if (current === "undetermined") {
-      const next = await requestRemotePushPermission();
-      setStatus(next);
+    if (current.status === "undetermined" || (current.status === "denied" && current.canAskAgain)) {
+      const next = await requestRemotePushPermissionDetails();
+      setStatus(next.status);
+      setCanAskAgain(next.canAskAgain);
       setBusy(false);
-      if (next === "granted") close(true);
+      if (next.status === "granted") {
+        if (uid) void registerPushTokenForCurrentUser(uid);
+        close("granted");
+      }
       return;
     }
     // denied / unavailable → Settings path (OS-controlled)
@@ -233,15 +266,16 @@ export function NotificationGateProvider({ children }: { children: React.ReactNo
       await Linking.openSettings();
     } finally {
       setBusy(false);
-      close(false);
+      close("settings");
     }
   };
 
   const value = useMemo<NotificationGateContextValue>(
     () => ({
       requireNotifications: async (nextReason: NotificationGateReason) => {
-        const s = await getRemotePushPermissionStatus();
-        if (s === "granted") return true;
+        const details = await getRemotePushPermissionDetails();
+        if (details.status === "granted") return true;
+        if (details.status === "unavailable") return false;
         if (resolverRef.current) {
           return await new Promise<boolean>((resolve) => {
             const prev = resolverRef.current;
@@ -251,16 +285,32 @@ export function NotificationGateProvider({ children }: { children: React.ReactNo
             };
           });
         }
+        if (resultResolverRef.current) return false;
         setReason(nextReason);
-        setStatus(s);
+        setStatus(details.status);
+        setCanAskAgain(details.canAskAgain);
         setVisible(true);
         return await new Promise<boolean>((resolve) => {
           resolverRef.current = resolve;
         });
       },
+      softAskNotifications: async (nextReason: NotificationGateReason) => {
+        const details = await getRemotePushPermissionDetails();
+        if (details.status === "granted") return "granted";
+        if (details.status === "unavailable") return "skipped";
+        if (resolverRef.current || resultResolverRef.current) return "skipped";
+        setReason(nextReason);
+        setStatus(details.status);
+        setCanAskAgain(details.canAskAgain);
+        setVisible(true);
+        return await new Promise<NotificationGateResult>((resolve) => {
+          resultResolverRef.current = resolve;
+        });
+      },
       suggestNotifications: async (nextReason: "mission_create" | "invite_accept" | "app_launch") => {
-        const s = await getRemotePushPermissionStatus();
-        if (s === "granted") return true;
+        const details = await getRemotePushPermissionDetails();
+        if (details.status === "granted") return true;
+        if (details.status === "unavailable") return false;
         try {
           const key = softAskStorageKey(nextReason);
           const already = await AsyncStorage.getItem(key);
@@ -269,9 +319,10 @@ export function NotificationGateProvider({ children }: { children: React.ReactNo
         } catch {
           // Ignore storage failures; still best-effort show.
         }
-        if (resolverRef.current) return false;
+        if (resolverRef.current || resultResolverRef.current) return false;
         setReason(nextReason);
-        setStatus(s);
+        setStatus(details.status);
+        setCanAskAgain(details.canAskAgain);
         setVisible(true);
         return await new Promise<boolean>((resolve) => {
           resolverRef.current = resolve;
@@ -284,15 +335,16 @@ export function NotificationGateProvider({ children }: { children: React.ReactNo
   return (
     <NotificationGateContext.Provider value={value}>
       {children}
-      <Modal transparent visible={visible} animationType="none" statusBarTranslucent onRequestClose={() => close(false)}>
+      <Modal transparent visible={visible} animationType="none" statusBarTranslucent onRequestClose={() => close("skipped")}>
         {visible ? (
           <NotificationPermissionSheet
             reason={reason}
             status={status}
+            canAskAgain={canAskAgain}
             busy={busy}
             theme={theme}
             isDark={isDark}
-            onClose={() => close(false)}
+            onClose={() => close("skipped")}
             onPrimary={() => void runPrimary()}
           />
         ) : null}
