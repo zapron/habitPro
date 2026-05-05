@@ -2,6 +2,7 @@ import { Text } from "../../src/components/AppText";
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState } from "react";
@@ -394,6 +395,7 @@ export default function CompeteScreen() {
     focusInvites?: string;
   }>();
   const { session } = useAuth();
+  const userId = session?.user?.id ?? null;
   const { isPremium, loading: premiumLoading } = usePremium();
   const { openUpsell } = usePlusUpsell();
   const refreshPremiumAccess = useRefreshPremiumAccess();
@@ -418,6 +420,21 @@ export default function CompeteScreen() {
   const [leagueError, setLeagueError] = useState<string | null>(null);
   const [leaguePlayerDrawer, setLeaguePlayerDrawer] = useState<CommunityPlayerDrawerSeed | null>(null);
   const deepLinkHandledRef = useRef(false);
+  const userIdRef = useRef<string | null>(userId);
+
+  useLayoutEffect(() => {
+    userIdRef.current = userId;
+    setGroupInvites([]);
+    setInviteCardMeta({});
+    setInviteBusy(null);
+    setInvitesLoading(Boolean(userId && isSupabaseConfigured()));
+    setLeagueRows([]);
+    setLeagueLoading(false);
+    setLeagueLoadingMore(false);
+    setLeagueHasMore(false);
+    setLeagueError(userId ? null : "Sign in to view Weekly Ranks.");
+    setLeaguePlayerDrawer(null);
+  }, [userId]);
 
   const xp = useHabitStore((s) => s.xp);
   const habits = useHabitStore((s) => s.habits);
@@ -435,7 +452,8 @@ export default function CompeteScreen() {
   }, [habits, miniMissions, reconcile]);
 
   const loadInvites = useCallback(async () => {
-    if (!isSupabaseConfigured() || !session?.user) {
+    const requestedUserId = userId;
+    if (!isSupabaseConfigured() || !requestedUserId) {
       setGroupInvites([]);
       setInviteCardMeta({});
       return;
@@ -443,6 +461,7 @@ export default function CompeteScreen() {
     setInvitesLoading(true);
     try {
       const rows = await listInvitesForMe();
+      if (userIdRef.current !== requestedUserId) return;
       setGroupInvites(rows);
       const meta: Record<string, InviteCardMeta> = {};
       await Promise.all(
@@ -451,16 +470,18 @@ export default function CompeteScreen() {
           if (g) meta[inv.id] = parseInviteCardMeta(g);
         }),
       );
+      if (userIdRef.current !== requestedUserId) return;
       setInviteCardMeta(meta);
     } catch (e: unknown) {
       console.warn("[habitPro] loadInvites", e);
     } finally {
       setInvitesLoading(false);
     }
-  }, [session?.user]);
+  }, [userId]);
 
   const loadLeague = useCallback(async () => {
-    if (!isSupabaseConfigured() || !session?.user) {
+    const requestedUserId = userId;
+    if (!isSupabaseConfigured() || !requestedUserId) {
       setLeagueRows([]);
       setLeagueHasMore(false);
       setLeagueError("Sign in to view Weekly Ranks.");
@@ -470,6 +491,7 @@ export default function CompeteScreen() {
     setLeagueError(null);
     try {
       const res = await fetchWeeklyLeaderboard(WEEKLY_RANK_PAGE_SIZE, 0);
+      if (userIdRef.current !== requestedUserId) return;
       if (res.ok === true) {
         setLeagueRows(res.items);
         setLeagueHasMore(res.hasMore);
@@ -486,16 +508,18 @@ export default function CompeteScreen() {
     } finally {
       setLeagueLoading(false);
     }
-  }, [session?.user]);
+  }, [userId]);
 
   const loadMoreLeague = useCallback(async () => {
     if (leagueLoading || leagueLoadingMore || !leagueHasMore) return;
-    if (!isSupabaseConfigured() || !session?.user) return;
+    const requestedUserId = userId;
+    if (!isSupabaseConfigured() || !requestedUserId) return;
 
     setLeagueLoadingMore(true);
     setLeagueError(null);
     try {
       const res = await fetchWeeklyLeaderboard(WEEKLY_RANK_PAGE_SIZE, leagueRows.length);
+      if (userIdRef.current !== requestedUserId) return;
       if (res.ok === true) {
         setLeagueRows((prev) => {
           const seen = new Set(prev.map((row) => row.userId));
@@ -511,7 +535,7 @@ export default function CompeteScreen() {
     } finally {
       setLeagueLoadingMore(false);
     }
-  }, [leagueHasMore, leagueLoading, leagueLoadingMore, leagueRows.length, session?.user]);
+  }, [leagueHasMore, leagueLoading, leagueLoadingMore, leagueRows.length, userId]);
 
   useFocusEffect(
     useCallback(() => {

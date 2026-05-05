@@ -266,16 +266,26 @@ const hubVisStyles = StyleSheet.create({
 export default function ProfileScreen() {
   const { theme, isDark } = useTheme();
   const insets = useSafeAreaInsets();
-  const { session, signOut } = useAuth();
+  const { session, signOut, syncReady } = useAuth();
   const { isPremium } = usePremium();
   const { openUpsell } = usePlusUpsell();
   const refreshPremiumAccess = useRefreshPremiumAccess();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [hubSheet, setHubSheet] = useState<HubSheetState>(null);
-  const xp = useHabitStore((s) => s.xp);
-  const username = useHabitStore((s) => s.username);
-  const habits = useHabitStore((s) => s.habits);
-  const miniMissions = useHabitStore((s) => s.miniMissions);
+  const rawXp = useHabitStore((s) => s.xp);
+  const rawUsername = useHabitStore((s) => s.username);
+  const rawHabits = useHabitStore((s) => s.habits);
+  const rawMiniMissions = useHabitStore((s) => s.miniMissions);
+  const showAccount = isSupabaseConfigured();
+  const accountHydrating = Boolean(showAccount && session?.user && !syncReady);
+  const xp = accountHydrating ? 0 : rawXp;
+  const username = accountHydrating ? null : rawUsername;
+  const habits = useMemo(() => (accountHydrating ? [] : rawHabits), [accountHydrating, rawHabits]);
+  const miniMissions = useMemo(
+    () => (accountHydrating ? [] : rawMiniMissions),
+    [accountHydrating, rawMiniMissions],
+  );
+  const profileIsPremium = !accountHydrating && isPremium;
 
   useFocusEffect(
     useCallback(() => {
@@ -432,7 +442,6 @@ export default function ProfileScreen() {
   }, [hubSheet, habits, miniMissions]);
 
   const bottomPad = Math.max(insets.bottom, 16) + 8;
-  const showAccount = isSupabaseConfigured();
   const appVersion = useAppVersion();
   const router = useRouter();
 
@@ -531,10 +540,10 @@ export default function ProfileScreen() {
               <Text style={[styles.handle, { color: theme.colors.cyan[400] }]} numberOfLines={1}>
                 @{username}
               </Text>
-            ) : showAccount && session?.user ? (
+            ) : showAccount && session?.user && !accountHydrating ? (
               <UsernameSetupFields compact />
             ) : null}
-            {isPremium ? (
+            {profileIsPremium ? (
               <View style={styles.plusActiveRow}>
                 <PlusBadge withFlame />
                 <Text style={[styles.plusActiveText, { color: theme.colors.textMuted }]}>Active</Text>
@@ -543,7 +552,7 @@ export default function ProfileScreen() {
           </View>
         </View>
 
-        {!isPremium ? (
+        {!accountHydrating && !profileIsPremium ? (
           <TouchableOpacity
             style={[
               styles.plusCard,

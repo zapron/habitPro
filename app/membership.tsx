@@ -1,5 +1,5 @@
 import { Text } from "../src/components/AppText";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { View, ScrollView, TouchableOpacity, StyleSheet, StatusBar, ActivityIndicator, Platform } from "react-native";
 import { useRouter, useFocusEffect } from "expo-router";
 import {
@@ -18,6 +18,7 @@ import { useBilling } from "../src/context/BillingContext";
 import { usePremium } from "../src/context/PremiumContext";
 import { usePlusUpsell } from "../src/context/PlusUpsellContext";
 import { useToast } from "../src/context/ToastContext";
+import { useAuth } from "../src/context/AuthContext";
 import type { AppTheme } from "../src/styles/theme";
 import {
   buildMembershipSummary,
@@ -55,6 +56,7 @@ export default function MembershipScreen() {
   const { theme, isDark } = useTheme();
   const { showToast } = useToast();
   const { openUpsell } = usePlusUpsell();
+  const { session } = useAuth();
   const {
     customerInfo,
     configured,
@@ -67,8 +69,14 @@ export default function MembershipScreen() {
   const { isPremium, loading: premiumLoading, refresh: refreshPremium } = usePremium();
   const [restoreBusy, setRestoreBusy] = useState(false);
   const [manageBusy, setManageBusy] = useState(false);
+  const userId = session?.user?.id ?? null;
 
   const summary = useMemo(() => buildMembershipSummary(customerInfo), [customerInfo]);
+
+  useEffect(() => {
+    setRestoreBusy(false);
+    setManageBusy(false);
+  }, [userId]);
 
   useFocusEffect(
     useCallback(() => {

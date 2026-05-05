@@ -1,6 +1,8 @@
 import { Text } from "../src/components/AppText";
 import {
   useCallback,
+  useLayoutEffect,
+  useRef,
   useState } from "react";
 import {
   View,
@@ -15,6 +17,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import { ArrowLeft } from "lucide-react-native";
 import { Screen } from "../src/components/Screen";
 import { useTheme } from "../src/context/ThemeContext";
+import { useAuth } from "../src/context/AuthContext";
 import { listNotifications, markAllNotificationsRead, markNotificationRead } from "../src/lib/groupChallengesApi";
 import { parseCommunityWinCheerPayload } from "../src/lib/notificationPayloads";
 import type { ChallengeNudgeKind, NotificationRow } from "../src/types/groupChallenge";
@@ -152,19 +155,36 @@ function notificationSubtitle(n: NotificationRow): string | null {
 export default function NotificationsScreen() {
   const router = useRouter();
   const { theme, isDark } = useTheme();
+  const { session } = useAuth();
+  const userId = session?.user?.id ?? null;
   const [items, setItems] = useState<NotificationRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [markingAll, setMarkingAll] = useState(false);
+  const userIdRef = useRef<string | null>(userId);
 
   const load = useCallback(async () => {
+    const requestedUserId = userId;
+    if (!requestedUserId) {
+      setItems([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const rows = await listNotifications(50);
+      if (userIdRef.current !== requestedUserId) return;
       setItems(rows);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [userId]);
+
+  useLayoutEffect(() => {
+    userIdRef.current = userId;
+    setItems([]);
+    setMarkingAll(false);
+    setLoading(Boolean(userId));
+  }, [userId]);
 
   useFocusEffect(
     useCallback(() => {

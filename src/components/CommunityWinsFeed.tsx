@@ -2,6 +2,7 @@ import { Text } from "./AppText";
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -78,8 +79,24 @@ export function CommunityWinsFeed({
   const [playerDrawerWin, setPlayerDrawerWin] = useState<CommunityPlayerDrawerSeed | null>(null);
   const itemsRef = useRef<CommunityWinFeedItem[]>([]);
   const loadMoreInFlight = useRef(false);
+  const userId = session?.user?.id ?? null;
+  const userIdRef = useRef<string | null>(userId);
 
   itemsRef.current = items;
+
+  useLayoutEffect(() => {
+    userIdRef.current = userId;
+    setItems([]);
+    setHasMore(Boolean(userId && isSupabaseConfigured()));
+    setExpandedById({});
+    setLightboxUri(null);
+    setCheerersSheet(null);
+    setPlayerDrawerWin(null);
+    setLoading(Boolean(userId && isSupabaseConfigured()));
+    setRefreshing(false);
+    setLoadingMore(false);
+    loadMoreInFlight.current = false;
+  }, [userId]);
 
   useEffect(() => {
     setCheerersSheet((s) => {
@@ -115,7 +132,8 @@ export function CommunityWinsFeed({
   }, [loading, items, session]);
 
   const loadInitial = useCallback(async () => {
-    if (!isSupabaseConfigured() || !session) {
+    const requestedUserId = userId;
+    if (!isSupabaseConfigured() || !requestedUserId) {
       setItems([]);
       setHasMore(false);
       setLoading(false);
@@ -123,10 +141,11 @@ export function CommunityWinsFeed({
     }
     setLoading(true);
     const { items: first, hasMore: more } = await fetchCommunityWinsFeedPage(0, COMMUNITY_WINS_PAGE_SIZE);
+    if (userIdRef.current !== requestedUserId) return;
     setItems(first);
     setHasMore(more);
     setLoading(false);
-  }, [session]);
+  }, [userId]);
 
   useFocusEffect(
     useCallback(() => {
@@ -142,11 +161,17 @@ export function CommunityWinsFeed({
   }, [loadInitial]);
 
   const loadMore = useCallback(async () => {
-    if (!session?.user || !hasMore || loadMoreInFlight.current) return;
+    const requestedUserId = userId;
+    if (!requestedUserId || !hasMore || loadMoreInFlight.current) return;
     loadMoreInFlight.current = true;
     setLoadingMore(true);
     const offset = itemsRef.current.length;
     const { items: next, hasMore: more } = await fetchCommunityWinsFeedPage(offset, COMMUNITY_WINS_PAGE_SIZE);
+    if (userIdRef.current !== requestedUserId) {
+      loadMoreInFlight.current = false;
+      setLoadingMore(false);
+      return;
+    }
     loadMoreInFlight.current = false;
     setLoadingMore(false);
     if (next.length === 0) {
@@ -165,7 +190,7 @@ export function CommunityWinsFeed({
       return merged;
     });
     setHasMore(more);
-  }, [session?.user, hasMore]);
+  }, [hasMore, userId]);
 
   const toggleExpanded = useCallback((id: string) => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
