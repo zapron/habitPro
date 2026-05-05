@@ -42,8 +42,11 @@ import {
   Minimize2,
 } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
-import { fireImmediateNotification } from "../../src/utils/notifications";
-import { clearMiniMissionNotifications } from "../../src/utils/miniMissionNotifications";
+import { setActiveMiniMissionNotificationContext } from "../../src/utils/notifications";
+import {
+  clearMiniMissionNotifications,
+  syncMiniMissionNotifications,
+} from "../../src/utils/miniMissionNotifications";
 import { Screen } from "../../src/components/Screen";
 import { ConfirmDialog } from "../../src/components/ConfirmDialog";
 import { Button } from "../../src/components/Button";
@@ -954,6 +957,21 @@ export default function MiniMissionDetail() {
     }
   }, [focusModeOpen, mission?.status]);
 
+  useEffect(() => {
+    const screenVisible =
+      isFocused && mission?.status === "in_progress";
+    setActiveMiniMissionNotificationContext({
+      missionId: screenVisible && mission ? mission.id : null,
+      screenVisible,
+    });
+    return () => {
+      setActiveMiniMissionNotificationContext({
+        missionId: null,
+        screenVisible: false,
+      });
+    };
+  }, [isFocused, mission?.id, mission?.status]);
+
   const flightProgressive = useMemo(
     () => remainingMsToProgressiveCountdown(countdown),
     [countdown],
@@ -991,7 +1009,7 @@ export default function MiniMissionDetail() {
     return Math.min(1, Math.max(0, elapsedMs / totalMs));
   }, [mission, now, totalMinutes, completeSheetOpen, timerFrozenAtMs]);
 
-  // Timer expiry while this screen is open: haptics + cancel OS schedule (avoid duplicate) + in-app banner.
+  // Timer expiry while this screen is open: haptics + cancel OS schedule (avoid duplicate).
   // Dedupe by mission id + planned end (module map) so leaving and reopening the card does not spam.
   useEffect(() => {
     if (!isTimerUp || !mission?.startedAt) return;
@@ -1004,10 +1022,6 @@ export default function MiniMissionDetail() {
     Vibration.vibrate([0, 400, 200, 400, 200, 400]);
     void (async () => {
       await clearMiniMissionNotifications(mission.id);
-      await fireImmediateNotification(
-        "⏰ Mission failed",
-        `"${mission.title}" timer hit zero. Open the app to dismiss or cancel.`,
-      );
     })();
   }, [isTimerUp, mission]);
 
@@ -1309,6 +1323,7 @@ export default function MiniMissionDetail() {
       return;
     }
     extendMiniMission(mission.id, 1);
+    void syncMiniMissionNotifications(useHabitStore.getState().miniMissions);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
   };
 

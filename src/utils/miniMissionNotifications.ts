@@ -6,8 +6,10 @@ import {
   scheduleTimerNotification,
 } from "./notifications";
 
-/** Min total mission length (estimated + reserve) to show the T−1 minute heads-up. */
-const MIN_TOTAL_MINUTES_FOR_WARN = 2;
+/** Timer heads-up rules for mini missions. */
+const WARN_LEAD_SECONDS = 120;
+const WARN_MIN_BUFFER_SECONDS = 15;
+const MIN_TOTAL_MINUTES_FOR_WARN = 3;
 
 /** Tracks OS notification ids per mission so we can reschedule without cancelling on screen unmount. */
 const lastEndMsByMission = new Map<string, number>();
@@ -15,6 +17,9 @@ const warnIdByMission = new Map<string, string | null>();
 const failIdByMission = new Map<string, string | null>();
 
 type MiniMissionNotifKind = "mini_warn" | "mini_fail";
+
+let syncInFlight: Promise<void> | null = null;
+let pendingSyncMissions: MiniMission[] | null = null;
 
 function isMiniMissionNotifKind(x: unknown): x is MiniMissionNotifKind {
   return x === "mini_warn" || x === "mini_fail";
@@ -32,14 +37,47 @@ function getWarnCopy(mission: MiniMission): { title: string; body: string } {
   const reserveMaxed = extended >= MAX_RESERVE_FUEL_MINUTES;
   if (reserveMaxed) {
     return {
-      title: "One minute left",
-      body: `Just 1 minute left. Try to complete "${mission.title}" and get XP.`,
+      title: "Two minutes left",
+      body: `Try to complete "${mission.title}" before the timer runs out.`,
     };
   }
   return {
     title: "Mini mission ending soon",
-    body: `Your mini mission is about to end. Pack some reserve fuel for "${mission.title}".`,
+    body: `About 2 minutes left for "${mission.title}". Add reserve fuel if you need it.`,
   };
+}
+
+function shouldScheduleWarn(mission: MiniMission, secondsUntilEnd: number): boolean {
+  const totalMinutes = mission.estimatedMinutes + (mission.extendedMinutes ?? 0);
+  return (
+    totalMinutes >= MIN_TOTAL_MINUTES_FOR_WARN &&
+    secondsUntilEnd > WARN_LEAD_SECONDS + WARN_MIN_BUFFER_SECONDS
+  );
+}
+
+function numberFromNotificationData(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+async function scanAndCancelMiniMissionNotifications(missionId: string) {
+  const scheduled = await listScheduledNotifications();
+  await Promise.all(
+    scheduled
+      .filter((n) => {
+        const data = n.content?.data;
+        return (
+          data?.type === "mini_mission" &&
+          data?.missionId === missionId &&
+          isMiniMissionNotifKind(data?.kind)
+        );
+      })
+      .map((n) => cancelNotification(n.identifier)),
+  );
 }
 
 /**
@@ -47,6 +85,26 @@ function getWarnCopy(mission: MiniMission): { title: string; body: string } {
  * and after hydration — skips work when end time unchanged and warn/fail ids still match intent.
  */
 export async function syncMiniMissionNotifications(missions: MiniMission[]) {
+  pendingSyncMissions = missions;
+  if (syncInFlight) return syncInFlight;
+
+  syncInFlight = (async () => {
+    while (pendingSyncMissions) {
+      const next = pendingSyncMissions;
+      pendingSyncMissions = null;
+      await syncMiniMissionNotificationsNow(next);
+    }
+  })().finally(() => {
+    syncInFlight = null;
+    if (pendingSyncMissions) {
+      void syncMiniMissionNotifications(pendingSyncMissions);
+    }
+  });
+
+  return syncInFlight;
+}
+
+async function syncMiniMissionNotificationsNow(missions: MiniMission[]) {
   const active = missions.filter((m) => m.status === "in_progress" && m.startedAt);
   const activeIds = new Set(active.map((m) => m.id));
   const nowMs = Date.now();
@@ -85,7 +143,7 @@ export async function syncMiniMissionNotifications(missions: MiniMission[]) {
   for (const n of scheduledMini) {
     const missionId = typeof n.missionId === "string" ? n.missionId : "";
     const expectedEndMs = endMsByActiveMission.get(missionId);
-    const storedEndMs = typeof n.endMs === "number" ? n.endMs : null;
+    const storedEndMs = numberFromNotificationData(n.endMs);
     const mission = activeById.get(missionId);
 
     const shouldCancel =
@@ -106,8 +164,7 @@ export async function syncMiniMissionNotifications(missions: MiniMission[]) {
       continue;
     }
 
-    const totalMinutes = mission.estimatedMinutes + (mission.extendedMinutes ?? 0);
-    const needsWarn = totalMinutes > MIN_TOTAL_MINUTES_FOR_WARN && secondsUntilEnd > 60;
+    const needsWarn = shouldScheduleWarn(mission, secondsUntilEnd);
 
     if (n.kind === "mini_warn" && !needsWarn) {
       await cancelNotification(n.id);
@@ -160,8 +217,7 @@ export async function syncMiniMissionNotifications(missions: MiniMission[]) {
       continue;
     }
 
-    const totalMinutes = mission.estimatedMinutes + (mission.extendedMinutes ?? 0);
-    const needsWarn = totalMinutes > MIN_TOTAL_MINUTES_FOR_WARN && secondsUntilEnd > 60;
+    const needsWarn = shouldScheduleWarn(mission, secondsUntilEnd);
 
     // Seed ids from OS schedule (after app restart) so we don't double-schedule.
     const keptFailId = keptFailIdByMission.get(mission.id);
@@ -189,7 +245,7 @@ export async function syncMiniMissionNotifications(missions: MiniMission[]) {
 
     let newWarnId: string | null = null;
     if (needsWarn) {
-      const warnSeconds = secondsUntilEnd - 60;
+      const warnSeconds = secondsUntilEnd - WARN_LEAD_SECONDS;
       if (warnSeconds >= 1) {
         const { title, body } = getWarnCopy(mission);
         newWarnId = await scheduleTimerNotification(title, body, warnSeconds, {
@@ -232,6 +288,7 @@ export async function syncMiniMissionNotifications(missions: MiniMission[]) {
 export async function clearMiniMissionNotifications(missionId: string) {
   await cancelNotification(warnIdByMission.get(missionId) ?? null);
   await cancelNotification(failIdByMission.get(missionId) ?? null);
+  await scanAndCancelMiniMissionNotifications(missionId);
   lastEndMsByMission.delete(missionId);
   warnIdByMission.delete(missionId);
   failIdByMission.delete(missionId);

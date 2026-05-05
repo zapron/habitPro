@@ -1,5 +1,6 @@
 import Constants from "expo-constants";
 import { Platform } from "react-native";
+import { useHabitStore } from "../store/habitStore";
 
 /** Used for remote pushes (Expo/FCM) + matches manifest `default_notification_channel_id`. */
 const DEFAULT_REMOTE_CHANNEL_ID = "default";
@@ -17,6 +18,70 @@ function shouldSkipNotificationsModule(): boolean {
 type NotificationsModule = typeof import("expo-notifications");
 
 let cached: NotificationsModule | null | undefined;
+let activeMiniMissionContext: {
+  missionId: string | null;
+  screenVisible: boolean;
+} = {
+  missionId: null,
+  screenVisible: false,
+};
+
+const foregroundDisplay = {
+  shouldPlaySound: true,
+  shouldSetBadge: false,
+  shouldShowBanner: true,
+  shouldShowList: true,
+};
+
+const foregroundSuppress = {
+  shouldPlaySound: false,
+  shouldSetBadge: false,
+  shouldShowBanner: false,
+  shouldShowList: false,
+};
+
+export function setActiveMiniMissionNotificationContext(next: {
+  missionId: string | null;
+  screenVisible: boolean;
+}) {
+  activeMiniMissionContext = next;
+}
+
+function getMiniMissionEndMs(missionId: string): number | null {
+  const mission = useHabitStore.getState().miniMissions.find((m) => m.id === missionId);
+  if (!mission || mission.status !== "in_progress" || !mission.startedAt) return null;
+  const totalMinutes = mission.estimatedMinutes + (mission.extendedMinutes ?? 0);
+  return new Date(mission.startedAt).getTime() + totalMinutes * 60_000;
+}
+
+function numberFromNotificationData(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function shouldSuppressForegroundNotification(data: Record<string, unknown> | undefined): boolean {
+  if (data?.type !== "mini_mission") return false;
+  const missionId = typeof data.missionId === "string" ? data.missionId : "";
+  const kind = typeof data.kind === "string" ? data.kind : "";
+  if (!missionId) return true;
+
+  const expectedEndMs = getMiniMissionEndMs(missionId);
+  const notificationEndMs = numberFromNotificationData(data.endMs);
+
+  if (expectedEndMs == null || notificationEndMs == null) return true;
+  if (expectedEndMs !== notificationEndMs) return true;
+  if (kind === "mini_warn" && expectedEndMs <= Date.now()) return true;
+  if (kind === "mini_fail" && expectedEndMs + 5 * 60_000 < Date.now()) return true;
+
+  return (
+    activeMiniMissionContext.screenVisible &&
+    activeMiniMissionContext.missionId === missionId
+  );
+}
 
 async function getNotifications(): Promise<NotificationsModule | null> {
   if (shouldSkipNotificationsModule()) {
@@ -41,12 +106,12 @@ export async function setupNotifications() {
   if (!Notifications) return;
 
   Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldPlaySound: true,
-      shouldSetBadge: false,
-      shouldShowBanner: true,
-      shouldShowList: true,
-    }),
+    handleNotification: async (notification) => {
+      const data = notification.request.content.data as Record<string, unknown> | undefined;
+      return shouldSuppressForegroundNotification(data)
+        ? foregroundSuppress
+        : foregroundDisplay;
+    },
   });
 
   if (Platform.OS === "android") {
