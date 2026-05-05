@@ -19,6 +19,10 @@ import { useTheme } from "../../src/context/ThemeContext";
 import { useAuth } from "../../src/context/AuthContext";
 import { Button } from "../../src/components/Button";
 import { GoogleGIcon } from "../../src/components/GoogleGIcon";
+import {
+  SPLASH_WORDMARK_HABIT_COLOR,
+  SPLASH_WORDMARK_PRO_COLOR,
+} from "../../src/constants/splash";
 
 type FocusKey = "email" | "password" | "confirmPassword" | null;
 
@@ -107,8 +111,8 @@ export default function LoginScreen() {
         <View style={[styles.form, { maxWidth: FORM_MAX_WIDTH }]}>
           <View style={styles.header}>
             <Text style={styles.titleWordmark}>
-              <Text style={{ color: theme.colors.indigo[500] }}>habit</Text>
-              <Text style={{ color: isDark ? theme.colors.textPrimary : "#000000" }}>Pro</Text>
+              <Text style={{ color: isDark ? SPLASH_WORDMARK_HABIT_COLOR : "#000000" }}>habit</Text>
+              <Text style={{ color: SPLASH_WORDMARK_PRO_COLOR }}>Pro</Text>
             </Text>
             <Text style={[styles.subtitle, { color: theme.colors.textSecondary }]}>
               Sign in to sync missions, streaks, and XP across devices.
