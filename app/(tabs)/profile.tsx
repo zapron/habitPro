@@ -35,7 +35,7 @@ import type { MissionVisibility, MiniMission } from "../../src/types/habit";
 import {
   weeklyCompeteScore,
   weeklyTierLabel,
-  countDistinctHabitDaysThisWeek,
+  countHabitCheckInsThisWeek,
   countMiniCompletionsThisWeek,
 } from "../../src/utils/weekStats";
 import {
@@ -347,14 +347,14 @@ export default function ProfileScreen() {
   const insights = useMemo(() => {
     const weeklyScore = weeklyCompeteScore(habits, miniMissions, level);
     const tier = weeklyTierLabel(weeklyScore);
-    const habitDaysThisWeek = countDistinctHabitDaysThisWeek(habits);
+    const habitCheckInsThisWeek = countHabitCheckInsThisWeek(habits);
     const miniCompletionsThisWeek = countMiniCompletionsThisWeek(miniMissions);
     const activityPoints = lastNDaysHabitCheckInsPerDay(habits, 7);
     const miniWeekBuckets = miniCompletionsByWeekBuckets(miniMissions, 4);
     return {
       weeklyScore,
       tier,
-      habitDaysThisWeek,
+      habitCheckInsThisWeek,
       miniCompletionsThisWeek,
       activityPoints,
       miniWeekBuckets,
@@ -572,7 +572,7 @@ export default function ProfileScreen() {
           weeklyScore={insights.weeklyScore}
           tierLabel={insights.tier.label}
           tierDetail={insights.tier.detail}
-          habitDaysThisWeek={insights.habitDaysThisWeek}
+          habitCheckInsThisWeek={insights.habitCheckInsThisWeek}
           miniCompletionsThisWeek={insights.miniCompletionsThisWeek}
         />
 

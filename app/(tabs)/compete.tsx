@@ -29,7 +29,7 @@ import { computeChallengeProgress } from "../../src/utils/challengeProgress";
 import {
   weeklyCompeteScore,
   weeklyTierLabel,
-  countDistinctHabitDaysThisWeek,
+  countHabitCheckInsThisWeek,
   countMiniCompletionsThisWeek,
 } from "../../src/utils/weekStats";
 import { inviteeHabitStartIsoFromGroupStartDate } from "../../src/utils/challengeInviteeStart";
@@ -673,10 +673,15 @@ export default function CompeteScreen() {
 
   const bottomPad = Math.max(insets.bottom, 16) + 8;
 
-  const weeklyScore = useMemo(
+  const localWeeklyScore = useMemo(
     () => weeklyCompeteScore(habits, miniMissions, level),
     [habits, miniMissions, level],
   );
+  const localHabitCheckInsWeek = useMemo(() => countHabitCheckInsThisWeek(habits), [habits]);
+  const localMinisWeek = useMemo(() => countMiniCompletionsThisWeek(miniMissions), [miniMissions]);
+  const weeklyScore = myWeeklyRank?.points ?? localWeeklyScore;
+  const habitCheckInsWeek = myWeeklyRank?.habitCheckIns ?? localHabitCheckInsWeek;
+  const minisWeek = myWeeklyRank?.miniCompletions ?? localMinisWeek;
 
   /** Map group challenge id → local habit id (accepted group missions). */
   const habitIdByChallengeId = useMemo(() => {
@@ -694,9 +699,6 @@ export default function CompeteScreen() {
     [groupInvites],
   );
   const tier = useMemo(() => weeklyTierLabel(weeklyScore), [weeklyScore]);
-  const habitDaysWeek = useMemo(() => countDistinctHabitDaysThisWeek(habits), [habits]);
-  const minisWeek = useMemo(() => countMiniCompletionsThisWeek(miniMissions), [miniMissions]);
-
   const activeIds = new Set(enrollments.map((e) => e.templateId));
   const catalog = useMemo(
     () => CHALLENGE_TEMPLATES.filter((t) => !activeIds.has(t.id)),
@@ -860,7 +862,7 @@ export default function CompeteScreen() {
                 <View style={styles.leagueHeroText}>
                   <Text style={[styles.leagueTitle, { color: theme.colors.textPrimary }]}>Weekly Ranks</Text>
                   <Text style={[styles.leagueBody, { color: theme.colors.textSecondary }]}>
-                    Ranked by habit days and mini missions completed this week.
+                    Ranked by habit check-ins and mini missions completed this week.
                   </Text>
                   <View style={styles.leagueHeroPills}>
                     <View style={[styles.leagueHeroPill, { borderColor: theme.colors.border }]}>
@@ -892,8 +894,8 @@ export default function CompeteScreen() {
                 </View>
                 <View style={[styles.leagueStatDivider, { backgroundColor: theme.colors.border }]} />
                 <View style={styles.leagueStatMini}>
-                  <Text style={[styles.leagueStatValue, { color: theme.colors.cyan[400] }]}>{habitDaysWeek}</Text>
-                  <Text style={[styles.leagueStatLabel, { color: theme.colors.textMuted }]}>habit days</Text>
+                  <Text style={[styles.leagueStatValue, { color: theme.colors.cyan[400] }]}>{habitCheckInsWeek}</Text>
+                  <Text style={[styles.leagueStatLabel, { color: theme.colors.textMuted }]}>check-ins</Text>
                 </View>
                 <View style={[styles.leagueStatDivider, { backgroundColor: theme.colors.border }]} />
                 <View style={styles.leagueStatMini}>
@@ -991,7 +993,7 @@ export default function CompeteScreen() {
                         weekly: {
                           rankPosition: entry.rankPosition,
                           points: entry.points,
-                          habitDays: entry.habitDays,
+                          habitCheckIns: entry.habitCheckIns,
                           miniCompletions: entry.miniCompletions,
                           isMe: entry.isMe,
                         },

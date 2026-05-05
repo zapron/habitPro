@@ -13,7 +13,7 @@ type Props = {
   weeklyScore: number;
   tierLabel: string;
   tierDetail: string;
-  habitDaysThisWeek: number;
+  habitCheckInsThisWeek: number;
   miniCompletionsThisWeek: number;
 };
 
@@ -23,7 +23,7 @@ export function ProfileWeeklyPulse({
   weeklyScore,
   tierLabel,
   tierDetail,
-  habitDaysThisWeek,
+  habitCheckInsThisWeek,
   miniCompletionsThisWeek,
 }: Props) {
   const { fraction, nextTierName } = weeklyTierProgressFraction(weeklyScore);
@@ -65,8 +65,8 @@ export function ProfileWeeklyPulse({
 
       <View style={[styles.statsRow, { borderTopColor: theme.colors.border }]}>
         <View style={styles.statCell}>
-          <Text style={[styles.statNum, { color: theme.colors.cyan[400] }]}>{habitDaysThisWeek}</Text>
-          <Text style={[styles.statLbl, { color: theme.colors.textMuted }]}>Habit days</Text>
+          <Text style={[styles.statNum, { color: theme.colors.cyan[400] }]}>{habitCheckInsThisWeek}</Text>
+          <Text style={[styles.statLbl, { color: theme.colors.textMuted }]}>Check-ins</Text>
         </View>
         <View style={[styles.statDivider, { backgroundColor: theme.colors.border }]} />
         <View style={styles.statCell}>

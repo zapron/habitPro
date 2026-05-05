@@ -38,7 +38,7 @@ export type CommunityPlayerDrawerSeed = {
   weekly?: {
     rankPosition: number;
     points: number;
-    habitDays: number;
+    habitCheckIns: number;
     miniCompletions: number;
     isMe?: boolean;
   };
@@ -235,7 +235,7 @@ export function CommunityPlayerDrawer({ visible, player, onClose }: Props) {
                     <PlayerStat label="pts" value={weekly.points} accent={theme.colors.indigo[400]}>
                       <Zap size={16} color={theme.colors.indigo[400]} />
                     </PlayerStat>
-                    <PlayerStat label="habit days" value={weekly.habitDays} accent={theme.colors.cyan[400]}>
+                    <PlayerStat label="check-ins" value={weekly.habitCheckIns} accent={theme.colors.cyan[400]}>
                       <CalendarCheck size={16} color={theme.colors.cyan[400]} />
                     </PlayerStat>
                     <PlayerStat label="minis" value={weekly.miniCompletions} accent={theme.colors.yellow[400]}>

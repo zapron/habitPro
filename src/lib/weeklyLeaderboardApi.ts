@@ -9,7 +9,7 @@ export type WeeklyLeaderboardEntry = {
   xp: number;
   level: number;
   points: number;
-  habitDays: number;
+  habitCheckIns: number;
   miniCompletions: number;
   isMe: boolean;
 };
@@ -77,7 +77,7 @@ export async function fetchWeeklyLeaderboard(
             ? Math.max(0, row.level)
             : levelFromTotalXp(xp),
         points,
-        habitDays:
+        habitCheckIns:
           typeof row.habit_days === "number" && Number.isFinite(row.habit_days)
             ? Math.max(0, row.habit_days)
             : 0,

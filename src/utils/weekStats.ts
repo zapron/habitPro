@@ -1,5 +1,8 @@
 import type { Habit, MiniMission } from "../types/habit";
 
+export const WEEKLY_HABIT_CHECKIN_POINTS = 25;
+export const WEEKLY_MINI_COMPLETION_POINTS = 12;
+
 /** Monday 00:00 local time for the week containing `d`. */
 export function startOfWeekMonday(d: Date): Date {
   const x = new Date(d.getFullYear(), d.getMonth(), d.getDate());
@@ -18,17 +21,22 @@ export function weekRangeMs(now: Date = new Date()): { startMs: number; endMs: n
   return { startMs: start.getTime(), endMs: end.getTime() };
 }
 
-export function countDistinctHabitDaysThisWeek(habits: Habit[], now: Date = new Date()): number {
+export function countHabitCheckInsThisWeek(habits: Habit[], now: Date = new Date()): number {
   const { startMs, endMs } = weekRangeMs(now);
-  const days = new Set<string>();
+  let n = 0;
   for (const h of habits) {
+    const seenDatesForHabit = new Set<string>();
     for (const raw of h.completedDates ?? []) {
       const day = raw.slice(0, 10);
+      if (seenDatesForHabit.has(day)) continue;
       const t = new Date(day + "T12:00:00").getTime();
-      if (t >= startMs && t <= endMs) days.add(day);
+      if (t >= startMs && t <= endMs) {
+        seenDatesForHabit.add(day);
+        n += 1;
+      }
     }
   }
-  return days.size;
+  return n;
 }
 
 export function countMiniCompletionsThisWeek(missions: MiniMission[], now: Date = new Date()): number {
@@ -49,9 +57,9 @@ export function weeklyCompeteScore(
   _level: number,
   now: Date = new Date(),
 ): number {
-  const days = countDistinctHabitDaysThisWeek(habits, now);
+  const days = countHabitCheckInsThisWeek(habits, now);
   const minis = countMiniCompletionsThisWeek(miniMissions, now);
-  return days * 25 + minis * 12;
+  return days * WEEKLY_HABIT_CHECKIN_POINTS + minis * WEEKLY_MINI_COMPLETION_POINTS;
 }
 
 export function weeklyTierLabel(score: number): { label: string; detail: string } {
