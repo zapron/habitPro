@@ -34,6 +34,23 @@ const unavailablePermissionDetails: RemotePushPermissionDetails = {
   canAskAgain: false,
 };
 
+let activePushUserId: string | null = null;
+
+export function setActivePushUserId(userId: string | null): void {
+  activePushUserId = userId;
+}
+
+function isActivePushUser(userId: string): boolean {
+  return activePushUserId === userId;
+}
+
+async function supabaseSessionMatches(userId: string): Promise<boolean> {
+  const supabase = getSupabase();
+  if (!supabase) return false;
+  const { data } = await supabase.auth.getSession();
+  return data.session?.user?.id === userId;
+}
+
 function mapPermissionDetails(res: {
   status: string;
   canAskAgain?: boolean;
@@ -84,6 +101,7 @@ function getEasProjectId(): string | undefined {
  * IMPORTANT: This function MUST NOT prompt for permissions.
  */
 export async function registerPushTokenForCurrentUser(userId: string): Promise<void> {
+  if (!isActivePushUser(userId)) return;
   const Notifications = await getNotificationsModule();
   if (!Notifications) return;
 
@@ -99,27 +117,25 @@ export async function registerPushTokenForCurrentUser(userId: string): Promise<v
   const tokenRes = await Notifications.getExpoPushTokenAsync({ projectId });
   const expoPushToken = tokenRes.data;
   if (!expoPushToken) return;
+  if (!isActivePushUser(userId)) return;
 
   const deviceId = await getOrCreateDeviceInstallId();
+  if (!isActivePushUser(userId)) return;
   const platform =
     Platform.OS === "ios" ? "ios" : Platform.OS === "android" ? "android" : "unknown";
 
   const supabase = getSupabase();
   if (!supabase) return;
+  if (!(await supabaseSessionMatches(userId))) return;
 
-  const { error } = await supabase.from("push_tokens").upsert(
-    {
-      user_id: userId,
-      device_id: deviceId,
-      expo_push_token: expoPushToken,
-      platform,
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: "user_id,device_id" },
-  );
+  const { error } = await supabase.rpc("rpc_register_push_token", {
+    p_device_id: deviceId,
+    p_expo_push_token: expoPushToken,
+    p_platform: platform,
+  });
 
   if (error && __DEV__) {
-    console.warn("[push] upsert push_tokens failed", error.message);
+    console.warn("[push] rpc_register_push_token failed", error.message);
   }
 }
 
@@ -128,6 +144,7 @@ export async function clearPushTokenForCurrentUser(userId: string): Promise<void
   const deviceId = await getOrCreateDeviceInstallId();
   const supabase = getSupabase();
   if (!supabase) return;
+  if (!(await supabaseSessionMatches(userId))) return;
 
   const { error } = await supabase
     .from("push_tokens")
@@ -147,14 +164,18 @@ export async function clearPushTokenForCurrentUser(userId: string): Promise<void
 export function subscribePushAndTimezoneOnAppActive(userId: string): () => void {
   const sub = AppState.addEventListener("change", (next: AppStateStatus) => {
     if (next !== "active") return;
-    void syncProfileTimezone(userId);
-    void registerPushTokenForCurrentUser(userId);
+    void (async () => {
+      if (!isActivePushUser(userId)) return;
+      await syncProfileTimezone(userId);
+      await registerPushTokenForCurrentUser(userId);
+    })();
   });
   return () => sub.remove();
 }
 
 /** Stores IANA timezone so streak reminders use the same calendar labels as the mission grid (24h slots from start_date). */
 export async function syncProfileTimezone(userId: string): Promise<void> {
+  if (!isActivePushUser(userId)) return;
   let tz: string;
   try {
     tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -163,6 +184,7 @@ export async function syncProfileTimezone(userId: string): Promise<void> {
   }
   const supabase = getSupabase();
   if (!supabase) return;
+  if (!(await supabaseSessionMatches(userId))) return;
 
   const { error } = await supabase.from("profiles").update({ timezone: tz }).eq("id", userId);
   if (error && __DEV__) {
