@@ -1,10 +1,5 @@
 import { Text } from "../../src/components/AppText";
-import {
-  StatusBar,
-  StyleSheet,
-  View,
-  TouchableOpacity,
-} from "react-native";
+import { StatusBar, StyleSheet, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Screen } from "../../src/components/Screen";
 import { CommunityWinsFeed } from "../../src/components/CommunityWinsFeed";
@@ -36,26 +31,49 @@ export default function CommunityScreen() {
     return freshPremium === true;
   }, [refreshPremiumAccess]);
 
-  return (
-    <Screen>
-      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={theme.colors.background} />
-      <Text style={[styles.title, { color: theme.colors.textPrimary, fontSize: theme.typography.h1 }]}>Community</Text>
+  const header = (
+    <View style={[styles.introInner, { paddingHorizontal: theme.spacing.sm }]}>
+      <Text
+        style={[
+          styles.title,
+          { color: theme.colors.textPrimary, fontSize: theme.typography.h1 },
+        ]}
+      >
+        Community
+      </Text>
       <View style={styles.plusRow}>
         <PlusBadge withFlame />
-        <Text style={[styles.plusHint, { color: theme.colors.textMuted, fontSize: theme.typography.micro }]}>
-          Social mode: post, cheer, and get seen.
+        <Text
+          style={[
+            styles.plusHint,
+            { color: theme.colors.textMuted, fontSize: theme.typography.micro },
+          ]}
+        >
+          Post, Cheer & Get seen
         </Text>
       </View>
-      <Text style={[styles.subtitle, { color: theme.colors.textSecondary, fontSize: theme.typography.caption }]}>
-        Cheer public mini wins and get seen. Post yours when you finish a public mini.
+      <Text
+        style={[
+          styles.subtitle,
+          {
+            color: theme.colors.textSecondary,
+            fontSize: theme.typography.caption,
+          },
+        ]}
+      >
+        Cheer mission streaks and Public mini missions
       </Text>
       {socialLocked ? (
         <TouchableOpacity
           style={[
             styles.upsellBanner,
             {
-              backgroundColor: isDark ? "rgba(99, 102, 241, 0.14)" : "rgba(79, 70, 229, 0.08)",
-              borderColor: isDark ? "rgba(129, 140, 248, 0.35)" : "rgba(79, 70, 229, 0.25)",
+              backgroundColor: isDark
+                ? "rgba(99, 102, 241, 0.14)"
+                : "rgba(79, 70, 229, 0.08)",
+              borderColor: isDark
+                ? "rgba(129, 140, 248, 0.35)"
+                : "rgba(79, 70, 229, 0.25)",
             },
           ]}
           onPress={() => openUpsell("community")}
@@ -63,12 +81,34 @@ export default function CommunityScreen() {
           accessibilityRole="button"
           accessibilityLabel="Browse Community. Cheering and posting are HabitPro Community. Tap to learn more."
         >
-          <Text style={[styles.upsellBannerTitle, { color: theme.colors.textPrimary }]}>You’re browsing Community</Text>
-          <Text style={[styles.upsellBannerBody, { color: theme.colors.textSecondary }]}>
-            Cheering and posting wins are HabitPro Community. Tap to see what’s included.
+          <Text
+            style={[
+              styles.upsellBannerTitle,
+              { color: theme.colors.textPrimary },
+            ]}
+          >
+            You're browsing Community
+          </Text>
+          <Text
+            style={[
+              styles.upsellBannerBody,
+              { color: theme.colors.textSecondary },
+            ]}
+          >
+            Cheering and posting wins are HabitPro Community. Tap to see what's
+            included.
           </Text>
         </TouchableOpacity>
       ) : null}
+    </View>
+  );
+
+  return (
+    <Screen>
+      <StatusBar
+        barStyle={isDark ? "light-content" : "dark-content"}
+        backgroundColor={theme.colors.background}
+      />
       <View style={styles.feedWrap}>
         <CommunityWinsFeed
           contentPaddingBottom={bottomPad}
@@ -76,6 +116,7 @@ export default function CommunityScreen() {
           canCheer={!socialLocked}
           onCheerBlocked={() => openUpsell("community")}
           validateCheerAccess={validateCheerAccess}
+          listHeaderComponent={header}
         />
       </View>
     </Screen>
@@ -83,8 +124,14 @@ export default function CommunityScreen() {
 }
 
 const styles = StyleSheet.create({
+  introInner: { paddingBottom: 2 },
   title: { fontWeight: "900", letterSpacing: -0.4, marginBottom: 6 },
-  plusRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 10 },
+  plusRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 10,
+  },
   plusHint: { fontWeight: "700" },
   subtitle: { lineHeight: 18, marginBottom: 14 },
   upsellBanner: {

@@ -14,6 +14,7 @@ import {
   RefreshControl,
   ListRenderItem,
 } from "react-native";
+import type { ReactElement } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import * as Haptics from "expo-haptics";
 import { Sparkles } from "lucide-react-native";
@@ -47,6 +48,7 @@ type Props = {
   onCheerBlocked?: () => void;
   /** Optional fresh entitlement check before sending the cheer API call. */
   validateCheerAccess?: () => Promise<boolean>;
+  listHeaderComponent?: ReactElement | null;
 };
 
 type ListRow =
@@ -59,6 +61,7 @@ export function CommunityWinsFeed({
   canCheer = true,
   onCheerBlocked,
   validateCheerAccess,
+  listHeaderComponent,
 }: Props) {
   const { theme, isDark } = useTheme();
   const { session } = useAuth();
@@ -289,6 +292,7 @@ export function CommunityWinsFeed({
           void loadMore();
         }}
         onEndReachedThreshold={0.35}
+        ListHeaderComponent={listHeaderComponent}
         ListFooterComponent={
           loadingMore && hasMore && items.length > 0 ? (
             <View style={styles.footerLoading}>

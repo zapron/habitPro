@@ -1,12 +1,12 @@
 /**
- * Inspiring, context-aware copy for habit streak moments in the Community feed.
- * Uses mission day + consecutive streak at post time.
+ * Short, context-aware copy for habit streak moments in the Community feed.
+ * Keep it human and avoid repeating the same day/streak facts twice.
  */
 
 export type StreakFeedKicker = {
-  /** Main celebratory line (often includes fire emoji) */
+  /** Main line, focused on the achievement rather than repeating the author. */
   line1: string;
-  /** Mission name; shown as secondary line */
+  /** Mission name context; shown as secondary line. */
   missionLine: string;
 };
 
@@ -16,7 +16,7 @@ function missionName(title: string): string {
 }
 
 /**
- * @param displayName @handle or "Someone" (no @ prefix required)
+ * @param displayName Kept for call-site compatibility; the feed already shows the author.
  */
 export function buildStreakCelebrationKicker(opts: {
   displayName: string;
@@ -25,49 +25,10 @@ export function buildStreakCelebrationKicker(opts: {
   streakCount: number;
 }): StreakFeedKicker {
   const m = missionName(opts.missionTitle);
-  const name = opts.displayName.trim() || "Someone";
-  const md = Math.max(1, opts.missionDay);
   const sc = Math.max(1, opts.streakCount);
 
-  // First day of the mission + first day of a streak
-  if (md === 1 && sc === 1) {
-    return {
-      line1: `${name} started the journey: first check-in 🔥`,
-      missionLine: m,
-    };
-  }
-
-  // Same calendar milestone: e.g. 3-day streak and this post is day 3
-  if (sc >= 2 && md === sc && md === 3) {
-    return {
-      line1: `3-day streak, day 3 on the mission 🔥`,
-      missionLine: m,
-    };
-  }
-
-  if (sc >= 2 && md === sc && md > 3) {
-    return {
-      line1: `${sc}-day streak, day ${md} locked in 🔥`,
-      missionLine: m,
-    };
-  }
-
-  if (sc >= 7) {
-    return {
-      line1: `${name} is on a ${sc}-day streak 🔥`,
-      missionLine: `on ${m}`,
-    };
-  }
-
-  if (sc >= 2) {
-    return {
-      line1: `${name} is on a ${sc}-day streak 🔥`,
-      missionLine: `on ${m}`,
-    };
-  }
-
   return {
-    line1: `${name} shared a streak moment 🔥`,
-    missionLine: m,
+    line1: `${sc}-day streak`,
+    missionLine: `on ${m}`,
   };
 }

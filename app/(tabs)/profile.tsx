@@ -444,7 +444,6 @@ export default function ProfileScreen() {
         <View>
           <View style={styles.profileTitleRow}>
             <Text style={[styles.title, { color: theme.colors.textPrimary, fontSize: theme.typography.h1 }]}>Profile</Text>
-            {!isPremium ? <PlusBadge withFlame /> : null}
           </View>
           <Text style={[styles.subtitle, { color: theme.colors.textSecondary, fontSize: theme.typography.caption }]}>
             Your progress at a glance
