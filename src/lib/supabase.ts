@@ -10,6 +10,28 @@ const authStorage = {
 
 let client: SupabaseClient | null = null;
 
+function getSupabaseAuthStorageKey(): string | null {
+  if (!isSupabaseConfigured()) return null;
+  const { url } = getSupabaseConfig();
+  try {
+    const parsed = new URL(url);
+    return `sb-${parsed.hostname.split(".")[0]}-auth-token`;
+  } catch {
+    return null;
+  }
+}
+
+/** Best-effort local session cleanup used when network sign-out cannot clear storage. */
+export async function clearSupabaseAuthStorage(): Promise<void> {
+  const storageKey = getSupabaseAuthStorageKey();
+  if (!storageKey) return;
+  await Promise.all([
+    AsyncStorage.removeItem(storageKey),
+    AsyncStorage.removeItem(`${storageKey}-code-verifier`),
+    AsyncStorage.removeItem(`${storageKey}-user`),
+  ]);
+}
+
 export function getSupabase(): SupabaseClient | null {
   if (!isSupabaseConfigured()) return null;
   if (!client) {

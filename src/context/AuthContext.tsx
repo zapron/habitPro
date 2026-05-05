@@ -21,14 +21,17 @@ import {
 import { extractOAuthCodeFromUrl } from "../lib/oauthExchange";
 import { getSignupConfirmationRedirectUrl } from "../lib/authRedirects";
 import { isPasswordRecoverySession } from "../lib/passwordRecovery";
-import { getSupabase } from "../lib/supabase";
+import { clearSupabaseAuthStorage, getSupabase } from "../lib/supabase";
 import { hydrateStoreAfterAuth } from "../lib/sync";
+import { disableAndCancelRemoteSync } from "../lib/syncQueue";
 import {
   clearPushTokenForCurrentUser,
   registerPushTokenForCurrentUser,
+  setActivePushUserId,
   subscribePushAndTimezoneOnAppActive,
   syncProfileTimezone,
 } from "../lib/pushTokens";
+import { syncMiniMissionNotifications } from "../utils/miniMissionNotifications";
 
 const PERSIST_KEY = "habit-storage";
 const CHALLENGE_STORAGE_KEY = "challenge-storage";
@@ -58,10 +61,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [syncReady, setSyncReady] = useState(false);
   const [passwordRecoveryPending, setPasswordRecoveryPending] = useState(false);
   const prevAuthUserIdRef = useRef<string | null>(null);
+  const activeAuthUserIdRef = useRef<string | null>(null);
 
   const clearPasswordRecovery = useCallback(() => {
     setPasswordRecoveryPending(false);
   }, []);
+
+  const clearLocalAccountState = useCallback(async () => {
+    disableAndCancelRemoteSync();
+    useHabitStore.getState().resetStore();
+    useChallengeStore.getState().reset();
+    setSyncReady(false);
+    setPasswordRecoveryPending(false);
+
+    await Promise.allSettled([
+      AsyncStorage.removeItem(PERSIST_KEY),
+      AsyncStorage.removeItem(CHALLENGE_STORAGE_KEY),
+      syncMiniMissionNotifications([]),
+    ]);
+  }, []);
+
+  useEffect(() => {
+    const uid = session?.user?.id ?? null;
+    activeAuthUserIdRef.current = uid;
+    setActivePushUserId(uid);
+  }, [session?.user?.id]);
 
   useEffect(() => {
     logSupabaseEnvHint();
@@ -133,13 +157,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     if (prevAuthUserIdRef.current !== null && prevAuthUserIdRef.current !== uid) {
-      useHabitStore.getState().resetStore();
-      useChallengeStore.getState().reset();
-      void AsyncStorage.removeItem(PERSIST_KEY);
-      void AsyncStorage.removeItem(CHALLENGE_STORAGE_KEY);
+      void clearLocalAccountState();
     }
     prevAuthUserIdRef.current = uid;
-  }, [session?.user?.id, supabaseConfigured]);
+  }, [clearLocalAccountState, session?.user?.id, supabaseConfigured]);
 
   useEffect(() => {
     if (!supabaseConfigured || !session?.user) {
@@ -148,23 +169,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     let cancelled = false;
+    const uid = session.user.id;
     setSyncReady(false);
 
     void hydrateStoreAfterAuth(
-      session.user.id,
+      uid,
       () => useHabitStore.getState(),
       (next) => {
-        if (!cancelled) {
+        if (!cancelled && activeAuthUserIdRef.current === uid) {
           useHabitStore.setState(next);
         }
       },
     )
       .then(() => {
-        if (!cancelled) setSyncReady(true);
+        if (!cancelled && activeAuthUserIdRef.current === uid) setSyncReady(true);
       })
       .catch((e) => {
         console.warn("[habitPro] hydrate failed", e);
-        if (!cancelled) setSyncReady(true);
+        if (!cancelled && activeAuthUserIdRef.current === uid) setSyncReady(true);
       });
 
     return () => {
@@ -272,28 +294,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = useCallback(async () => {
     const supabase = getSupabase();
-    let uid: string | undefined;
-    if (supabase) {
-      const { data } = await supabase.auth.getSession();
-      uid = data.session?.user?.id;
-    }
-    if (uid) {
-      await clearPushTokenForCurrentUser(uid);
-    }
-    useHabitStore.getState().resetStore();
-    useChallengeStore.getState().reset();
-    setSyncReady(false);
-    try {
-      await AsyncStorage.removeItem(PERSIST_KEY);
-      await AsyncStorage.removeItem(CHALLENGE_STORAGE_KEY);
-    } catch {
-      /* ignore */
-    }
-    if (supabase) {
-      await supabase.auth.signOut();
-    }
-    setPasswordRecoveryPending(false);
-  }, []);
+    const uid = activeAuthUserIdRef.current ?? session?.user?.id ?? undefined;
+
+    activeAuthUserIdRef.current = null;
+    setActivePushUserId(null);
+    prevAuthUserIdRef.current = null;
+    setSession(null);
+
+    const localCleanup = clearLocalAccountState();
+    const pushCleanup = uid
+      ? clearPushTokenForCurrentUser(uid).catch((e) => {
+          if (__DEV__) console.warn("[habitPro] push token cleanup failed", e);
+        })
+      : Promise.resolve();
+    const authCleanup = supabase
+      ? supabase.auth
+          .signOut()
+          .then(async ({ error }) => {
+            if (error) {
+              if (__DEV__) console.warn("[habitPro] signOut failed", error.message);
+              await clearSupabaseAuthStorage();
+            }
+          })
+          .catch(async (e) => {
+            if (__DEV__) console.warn("[habitPro] signOut failed", e);
+            await clearSupabaseAuthStorage();
+          })
+      : clearSupabaseAuthStorage();
+
+    await Promise.allSettled([localCleanup, pushCleanup, authCleanup]);
+  }, [clearLocalAccountState, session?.user?.id]);
 
   const value = useMemo<AuthContextValue>(
     () => ({

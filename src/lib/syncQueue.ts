@@ -72,6 +72,11 @@ export function setRemoteSyncContext(uid: string | null, enabled: boolean) {
   }
 }
 
+/** Disable remote sync and cancel any queued debounce before account state is reset. */
+export function disableAndCancelRemoteSync() {
+  setRemoteSyncContext(null, false);
+}
+
 function canPush(): boolean {
   return Boolean(syncEnabled && userId && getSnapshot);
 }
