@@ -1,9 +1,9 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { AppState } from "react-native";
 import { useAuth } from "./AuthContext";
 import { useBilling } from "./BillingContext";
 import { isSupabaseConfigured } from "../lib/env";
-import { getMyProfileIsPremium } from "../lib/groupChallengesApi";
+import { getProfileIsPremiumForUser } from "../lib/groupChallengesApi";
 import { getSupabase } from "../lib/supabase";
 
 type PremiumContextValue = {
@@ -23,24 +23,42 @@ export function PremiumProvider({ children }: { children: React.ReactNode }) {
   const { session, initializing } = useAuth();
   const { hasCommunityAccess } = useBilling();
   const [dbPremium, setDbPremium] = useState(false);
+  const [dbPremiumUserId, setDbPremiumUserId] = useState<string | null>(null);
   const [dbLoading, setDbLoading] = useState(false);
+  const activeUserIdRef = useRef<string | null>(null);
 
   const userId = session?.user?.id ?? null;
+
+  useEffect(() => {
+    activeUserIdRef.current = userId;
+    setDbPremium(false);
+    setDbPremiumUserId(null);
+    setDbLoading(false);
+  }, [userId]);
 
   const refresh = useCallback(async () => {
     if (!isSupabaseConfigured() || !userId) {
       setDbPremium(false);
+      setDbPremiumUserId(null);
       setDbLoading(false);
       return false;
     }
+    const requestedUserId = userId;
+    setDbPremium(false);
     setDbLoading(true);
     try {
-      const v = await getMyProfileIsPremium();
+      const v = await getProfileIsPremiumForUser(requestedUserId);
       const next = Boolean(v);
-      setDbPremium(next);
-      return next;
+      if (activeUserIdRef.current === requestedUserId) {
+        setDbPremium(next);
+        setDbPremiumUserId(requestedUserId);
+        return next;
+      }
+      return false;
     } finally {
-      setDbLoading(false);
+      if (activeUserIdRef.current === requestedUserId) {
+        setDbLoading(false);
+      }
     }
   }, [userId]);
 
@@ -74,13 +92,16 @@ export function PremiumProvider({ children }: { children: React.ReactNode }) {
           filter: `id=eq.${userId}`,
         },
         (payload) => {
+          if (activeUserIdRef.current !== userId) return;
           const next = payload.new as Record<string, unknown> | null;
           if (!next) return;
           const v = next.is_premium;
           if (typeof v === "boolean") {
             setDbPremium(v);
+            setDbPremiumUserId(userId);
           } else if (typeof v === "number") {
             setDbPremium(Boolean(v));
+            setDbPremiumUserId(userId);
           } else {
             void refresh();
           }
@@ -93,7 +114,8 @@ export function PremiumProvider({ children }: { children: React.ReactNode }) {
     };
   }, [initializing, userId, refresh]);
 
-  const isPremium = dbPremium || hasCommunityAccess;
+  const dbPremiumForCurrentUser = dbPremiumUserId === userId && dbPremium;
+  const isPremium = dbPremiumForCurrentUser || hasCommunityAccess;
   const loading = dbLoading && !hasCommunityAccess;
 
   const value = useMemo(() => ({ isPremium, loading, refresh }), [isPremium, loading, refresh]);

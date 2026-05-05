@@ -266,15 +266,23 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
   const { session } = useAuth();
   const [ready, setReady] = useState(false);
   const [customerInfo, setCustomerInfo] = useState<CustomerInfo | null>(null);
+  const [customerInfoUserId, setCustomerInfoUserId] = useState<string | null>(null);
   const [billingDebug, setBillingDebug] = useState<BillingDebugSnapshot | null>(null);
   const configuredRef = useRef(false);
   const logBufferRef = useRef<string[]>([]);
+  const activeBillingUserIdRef = useRef<string | null>(null);
   const isExpoGo = shouldSkipNativePurchases();
 
   const { androidApiKey, iosApiKey } = getRevenueCatConfig();
   const apiKey = Platform.OS === "android" ? androidApiKey : iosApiKey;
   const configured = Boolean(apiKey);
   const userId = session?.user?.id ?? null;
+
+  useEffect(() => {
+    activeBillingUserIdRef.current = userId;
+    setCustomerInfo(null);
+    setCustomerInfoUserId(null);
+  }, [userId]);
 
   const appendRevenueCatLog = useCallback((level: unknown, message: unknown) => {
     const entry = `${new Date().toISOString()} [${String(level)}] ${String(message)}`;
@@ -364,6 +372,7 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
     if (!configured || !apiKey) {
       setReady(false);
       setCustomerInfo(null);
+      setCustomerInfoUserId(null);
       configuredRef.current = false;
       return;
     }
@@ -384,16 +393,24 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!ready || !configured || isExpoGo) return;
     let cancelled = false;
+    const requestedUserId = userId;
 
     void (async () => {
       try {
-        if (userId) {
-          await Purchases.logIn(userId);
-        } else {
+        if (!requestedUserId) {
           await Purchases.logOut();
+          if (!cancelled && activeBillingUserIdRef.current === null) {
+            setCustomerInfo(null);
+            setCustomerInfoUserId(null);
+          }
+          return;
         }
+        await Purchases.logIn(requestedUserId);
         const info = await Purchases.getCustomerInfo();
-        if (!cancelled) setCustomerInfo(info);
+        if (!cancelled && activeBillingUserIdRef.current === requestedUserId) {
+          setCustomerInfo(info);
+          setCustomerInfoUserId(requestedUserId);
+        }
       } catch (e) {
         if (__DEV__) {
           const msg = e instanceof Error ? e.message : String(e);
@@ -405,26 +422,37 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [configured, ready, userId]);
+  }, [configured, isExpoGo, ready, userId]);
 
   const refresh = useCallback(async () => {
-    if (!ready || !configured || isExpoGo) return null;
+    if (!ready || !configured || isExpoGo || !userId) {
+      setCustomerInfo(null);
+      setCustomerInfoUserId(null);
+      return null;
+    }
+    const requestedUserId = userId;
     await Purchases.invalidateCustomerInfoCache();
     const info = await Purchases.getCustomerInfo();
+    if (activeBillingUserIdRef.current !== requestedUserId) return null;
     setCustomerInfo(info);
+    setCustomerInfoUserId(requestedUserId);
     return info;
-  }, [configured, isExpoGo, ready]);
+  }, [configured, isExpoGo, ready, userId]);
 
   const restore = async () => {
-    if (!ready || !configured || isExpoGo) return;
+    if (!ready || !configured || isExpoGo || !userId) return;
+    const requestedUserId = userId;
     const info = await Purchases.restorePurchases();
+    if (activeBillingUserIdRef.current !== requestedUserId) return;
     setCustomerInfo(info);
+    setCustomerInfoUserId(requestedUserId);
   };
 
   const purchaseCommunity = async (plan: PlanId) => {
-    if (!ready || !configured || isExpoGo) {
+    if (!ready || !configured || isExpoGo || !userId) {
       return { cancelled: true };
     }
+    const requestedUserId = userId;
 
     const snapshot = createDebugSnapshot(plan, "load offerings");
     let stage: PurchaseStage = "load offerings";
@@ -455,7 +483,11 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
       stage = "start purchase";
       await Purchases.invalidateCustomerInfoCache();
       const { customerInfo: info } = await Purchases.purchasePackage(pkg);
+      if (activeBillingUserIdRef.current !== requestedUserId) {
+        return { cancelled: true };
+      }
       setCustomerInfo(info);
+      setCustomerInfoUserId(requestedUserId);
       snapshot.customerInfo = summarizeCustomerInfo(info);
       snapshot.recentLogs = logBufferRef.current.slice(-12);
       setBillingDebug(snapshot);
@@ -488,7 +520,8 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const hasCommunityAccess = Boolean(customerInfo?.entitlements?.active?.[ENTITLEMENT_ID]);
+  const visibleCustomerInfo = customerInfoUserId === userId ? customerInfo : null;
+  const hasCommunityAccess = Boolean(visibleCustomerInfo?.entitlements?.active?.[ENTITLEMENT_ID]);
 
   useEffect(() => {
     if (!ready || !configured || isExpoGo) return;
@@ -521,7 +554,7 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
       configured,
       ready,
       isExpoGo,
-      customerInfo,
+      customerInfo: visibleCustomerInfo,
       hasCommunityAccess,
       refresh,
       purchaseCommunity,
@@ -533,12 +566,13 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
     [
       billingDebug,
       configured,
-      customerInfo,
       hasCommunityAccess,
+      visibleCustomerInfo,
       refresh,
       isExpoGo,
       ready,
       runBillingDiagnostics,
+      userId,
     ],
   );
 
