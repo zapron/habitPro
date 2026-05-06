@@ -96,7 +96,7 @@ export function StreakMemorySheet({
     ((isMini && miniPublishAvailable === true) || (!isMini && habitPublishAvailable === true));
   const { theme, isDark } = useTheme();
   const insets = useSafeAreaInsets();
-  const { height: windowH } = useWindowDimensions();
+  const { height: windowH, width: windowW } = useWindowDimensions();
   const slideY = useRef(new Animated.Value(420)).current;
   const [note, setNote] = useState("");
   const [imageUri, setImageUri] = useState<string | undefined>();
@@ -273,6 +273,7 @@ export function StreakMemorySheet({
   const isMemoryCreate = !isView;
   const isMiniCreate = !isView && isMini;
   const isHabitCreate = !isView && !isMini;
+  const stackMemoryActions = isMemoryCreate && windowW < 360;
   /** Shown while onCommit runs (upload, check-in, optional Community publish). */
   const submittingPublishCopy =
     submitting && publishToCommunity && canPublishCommunity && Boolean(imageUri);
@@ -798,6 +799,7 @@ export function StreakMemorySheet({
                     style={[
                       styles.actions,
                       styles.actionsMemory,
+                      stackMemoryActions && styles.actionsMemoryStacked,
                       {
                         paddingBottom: Math.max(insets.bottom, 12),
                         paddingTop: 12,
@@ -810,6 +812,7 @@ export function StreakMemorySheet({
                       style={[
                         styles.btnSecondary,
                         styles.btnSecondaryMemory,
+                        stackMemoryActions && styles.btnMemoryStacked,
                         {
                           borderColor: theme.colors.border,
                           backgroundColor: isDark ? "rgba(148, 163, 184, 0.12)" : theme.colors.slate[750],
@@ -822,22 +825,26 @@ export function StreakMemorySheet({
                           styles.btnSecondaryText,
                           styles.btnSecondaryTextMemory,
                           { color: theme.colors.textSecondary },
-                          Platform.OS === "android" ? styles.btnTextAndroid : null,
+                          Platform.OS === "android" ? styles.btnMemoryTextAndroid : null,
                         ]}
                         numberOfLines={2}
-                        adjustsFontSizeToFit={false}
-                        minimumFontScale={0.85}
+                        adjustsFontSizeToFit
+                        minimumFontScale={0.8}
                       >
                         {isMini ? "Just Mark Complete" : "Just mark done"}
                       </Text>
                     </Pressable>
-                    <CoachMarkTarget id="mini_complete_memory" style={styles.memoryCoachTarget}>
+                    <CoachMarkTarget
+                      id="mini_complete_memory"
+                      style={[styles.memoryCoachTarget, stackMemoryActions && styles.memoryCoachTargetStacked]}
+                    >
                       <Pressable
                         onPress={() => void handleSave()}
                         disabled={submitting}
                         style={[
                           styles.btnPrimary,
                           styles.btnPrimaryMemory,
+                          stackMemoryActions && styles.btnMemoryStacked,
                           { backgroundColor: theme.colors.indigo[600], ...theme.shadow.glow, opacity: submitting ? 0.92 : 1 },
                         ]}
                       >
@@ -849,11 +856,11 @@ export function StreakMemorySheet({
                               styles.btnPrimaryText,
                               styles.btnPrimaryTextMemory,
                               { color: theme.colors.white },
-                              Platform.OS === "android" ? styles.btnTextAndroid : null,
+                              Platform.OS === "android" ? styles.btnMemoryTextAndroid : null,
                             ]}
                             numberOfLines={2}
-                            adjustsFontSizeToFit={false}
-                            minimumFontScale={0.85}
+                            adjustsFontSizeToFit
+                            minimumFontScale={0.8}
                           >
                             {isMini ? "Complete with Memory" : "Save moment"}
                           </Text>
@@ -1110,7 +1117,14 @@ const styles = StyleSheet.create({
   actionsMemory: {
     gap: 8,
   },
-  memoryCoachTarget: { flex: 1 },
+  actionsMemoryStacked: {
+    flexDirection: "column",
+  },
+  memoryCoachTarget: { flex: 1, minHeight: 58 },
+  memoryCoachTargetStacked: {
+    flex: 0,
+    width: "100%",
+  },
   btnSecondary: {
     flex: 1,
     minHeight: 48,
@@ -1122,17 +1136,18 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   btnSecondaryMemory: {
-    minHeight: 42,
-    paddingVertical: 9,
-    paddingHorizontal: 6,
+    minHeight: 58,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
     borderRadius: 12,
   },
   btnSecondaryText: { fontWeight: "700", fontSize: 14, textAlign: "center" },
   btnSecondaryTextMemory: {
     fontSize: 12.5,
     fontWeight: "600",
-    letterSpacing: 0.25,
-    lineHeight: 16,
+    letterSpacing: 0,
+    maxWidth: "100%",
+    textAlign: "center",
   },
   btnPrimary: {
     flex: 1,
@@ -1144,19 +1159,24 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   btnPrimaryMemory: {
-    minHeight: 42,
-    paddingVertical: 9,
-    paddingHorizontal: 6,
+    minHeight: 58,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
     borderRadius: 12,
   },
   btnPrimaryText: { fontWeight: "800", fontSize: 15 },
   btnPrimaryTextMemory: {
     fontSize: 12.5,
     fontWeight: "600",
-    letterSpacing: 0.25,
-    lineHeight: 16,
+    letterSpacing: 0,
+    maxWidth: "100%",
+    textAlign: "center",
   },
-  btnTextAndroid: { includeFontPadding: false },
+  btnMemoryTextAndroid: { includeFontPadding: true },
+  btnMemoryStacked: {
+    flex: 0,
+    width: "100%",
+  },
   viewOnlyPill: {
     flexDirection: "row",
     alignItems: "center",
