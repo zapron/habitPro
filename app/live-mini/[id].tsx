@@ -12,10 +12,9 @@ import {
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { ArrowLeft, Check, Clock3, Radio, Timer, Trophy, Users, X } from "lucide-react-native";
+import { ArrowLeft, Check, Flame, Radio, Timer, Trophy, Users, X } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import { Text } from "../../src/components/AppText";
-import { Button } from "../../src/components/Button";
 import { Screen } from "../../src/components/Screen";
 import { FuelQuickMinutesStrip } from "../../src/components/fuel/FuelQuickMinutesStrip";
 import { FuelTimePresetButton } from "../../src/components/fuel/FuelTimePresetButton";
@@ -39,6 +38,7 @@ import type {
   LiveMiniProfileLabel,
   LiveMiniSquadSnapshot,
 } from "../../src/types/liveMiniMission";
+import { levelFromTotalXp } from "../../src/utils/xpLevel";
 
 const QUICK_MINUTES = [
   { label: "5m", minutes: 5 },
@@ -67,6 +67,34 @@ function displayName(label: LiveMiniProfileLabel | undefined): string {
   if (label?.displayName) return label.displayName;
   if (label?.username) return `@${label.username.toLowerCase()}`;
   return "Member";
+}
+
+function shortDisplayName(label: LiveMiniProfileLabel | undefined, fallback = "Member"): string {
+  const name = displayName(label).replace(/^@/, "");
+  return name || fallback;
+}
+
+function initialsFromLabel(label: LiveMiniProfileLabel | undefined): string {
+  const raw = shortDisplayName(label, "M").trim();
+  const parts = raw.split(/\s+/).filter(Boolean);
+  const first = parts[0]?.[0] ?? "M";
+  const second = parts.length > 1 ? parts[1]?.[0] : raw.replace(/[^A-Za-z0-9]/g, "")[1];
+  return `${first}${second ?? ""}`.toUpperCase();
+}
+
+function formatMinutesLabel(minutes: number | null | undefined): string {
+  if (typeof minutes !== "number" || !Number.isFinite(minutes)) return "--";
+  if (minutes >= 60) {
+    const h = Math.floor(minutes / 60);
+    const m = minutes % 60;
+    return m > 0 ? `${h}h ${m}m` : `${h}h`;
+  }
+  return `${minutes}m`;
+}
+
+function withImageVersion(url: string, version: string | null | undefined): string {
+  if (!version) return url;
+  return `${url}${url.includes("?") ? "&" : "?"}v=${encodeURIComponent(version)}`;
 }
 
 function statusCopy(status: LiveMiniParticipantStatus): string {
@@ -114,6 +142,195 @@ function rankFor(row: LiveMiniParticipantRow, completed: LiveMiniParticipantRow[
   return idx >= 0 ? idx + 1 : null;
 }
 
+function LiveSquadHero({
+  completedRows,
+  participants,
+  profiles,
+  bottomText,
+}: {
+  completedRows: LiveMiniParticipantRow[];
+  participants: LiveMiniParticipantRow[];
+  profiles: Record<string, LiveMiniProfileLabel>;
+  bottomText: string;
+}) {
+  const { theme, isDark } = useTheme();
+  const leader = completedRows[0] ?? null;
+  const runnerUp = completedRows[1] ?? null;
+  const leaderProfile = leader ? profiles[leader.user_id] : undefined;
+  const leaderLevel =
+    leaderProfile?.xp != null && Number.isFinite(leaderProfile.xp)
+      ? levelFromTotalXp(leaderProfile.xp)
+      : null;
+  const leaderName = leader ? shortDisplayName(leaderProfile) : "Squad";
+  const leaderTotal = leader ? (leader.planned_minutes ?? 0) + (leader.reserve_minutes ?? 0) : 1;
+  const runnerTotal = runnerUp ? (runnerUp.planned_minutes ?? 0) + (runnerUp.reserve_minutes ?? 0) : leaderTotal;
+  const leaderSeconds = leader?.final_elapsed_seconds ?? 0;
+  const runnerSeconds = runnerUp?.final_elapsed_seconds ?? 0;
+  const maxSeconds = Math.max(60, leaderTotal * 60, runnerTotal * 60, leaderSeconds, runnerSeconds);
+  const leaderProgress = leader ? Math.max(0.04, Math.min(1, leaderSeconds / maxSeconds)) : 0;
+  const runnerProgress = runnerUp ? Math.max(0.04, Math.min(1, runnerSeconds / maxSeconds)) : 0;
+  const waitingCount = participants.filter((p) => p.status === "invited" || p.status === "joined").length;
+  const activeCount = participants.filter((p) => p.status === "in_progress").length;
+
+  return (
+    <View
+      style={[
+        styles.heroCard,
+        {
+          backgroundColor: theme.colors.surface,
+          borderColor: theme.colors.border,
+          ...theme.shadow.card,
+        },
+      ]}
+    >
+      {leader ? (
+        <>
+          <View style={styles.heroTopRow}>
+            <View
+              style={[
+                styles.heroAvatar,
+                {
+                  backgroundColor: isDark ? "rgba(129, 140, 248, 0.22)" : "rgba(99, 102, 241, 0.12)",
+                  borderColor: isDark ? "rgba(129, 140, 248, 0.4)" : "rgba(99, 102, 241, 0.25)",
+                },
+              ]}
+            >
+              <Text style={[styles.heroAvatarText, { color: theme.colors.indigo[400] }]}>
+                {initialsFromLabel(leaderProfile)}
+              </Text>
+            </View>
+            <View style={styles.heroLeaderText}>
+              <View style={styles.heroNameRow}>
+                <Text style={[styles.heroLeaderName, { color: theme.colors.textPrimary }]} numberOfLines={1}>
+                  {leaderName}
+                </Text>
+                {leaderLevel != null ? (
+                  <View
+                    style={[
+                      styles.levelPill,
+                      {
+                        backgroundColor: isDark ? "rgba(251, 191, 36, 0.12)" : "rgba(234, 179, 8, 0.12)",
+                        borderColor: theme.colors.border,
+                      },
+                    ]}
+                  >
+                    <Text style={[styles.levelPillText, { color: theme.colors.yellow[400] }]}>Lv {leaderLevel}</Text>
+                  </View>
+                ) : null}
+              </View>
+              <Text style={[styles.heroSubtitle, { color: theme.colors.textMuted }]} numberOfLines={2}>
+                {runnerUp ? "Fastest so far, with pressure behind." : "Fastest finisher on the board."}
+              </Text>
+            </View>
+            <View
+              style={[
+                styles.fastestPill,
+                {
+                  backgroundColor: isDark ? "rgba(34, 211, 238, 0.12)" : "rgba(8, 145, 178, 0.1)",
+                  borderColor: isDark ? "rgba(34, 211, 238, 0.32)" : "rgba(8, 145, 178, 0.2)",
+                },
+              ]}
+            >
+              <Text style={[styles.fastestPillText, { color: theme.colors.cyan[400] }]}>
+                {formatLiveMiniElapsed(leader.final_elapsed_seconds)}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.paceRows}>
+            <View style={styles.paceRow}>
+              <Text style={[styles.paceLabel, { color: theme.colors.textMuted }]} numberOfLines={1}>
+                1st · {leaderName}
+              </Text>
+              <View style={[styles.paceTrack, { backgroundColor: isDark ? "rgba(255,255,255,0.09)" : "rgba(15,23,42,0.06)" }]}>
+                <View style={[styles.paceFill, { width: `${leaderProgress * 100}%`, backgroundColor: theme.colors.indigo[500] }]} />
+              </View>
+              <Text style={[styles.paceValue, { color: theme.colors.textSecondary }]}>
+                {formatLiveMiniElapsed(leader.final_elapsed_seconds)}
+              </Text>
+            </View>
+
+            {runnerUp ? (
+              <View style={styles.paceRow}>
+                <Text style={[styles.paceLabel, { color: theme.colors.textMuted }]} numberOfLines={1}>
+                  2nd · {shortDisplayName(profiles[runnerUp.user_id])}
+                </Text>
+                <View style={[styles.paceTrack, { backgroundColor: isDark ? "rgba(255,255,255,0.09)" : "rgba(15,23,42,0.06)" }]}>
+                  <View style={[styles.paceFill, { width: `${runnerProgress * 100}%`, backgroundColor: theme.colors.cyan[500] }]} />
+                </View>
+                <Text style={[styles.paceValue, { color: theme.colors.textSecondary }]}>
+                  {formatLiveMiniElapsed(runnerUp.final_elapsed_seconds)}
+                </Text>
+              </View>
+            ) : null}
+          </View>
+
+          <View style={[styles.heroNarrative, { borderTopColor: theme.colors.border }]}>
+            <Trophy size={28} color={theme.colors.amber[500]} />
+            <Text style={[styles.heroNarrativeText, { color: theme.colors.textSecondary }]}>
+              <Text style={{ color: theme.colors.textPrimary, fontWeight: "900" }}>{leaderName}</Text>
+              {" leads with "}
+              <Text style={{ color: theme.colors.indigo[400], fontWeight: "900" }}>
+                {formatLiveMiniElapsed(leader.final_elapsed_seconds)}
+              </Text>
+              {runnerUp ? ", but the board can still flip." : ". Waiting for the next finisher."}
+            </Text>
+          </View>
+        </>
+      ) : (
+        <View style={styles.emptyHeroRow}>
+          <View
+            style={[
+              styles.emptyHeroIcon,
+              {
+                backgroundColor: isDark ? "rgba(34, 211, 238, 0.13)" : "rgba(8,145,178,0.1)",
+                borderColor: theme.colors.border,
+              },
+            ]}
+          >
+            <Flame size={28} color={theme.colors.cyan[400]} />
+          </View>
+          <View style={styles.emptyHeroCopy}>
+            <Text style={[styles.heroLeaderName, { color: theme.colors.textPrimary }]}>Squad is warming up</Text>
+            <Text style={[styles.heroSubtitle, { color: theme.colors.textMuted }]}>
+              {activeCount > 0
+                ? `${activeCount} on mission. ${waitingCount} still choosing a timer.`
+                : bottomText}
+            </Text>
+          </View>
+        </View>
+      )}
+    </View>
+  );
+}
+
+function StatusLegend() {
+  const { theme, isDark } = useTheme();
+  const items = [
+    { label: "Done", color: theme.colors.green[500] },
+    { label: "On", color: theme.colors.cyan[400] },
+    { label: "Waiting", color: theme.colors.indigo[400] },
+  ];
+  return (
+    <View style={styles.legendRow}>
+      {items.map((item) => (
+        <View key={item.label} style={styles.legendItem}>
+          <View
+            style={[
+              styles.legendDot,
+              {
+                borderColor: item.color,
+                backgroundColor: isDark ? `${item.color}33` : `${item.color}22`,
+              },
+            ]}
+          />
+          <Text style={[styles.legendText, { color: theme.colors.textMuted }]}>{item.label}</Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
 function ParticipantCard({
   row,
   rank,
@@ -133,19 +350,49 @@ function ParticipantCard({
   const tone = statusTone(row.status, theme, isDark);
   const planned = row.planned_minutes ?? localMission?.estimatedMinutes ?? null;
   const reserve = row.reserve_minutes ?? 0;
+  const totalMinutes = planned != null ? planned + reserve : null;
+  const level =
+    profile?.xp != null && Number.isFinite(profile.xp)
+      ? levelFromTotalXp(profile.xp)
+      : null;
+  const elapsedSeconds =
+    row.status === "completed"
+      ? row.final_elapsed_seconds ?? null
+      : row.status === "in_progress" && row.started_at
+        ? Math.max(0, Math.floor((Date.now() - new Date(row.started_at).getTime()) / 1000))
+        : null;
+  const totalSeconds = Math.max(60, (totalMinutes ?? 1) * 60);
+  const progress = elapsedSeconds == null ? 0 : Math.min(1, elapsedSeconds / totalSeconds);
+  const showProgress = row.status === "completed" || row.status === "in_progress";
+  const memoryImage = row.memory_image_url ? withImageVersion(row.memory_image_url, row.updated_at) : null;
 
   return (
     <View style={[styles.participantCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, ...theme.shadow.card }]}>
       <View style={styles.participantTop}>
         <View style={styles.nameBlock}>
-          <Text style={[styles.participantName, { color: theme.colors.textPrimary }]} numberOfLines={2}>
-            {displayName(profile)}
-            {isMe ? "  You" : ""}
-          </Text>
+          <View style={styles.participantNameRow}>
+            <Text style={[styles.participantName, { color: theme.colors.textPrimary }]} numberOfLines={1}>
+              {displayName(profile)}
+              {isMe ? "  You" : ""}
+            </Text>
+            {level != null ? (
+              <View
+                style={[
+                  styles.levelPill,
+                  {
+                    backgroundColor: isDark ? "rgba(251, 191, 36, 0.12)" : "rgba(234, 179, 8, 0.12)",
+                    borderColor: theme.colors.border,
+                  },
+                ]}
+              >
+                <Text style={[styles.levelPillText, { color: theme.colors.yellow[400] }]}>Lv {level}</Text>
+              </View>
+            ) : null}
+          </View>
           <View style={styles.metaLineWrap}>
-            {planned ? (
+            {totalMinutes ? (
               <Text style={[styles.metaLine, { color: theme.colors.textMuted }]}>
-                {planned + reserve} min total{reserve > 0 ? ` (${reserve} reserve)` : ""}
+                {formatMinutesLabel(totalMinutes)} total{reserve > 0 ? ` (${reserve} reserve)` : ""}
               </Text>
             ) : (
               <Text style={[styles.metaLine, { color: theme.colors.textMuted }]}>Waiting for timer</Text>
@@ -172,14 +419,38 @@ function ParticipantCard({
         </View>
       ) : null}
 
+      {showProgress ? (
+        <View style={styles.progressBlock}>
+          <View style={[styles.resultTrack, { backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(15,23,42,0.06)" }]}>
+            <View
+              style={[
+                styles.resultFill,
+                {
+                  width: `${Math.max(0.04, progress) * 100}%`,
+                  backgroundColor: row.status === "completed" ? theme.colors.indigo[500] : theme.colors.cyan[500],
+                },
+              ]}
+            />
+          </View>
+          <View style={styles.progressMetaRow}>
+            <Text style={[styles.progressMetaText, { color: theme.colors.textMuted }]}>
+              {elapsedSeconds == null ? "--" : formatLiveMiniElapsed(elapsedSeconds)}
+            </Text>
+            <Text style={[styles.progressMetaText, { color: theme.colors.textMuted }]}>
+              of {formatMinutesLabel(totalMinutes)}
+            </Text>
+          </View>
+        </View>
+      ) : null}
+
       {row.status === "in_progress" && row.deadline_at ? (
         <Text style={[styles.deadlineText, { color: theme.colors.textSecondary }]}>
           Deadline: {new Date(row.deadline_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
         </Text>
       ) : null}
 
-      {row.memory_image_url ? (
-        <Image source={{ uri: row.memory_image_url }} style={styles.memoryImage} resizeMode="cover" />
+      {memoryImage ? (
+        <Image source={{ uri: memoryImage }} style={styles.memoryImage} resizeMode="cover" />
       ) : null}
       {row.memory_note ? (
         <Text style={[styles.memoryNote, { color: theme.colors.textSecondary }]} numberOfLines={4}>
@@ -407,7 +678,15 @@ export default function LiveMiniSquadScreen() {
         >
           <ArrowLeft size={20} color={theme.colors.textPrimary} />
         </TouchableOpacity>
-        <View style={[styles.livePill, { backgroundColor: isDark ? "rgba(34,211,238,0.12)" : "rgba(8,145,178,0.1)" }]}>
+        <View
+          style={[
+            styles.livePill,
+            {
+              backgroundColor: isDark ? "rgba(34,211,238,0.12)" : "rgba(8,145,178,0.1)",
+              borderColor: isDark ? "rgba(34,211,238,0.24)" : "rgba(8,145,178,0.16)",
+            },
+          ]}
+        >
           <Radio size={14} color={theme.colors.cyan[400]} />
           <Text style={[styles.livePillText, { color: theme.colors.cyan[400] }]}>Live Squad</Text>
         </View>
@@ -448,24 +727,50 @@ export default function LiveMiniSquadScreen() {
             </Text>
           ) : null}
 
-          <View style={[styles.summaryCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
-            <View style={styles.summaryItem}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.metaPillsRow}
+            style={styles.metaPillsScroll}
+          >
+            <View
+              style={[
+                styles.metaChip,
+                {
+                  borderColor: theme.colors.border,
+                  backgroundColor: isDark ? "rgba(255,255,255,0.06)" : theme.colors.surfaceElevated,
+                },
+              ]}
+            >
               <Users size={18} color={theme.colors.indigo[400]} />
-              <Text style={[styles.summaryValue, { color: theme.colors.textPrimary }]}>{participants.length}</Text>
-              <Text style={[styles.summaryLabel, { color: theme.colors.textMuted }]}>players</Text>
-            </View>
-            <View style={styles.summaryItem}>
-              <Check size={18} color={theme.colors.green[500]} />
-              <Text style={[styles.summaryValue, { color: theme.colors.textPrimary }]}>{completedRows.length}</Text>
-              <Text style={[styles.summaryLabel, { color: theme.colors.textMuted }]}>done</Text>
-            </View>
-            <View style={styles.summaryItem}>
-              <Clock3 size={18} color={theme.colors.cyan[400]} />
-              <Text style={[styles.summaryHint, { color: theme.colors.textSecondary }]} numberOfLines={2}>
-                {bottomText}
+              <Text style={[styles.metaChipText, { color: theme.colors.textSecondary }]}>
+                {participants.length} player{participants.length === 1 ? "" : "s"}
               </Text>
             </View>
-          </View>
+
+            <View
+              style={[
+                styles.metaChip,
+                {
+                  borderColor: theme.colors.border,
+                  backgroundColor: isDark ? "rgba(255,255,255,0.06)" : theme.colors.surfaceElevated,
+                },
+              ]}
+            >
+              <Check size={18} color={theme.colors.green[500]} />
+              <Text style={[styles.metaChipText, { color: theme.colors.textSecondary }]}>
+                {completedRows.length} done
+              </Text>
+            </View>
+
+          </ScrollView>
+
+          <LiveSquadHero
+            completedRows={completedRows}
+            participants={participants}
+            profiles={snapshot.profiles}
+            bottomText={bottomText}
+          />
 
           {myParticipant?.status === "invited" ? (
             <View style={[styles.acceptCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, ...theme.shadow.card }]}>
@@ -543,7 +848,12 @@ export default function LiveMiniSquadScreen() {
             </View>
           ) : null}
 
-          <Text style={[styles.sectionLabel, { color: theme.colors.textMuted }]}>SQUAD BOARD</Text>
+          <View style={styles.participantsSectionHeader}>
+            <Text style={[styles.sectionLabel, styles.participantsSectionTitle, { color: theme.colors.textMuted }]}>
+              PARTICIPANTS
+            </Text>
+            <StatusLegend />
+          </View>
           {sortedParticipants.map((row) => (
             <ParticipantCard
               key={row.id}
@@ -565,21 +875,72 @@ export default function LiveMiniSquadScreen() {
 }
 
 const styles = StyleSheet.create({
-  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 16 },
+  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 14 },
   iconButton: { width: 40, height: 40, borderRadius: 999, alignItems: "center", justifyContent: "center", borderWidth: 1 },
-  livePill: { minHeight: 34, borderRadius: 999, paddingHorizontal: 12, flexDirection: "row", alignItems: "center", gap: 6 },
+  livePill: { minHeight: 36, borderRadius: 999, paddingHorizontal: 13, flexDirection: "row", alignItems: "center", gap: 6, borderWidth: 1 },
   livePillText: { fontSize: 12, fontWeight: "900" },
   centerState: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 24 },
   centerTitle: { fontSize: 18, fontWeight: "900", marginTop: 12, textAlign: "center" },
   centerText: { fontSize: 13, lineHeight: 19, textAlign: "center", marginTop: 8, fontWeight: "600" },
-  scrollContent: { paddingBottom: 28 },
-  title: { fontSize: 28, lineHeight: 34, fontWeight: "900", marginBottom: 8 },
-  objective: { fontSize: 14, lineHeight: 20, fontWeight: "600", marginBottom: 16 },
-  summaryCard: { borderWidth: 1, borderRadius: 18, padding: 14, flexDirection: "row", gap: 12, marginBottom: 16 },
-  summaryItem: { flex: 1, minWidth: 0, alignItems: "center", justifyContent: "center", gap: 4 },
-  summaryValue: { fontSize: 20, fontWeight: "900" },
-  summaryLabel: { fontSize: 11, fontWeight: "800" },
-  summaryHint: { fontSize: 11, lineHeight: 15, fontWeight: "700", textAlign: "center" },
+  scrollContent: { paddingBottom: 32 },
+  title: { fontSize: 30, lineHeight: 36, fontWeight: "900", marginBottom: 8 },
+  objective: { fontSize: 14, lineHeight: 20, fontWeight: "700", marginBottom: 14 },
+  metaPillsScroll: { marginBottom: 14 },
+  metaPillsRow: { flexDirection: "row", gap: 8, paddingRight: 16 },
+  metaChip: {
+    minHeight: 38,
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+  },
+  metaChipText: { fontSize: 12, lineHeight: 16, fontWeight: "800" },
+  heroCard: { borderWidth: 1, borderRadius: 20, padding: 16, marginBottom: 18 },
+  heroTopRow: { flexDirection: "row", alignItems: "center", gap: 12 },
+  heroAvatar: {
+    width: 62,
+    height: 62,
+    borderRadius: 999,
+    borderWidth: 2,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  heroAvatarText: { fontSize: 21, fontWeight: "900", letterSpacing: 0.2 },
+  heroLeaderText: { flex: 1, minWidth: 0 },
+  heroNameRow: { flexDirection: "row", alignItems: "center", gap: 8, minWidth: 0 },
+  heroLeaderName: { fontSize: 18, lineHeight: 23, fontWeight: "900", flexShrink: 1 },
+  levelPill: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 4 },
+  levelPillText: { fontSize: 11, lineHeight: 14, fontWeight: "900", letterSpacing: 0.2 },
+  heroSubtitle: { fontSize: 13, lineHeight: 18, fontWeight: "800", marginTop: 4 },
+  fastestPill: {
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  fastestPillText: { fontSize: 12, lineHeight: 15, fontWeight: "900", fontVariant: ["tabular-nums"] },
+  paceRows: { gap: 10, marginTop: 18 },
+  paceRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  paceLabel: { width: 92, fontSize: 11, lineHeight: 15, fontWeight: "900" },
+  paceTrack: { flex: 1, minWidth: 56, height: 10, borderRadius: 999, overflow: "hidden" },
+  paceFill: { height: "100%", borderRadius: 999 },
+  paceValue: { width: 50, textAlign: "right", fontSize: 12, fontWeight: "900", fontVariant: ["tabular-nums"] },
+  heroNarrative: { borderTopWidth: 1, marginTop: 18, paddingTop: 16, flexDirection: "row", alignItems: "center", gap: 14 },
+  heroNarrativeText: { flex: 1, minWidth: 0, fontSize: 14, lineHeight: 21, fontWeight: "700" },
+  emptyHeroRow: { flexDirection: "row", alignItems: "center", gap: 14 },
+  emptyHeroIcon: {
+    width: 58,
+    height: 58,
+    borderRadius: 999,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  emptyHeroCopy: { flex: 1, minWidth: 0 },
   acceptCard: { borderWidth: 1, borderRadius: 18, padding: 14, gap: 12, marginBottom: 18 },
   acceptTitle: { fontSize: 18, fontWeight: "900" },
   acceptBody: { fontSize: 13, lineHeight: 18, fontWeight: "600" },
@@ -590,11 +951,25 @@ const styles = StyleSheet.create({
   declineText: { fontSize: 14, fontWeight: "900" },
   acceptButton: { flex: 1.2, minHeight: 50, borderRadius: 16, alignItems: "center", justifyContent: "center", paddingHorizontal: 12 },
   acceptButtonText: { color: "#fff", fontSize: 14, fontWeight: "900", textAlign: "center" },
-  sectionLabel: { fontSize: 11, fontWeight: "900", marginBottom: 10 },
-  participantCard: { borderWidth: 1, borderRadius: 18, padding: 14, marginBottom: 12 },
+  participantsSectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+    flexWrap: "wrap",
+    marginBottom: 12,
+  },
+  participantsSectionTitle: { marginBottom: 0 },
+  sectionLabel: { fontSize: 11, fontWeight: "900", letterSpacing: 1.2, marginBottom: 10 },
+  legendRow: { flexDirection: "row", alignItems: "center", gap: 8, flexShrink: 0 },
+  legendItem: { flexDirection: "row", alignItems: "center", gap: 4, flexShrink: 0 },
+  legendDot: { width: 9, height: 9, borderRadius: 999, borderWidth: 2 },
+  legendText: { fontSize: 9, lineHeight: 12, fontWeight: "900" },
+  participantCard: { borderWidth: 1, borderRadius: 20, padding: 16, marginBottom: 14 },
   participantTop: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
   nameBlock: { flex: 1, minWidth: 0 },
-  participantName: { fontSize: 16, lineHeight: 21, fontWeight: "900" },
+  participantNameRow: { flexDirection: "row", alignItems: "center", gap: 7, minWidth: 0 },
+  participantName: { fontSize: 19, lineHeight: 24, fontWeight: "900", flexShrink: 1 },
   metaLineWrap: { marginTop: 4 },
   metaLine: { fontSize: 12, lineHeight: 16, fontWeight: "700" },
   statusPill: { borderRadius: 999, paddingVertical: 5, paddingHorizontal: 9 },
@@ -603,6 +978,11 @@ const styles = StyleSheet.create({
   rankBadge: { borderWidth: 1, borderRadius: 999, paddingVertical: 5, paddingHorizontal: 9, flexDirection: "row", alignItems: "center", gap: 5 },
   rankText: { fontSize: 12, fontWeight: "900" },
   elapsedText: { fontSize: 16, fontWeight: "900", fontVariant: ["tabular-nums"] },
+  progressBlock: { marginTop: 12, gap: 7 },
+  resultTrack: { height: 10, borderRadius: 999, overflow: "hidden" },
+  resultFill: { height: "100%", borderRadius: 999 },
+  progressMetaRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
+  progressMetaText: { fontSize: 11, lineHeight: 15, fontWeight: "800", fontVariant: ["tabular-nums"] },
   deadlineText: { fontSize: 12, lineHeight: 17, fontWeight: "700", marginTop: 10 },
   memoryImage: { width: "100%", aspectRatio: 1.8, borderRadius: 14, marginTop: 12 },
   memoryNote: { fontSize: 13, lineHeight: 19, fontWeight: "600", marginTop: 10 },
