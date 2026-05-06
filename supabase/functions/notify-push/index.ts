@@ -46,6 +46,48 @@ function buildMessage(
         data,
       };
     }
+    case "live_mini_invite": {
+      const inviter =
+        typeof payload.inviter_username === "string"
+          ? payload.inviter_username
+          : "Someone";
+      const title =
+        typeof payload.mini_mission_title === "string"
+          ? payload.mini_mission_title
+          : "a mini mission";
+      return {
+        title: "Live mini invite",
+        body: `@${String(inviter).toLowerCase()} invited you to "${title}"`,
+        data,
+      };
+    }
+    case "live_mini_accepted": {
+      const u = typeof payload.invitee_username === "string" ? payload.invitee_username : "Someone";
+      return {
+        title: "Live mini accepted",
+        body: `@${String(u).toLowerCase()} joined your Live Squad`,
+        data,
+      };
+    }
+    case "live_mini_declined": {
+      const u = typeof payload.invitee_username === "string" ? payload.invitee_username : "Someone";
+      return {
+        title: "Live mini declined",
+        body: `@${String(u).toLowerCase()} declined your invite`,
+        data,
+      };
+    }
+    case "live_mini_completed": {
+      const u =
+        typeof payload.participant_username === "string"
+          ? payload.participant_username
+          : "Someone";
+      return {
+        title: "Live mini completed",
+        body: `@${String(u).toLowerCase()} finished the mini mission`,
+        data,
+      };
+    }
     case "challenge_invite_accepted": {
       const u = typeof payload.invitee_username === "string" ? payload.invitee_username : "Someone";
       return {

@@ -45,6 +45,8 @@ type StreakMemorySheetProps = {
   ) => void | Promise<void>;
   /** When variant is mini, whether Community publish is allowed (signed in + Supabase). */
   miniPublishAvailable?: boolean;
+  /** Mini Live Squad: memory is visible to squad members by default. */
+  miniSquadShare?: boolean;
   /** When variant is habit, whether Community publish is allowed (signed in + Supabase). */
   habitPublishAvailable?: boolean;
   /** When false, Community publish/toggle is locked (e.g. HabitPro Community). Default true (unset). */
@@ -82,6 +84,7 @@ export function StreakMemorySheet({
   onClose,
   onCommit,
   miniPublishAvailable,
+  miniSquadShare,
   habitPublishAvailable,
   plusCommunityOk,
   habitViewCommunity,
@@ -146,7 +149,7 @@ export function StreakMemorySheet({
   );
 
   const pickerOptions = {
-    mediaTypes: ImagePicker.MediaTypeOptions.Images,
+    mediaTypes: ["images"] satisfies ImagePicker.MediaType[],
     allowsEditing: true,
     aspect: [4, 5] as [number, number],
     quality: 0.88,
@@ -677,6 +680,40 @@ export function StreakMemorySheet({
                     <Text style={[styles.counter, styles.counterMemory, { color: theme.colors.textMuted }]}>
                       {note.length}/280
                     </Text>
+
+                    {isMini && miniSquadShare ? (
+                      <View
+                        style={[
+                          styles.communityPublishRow,
+                          styles.communityPublishRowMini,
+                          {
+                            borderColor: theme.colors.border,
+                            backgroundColor: theme.colors.surface,
+                          },
+                        ]}
+                      >
+                        <View style={[styles.communityPublishTopRow, styles.communityPublishTopRowMini]}>
+                          <Users
+                            size={18}
+                            color={theme.colors.cyan[400]}
+                            style={[styles.communityPublishGlobe, styles.communityPublishGlobeMini]}
+                          />
+                          <View style={styles.communityPublishTextCol}>
+                            <Text style={[styles.communityPublishTitle, { color: theme.colors.textPrimary }]}>
+                              Shared with Live Squad
+                            </Text>
+                            <Text
+                              style={[
+                                styles.communityPublishHintMiniBody,
+                                { color: theme.colors.textMuted },
+                              ]}
+                            >
+                              Your saved photo or note appears on the squad board. Community posting stays optional.
+                            </Text>
+                          </View>
+                        </View>
+                      </View>
+                    ) : null}
 
                     {!isMini && squadShare?.show ? (
                       <View

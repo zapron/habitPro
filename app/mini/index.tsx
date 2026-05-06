@@ -21,6 +21,7 @@ import {
   Check,
   Timer,
   Globe,
+  Radio,
   Sparkles,
   Plus,
   CircleX,
@@ -31,6 +32,7 @@ import { MiniMissionFireProgressBar } from "../../src/components/MiniMissionFire
 import { useTheme } from "../../src/context/ThemeContext";
 import { useHabitStore } from "../../src/store/habitStore";
 import { MiniMission } from "../../src/types/habit";
+import { useRemoteStoreRefreshOnFocus } from "../../src/hooks/useRemoteStoreRefreshOnFocus";
 import { getMiniRemainingMs } from "../../src/utils/miniMissionTime";
 import {
   MINI_MISSION_KEEP_SCREEN_ON_KEY,
@@ -118,8 +120,24 @@ function MiniMissionCard({ item, now }: { item: MiniMission; now: number }) {
             {item.title}
           </Text>
         </View>
-        <View style={[styles.statusBadge, { backgroundColor: statusConfig.color + "18" }]}>
-          <Text style={[styles.statusBadgeText, { color: statusConfig.color }]}>{statusConfig.label}</Text>
+        <View style={styles.cardBadgeStack}>
+          {item.liveSquadId ? (
+            <View
+              style={[
+                styles.liveBadge,
+                {
+                  backgroundColor: isDark ? "rgba(34,211,238,0.12)" : "rgba(8,145,178,0.1)",
+                  borderColor: isDark ? "rgba(34,211,238,0.3)" : "rgba(8,145,178,0.2)",
+                },
+              ]}
+            >
+              <Radio size={12} color={theme.colors.cyan[400]} />
+              <Text style={[styles.liveBadgeText, { color: theme.colors.cyan[400] }]}>Live</Text>
+            </View>
+          ) : null}
+          <View style={[styles.statusBadge, { backgroundColor: statusConfig.color + "18" }]}>
+            <Text style={[styles.statusBadgeText, { color: statusConfig.color }]}>{statusConfig.label}</Text>
+          </View>
         </View>
       </View>
 
@@ -192,11 +210,19 @@ function MiniMissionCard({ item, now }: { item: MiniMission; now: number }) {
 
       {isTimerUp ? (
         <View style={[styles.cardRetrySection, { borderTopColor: theme.colors.border }]}>
-          <Button
-            title="Retry mission"
-            onPress={handleRetry}
-            accessibilityLabel={`Retry mission: ${item.title}`}
-          />
+          {item.liveSquadId ? (
+            <Button
+              title="Open Live Squad"
+              onPress={() => router.push(`/live-mini/${item.liveSquadId}`)}
+              accessibilityLabel={`Open Live Squad: ${item.title}`}
+            />
+          ) : (
+            <Button
+              title="Retry mission"
+              onPress={handleRetry}
+              accessibilityLabel={`Retry mission: ${item.title}`}
+            />
+          )}
         </View>
       ) : null}
     </View>
@@ -208,6 +234,7 @@ export default function MiniMissionsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { theme, isDark } = useTheme();
+  useRemoteStoreRefreshOnFocus();
   const { view, tab: tabParam } = useLocalSearchParams<{ view?: string; tab?: string }>();
   const miniMissions = useHabitStore((state) => state.miniMissions);
   const initialTab: MiniTab =
@@ -512,6 +539,17 @@ const styles = StyleSheet.create({
   cardTitleRow: { flex: 1, flexDirection: "row", alignItems: "center", marginRight: 8, minWidth: 0 },
   publicTitleIcon: { marginRight: 6 },
   cardTitle: { fontWeight: "700", flex: 1, minWidth: 0 },
+  cardBadgeStack: { alignItems: "flex-end", gap: 5, maxWidth: 118 },
+  liveBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    borderRadius: 9999,
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  liveBadgeText: { fontSize: 10, fontWeight: "900" },
   statusBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 9999 },
   statusBadgeText: { fontSize: 11, fontWeight: "800", letterSpacing: 0.3 },
   cardObjective: { lineHeight: 20, marginBottom: 4 },

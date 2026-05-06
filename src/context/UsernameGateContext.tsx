@@ -11,7 +11,9 @@ type UsernameGateReason =
   | "community_like"
   | "community_post"
   | "group_mission_create"
-  | "group_invite";
+  | "group_invite"
+  | "live_mini_create"
+  | "live_mini_invite";
 
 type UsernameGateContextValue = {
   /**
@@ -33,6 +35,10 @@ function titleForReason(reason: UsernameGateReason): string {
       return "Pick a username to start a group mission";
     case "group_invite":
       return "Pick a username to invite";
+    case "live_mini_create":
+      return "Pick a username to start Live Squad";
+    case "live_mini_invite":
+      return "Pick a username to invite";
   }
 }
 
@@ -44,6 +50,10 @@ function bodyForReason(reason: UsernameGateReason): string {
       return "Community posts show your handle. Choose a public username to publish.";
     case "group_mission_create":
       return "Group missions use your handle for invites and squad activity.";
+    case "live_mini_create":
+      return "Live mini missions use your handle for invites and the squad board.";
+    case "live_mini_invite":
+      return "Invites include your handle so people know who started the mini mission.";
     case "group_invite":
       return "Invites include your handle so your squad knows it’s you.";
   }

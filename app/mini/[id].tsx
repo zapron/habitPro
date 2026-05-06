@@ -40,6 +40,8 @@ import {
   Info,
   Maximize2,
   Minimize2,
+  Radio,
+  Users,
 } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import { setActiveMiniMissionNotificationContext } from "../../src/utils/notifications";
@@ -67,10 +69,12 @@ import { useAuth } from "../../src/context/AuthContext";
 import { usePremium } from "../../src/context/PremiumContext";
 import { usePlusUpsell } from "../../src/context/PlusUpsellContext";
 import { useRefreshPremiumAccess } from "../../src/hooks/useRefreshPremiumAccess";
+import { useRemoteStoreRefreshOnFocus } from "../../src/hooks/useRemoteStoreRefreshOnFocus";
 import { useUsernameGate } from "../../src/context/UsernameGateContext";
 import { useNotificationGate } from "../../src/context/NotificationGateContext";
 import { isSupabaseConfigured } from "../../src/lib/env";
 import { MiniVisibilityRow } from "../../src/components/MiniVisibilityRow";
+import { LiveMiniInviteSheet } from "../../src/components/LiveMiniInviteSheet";
 import {
   deleteCommunityWin,
   postCommunityWin,
@@ -85,6 +89,7 @@ import {
   shouldUploadLocalStreakImage,
   uploadMiniStreakMemoryImage,
 } from "../../src/lib/streakMemoryStorage";
+import { syncLiveMiniFromLocalMission } from "../../src/lib/liveMiniMissionProgress";
 
 // Notification handler is configured globally in _layout.tsx via setupNotifications()
 
@@ -654,6 +659,7 @@ function FocusSecondsMatrix({
 type FocusMissionControlModalProps = {
   visible: boolean;
   title: string;
+  liveSquadId?: string | null;
   countdownMs: number;
   totalMinutes: number;
   baseMissionSeconds: number;
@@ -662,6 +668,7 @@ type FocusMissionControlModalProps = {
   reserveFull: boolean;
   isTimerUp: boolean;
   onClose: () => void;
+  onOpenLiveSquad?: () => void;
   onReserveFuel: () => void;
   onMarkComplete: () => void;
 };
@@ -669,6 +676,7 @@ type FocusMissionControlModalProps = {
 function FocusMissionControlModal({
   visible,
   title,
+  liveSquadId,
   countdownMs,
   totalMinutes,
   baseMissionSeconds,
@@ -677,6 +685,7 @@ function FocusMissionControlModal({
   reserveFull,
   isTimerUp,
   onClose,
+  onOpenLiveSquad,
   onReserveFuel,
   onMarkComplete,
 }: FocusMissionControlModalProps) {
@@ -830,6 +839,27 @@ function FocusMissionControlModal({
           </TouchableOpacity>
         </View>
 
+        {liveSquadId ? (
+          <TouchableOpacity
+            onPress={onOpenLiveSquad}
+            activeOpacity={0.86}
+            style={[
+              focusStyles.liveSquadButton,
+              {
+                backgroundColor: isDark ? "rgba(34, 211, 238, 0.1)" : "rgba(8, 145, 178, 0.08)",
+                borderColor: isDark ? "rgba(34, 211, 238, 0.34)" : "rgba(8, 145, 178, 0.24)",
+              },
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="Open Live Squad board"
+          >
+            <Radio size={16} color={isDark ? "#22d3ee" : "#0891b2"} />
+            <Text style={[focusStyles.liveSquadButtonText, { color: focusColors.title }]}>
+              Live Squad
+            </Text>
+          </TouchableOpacity>
+        ) : null}
+
         <ScrollView
           style={focusStyles.focusScroll}
           contentContainerStyle={[
@@ -874,6 +904,7 @@ export default function MiniMissionDetail() {
   const insets = useSafeAreaInsets();
   const isFocused = useIsFocused();
   const { session } = useAuth();
+  useRemoteStoreRefreshOnFocus();
   const { isPremium, loading: premiumLoading } = usePremium();
   const { openUpsell } = usePlusUpsell();
   const refreshPremiumAccess = useRefreshPremiumAccess();
@@ -919,6 +950,7 @@ export default function MiniMissionDetail() {
   const [completionImageOpen, setCompletionImageOpen] = useState(false);
   const [keepScreenOn, setKeepScreenOn] = useState(false);
   const [focusModeOpen, setFocusModeOpen] = useState(false);
+  const [liveMiniSheetOpen, setLiveMiniSheetOpen] = useState(false);
 
   const completionImageUri = useMemo(() => {
     return mission?.completionMemory?.imageUrl ?? mission?.completionMemory?.imageUri ?? null;
@@ -1063,6 +1095,18 @@ export default function MiniMissionDetail() {
   }, [mission, now, totalMinutes, completeSheetOpen, timerFrozenAtMs]);
 
   const isTimerUp = mission?.status === "in_progress" && countdown === 0;
+  const isLiveMiniMission = Boolean(mission?.liveSquadId);
+
+  const openLiveSquadBoard = useCallback(() => {
+    const squadId = mission?.liveSquadId;
+    if (!squadId) {
+      setLiveMiniSheetOpen(true);
+      return;
+    }
+    setLiveMiniSheetOpen(false);
+    setFocusModeOpen(false);
+    router.push(`/live-mini/${squadId}`);
+  }, [mission?.liveSquadId, router]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1171,6 +1215,7 @@ export default function MiniMissionDetail() {
     Vibration.vibrate([0, 400, 200, 400, 200, 400]);
     void (async () => {
       await clearMiniMissionNotifications(mission.id);
+      await syncLiveMiniFromLocalMission(mission, { now: endMs });
     })();
   }, [isTimerUp, mission]);
 
@@ -1187,6 +1232,10 @@ export default function MiniMissionDetail() {
   const confirmDeleteMiniMission = useCallback(() => {
     if (!mission) return;
     setDeleteDialogOpen(false);
+    if (mission.liveSquadId) {
+      Alert.alert("Live Squad mission", "Live mini missions cannot be deleted. Cancel it instead to close your run.");
+      return;
+    }
     const id = mission.id;
     setPendingExitAfterRemove(true);
     void (async () => {
@@ -1250,6 +1299,8 @@ export default function MiniMissionDetail() {
         if (notificationResult === "settings") return;
 
         startMiniMission(mission.id);
+        const nextMission = useHabitStore.getState().getMiniMission(mission.id);
+        void syncLiveMiniFromLocalMission(nextMission);
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       } finally {
         startPromptBusyRef.current = false;
@@ -1329,6 +1380,12 @@ export default function MiniMissionDetail() {
       visibility: "solo",
       communityFeedRevoked: lockCommunity,
       completedAt,
+    });
+    const completedMission = useHabitStore.getState().getMiniMission(mission.id);
+    void syncLiveMiniFromLocalMission(completedMission, {
+      completedAt,
+      memoryNote: memoryToSave?.note ?? null,
+      memoryImageUrl: memoryToSave?.imageUrl ?? null,
     });
 
     if (canPublish) {
@@ -1472,16 +1529,24 @@ export default function MiniMissionDetail() {
       return;
     }
     extendMiniMission(mission.id, 1);
+    const nextMission = useHabitStore.getState().getMiniMission(mission.id);
+    void syncLiveMiniFromLocalMission(nextMission);
     void syncMiniMissionNotifications(useHabitStore.getState().miniMissions);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
   };
 
   const handleCancel = () => {
     cancelMiniMission(mission.id);
+    const nextMission = useHabitStore.getState().getMiniMission(mission.id);
+    void syncLiveMiniFromLocalMission(nextMission);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
   };
 
   const handleRetryFailed = () => {
+    if (mission.liveSquadId) {
+      Alert.alert("Live Squad mission", "Live mini missions cannot be retried. Start a fresh mini mission when you want another run.");
+      return;
+    }
     retryFailedMiniMission(mission.id);
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
   };
@@ -1504,6 +1569,11 @@ export default function MiniMissionDetail() {
         onClose={() => setMissionDetailsOpen(false)}
         mission={mission}
       />
+      <LiveMiniInviteSheet
+        visible={liveMiniSheetOpen}
+        mission={mission}
+        onClose={() => setLiveMiniSheetOpen(false)}
+      />
       <StreakMemorySheet
         visible={completeSheetOpen}
         variant="mini"
@@ -1516,11 +1586,13 @@ export default function MiniMissionDetail() {
         }}
         onCommit={handleCompleteCommit}
         miniPublishAvailable={isSupabaseConfigured() && !!session?.user}
+        miniSquadShare={isLiveMiniMission}
         plusCommunityOk={!socialLocked}
       />
       <FocusMissionControlModal
         visible={focusModeOpen}
         title={mission.title}
+        liveSquadId={mission.liveSquadId}
         countdownMs={countdown}
         totalMinutes={totalMinutes}
         baseMissionSeconds={Math.max(1, mission.estimatedMinutes * 60)}
@@ -1529,6 +1601,7 @@ export default function MiniMissionDetail() {
         reserveFull={reserveFull}
         isTimerUp={isTimerUp}
         onClose={() => setFocusModeOpen(false)}
+        onOpenLiveSquad={openLiveSquadBoard}
         onReserveFuel={handleReserveFuel}
         onMarkComplete={handleMarkComplete}
       />
@@ -1557,9 +1630,18 @@ export default function MiniMissionDetail() {
               borderColor: theme.colors.border,
             },
           ]}
-          onPress={() => setDeleteDialogOpen(true)}
+          onPress={() => {
+            if (mission.liveSquadId) {
+              Alert.alert("Live Squad mission", "Live mini missions cannot be deleted. Cancel it instead to close your run.");
+              return;
+            }
+            setDeleteDialogOpen(true);
+          }}
         >
-          <Trash2 size={theme.icon.md} color={theme.colors.red[500]} />
+          <Trash2
+            size={theme.icon.md}
+            color={mission.liveSquadId ? theme.colors.textMuted : theme.colors.red[500]}
+          />
         </TouchableOpacity>
       </View>
 
@@ -1620,6 +1702,27 @@ export default function MiniMissionDetail() {
                 Completed
               </Text>
             </View>
+          ) : null}
+
+          {mission.liveSquadId ? (
+            <TouchableOpacity
+              onPress={openLiveSquadBoard}
+              activeOpacity={0.86}
+              style={[
+                styles.liveMiniPill,
+                {
+                  borderColor: isDark ? "rgba(34, 211, 238, 0.34)" : "rgba(8, 145, 178, 0.24)",
+                  backgroundColor: isDark ? "rgba(34, 211, 238, 0.1)" : "rgba(8, 145, 178, 0.08)",
+                },
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Open Live Squad board"
+            >
+              <Radio size={14} color={theme.colors.cyan[400]} />
+              <Text style={[styles.liveMiniPillText, { color: theme.colors.cyan[400] }]}>
+                Live Squad
+              </Text>
+            </TouchableOpacity>
           ) : null}
 
           <View
@@ -1692,6 +1795,49 @@ export default function MiniMissionDetail() {
             <Text style={[styles.focusLauncherText, { color: theme.colors.textPrimary }]}>
               Focus Mode
             </Text>
+          </TouchableOpacity>
+        ) : null}
+
+        {mission.status !== "completed" && mission.status !== "cancelled" ? (
+          <TouchableOpacity
+            style={[
+              styles.liveMiniEntry,
+              {
+                borderRadius: theme.radius.md,
+                borderColor: mission.liveSquadId
+                  ? isDark
+                    ? "rgba(34, 211, 238, 0.35)"
+                    : "rgba(8, 145, 178, 0.26)"
+                  : theme.colors.border,
+                backgroundColor: mission.liveSquadId
+                  ? isDark
+                    ? "rgba(34, 211, 238, 0.09)"
+                    : "rgba(8, 145, 178, 0.07)"
+                  : theme.colors.surface,
+              },
+            ]}
+            activeOpacity={0.86}
+            onPress={mission.liveSquadId ? openLiveSquadBoard : () => setLiveMiniSheetOpen(true)}
+            accessibilityRole="button"
+            accessibilityLabel={mission.liveSquadId ? "Open Live Squad board" : "Start Live Squad"}
+          >
+            <View style={styles.liveMiniEntryIcon}>
+              {mission.liveSquadId ? (
+                <Radio size={19} color={theme.colors.cyan[400]} />
+              ) : (
+                <Users size={19} color={theme.colors.indigo[400]} />
+              )}
+            </View>
+            <View style={styles.liveMiniEntryText}>
+              <Text style={[styles.liveMiniEntryTitle, { color: theme.colors.textPrimary }]} numberOfLines={1}>
+                {mission.liveSquadId ? "Live Squad is on" : "Do it with others?"}
+              </Text>
+              <Text style={[styles.liveMiniEntryBody, { color: theme.colors.textSecondary }]} numberOfLines={2}>
+                {mission.liveSquadId
+                  ? "Open the board to see who joined, finished, or missed."
+                  : "Invite people by username. They pick their own timer."}
+              </Text>
+            </View>
           </TouchableOpacity>
         ) : null}
 
@@ -1793,7 +1939,11 @@ export default function MiniMissionDetail() {
                   </Text>
                 </View>
               </View>
-              <Button title="Retry mission" onPress={handleRetryFailed} />
+              {mission.liveSquadId ? (
+                <Button title="Open Live Squad" onPress={openLiveSquadBoard} />
+              ) : (
+                <Button title="Retry mission" onPress={handleRetryFailed} />
+              )}
             </>
           )}
 
@@ -2056,6 +2206,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   completedPillText: { fontWeight: "800", fontSize: 13, letterSpacing: 0.2 },
+  liveMiniPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    borderRadius: 9999,
+    borderWidth: 1,
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+  },
+  liveMiniPillText: { fontWeight: "900", fontSize: 12 },
   metaPill: {
     flexDirection: "row",
     alignItems: "center",
@@ -2082,6 +2242,27 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "800",
   },
+  liveMiniEntry: {
+    minHeight: 74,
+    borderWidth: 1,
+    paddingVertical: 13,
+    paddingHorizontal: 14,
+    marginBottom: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  liveMiniEntryIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 9999,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(129, 140, 248, 0.12)",
+  },
+  liveMiniEntryText: { flex: 1, minWidth: 0 },
+  liveMiniEntryTitle: { fontSize: 15, fontWeight: "900", marginBottom: 3 },
+  liveMiniEntryBody: { fontSize: 12, lineHeight: 17, fontWeight: "600" },
   failedRow: {
     flexDirection: "row",
     alignItems: "flex-start",
@@ -2242,6 +2423,22 @@ const focusStyles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(148, 163, 184, 0.28)",
     backgroundColor: "rgba(15, 23, 42, 0.78)",
+  },
+  liveSquadButton: {
+    minHeight: 42,
+    borderRadius: 999,
+    borderWidth: 1,
+    marginTop: -4,
+    marginBottom: 12,
+    alignSelf: "flex-start",
+    paddingHorizontal: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  liveSquadButtonText: {
+    fontSize: 13,
+    fontWeight: "900",
   },
   focusScroll: {
     flex: 1,

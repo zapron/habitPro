@@ -70,6 +70,8 @@ export type MiniMissionStatus =
   | "completed"
   | "cancelled";
 
+export type MiniMissionLiveRole = "creator" | "member";
+
 export interface MiniMission {
   /** Supabase auth user id who owns this mini mission (set on create / hydrate). */
   ownerUserId?: string | null;
@@ -88,6 +90,9 @@ export interface MiniMission {
   completedAt?: string;
   /** Optional photo/note saved when completing (local URIs until cloud sync). */
   completionMemory?: StreakMemory;
+  /** When set, this mini mission is attached to an async Live Squad. */
+  liveSquadId?: string | null;
+  liveSquadRole?: MiniMissionLiveRole | null;
 }
 
 export type AddHabitInput = {
@@ -137,11 +142,17 @@ export type HabitStore = {
   setMissionReport: (id: string, report: MissionReport) => void;
   getHabit: (id: string) => Habit | undefined;
   addMiniMission: (input: {
+    id?: string;
     title: string;
     objective?: string;
     estimatedMinutes: number;
     startMode: "now" | "later";
+    createdAt?: string;
+    startedAt?: string;
+    liveSquadId?: string | null;
+    liveSquadRole?: MiniMissionLiveRole | null;
   }) => string;
+  setMiniMissionLiveSquad: (id: string, squadId: string | null, role: MiniMissionLiveRole | null) => void;
   setHabitVisibility: (id: string, visibility: MissionVisibility) => void;
   setMiniMissionVisibility: (id: string, visibility: MissionVisibility) => void;
   setMiniMissionCommunityFeedRevoked: (id: string, revoked: boolean) => void;

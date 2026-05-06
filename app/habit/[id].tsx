@@ -63,6 +63,7 @@ import { useAuth } from '../../src/context/AuthContext';
 import { usePremium } from '../../src/context/PremiumContext';
 import { usePlusUpsell } from '../../src/context/PlusUpsellContext';
 import { useRefreshPremiumAccess } from "../../src/hooks/useRefreshPremiumAccess";
+import { useRemoteStoreRefreshOnFocus } from "../../src/hooks/useRemoteStoreRefreshOnFocus";
 import { useUsernameGate } from "../../src/context/UsernameGateContext";
 import { useNotificationGate } from "../../src/context/NotificationGateContext";
 import { isSupabaseConfigured } from '../../src/lib/env';
@@ -340,6 +341,7 @@ export default function HabitDetail() {
     const { theme, isDark } = useTheme();
     const { showToast } = useToast();
     const { session } = useAuth();
+    useRemoteStoreRefreshOnFocus();
     const { isPremium, loading: premiumLoading } = usePremium();
     const { openUpsell } = usePlusUpsell();
     const refreshPremiumAccess = useRefreshPremiumAccess();

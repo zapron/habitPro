@@ -13,6 +13,11 @@ import {
 } from "../utils/missionCalendarKeys";
 import { alignGroupHabitToChallengeStart } from "../utils/groupMissionClock";
 import { getSupabase } from "./supabase";
+import {
+  shouldUploadLocalStreakImage,
+  uploadHabitStreakMemoryImage,
+  uploadMiniStreakMemoryImage,
+} from "./streakMemoryStorage";
 
 type RemoteSnapshot = Pick<HabitStore, "habits" | "miniMissions" | "xp" | "username"> & {
   cohortPeerHabits: Habit[];
@@ -22,6 +27,75 @@ type RepairRow = {
   habit_id: string;
   date_str: string;
 };
+
+function isHttpImageUri(uri: string | undefined): boolean {
+  return Boolean(uri?.startsWith("http://") || uri?.startsWith("https://"));
+}
+
+async function memoryForRemote(
+  memory: StreakMemory,
+  uploadLocalImage: (localUri: string) => Promise<string>,
+): Promise<StreakMemory> {
+  const next: StreakMemory = { ...memory };
+  const localUri = next.imageUri;
+
+  if (!next.imageUrl && localUri) {
+    if (isHttpImageUri(localUri)) {
+      next.imageUrl = localUri;
+    } else if (shouldUploadLocalStreakImage(localUri)) {
+      try {
+        next.imageUrl = await uploadLocalImage(localUri);
+      } catch (e) {
+        console.warn("[habitPro] memory image upload before sync failed", e);
+      }
+    }
+  }
+
+  if (next.imageUri && (!isHttpImageUri(next.imageUri) || next.imageUrl)) {
+    delete next.imageUri;
+  }
+
+  return next;
+}
+
+async function habitForRemote(h: Habit): Promise<Habit> {
+  if (!h.streakMemories) return h;
+
+  let changed = false;
+  const nextMemories: Record<string, StreakMemory> = {};
+  for (const [dateStr, memory] of Object.entries(h.streakMemories)) {
+    const nextMemory = await memoryForRemote(memory, (localUri) =>
+      uploadHabitStreakMemoryImage({
+        habitId: h.id,
+        dateStr,
+        localUri,
+      }),
+    );
+    nextMemories[dateStr] = nextMemory;
+    if (nextMemory !== memory || nextMemory.imageUri !== memory.imageUri || nextMemory.imageUrl !== memory.imageUrl) {
+      changed = true;
+    }
+  }
+
+  return changed ? { ...h, streakMemories: nextMemories } : h;
+}
+
+async function miniMissionForRemote(m: MiniMission): Promise<MiniMission> {
+  if (!m.completionMemory) return m;
+
+  const nextMemory = await memoryForRemote(m.completionMemory, (localUri) =>
+    uploadMiniStreakMemoryImage({
+      miniMissionId: m.id,
+      localUri,
+    }),
+  );
+
+  return nextMemory !== m.completionMemory ||
+    nextMemory.imageUri !== m.completionMemory.imageUri ||
+    nextMemory.imageUrl !== m.completionMemory.imageUrl
+    ? { ...m, completionMemory: nextMemory }
+    : m;
+}
 
 function parseMissionReport(v: unknown): MissionReport | undefined {
   return v === "accomplished" || v === "failed" ? v : undefined;
@@ -190,6 +264,8 @@ function miniFromRow(row: {
   started_at: string | null;
   completed_at: string | null;
   completion_memory?: unknown | null;
+  live_squad_id?: string | null;
+  live_squad_role?: string | null;
 }): MiniMission {
   const vis: MissionVisibility =
     row.visibility === "public" || row.visibility === "solo"
@@ -219,6 +295,11 @@ function miniFromRow(row: {
     startedAt: row.started_at ?? undefined,
     completedAt: row.completed_at ?? undefined,
     completionMemory: miniCompletionMemoryFromRow(row.completion_memory),
+    liveSquadId: row.live_squad_id ?? null,
+    liveSquadRole:
+      row.live_squad_role === "creator" || row.live_squad_role === "member"
+        ? row.live_squad_role
+        : null,
   };
 }
 
@@ -277,6 +358,8 @@ function miniToRow(sessionUserId: string, m: MiniMission) {
     started_at: m.startedAt ?? null,
     completed_at: m.completedAt ?? null,
     completion_memory: m.completionMemory ?? null,
+    live_squad_id: m.liveSquadId ?? null,
+    live_squad_role: m.liveSquadRole ?? null,
   };
 }
 
@@ -358,14 +441,17 @@ export async function pushFullState(
   const supabase = getSupabase();
   if (!supabase) return;
 
-  const habitsForUser = state.habits.filter(
+  const localHabitsForUser = state.habits.filter(
     (h) =>
       h.ownerUserId == null || h.ownerUserId === sessionUserId,
   );
-  const minisForUser = state.miniMissions.filter(
+  const localMinisForUser = state.miniMissions.filter(
     (m) =>
       m.ownerUserId == null || m.ownerUserId === sessionUserId,
   );
+
+  const habitsForUser = await Promise.all(localHabitsForUser.map(habitForRemote));
+  const minisForUser = await Promise.all(localMinisForUser.map(miniMissionForRemote));
 
   const habitRows = habitsForUser.map((h) => habitToRow(sessionUserId, h));
   const miniRows = minisForUser.map((m) => miniToRow(sessionUserId, m));

@@ -22,6 +22,7 @@ export type PlusUpsellReason =
   | "visibility"
   | "community_publish"
   | "group_mission"
+  | "live_mini"
   | "invite_accept"
   | "squad_nudge"
   | "streak_repair"
@@ -39,6 +40,7 @@ const BULLETS = [
   "Cheer and discover wins in Community",
   "Public missions: visible to your squad on the mission",
   "Group missions, invites, and cohort streaks",
+  "Live mini missions with a small squad board",
   "Squad nudges (cheer, ping, fire, one-time note)",
   "Publish streak moments and mini wins to Community",
   "Streak repairs to protect momentum",
@@ -136,6 +138,8 @@ export function PlusUpsellProvider({
           ? "Publishing to Community is HabitPro Community"
           : reason === "group_mission"
             ? "Group missions are HabitPro Community"
+            : reason === "live_mini"
+              ? "Live mini missions are HabitPro Community"
             : reason === "invite_accept"
               ? "Joining group missions is HabitPro Community"
               : reason === "squad_nudge"

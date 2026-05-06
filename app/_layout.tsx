@@ -96,6 +96,26 @@ function RootLayoutNav() {
         return;
       }
 
+      if (
+        type === "live_mini_invite" ||
+        type === "live_mini_accepted" ||
+        type === "live_mini_declined" ||
+        type === "live_mini_completed"
+      ) {
+        const liveMiniSquadId =
+          typeof data.live_mini_squad_id === "string"
+            ? data.live_mini_squad_id
+            : typeof data.squad_id === "string"
+              ? data.squad_id
+              : "";
+        if (liveMiniSquadId) {
+          router.push(`/live-mini/${liveMiniSquadId}`);
+        } else {
+          router.push("/mini");
+        }
+        return;
+      }
+
       if (type === "community_win_cheer") {
         router.push({ pathname: "/(tabs)/community" });
         return;

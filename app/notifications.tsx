@@ -60,6 +60,14 @@ function notificationTitle(type: string, payload?: Record<string, unknown>): str
   switch (type) {
     case "challenge_invite":
       return "Group mission invite";
+    case "live_mini_invite":
+      return "Live mini invite";
+    case "live_mini_accepted":
+      return "Live mini accepted";
+    case "live_mini_declined":
+      return "Live mini declined";
+    case "live_mini_completed":
+      return "Live mini completed";
     case "challenge_invite_accepted":
       return "Invite accepted";
     case "challenge_invite_declined":
@@ -87,6 +95,23 @@ function notificationSubtitle(n: NotificationRow): string | null {
   switch (n.type) {
     case "challenge_invite":
       return groupMissionInviteSubtitle(n);
+    case "live_mini_invite": {
+      const u = p.inviter_username;
+      const from =
+        typeof u === "string" && u.trim().length > 0 ? `From @${u.trim().toLowerCase()}` : "Live Squad";
+      const title = typeof p.mini_mission_title === "string" ? p.mini_mission_title : "mini mission";
+      return `${from} invited you to "${title}"`;
+    }
+    case "live_mini_accepted":
+      return `${inviteeLabel(p)} joined your Live Squad`;
+    case "live_mini_declined":
+      return `${inviteeLabel(p)} declined your Live Squad invite`;
+    case "live_mini_completed": {
+      const u = p.participant_username;
+      const who =
+        typeof u === "string" && u.trim().length > 0 ? `@${u.trim().toLowerCase()}` : "Someone";
+      return `${who} completed the live mini mission`;
+    }
     case "challenge_invite_accepted":
       return `${inviteeLabel(p)} joined your group mission · Tap to open`;
     case "challenge_invite_declined":
@@ -213,6 +238,26 @@ export default function NotificationsScreen() {
         });
       } else {
         router.push({ pathname: "/(tabs)/compete", params: { focusInvites: "1" } });
+      }
+      return;
+    }
+
+    if (
+      n.type === "live_mini_invite" ||
+      n.type === "live_mini_accepted" ||
+      n.type === "live_mini_declined" ||
+      n.type === "live_mini_completed"
+    ) {
+      const sid =
+        typeof p.live_mini_squad_id === "string"
+          ? p.live_mini_squad_id
+          : typeof p.squad_id === "string"
+            ? p.squad_id
+            : "";
+      if (sid) {
+        router.push(`/live-mini/${sid}`);
+      } else {
+        router.push("/mini");
       }
       return;
     }

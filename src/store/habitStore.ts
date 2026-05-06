@@ -408,9 +408,27 @@ export const useHabitStore = create<HabitStore>()(
         }));
         requestRemoteSync({ immediate: false });
       },
-      addMiniMission: ({ title, objective, estimatedMinutes, startMode }) => {
-        const now = new Date().toISOString();
-        const id =
+      setMiniMissionLiveSquad: (id, squadId, role) => {
+        set((state) => ({
+          miniMissions: state.miniMissions.map((m) =>
+            m.id === id ? { ...m, liveSquadId: squadId, liveSquadRole: role } : m,
+          ),
+        }));
+        requestRemoteSync({ immediate: true });
+      },
+      addMiniMission: ({
+        id: idOverride,
+        title,
+        objective,
+        estimatedMinutes,
+        startMode,
+        createdAt,
+        startedAt,
+        liveSquadId,
+        liveSquadRole,
+      }) => {
+        const now = createdAt ?? new Date().toISOString();
+        const id = idOverride ??
           Date.now().toString(36) + Math.random().toString(36).substring(2);
         const normalizedMinutes = Math.max(1, Math.floor(estimatedMinutes));
 
@@ -425,8 +443,10 @@ export const useHabitStore = create<HabitStore>()(
           extendedMinutes: 0,
           status: startMode === "now" ? "in_progress" : "pending",
           createdAt: now,
-          startedAt: startMode === "now" ? now : undefined,
+          startedAt: startMode === "now" ? startedAt ?? now : undefined,
           scheduledStartAt: startMode === "later" ? now : undefined,
+          liveSquadId: liveSquadId ?? null,
+          liveSquadRole: liveSquadRole ?? null,
         };
 
         set((state) => ({
@@ -517,6 +537,7 @@ export const useHabitStore = create<HabitStore>()(
       },
       retryFailedMiniMission: (id) => {
         const mission = get().miniMissions.find((m) => m.id === id);
+        if (mission?.liveSquadId) return;
         if (!mission || mission.status !== "in_progress" || !mission.startedAt) return;
         const totalMinutes =
           mission.estimatedMinutes + (mission.extendedMinutes ?? 0);
@@ -559,6 +580,8 @@ export const useHabitStore = create<HabitStore>()(
         requestRemoteSync({ immediate: false });
       },
       deleteMiniMission: (id) => {
+        const mission = get().miniMissions.find((m) => m.id === id);
+        if (mission?.liveSquadId) return;
         set((state) => ({
           miniMissions: state.miniMissions.filter(
             (mission) => mission.id !== id,
@@ -631,6 +654,15 @@ export const useHabitStore = create<HabitStore>()(
               ownerUserId: m.ownerUserId ?? null,
               visibility: vis,
               communityFeedRevoked,
+              liveSquadId:
+                typeof (m as { liveSquadId?: unknown }).liveSquadId === "string"
+                  ? (m as { liveSquadId: string }).liveSquadId
+                  : null,
+              liveSquadRole:
+                (m as { liveSquadRole?: unknown }).liveSquadRole === "creator" ||
+                (m as { liveSquadRole?: unknown }).liveSquadRole === "member"
+                  ? ((m as { liveSquadRole: "creator" | "member" }).liveSquadRole)
+                  : null,
             };
           });
           // Migrate: ensure xp exists
