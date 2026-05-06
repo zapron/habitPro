@@ -202,6 +202,145 @@ function getFocusMatrixCellCount(totalSeconds: number): number {
   return 420;
 }
 
+function getFocusActiveCellCount(
+  remainingSeconds: number,
+  matrixSeconds: number,
+  totalCells: number,
+): number {
+  const clampedRemaining = Math.min(
+    Math.max(0, remainingSeconds),
+    Math.max(1, matrixSeconds),
+  );
+  return Math.min(
+    totalCells,
+    Math.ceil((clampedRemaining / Math.max(1, matrixSeconds)) * totalCells),
+  );
+}
+
+type FocusGridPalette = {
+  name: string;
+  dark: {
+    cell: string;
+    shadow: string;
+    label: string;
+    border: string;
+  };
+  light: {
+    cell: string;
+    shadow: string;
+    label: string;
+    border: string;
+  };
+};
+
+const FOCUS_GRID_PALETTES: FocusGridPalette[] = [
+  {
+    name: "Violet",
+    dark: {
+      cell: "#ddd6fe",
+      shadow: "#c4b5fd",
+      label: "rgba(221, 214, 254, 0.8)",
+      border: "rgba(221, 214, 254, 0.22)",
+    },
+    light: {
+      cell: "#8b5cf6",
+      shadow: "#a78bfa",
+      label: "rgba(109, 40, 217, 0.78)",
+      border: "rgba(139, 92, 246, 0.2)",
+    },
+  },
+  {
+    name: "Indigo",
+    dark: {
+      cell: "#c4b5fd",
+      shadow: "#a78bfa",
+      label: "rgba(199, 210, 254, 0.8)",
+      border: "rgba(196, 181, 253, 0.24)",
+    },
+    light: {
+      cell: "#4f46e5",
+      shadow: "#6366f1",
+      label: "rgba(67, 56, 202, 0.78)",
+      border: "rgba(79, 70, 229, 0.2)",
+    },
+  },
+  {
+    name: "Blue",
+    dark: {
+      cell: "#93c5fd",
+      shadow: "#93c5fd",
+      label: "rgba(191, 219, 254, 0.78)",
+      border: "rgba(147, 197, 253, 0.23)",
+    },
+    light: {
+      cell: "#2563eb",
+      shadow: "#3b82f6",
+      label: "rgba(29, 78, 216, 0.76)",
+      border: "rgba(37, 99, 235, 0.2)",
+    },
+  },
+  {
+    name: "Green",
+    dark: {
+      cell: "#86efac",
+      shadow: "#86efac",
+      label: "rgba(187, 247, 208, 0.78)",
+      border: "rgba(134, 239, 172, 0.22)",
+    },
+    light: {
+      cell: "#16a34a",
+      shadow: "#22c55e",
+      label: "rgba(21, 128, 61, 0.78)",
+      border: "rgba(22, 163, 74, 0.2)",
+    },
+  },
+  {
+    name: "Yellow",
+    dark: {
+      cell: "#fde68a",
+      shadow: "#facc15",
+      label: "rgba(254, 240, 138, 0.78)",
+      border: "rgba(253, 230, 138, 0.22)",
+    },
+    light: {
+      cell: "#ca8a04",
+      shadow: "#eab308",
+      label: "rgba(133, 77, 14, 0.78)",
+      border: "rgba(202, 138, 4, 0.2)",
+    },
+  },
+  {
+    name: "Orange",
+    dark: {
+      cell: "#fdba74",
+      shadow: "#fb923c",
+      label: "rgba(254, 215, 170, 0.78)",
+      border: "rgba(253, 186, 116, 0.22)",
+    },
+    light: {
+      cell: "#ea580c",
+      shadow: "#f97316",
+      label: "rgba(154, 52, 18, 0.76)",
+      border: "rgba(234, 88, 12, 0.18)",
+    },
+  },
+  {
+    name: "Red",
+    dark: {
+      cell: "#fca5a5",
+      shadow: "#f87171",
+      label: "rgba(254, 202, 202, 0.78)",
+      border: "rgba(252, 165, 165, 0.22)",
+    },
+    light: {
+      cell: "#dc2626",
+      shadow: "#ef4444",
+      label: "rgba(185, 28, 28, 0.76)",
+      border: "rgba(220, 38, 38, 0.18)",
+    },
+  },
+];
+
 type FocusSecondCellProps = {
   active: boolean;
   color: string;
@@ -285,7 +424,14 @@ function FocusSecondsMatrix({
 }: FocusSecondsMatrixProps) {
   const { isDark } = useTheme();
   const { width, height } = useWindowDimensions();
+  const [paletteIndex, setPaletteIndex] = useState(0);
   const remainingSeconds = Math.max(0, Math.ceil(countdownMs / 1000));
+  const palette = FOCUS_GRID_PALETTES[paletteIndex % FOCUS_GRID_PALETTES.length];
+  const paletteColors = isDark ? palette.dark : palette.light;
+  const cycleFocusPalette = useCallback(() => {
+    void Haptics.selectionAsync();
+    setPaletteIndex((current) => (current + 1) % FOCUS_GRID_PALETTES.length);
+  }, []);
   // Keep the grid as the original mission container. Reserve fuel refills
   // vanished dots instead of adding new cells or changing the layout.
   const matrixSeconds = Math.max(1, baseMissionSeconds);
@@ -293,10 +439,10 @@ function FocusSecondsMatrix({
     matrixSeconds,
     getFocusMatrixCellCount(matrixSeconds),
   );
-  const secondsPerCell = Math.ceil(matrixSeconds / totalCells);
-  const activeCells = Math.min(
+  const activeCells = getFocusActiveCellCount(
+    remainingSeconds,
+    matrixSeconds,
     totalCells,
-    Math.ceil(remainingSeconds / secondsPerCell),
   );
   const cellColor = isTimerUp
     ? isDark
@@ -310,9 +456,7 @@ function FocusSecondsMatrix({
           ? isDark
             ? "#f59e0b"
             : "#d97706"
-          : isDark
-            ? "#5eead4"
-            : "#0d9488";
+          : paletteColors.cell;
   const gap = totalCells <= 120 ? 5 : totalCells <= 300 ? 4 : 3;
   const animateCells = totalCells <= 300;
   const maxGridWidth = isWide
@@ -392,21 +536,21 @@ function FocusSecondsMatrix({
   const cardColors = isDark
     ? {
         bg: "#0b1f27",
-        border: "rgba(94, 234, 212, 0.22)",
-        label: "rgba(153, 246, 228, 0.76)",
+        border: paletteColors.border,
+        label: paletteColors.label,
         detail: "rgba(203, 213, 225, 0.72)",
         detailValue: "#e2e8f0",
         valueMuted: "rgba(203, 213, 225, 0.52)",
-        shadow: "#5eead4",
+        shadow: paletteColors.shadow,
       }
     : {
         bg: "#ffffff",
-        border: "#cfede7",
-        label: "rgba(15, 118, 110, 0.78)",
+        border: paletteColors.border,
+        label: paletteColors.label,
         detail: "rgba(71, 85, 105, 0.72)",
         detailValue: "#334155",
         valueMuted: "rgba(71, 85, 105, 0.45)",
-        shadow: "#0d9488",
+        shadow: paletteColors.shadow,
       };
 
   return (
@@ -454,7 +598,12 @@ function FocusSecondsMatrix({
           </View>
         </View>
       </View>
-      <View style={[focusStyles.secondsGrid, { width: gridLayout.width }]}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`Change focus grid color. Current color ${palette.name}.`}
+        onPress={cycleFocusPalette}
+        style={[focusStyles.secondsGrid, { width: gridLayout.width }]}
+      >
         {Array.from({ length: rows }, (_, row) => (
           <View
             key={row}
@@ -497,7 +646,7 @@ function FocusSecondsMatrix({
             })}
           </View>
         ))}
-      </View>
+      </Pressable>
     </View>
   );
 }
