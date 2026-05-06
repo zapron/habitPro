@@ -14,6 +14,7 @@ import { useTheme } from "./ThemeContext";
 import { useBilling, type BillingDebugSnapshot } from "./BillingContext";
 import { useToast } from "./ToastContext";
 import { getPublicLinks } from "../lib/env";
+import { useRefreshPremiumAccess } from "../hooks/useRefreshPremiumAccess";
 
 export type PlusUpsellReason =
   | "generic"
@@ -192,6 +193,7 @@ function BillingUpsellModal({
     runBillingDiagnostics,
   } = useBilling();
   const { showToast } = useToast();
+  const refreshPremiumAccess = useRefreshPremiumAccess(1_000);
   const publicLinks = useMemo(() => getPublicLinks(), []);
   const [busy, setBusy] = useState<
     null | "monthly" | "yearly" | "restore" | "diagnostics"
@@ -229,13 +231,29 @@ function BillingUpsellModal({
     try {
       if (kind === "restore") {
         await restore();
-        showToast("Restored purchases.", "success");
+        showToast("Activating membership...", "info", 1400);
+        const serverReady = await waitForServerPremium();
+        showToast(
+          serverReady
+            ? "Purchases restored."
+            : "Purchases restored. Community actions may take a moment to activate.",
+          serverReady ? "success" : "info",
+          serverReady ? 2600 : 5000,
+        );
         onClose();
         return;
       }
       const res = await purchaseCommunity(kind);
       if (!res.cancelled) {
-        showToast("Subscription active. Welcome to HabitPro Community.", "success");
+        showToast("Activating membership...", "info", 1400);
+        const serverReady = await waitForServerPremium();
+        showToast(
+          serverReady
+            ? "Subscription active. Welcome to HabitPro Community."
+            : "Subscription active. Community actions may take a moment to activate.",
+          serverReady ? "success" : "info",
+          serverReady ? 2600 : 5000,
+        );
         onClose();
       } else if (res.purchaseFailed) {
         const msg = res.message?.trim();
@@ -259,6 +277,18 @@ function BillingUpsellModal({
       setBusy(null);
     }
   };
+
+  async function waitForServerPremium(): Promise<boolean> {
+    const delays = [0, 1_000, 2_000, 3_000, 5_000];
+    for (const delayMs of delays) {
+      if (delayMs > 0) {
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+      const ok = await refreshPremiumAccess({ force: true, serverOnly: true });
+      if (ok === true) return true;
+    }
+    return false;
+  }
 
   const onOpenPrivacy = async () => {
     await Linking.openURL(publicLinks.privacy);

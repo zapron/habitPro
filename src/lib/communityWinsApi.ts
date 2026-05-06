@@ -62,6 +62,16 @@ export type CommunityWinCheerer = {
   cheeredAt: string | null;
 };
 
+type CommunityActionFailureReason = "auth_required" | "premium_required";
+type CommunityActionResult =
+  | { ok: true }
+  | { ok: false; error: string; reason?: CommunityActionFailureReason };
+
+function isPremiumPolicyError(error: { code?: string; message?: string } | null | undefined): boolean {
+  const msg = error?.message?.toLowerCase() ?? "";
+  return error?.code === "42501" || msg.includes("row-level security") || msg.includes("violates row-level security");
+}
+
 export async function postCommunityWin(input: {
   miniMissionId: string;
   title: string;
@@ -72,7 +82,7 @@ export async function postCommunityWin(input: {
   feedSource?: CommunityWinFeedSource;
   streakMissionDay?: number | null;
   streakCountAtPost?: number | null;
-}): Promise<{ ok: true } | { ok: false; error: string }> {
+}): Promise<CommunityActionResult> {
   const supabase = getSupabase();
   if (!supabase) return { ok: false, error: "Cloud sync not configured." };
 
@@ -80,7 +90,7 @@ export async function postCommunityWin(input: {
     data: { user },
     error: userErr,
   } = await supabase.auth.getUser();
-  if (userErr || !user) return { ok: false, error: "Sign in to share your win." };
+  if (userErr || !user) return { ok: false, error: "Sign in to share your win.", reason: "auth_required" };
 
   const feedSource = input.feedSource ?? "mini";
   const streakDay =
@@ -107,13 +117,21 @@ export async function postCommunityWin(input: {
     { onConflict: "user_id,mini_mission_id" },
   );
 
-  if (error) return { ok: false, error: error.message };
+  if (error) {
+    return {
+      ok: false,
+      error: isPremiumPolicyError(error)
+        ? "Membership is still activating. Try again in a moment."
+        : error.message,
+      reason: isPremiumPolicyError(error) ? "premium_required" : undefined,
+    };
+  }
   return { ok: true };
 }
 
 export async function deleteCommunityWin(
   miniMissionId: string,
-): Promise<{ ok: true } | { ok: false; error: string }> {
+): Promise<CommunityActionResult> {
   const supabase = getSupabase();
   if (!supabase) return { ok: false, error: "Cloud sync not configured." };
 
@@ -121,7 +139,7 @@ export async function deleteCommunityWin(
     data: { user },
     error: userErr,
   } = await supabase.auth.getUser();
-  if (userErr || !user) return { ok: false, error: "Sign in to update your win." };
+  if (userErr || !user) return { ok: false, error: "Sign in to update your win.", reason: "auth_required" };
 
   const { error } = await supabase
     .from("community_wins")
@@ -256,7 +274,7 @@ export async function fetchCommunityWinsFeed(limit = 40): Promise<CommunityWinFe
   return items;
 }
 
-export async function toggleCheer(winId: string, currentlyCheered: boolean): Promise<{ ok: true } | { ok: false; error: string }> {
+export async function toggleCheer(winId: string, currentlyCheered: boolean): Promise<CommunityActionResult> {
   const supabase = getSupabase();
   if (!supabase) return { ok: false, error: "Cloud sync not configured." };
 
@@ -264,7 +282,7 @@ export async function toggleCheer(winId: string, currentlyCheered: boolean): Pro
     data: { user },
     error: userErr,
   } = await supabase.auth.getUser();
-  if (userErr || !user) return { ok: false, error: "Sign in to cheer." };
+  if (userErr || !user) return { ok: false, error: "Sign in to cheer.", reason: "auth_required" };
 
   if (currentlyCheered) {
     const { error } = await supabase
@@ -278,7 +296,15 @@ export async function toggleCheer(winId: string, currentlyCheered: boolean): Pro
       win_id: winId,
       user_id: user.id,
     });
-    if (error) return { ok: false, error: error.message };
+    if (error) {
+      return {
+        ok: false,
+        error: isPremiumPolicyError(error)
+          ? "Membership is still activating. Try again in a moment."
+          : error.message,
+        reason: isPremiumPolicyError(error) ? "premium_required" : undefined,
+      };
+    }
   }
   return { ok: true };
 }

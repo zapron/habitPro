@@ -271,6 +271,7 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
   const configuredRef = useRef(false);
   const logBufferRef = useRef<string[]>([]);
   const activeBillingUserIdRef = useRef<string | null>(null);
+  const identitySyncRef = useRef<Promise<void>>(Promise.resolve());
   const isExpoGo = shouldSkipNativePurchases();
 
   const { androidApiKey, iosApiKey } = getRevenueCatConfig();
@@ -355,6 +356,40 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
     [createDebugSnapshot, enrichDebugSnapshot],
   );
 
+  const runRevenueCatIdentityTask = useCallback(
+    async <T,>(task: () => Promise<T>): Promise<T> => {
+      const previous = identitySyncRef.current.catch(() => {});
+      const next = previous.then(task);
+      identitySyncRef.current = next.then(
+        () => undefined,
+        () => undefined,
+      );
+      return next;
+    },
+    [],
+  );
+
+  const ensureRevenueCatUser = useCallback(
+    async (requestedUserId: string): Promise<CustomerInfo | null> => {
+      if (!ready || !configured || isExpoGo || !requestedUserId) return null;
+      return runRevenueCatIdentityTask(async () => {
+        if (activeBillingUserIdRef.current !== requestedUserId) return null;
+
+        const currentAppUserId = await Purchases.getAppUserID();
+        if (currentAppUserId !== requestedUserId) {
+          const { customerInfo: info } = await Purchases.logIn(requestedUserId);
+          if (activeBillingUserIdRef.current !== requestedUserId) return null;
+          setCustomerInfo(info);
+          setCustomerInfoUserId(requestedUserId);
+          return info;
+        }
+
+        return null;
+      });
+    },
+    [configured, isExpoGo, ready, runRevenueCatIdentityTask],
+  );
+
   useEffect(() => {
     logRevenueCatEnvHint();
   }, []);
@@ -398,14 +433,18 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
     void (async () => {
       try {
         if (!requestedUserId) {
-          await Purchases.logOut();
+          await runRevenueCatIdentityTask(async () => {
+            await Purchases.logOut();
+          });
           if (!cancelled && activeBillingUserIdRef.current === null) {
             setCustomerInfo(null);
             setCustomerInfoUserId(null);
           }
           return;
         }
-        await Purchases.logIn(requestedUserId);
+        await ensureRevenueCatUser(requestedUserId);
+        if (cancelled || activeBillingUserIdRef.current !== requestedUserId) return;
+        await Purchases.invalidateCustomerInfoCache();
         const info = await Purchases.getCustomerInfo();
         if (!cancelled && activeBillingUserIdRef.current === requestedUserId) {
           setCustomerInfo(info);
@@ -422,7 +461,7 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [configured, isExpoGo, ready, userId]);
+  }, [configured, ensureRevenueCatUser, isExpoGo, ready, runRevenueCatIdentityTask, userId]);
 
   const refresh = useCallback(async () => {
     if (!ready || !configured || isExpoGo || !userId) {
@@ -431,17 +470,21 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
       return null;
     }
     const requestedUserId = userId;
+    await ensureRevenueCatUser(requestedUserId);
+    if (activeBillingUserIdRef.current !== requestedUserId) return null;
     await Purchases.invalidateCustomerInfoCache();
     const info = await Purchases.getCustomerInfo();
     if (activeBillingUserIdRef.current !== requestedUserId) return null;
     setCustomerInfo(info);
     setCustomerInfoUserId(requestedUserId);
     return info;
-  }, [configured, isExpoGo, ready, userId]);
+  }, [configured, ensureRevenueCatUser, isExpoGo, ready, userId]);
 
   const restore = async () => {
     if (!ready || !configured || isExpoGo || !userId) return;
     const requestedUserId = userId;
+    await ensureRevenueCatUser(requestedUserId);
+    if (activeBillingUserIdRef.current !== requestedUserId) return;
     const info = await Purchases.restorePurchases();
     if (activeBillingUserIdRef.current !== requestedUserId) return;
     setCustomerInfo(info);
@@ -457,6 +500,11 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
     const snapshot = createDebugSnapshot(plan, "load offerings");
     let stage: PurchaseStage = "load offerings";
     try {
+      await ensureRevenueCatUser(requestedUserId);
+      if (activeBillingUserIdRef.current !== requestedUserId) {
+        return { cancelled: true };
+      }
+
       const offerings = await Purchases.getOfferings();
       snapshot.offerings = summarizeOfferings(offerings);
 

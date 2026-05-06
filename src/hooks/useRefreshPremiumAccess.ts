@@ -6,10 +6,22 @@ import { HABITPRO_COMMUNITY_ENTITLEMENT_ID } from "../constants/revenueCat";
 
 const DEFAULT_MIN_INTERVAL_MS = 30_000;
 
+type RefreshPremiumAccessOptions = {
+  force?: boolean;
+  /** Server-gated Community actions need Supabase `profiles.is_premium`, not just local RevenueCat access. */
+  serverOnly?: boolean;
+};
+
+type PremiumAccessSnapshot = {
+  access: boolean | null;
+  serverAccess: boolean | null;
+  revenueCatAccess: boolean;
+};
+
 type PremiumAccessCache = {
   lastRefreshAt: number;
-  lastAccess: boolean | null;
-  inFlight: Promise<boolean | null> | null;
+  lastSnapshot: PremiumAccessSnapshot | null;
+  inFlight: Promise<PremiumAccessSnapshot> | null;
 };
 
 const cacheByUserId = new Map<string, PremiumAccessCache>();
@@ -19,11 +31,19 @@ function cacheForUser(userId: string): PremiumAccessCache {
   if (existing) return existing;
   const next: PremiumAccessCache = {
     lastRefreshAt: 0,
-    lastAccess: null,
+    lastSnapshot: null,
     inFlight: null,
   };
   cacheByUserId.set(userId, next);
   return next;
+}
+
+function selectAccess(
+  snapshot: PremiumAccessSnapshot | null,
+  options?: RefreshPremiumAccessOptions,
+): boolean | null {
+  if (!snapshot) return null;
+  return options?.serverOnly ? snapshot.serverAccess === true : snapshot.access;
 }
 
 export function useRefreshPremiumAccess(minIntervalMs = DEFAULT_MIN_INTERVAL_MS) {
@@ -33,15 +53,15 @@ export function useRefreshPremiumAccess(minIntervalMs = DEFAULT_MIN_INTERVAL_MS)
   const userId = session?.user?.id ?? null;
 
   return useCallback(
-    async (options?: { force?: boolean }) => {
+    async (options?: RefreshPremiumAccessOptions) => {
       if (!userId) return null;
       const cache = cacheForUser(userId);
       const now = Date.now();
       if (!options?.force && cache.inFlight) {
-        return cache.inFlight;
+        return selectAccess(await cache.inFlight, options);
       }
       if (!options?.force && now - cache.lastRefreshAt < minIntervalMs) {
-        return cache.lastAccess;
+        return selectAccess(cache.lastSnapshot, options);
       }
       cache.lastRefreshAt = now;
 
@@ -53,18 +73,25 @@ export function useRefreshPremiumAccess(minIntervalMs = DEFAULT_MIN_INTERVAL_MS)
         const info = billingResult.status === "fulfilled" ? billingResult.value : null;
         const dbPremium = premiumResult.status === "fulfilled" ? premiumResult.value : null;
 
-        if (info == null && dbPremium == null) return null;
+        if (info == null && dbPremium == null) {
+          return { access: null, serverAccess: null, revenueCatAccess: false };
+        }
 
-        const hasCommunityAccess = Boolean(
+        const revenueCatAccess = Boolean(
           info?.entitlements?.active?.[HABITPRO_COMMUNITY_ENTITLEMENT_ID],
         );
-        return Boolean(dbPremium) || hasCommunityAccess;
+        const serverAccess = dbPremium == null ? null : Boolean(dbPremium);
+        return {
+          access: Boolean(dbPremium) || revenueCatAccess,
+          serverAccess,
+          revenueCatAccess,
+        };
       })();
       cache.inFlight = request;
 
       try {
-        cache.lastAccess = await request;
-        return cache.lastAccess;
+        cache.lastSnapshot = await request;
+        return selectAccess(cache.lastSnapshot, options);
       } finally {
         if (cache.inFlight === request) {
           cache.inFlight = null;

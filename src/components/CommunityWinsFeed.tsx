@@ -21,6 +21,7 @@ import * as Haptics from "expo-haptics";
 import { Sparkles } from "lucide-react-native";
 import { useTheme } from "../context/ThemeContext";
 import { useAuth } from "../context/AuthContext";
+import { useToast } from "../context/ToastContext";
 import { useUsernameGate } from "../context/UsernameGateContext";
 import { useReducedMotion } from "../hooks/useReducedMotion";
 import { isSupabaseConfigured } from "../lib/env";
@@ -66,6 +67,7 @@ export function CommunityWinsFeed({
 }: Props) {
   const { theme, isDark } = useTheme();
   const { session } = useAuth();
+  const { showToast } = useToast();
   const { requireUsername } = useUsernameGate();
   const reduceMotion = useReducedMotion();
   const [items, setItems] = useState<CommunityWinFeedItem[]>([]);
@@ -207,14 +209,25 @@ export function CommunityWinsFeed({
       if (validateCheerAccess) {
         const allowed = await validateCheerAccess();
         if (!allowed) {
-          onCheerBlocked?.();
           return false;
         }
       }
       const ok = await requireUsername("community_like");
       if (!ok) return false;
-      const res = await toggleCheer(win.id, win.viewerHasCheered);
-      if (!res.ok) return false;
+      const firstResult = await toggleCheer(win.id, win.viewerHasCheered);
+      let finalResult = firstResult;
+      if (firstResult.ok === false && firstResult.reason === "premium_required" && validateCheerAccess) {
+        const allowed = await validateCheerAccess();
+        if (allowed) {
+          finalResult = await toggleCheer(win.id, win.viewerHasCheered);
+        }
+      }
+      if (finalResult.ok === false) {
+        if (finalResult.reason !== "premium_required") {
+          showToast(finalResult.error, "error");
+        }
+        return false;
+      }
       setItems((prev) =>
         prev.map((w) =>
           w.id === win.id
@@ -228,7 +241,7 @@ export function CommunityWinsFeed({
       );
       return true;
     },
-    [session?.user, canCheer, onCheerBlocked, requireUsername, validateCheerAccess],
+    [session?.user, canCheer, onCheerBlocked, requireUsername, showToast, validateCheerAccess],
   );
 
   const renderItem: ListRenderItem<ListRow> = useCallback(
