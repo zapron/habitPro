@@ -23,10 +23,25 @@ type RemoteSnapshot = Pick<HabitStore, "habits" | "miniMissions" | "xp" | "usern
   cohortPeerHabits: Habit[];
 };
 
+type SupabaseClient = NonNullable<ReturnType<typeof getSupabase>>;
+
 type RepairRow = {
   habit_id: string;
   date_str: string;
 };
+
+async function hasMatchingAuthSession(
+  supabase: SupabaseClient,
+  sessionUserId: string,
+): Promise<boolean> {
+  if (!sessionUserId) return false;
+  const { data, error } = await supabase.auth.getSession();
+  if (error) {
+    if (__DEV__) console.warn("[habitPro] sync auth guard failed", error.message);
+    return false;
+  }
+  return data.session?.user?.id === sessionUserId;
+}
 
 function isHttpImageUri(uri: string | undefined): boolean {
   return Boolean(uri?.startsWith("http://") || uri?.startsWith("https://"));
@@ -440,6 +455,7 @@ export async function pushFullState(
 ): Promise<void> {
   const supabase = getSupabase();
   if (!supabase) return;
+  if (!(await hasMatchingAuthSession(supabase, sessionUserId))) return;
 
   const localHabitsForUser = state.habits.filter(
     (h) =>
@@ -452,6 +468,7 @@ export async function pushFullState(
 
   const habitsForUser = await Promise.all(localHabitsForUser.map(habitForRemote));
   const minisForUser = await Promise.all(localMinisForUser.map(miniMissionForRemote));
+  if (!(await hasMatchingAuthSession(supabase, sessionUserId))) return;
 
   const habitRows = habitsForUser.map((h) => habitToRow(sessionUserId, h));
   const miniRows = minisForUser.map((m) => miniToRow(sessionUserId, m));
@@ -493,6 +510,7 @@ export async function pushFullState(
 export async function deleteRemoteHabit(sessionUserId: string, habitId: string): Promise<void> {
   const supabase = getSupabase();
   if (!supabase || !sessionUserId || !habitId) return;
+  if (!(await hasMatchingAuthSession(supabase, sessionUserId))) return;
   const { error } = await supabase
     .from("habits")
     .delete()
@@ -504,7 +522,9 @@ export async function deleteRemoteHabit(sessionUserId: string, habitId: string):
 export async function upsertRemoteHabit(sessionUserId: string, habit: Habit): Promise<void> {
   const supabase = getSupabase();
   if (!supabase || !sessionUserId) return;
+  if (!(await hasMatchingAuthSession(supabase, sessionUserId))) return;
   const normalized = await habitForRemote(habit);
+  if (!(await hasMatchingAuthSession(supabase, sessionUserId))) return;
   const row = habitToRow(sessionUserId, normalized);
   const { error } = await supabase.from("habits").upsert(row, {
     onConflict: "user_id,id",
@@ -515,6 +535,7 @@ export async function upsertRemoteHabit(sessionUserId: string, habit: Habit): Pr
 export async function deleteRemoteMiniMission(sessionUserId: string, miniMissionId: string): Promise<void> {
   const supabase = getSupabase();
   if (!supabase || !sessionUserId || !miniMissionId) return;
+  if (!(await hasMatchingAuthSession(supabase, sessionUserId))) return;
   const { error } = await supabase
     .from("mini_missions")
     .delete()

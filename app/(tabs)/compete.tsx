@@ -72,6 +72,7 @@ import {
 import { levelFromTotalXp, xpInCurrentLevel } from "../../src/utils/xpLevel";
 
 const WEEKLY_RANK_PAGE_SIZE = 20;
+const COMPETE_AUTO_RELOAD_COOLDOWN_MS = 15_000;
 
 type CompeteSegment = "leaderboard" | "challenges";
 
@@ -476,6 +477,8 @@ export default function CompeteScreen() {
   const userIdRef = useRef<string | null>(userId);
   const invitesLoadInFlightRef = useRef(false);
   const leagueLoadInFlightRef = useRef(false);
+  const lastInvitesLoadAtRef = useRef(0);
+  const lastLeagueLoadAtRef = useRef(0);
 
   useLayoutEffect(() => {
     userIdRef.current = userId;
@@ -492,6 +495,8 @@ export default function CompeteScreen() {
     setLeaguePlayerDrawer(null);
     invitesLoadInFlightRef.current = false;
     leagueLoadInFlightRef.current = false;
+    lastInvitesLoadAtRef.current = 0;
+    lastLeagueLoadAtRef.current = 0;
   }, [userId]);
 
   const xp = useHabitStore((s) => s.xp);
@@ -509,7 +514,7 @@ export default function CompeteScreen() {
     reconcile(habits, miniMissions);
   }, [habits, miniMissions, reconcile]);
 
-  const loadInvites = useCallback(async () => {
+  const loadInvites = useCallback(async (options?: { force?: boolean }) => {
     const requestedUserId = userId;
     if (!isSupabaseConfigured() || !requestedUserId) {
       setGroupInvites([]);
@@ -519,6 +524,9 @@ export default function CompeteScreen() {
       return;
     }
     if (invitesLoadInFlightRef.current) return;
+    const now = Date.now();
+    if (!options?.force && now - lastInvitesLoadAtRef.current < COMPETE_AUTO_RELOAD_COOLDOWN_MS) return;
+    lastInvitesLoadAtRef.current = now;
     invitesLoadInFlightRef.current = true;
     setInvitesLoading(true);
     try {
@@ -557,7 +565,7 @@ export default function CompeteScreen() {
     }
   }, [syncInviteBadgeCount, userId]);
 
-  const loadLeague = useCallback(async () => {
+  const loadLeague = useCallback(async (options?: { force?: boolean }) => {
     const requestedUserId = userId;
     if (!isSupabaseConfigured() || !requestedUserId) {
       setLeagueRows([]);
@@ -566,6 +574,9 @@ export default function CompeteScreen() {
       return;
     }
     if (leagueLoadInFlightRef.current) return;
+    const now = Date.now();
+    if (!options?.force && now - lastLeagueLoadAtRef.current < COMPETE_AUTO_RELOAD_COOLDOWN_MS) return;
+    lastLeagueLoadAtRef.current = now;
     leagueLoadInFlightRef.current = true;
     setLeagueLoading(true);
     setLeagueError(null);
@@ -632,10 +643,15 @@ export default function CompeteScreen() {
       if (segment === "leaderboard") {
         void loadLeague();
       }
+    }, [loadInvites, loadLeague, segment]),
+  );
+
+  useFocusEffect(
+    useCallback(() => {
       if (!isPremium || premiumLoading) {
         void refreshPremiumAccess();
       }
-    }, [isPremium, loadInvites, loadLeague, premiumLoading, refreshPremiumAccess, segment]),
+    }, [isPremium, premiumLoading, refreshPremiumAccess]),
   );
 
   useEffect(() => {
@@ -647,7 +663,7 @@ export default function CompeteScreen() {
   useEffect(() => {
     if (segment !== "leaderboard") return undefined;
     return subscribeSyncSuccess(() => {
-      void loadLeague();
+      void loadLeague({ force: true });
     });
   }, [loadLeague, segment]);
 
@@ -754,7 +770,7 @@ export default function CompeteScreen() {
         });
       }
       void refreshCohortPeerHabits();
-      void loadInvites();
+      void loadInvites({ force: true });
       showToast("Joined the group mission", "success");
       setTimeout(() => {
         void suggestNotifications("invite_accept");
@@ -781,7 +797,7 @@ export default function CompeteScreen() {
         return;
       }
       showToast("Invite declined", "success");
-      void loadInvites();
+      void loadInvites({ force: true });
     } finally {
       setInviteBusy(null);
     }
@@ -797,7 +813,7 @@ export default function CompeteScreen() {
         return;
       }
       showToast("Live Squad invite declined", "success");
-      void loadInvites();
+      void loadInvites({ force: true });
     } finally {
       setInviteBusy(null);
     }
@@ -1056,7 +1072,7 @@ export default function CompeteScreen() {
                 THIS WEEK
               </Text>
               <TouchableOpacity
-                onPress={() => void loadLeague()}
+                onPress={() => void loadLeague({ force: true })}
                 disabled={leagueLoading || leagueLoadingMore}
                 activeOpacity={0.85}
                 style={[
