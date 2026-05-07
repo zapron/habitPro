@@ -18,7 +18,7 @@ import * as Haptics from "expo-haptics";
 import {
   ChevronDown,
   ChevronUp,
-  Flame,
+  Radio,
   Sparkles,
   ThumbsUp,
 } from "lucide-react-native";
@@ -170,6 +170,7 @@ export function CommunityWinFeedPost({
   const playerLeague = playerLeagueForLevel(level, theme, isDark);
   const showMissionTitle = !streakKicker;
   const showDetailsToggle = hasLongNote || expanded;
+  const isLiveSquadWin = win.feed_source === "mini" && Boolean(win.live_squad_id);
 
   const lastTapRef = useRef(0);
   const lightboxTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -351,6 +352,23 @@ export function CommunityWinFeedPost({
           accessibilityIgnoresInvertColors
         />
         {!imageLoaded ? <View pointerEvents="none" style={styles.photoLoadGlow} /> : null}
+        {isLiveSquadWin ? (
+          <View
+            pointerEvents="none"
+            style={[
+              styles.liveSquadPhotoBadge,
+              {
+                backgroundColor: isDark ? "rgba(8, 47, 73, 0.88)" : "rgba(236, 254, 255, 0.94)",
+                borderColor: isDark ? "rgba(34, 211, 238, 0.42)" : "rgba(6, 182, 212, 0.28)",
+              },
+            ]}
+          >
+            <Radio size={12} color={theme.colors.cyan[400]} strokeWidth={2.4} />
+            <Text style={[styles.liveSquadPhotoBadgeText, { color: theme.colors.cyan[400] }]} numberOfLines={1}>
+              Live Squad
+            </Text>
+          </View>
+        ) : null}
         <CheerBurstOverlay burstKey={burstKey} reduceMotion={reduceMotion} thumbColor={theme.colors.indigo[400]} />
       </View>
     </Pressable>
@@ -567,6 +585,26 @@ const styles = StyleSheet.create({
   photoLoadGlow: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "rgba(255, 255, 255, 0.08)",
+  },
+  liveSquadPhotoBadge: {
+    position: "absolute",
+    left: 14,
+    top: 14,
+    maxWidth: 142,
+    minHeight: 28,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    borderRadius: 9999,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  liveSquadPhotoBadgeText: {
+    flexShrink: 1,
+    fontSize: 12,
+    lineHeight: 14,
+    fontWeight: "900",
   },
   burstLayer: {
     ...StyleSheet.absoluteFillObject,

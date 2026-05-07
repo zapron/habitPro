@@ -22,6 +22,7 @@ export type CommunityWinRow = {
   feed_source: CommunityWinFeedSource;
   streak_mission_day: number | null;
   streak_count_at_post: number | null;
+  live_squad_id: string | null;
 };
 
 export type CommunityWinFeedItem = CommunityWinRow & {
@@ -82,6 +83,8 @@ export async function postCommunityWin(input: {
   feedSource?: CommunityWinFeedSource;
   streakMissionDay?: number | null;
   streakCountAtPost?: number | null;
+  /** Mini missions only. Shows a Live Squad badge on the public Community photo. */
+  liveSquadId?: string | null;
 }): Promise<CommunityActionResult> {
   const supabase = getSupabase();
   if (!supabase) return { ok: false, error: "Cloud sync not configured." };
@@ -101,6 +104,12 @@ export async function postCommunityWin(input: {
     feedSource === "habit_streak" && typeof input.streakCountAtPost === "number"
       ? input.streakCountAtPost
       : null;
+  const liveSquadId =
+    feedSource === "mini" &&
+    typeof input.liveSquadId === "string" &&
+    input.liveSquadId.trim().length > 0
+      ? input.liveSquadId.trim()
+      : null;
 
   const { error } = await supabase.from("community_wins").upsert(
     {
@@ -113,6 +122,7 @@ export async function postCommunityWin(input: {
       feed_source: feedSource,
       streak_mission_day: streakDay,
       streak_count_at_post: streakCount,
+      live_squad_id: liveSquadId,
     },
     { onConflict: "user_id,mini_mission_id" },
   );
@@ -223,6 +233,7 @@ async function enrichWinsWithProfilesAndCheers(
       feed_source: (r.feed_source ?? "mini") as CommunityWinFeedSource,
       streak_mission_day: r.streak_mission_day ?? null,
       streak_count_at_post: r.streak_count_at_post ?? null,
+      live_squad_id: r.live_squad_id ?? null,
       username: prof?.username ?? null,
       displayName: prof?.displayName ?? null,
       xp: prof?.xp ?? 0,
@@ -251,7 +262,7 @@ export async function fetchCommunityWinsFeedPage(
   const { data: winsRaw, error: winsErr } = await supabase
     .from("community_wins")
     .select(
-      "id, user_id, mini_mission_id, title, completed_at, memory_note, memory_image_url, created_at, feed_source, streak_mission_day, streak_count_at_post",
+      "id, user_id, mini_mission_id, title, completed_at, memory_note, memory_image_url, created_at, feed_source, streak_mission_day, streak_count_at_post, live_squad_id",
     )
     .order("created_at", { ascending: false })
     .range(offset, offset + take - 1);

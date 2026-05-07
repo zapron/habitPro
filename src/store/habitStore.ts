@@ -520,7 +520,7 @@ export const useHabitStore = create<HabitStore>()(
           if (elapsed < allocated) xpGain += 10; // early finish bonus
         }
         get().addXp(xpGain);
-        requestRemoteSync({ immediate: false });
+        requestRemoteSync({ immediate: true });
       },
       cancelMiniMission: (id) => {
         set((state) => ({

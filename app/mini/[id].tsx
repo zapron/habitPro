@@ -1400,6 +1400,7 @@ export default function MiniMissionDetail() {
         completedAt,
         memoryNote: memoryToSave?.note ?? null,
         memoryImageUrl: memoryToSave?.imageUrl ?? null,
+        liveSquadId: mission.liveSquadId ?? null,
       });
       if (res.ok === true) {
         setMiniMissionVisibility(mission.id, "public");
@@ -1489,6 +1490,7 @@ export default function MiniMissionDetail() {
           completedAt: mission.completedAt ?? new Date().toISOString(),
           memoryNote: mission.completionMemory?.note ?? null,
           memoryImageUrl: mission.completionMemory?.imageUrl ?? null,
+          liveSquadId: mission.liveSquadId ?? null,
         });
         if (res.ok === false) {
           Alert.alert("Couldn’t publish", res.error, [{ text: "OK" }]);

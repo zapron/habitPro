@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Image,
+  Modal,
+  Pressable,
   RefreshControl,
   ScrollView,
   StatusBar,
@@ -338,6 +340,7 @@ function ParticipantCard({
   isMe,
   localMission,
   onOpenMine,
+  onOpenImage,
 }: {
   row: LiveMiniParticipantRow;
   rank: number | null;
@@ -345,6 +348,7 @@ function ParticipantCard({
   isMe: boolean;
   localMission?: MiniMission;
   onOpenMine: () => void;
+  onOpenImage: (uri: string) => void;
 }) {
   const { theme, isDark } = useTheme();
   const tone = statusTone(row.status, theme, isDark);
@@ -450,7 +454,14 @@ function ParticipantCard({
       ) : null}
 
       {memoryImage ? (
-        <Image source={{ uri: memoryImage }} style={styles.memoryImage} resizeMode="cover" />
+        <Pressable
+          onPress={() => onOpenImage(memoryImage)}
+          accessibilityRole="button"
+          accessibilityLabel="View squad memory photo"
+          style={({ pressed }) => ({ opacity: pressed ? 0.92 : 1 })}
+        >
+          <Image source={{ uri: memoryImage }} style={styles.memoryImage} resizeMode="cover" />
+        </Pressable>
       ) : null}
       {row.memory_note ? (
         <Text style={[styles.memoryNote, { color: theme.colors.textSecondary }]} numberOfLines={4}>
@@ -490,6 +501,7 @@ export default function LiveMiniSquadScreen() {
   const [busy, setBusy] = useState<"accept" | "decline" | null>(null);
   const [selectedMinutes, setSelectedMinutes] = useState(15);
   const [manualMinutes, setManualMinutes] = useState("15");
+  const [openImageUri, setOpenImageUri] = useState<string | null>(null);
   const userIdRef = useRef(userId);
   const liveSyncKeyRef = useRef<string | null>(null);
 
@@ -866,10 +878,40 @@ export default function LiveMiniSquadScreen() {
                 const mid = row.local_mini_mission_id ?? localLiveMission?.id;
                 if (mid) router.push(`/mini/${mid}`);
               }}
+              onOpenImage={setOpenImageUri}
             />
           ))}
         </ScrollView>
       )}
+
+      <Modal
+        visible={openImageUri !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setOpenImageUri(null)}
+      >
+        <Pressable
+          style={styles.imageViewerBackdrop}
+          onPress={() => setOpenImageUri(null)}
+          accessibilityRole="button"
+          accessibilityLabel="Close photo viewer"
+        >
+          <Pressable style={styles.imageViewerInner} onPress={(e) => e.stopPropagation()}>
+            {openImageUri ? (
+              <Image source={{ uri: openImageUri }} style={styles.imageViewerPhoto} resizeMode="contain" />
+            ) : null}
+            <TouchableOpacity
+              onPress={() => setOpenImageUri(null)}
+              activeOpacity={0.86}
+              style={[styles.imageViewerClose, { backgroundColor: theme.colors.surface }]}
+              accessibilityRole="button"
+              accessibilityLabel="Close photo"
+            >
+              <X size={22} color={theme.colors.textPrimary} />
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </Screen>
   );
 }
@@ -988,4 +1030,22 @@ const styles = StyleSheet.create({
   memoryNote: { fontSize: 13, lineHeight: 19, fontWeight: "600", marginTop: 10 },
   openMineButton: { minHeight: 42, borderWidth: 1, borderRadius: 14, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, marginTop: 12 },
   openMineText: { fontSize: 13, fontWeight: "900" },
+  imageViewerBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.88)",
+    justifyContent: "center",
+    padding: 18,
+  },
+  imageViewerInner: { borderRadius: 18, overflow: "hidden" },
+  imageViewerPhoto: { width: "100%", height: 420, backgroundColor: "#000" },
+  imageViewerClose: {
+    position: "absolute",
+    top: 12,
+    right: 12,
+    width: 42,
+    height: 42,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+  },
 });

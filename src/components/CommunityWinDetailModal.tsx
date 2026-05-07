@@ -10,7 +10,7 @@ import {
   Platform,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { X } from "lucide-react-native";
+import { Radio, X } from "lucide-react-native";
 import { useTheme } from "../context/ThemeContext";
 import type { CommunityWinFeedItem } from "../lib/communityWinsApi";
 import { buildStreakCelebrationKicker } from "../lib/communityStreakFeedCopy";
@@ -66,6 +66,7 @@ export function CommunityWinDetailModal({ visible, win, onClose, onPressImage }:
           streakCount: win.streak_count_at_post,
         })
       : null;
+  const isLiveSquadWin = win.feed_source === "mini" && Boolean(win.live_squad_id);
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
@@ -135,7 +136,7 @@ export function CommunityWinDetailModal({ visible, win, onClose, onPressImage }:
             {win.memory_image_url ? (
               <Pressable
                 onPress={() => onPressImage(win.memory_image_url!)}
-                style={({ pressed }) => [pressed && { opacity: 0.92 }]}
+                style={({ pressed }) => [styles.heroImgWrap, pressed && { opacity: 0.92 }]}
                 accessibilityRole="image"
                 accessibilityLabel="View full photo"
               >
@@ -144,6 +145,23 @@ export function CommunityWinDetailModal({ visible, win, onClose, onPressImage }:
                   style={[styles.heroImg, { backgroundColor: isDark ? "rgba(255,255,255,0.06)" : theme.colors.surface }]}
                   resizeMode="cover"
                 />
+                {isLiveSquadWin ? (
+                  <View
+                    pointerEvents="none"
+                    style={[
+                      styles.liveSquadPhotoBadge,
+                      {
+                        backgroundColor: isDark ? "rgba(8, 47, 73, 0.88)" : "rgba(236, 254, 255, 0.94)",
+                        borderColor: isDark ? "rgba(34, 211, 238, 0.42)" : "rgba(6, 182, 212, 0.28)",
+                      },
+                    ]}
+                  >
+                    <Radio size={12} color={theme.colors.cyan[400]} strokeWidth={2.4} />
+                    <Text style={[styles.liveSquadPhotoBadgeText, { color: theme.colors.cyan[400] }]} numberOfLines={1}>
+                      Live Squad
+                    </Text>
+                  </View>
+                ) : null}
                 <Text style={[styles.tapHint, { color: theme.colors.textMuted }]}>Tap for full screen</Text>
               </Pressable>
             ) : null}
@@ -212,11 +230,34 @@ const styles = StyleSheet.create({
   streakLine1: { fontSize: 15, fontWeight: "800", lineHeight: 21 },
   streakMission: { fontSize: 13, fontWeight: "700", marginTop: 4, lineHeight: 18 },
   title: { fontSize: 20, fontWeight: "800", marginBottom: 14, lineHeight: 26 },
+  heroImgWrap: {
+    position: "relative",
+  },
   heroImg: {
     width: "100%",
     height: 220,
     borderRadius: 14,
     marginBottom: 6,
+  },
+  liveSquadPhotoBadge: {
+    position: "absolute",
+    left: 12,
+    top: 12,
+    maxWidth: 142,
+    minHeight: 28,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    borderRadius: 9999,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  liveSquadPhotoBadgeText: {
+    flexShrink: 1,
+    fontSize: 12,
+    lineHeight: 14,
+    fontWeight: "900",
   },
   tapHint: { fontSize: 11, fontWeight: "600", marginBottom: 16 },
   note: { fontSize: 16, lineHeight: 24 },
