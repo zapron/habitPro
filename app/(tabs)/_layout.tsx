@@ -1,5 +1,7 @@
 import { Tabs } from "expo-router";
+import type { ReactNode } from "react";
 import { Home, Swords, User, Users } from "lucide-react-native";
+import { StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   TAB_BAR_BOTTOM_GAP,
@@ -7,11 +9,29 @@ import {
   tabBarOuterHeight,
 } from "../../src/constants/tabBar";
 import { useTheme } from "../../src/context/ThemeContext";
+import { useInviteBadge } from "../../src/context/InviteBadgeContext";
 
 const TAB_BAR_TOP_PAD = 8;
 
+function TabIconWithDot({
+  children,
+  showDot,
+}: {
+  children: ReactNode;
+  showDot: boolean;
+}) {
+  const { theme } = useTheme();
+  return (
+    <View style={styles.tabIconWrap}>
+      {children}
+      {showDot ? <View style={[styles.tabDot, { backgroundColor: theme.colors.red[500] }]} /> : null}
+    </View>
+  );
+}
+
 export default function TabLayout() {
   const { theme } = useTheme();
+  const { pendingInviteCount } = useInviteBadge();
   const insets = useSafeAreaInsets();
 
   const paddingBottom = insets.bottom + TAB_BAR_BOTTOM_GAP;
@@ -45,7 +65,11 @@ export default function TabLayout() {
         name="compete"
         options={{
           title: "Compete",
-          tabBarIcon: ({ color, size }) => <Swords size={size ?? 22} color={color} />,
+          tabBarIcon: ({ color, size }) => (
+            <TabIconWithDot showDot={pendingInviteCount > 0}>
+              <Swords size={size ?? 22} color={color} />
+            </TabIconWithDot>
+          ),
         }}
       />
       <Tabs.Screen
@@ -65,3 +89,19 @@ export default function TabLayout() {
     </Tabs>
   );
 }
+
+const styles = StyleSheet.create({
+  tabIconWrap: {
+    position: "relative",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  tabDot: {
+    position: "absolute",
+    top: -2,
+    right: -6,
+    width: 8,
+    height: 8,
+    borderRadius: 999,
+  },
+});

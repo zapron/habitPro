@@ -18,7 +18,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { ChevronRight, Crown, Eye, Medal, RefreshCw, Swords, Trophy, Clock, X, Zap } from "lucide-react-native";
+import { ChevronRight, Crown, Eye, Medal, Radio, RefreshCw, Swords, Trophy, Clock, X, Zap } from "lucide-react-native";
 import { Screen } from "../../src/components/Screen";
 import { ConfirmDialog } from "../../src/components/ConfirmDialog";
 import { useTheme } from "../../src/context/ThemeContext";
@@ -41,6 +41,7 @@ import { useAuth } from "../../src/context/AuthContext";
 import { usePremium } from "../../src/context/PremiumContext";
 import { usePlusUpsell } from "../../src/context/PlusUpsellContext";
 import { useNotificationGate } from "../../src/context/NotificationGateContext";
+import { useInviteBadge } from "../../src/context/InviteBadgeContext";
 import { isSupabaseConfigured } from "../../src/lib/env";
 import {
   acceptInviteAndJoin,
@@ -59,6 +60,12 @@ import {
   fetchWeeklyLeaderboard,
   type WeeklyLeaderboardEntry,
 } from "../../src/lib/weeklyLeaderboardApi";
+import {
+  declineLiveMiniInvite,
+  formatLiveMiniElapsed,
+  listLiveMiniInvitesForMe,
+  type LiveMiniInviteForMe,
+} from "../../src/lib/liveMiniMissionsApi";
 import { levelFromTotalXp, xpInCurrentLevel } from "../../src/utils/xpLevel";
 
 const INVITE_ACCEPT_TIMEOUT_MS = 45_000;
@@ -188,6 +195,48 @@ function InviteStatusPill({
       <Text style={[styles.inviteStatusPillText, { color: cfg.text }]}>{label}</Text>
     </View>
   );
+}
+
+function liveMiniStatusLabel(status: LiveMiniInviteForMe["participant"]["status"]): string {
+  switch (status) {
+    case "invited":
+      return "Pending";
+    case "joined":
+      return "Joined";
+    case "in_progress":
+      return "On mission";
+    case "completed":
+      return "Done";
+    case "missed":
+      return "Missed";
+    case "cancelled":
+      return "Cancelled";
+    case "declined":
+      return "Declined";
+  }
+}
+
+function liveMiniStatusVariant(status: LiveMiniInviteForMe["participant"]["status"]): "pending" | "accepted" | "declined" {
+  if (status === "invited" || status === "joined") return "pending";
+  if (status === "in_progress" || status === "completed") return "accepted";
+  return "declined";
+}
+
+function liveMiniCreatorLabel(invite: LiveMiniInviteForMe): string {
+  const creator = invite.creator;
+  if (creator?.displayName?.trim()) return creator.displayName.trim();
+  if (creator?.username?.trim()) return `@${creator.username.trim().toLowerCase()}`;
+  return "Someone";
+}
+
+function formatLiveMiniMinutes(minutes: number | null | undefined): string {
+  if (typeof minutes !== "number" || !Number.isFinite(minutes)) return "Timer not chosen";
+  if (minutes >= 60) {
+    const h = Math.floor(minutes / 60);
+    const m = minutes % 60;
+    return m > 0 ? `${h}h ${m}m timer` : `${h}h timer`;
+  }
+  return `${minutes}m timer`;
 }
 
 function formatEndsIn(endsAtMs: number): string {
@@ -400,6 +449,7 @@ export default function CompeteScreen() {
   const { openUpsell } = usePlusUpsell();
   const refreshPremiumAccess = useRefreshPremiumAccess();
   const { suggestNotifications } = useNotificationGate();
+  const { syncInviteBadgeCount } = useInviteBadge();
   /** True while we do not know premium yet — do not run accept API or open paywall. */
   const inviteAcceptPremiumUnknown = premiumLoading;
   /** Non-premium users see Accept → paywall instead of API (avoids RLS errors on accept). */
@@ -407,6 +457,7 @@ export default function CompeteScreen() {
   const [segment, setSegment] = useState<CompeteSegment>("challenges");
   const [challengesSubTab, setChallengesSubTab] = useState<ChallengesSubTab>("missions");
   const [groupInvites, setGroupInvites] = useState<ChallengeInviteRow[]>([]);
+  const [liveMiniInvites, setLiveMiniInvites] = useState<LiveMiniInviteForMe[]>([]);
   const [inviteCardMeta, setInviteCardMeta] = useState<Record<string, InviteCardMeta>>({});
   const [inviteBusy, setInviteBusy] = useState<string | null>(null);
   const [invitesLoading, setInvitesLoading] = useState(false);
@@ -425,6 +476,7 @@ export default function CompeteScreen() {
   useLayoutEffect(() => {
     userIdRef.current = userId;
     setGroupInvites([]);
+    setLiveMiniInvites([]);
     setInviteCardMeta({});
     setInviteBusy(null);
     setInvitesLoading(Boolean(userId && isSupabaseConfigured()));
@@ -455,14 +507,21 @@ export default function CompeteScreen() {
     const requestedUserId = userId;
     if (!isSupabaseConfigured() || !requestedUserId) {
       setGroupInvites([]);
+      setLiveMiniInvites([]);
       setInviteCardMeta({});
+      syncInviteBadgeCount(0);
       return;
     }
     setInvitesLoading(true);
     try {
-      const rows = await listInvitesForMe();
+      const [rows, liveRows] = await Promise.all([listInvitesForMe(), listLiveMiniInvitesForMe()]);
       if (userIdRef.current !== requestedUserId) return;
       setGroupInvites(rows);
+      setLiveMiniInvites(liveRows);
+      syncInviteBadgeCount(
+        rows.filter((i) => i.status === "pending").length +
+          liveRows.filter((i) => i.participant.status === "invited").length,
+      );
       const meta: Record<string, InviteCardMeta> = {};
       await Promise.all(
         rows.map(async (inv) => {
@@ -477,7 +536,7 @@ export default function CompeteScreen() {
     } finally {
       setInvitesLoading(false);
     }
-  }, [userId]);
+  }, [syncInviteBadgeCount, userId]);
 
   const loadLeague = useCallback(async () => {
     const requestedUserId = userId;
@@ -691,6 +750,22 @@ export default function CompeteScreen() {
     }
   };
 
+  const handleDeclineLiveMiniInvite = async (invite: LiveMiniInviteForMe) => {
+    const busyKey = `live:${invite.participant.id}`;
+    setInviteBusy(busyKey);
+    try {
+      const res = await declineLiveMiniInvite(invite.squad.id);
+      if (res.ok === false) {
+        showToast(res.error, "error");
+        return;
+      }
+      showToast("Live Squad invite declined", "success");
+      void loadInvites();
+    } finally {
+      setInviteBusy(null);
+    }
+  };
+
   const level = levelFromTotalXp(xp);
   const xpInLevel = xpInCurrentLevel(xp);
   const myWeeklyRank = useMemo(() => leagueRows.find((row) => row.isMe) ?? null, [leagueRows]);
@@ -718,9 +793,19 @@ export default function CompeteScreen() {
     return m;
   }, [habits]);
 
+  const miniMissionByLiveSquadId = useMemo(() => {
+    const m = new Map<string, MiniMission>();
+    for (const mission of miniMissions) {
+      if (mission.liveSquadId) m.set(mission.liveSquadId, mission);
+    }
+    return m;
+  }, [miniMissions]);
+
   const pendingInviteCount = useMemo(
-    () => groupInvites.filter((i) => i.status === "pending").length,
-    [groupInvites],
+    () =>
+      groupInvites.filter((i) => i.status === "pending").length +
+      liveMiniInvites.filter((i) => i.participant.status === "invited").length,
+    [groupInvites, liveMiniInvites],
   );
   const tier = useMemo(() => weeklyTierLabel(weeklyScore), [weeklyScore]);
   const activeIds = new Set(enrollments.map((e) => e.templateId));
@@ -1057,7 +1142,7 @@ export default function CompeteScreen() {
           </>
         ) : challengesSubTab === "invites" ? (
           <>
-            <Text style={[styles.sectionLabel, { color: theme.colors.textMuted }]}>GROUP MISSION INVITES</Text>
+            <Text style={[styles.sectionLabel, { color: theme.colors.textMuted }]}>INVITES</Text>
             {invitesLoading ? (
               <View style={{ gap: 12 }}>
                 {Array.from({ length: 3 }, (_, i) => (
@@ -1089,18 +1174,159 @@ export default function CompeteScreen() {
                   </View>
                 ))}
               </View>
-            ) : groupInvites.length === 0 ? (
+            ) : groupInvites.length === 0 && liveMiniInvites.length === 0 ? (
               <View
                 style={[styles.card, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, ...theme.shadow.card }]}
               >
                 <Text style={[styles.emptyTitle, { color: theme.colors.textPrimary }]}>No invites yet</Text>
                 <Text style={[styles.emptyBody, { color: theme.colors.textSecondary }]}>
-                  When someone invites you to a group mission, it will show up here. You can still use Weeklies for solo
-                  time-boxed challenges.
+                  When someone invites you to a group mission or Live Mini Mission, it will show up here.
                 </Text>
               </View>
             ) : (
-              groupInvites.map((inv) => {
+              <>
+                {liveMiniInvites.length > 0 ? (
+                  <>
+                    <Text style={[styles.sectionLabel, styles.inviteSubSectionLabel, { color: theme.colors.textMuted }]}>
+                      LIVE MINI INVITES
+                    </Text>
+                    {liveMiniInvites.map((liveInvite) => {
+                      const participant = liveInvite.participant;
+                      const squad = liveInvite.squad;
+                      const pending = participant.status === "invited";
+                      const busyKey = `live:${participant.id}`;
+                      const localMission = miniMissionByLiveSquadId.get(squad.id);
+                      const localMissionId = localMission?.id ?? participant.local_mini_mission_id;
+                      const canOpenTimer =
+                        Boolean(localMissionId) &&
+                        (participant.status === "in_progress" || participant.status === "completed");
+                      const plannedMinutes = participant.planned_minutes ?? localMission?.estimatedMinutes ?? null;
+                      const totalMinutes =
+                        plannedMinutes == null ? null : plannedMinutes + (participant.reserve_minutes ?? 0);
+                      const timerLabel =
+                        participant.status === "completed" && participant.final_elapsed_seconds != null
+                          ? `Done in ${formatLiveMiniElapsed(participant.final_elapsed_seconds)}`
+                          : formatLiveMiniMinutes(totalMinutes);
+                      const liveMeta: InviteCardMeta = {
+                        challengeName: squad.title,
+                        pillLabel: "Live Mini",
+                        description: squad.objective ?? undefined,
+                      };
+
+                      return (
+                        <View
+                          key={participant.id}
+                          style={[
+                            styles.card,
+                            {
+                              backgroundColor: theme.colors.surface,
+                              borderColor: theme.colors.border,
+                              ...theme.shadow.card,
+                            },
+                          ]}
+                        >
+                          <InviteMissionHeader meta={liveMeta} theme={theme} isDark={isDark} />
+                          <Text style={[styles.liveInviteFrom, { color: theme.colors.textMuted }]} numberOfLines={1}>
+                            From {liveMiniCreatorLabel(liveInvite)}
+                          </Text>
+                          <View style={styles.inviteStatusRow}>
+                            <InviteStatusPill
+                              variant={liveMiniStatusVariant(participant.status)}
+                              label={liveMiniStatusLabel(participant.status)}
+                              theme={theme}
+                            />
+                            {participant.status !== "declined" ? (
+                              <View
+                                style={[
+                                  styles.liveInviteTimerPill,
+                                  {
+                                    backgroundColor: isDark ? "rgba(34, 211, 238, 0.1)" : "rgba(8, 145, 178, 0.08)",
+                                    borderColor: isDark ? "rgba(34, 211, 238, 0.28)" : "rgba(8, 145, 178, 0.2)",
+                                  },
+                                ]}
+                              >
+                                <Clock size={13} color={theme.colors.cyan[400]} />
+                                <Text style={[styles.liveInviteTimerText, { color: theme.colors.cyan[400] }]} numberOfLines={1}>
+                                  {timerLabel}
+                                </Text>
+                              </View>
+                            ) : null}
+                          </View>
+                          <Text style={[styles.inviteHint, { color: theme.colors.textSecondary }]}>
+                            {pending
+                              ? "Open this invite to choose your timer. Joining Live Mini Missions is free for invitees."
+                              : participant.status === "in_progress"
+                                ? "Your timer is running. Finish before the deadline to rank on the board."
+                                : participant.status === "completed"
+                                  ? "Your result is saved on the Live Squad board."
+                                  : participant.status === "declined"
+                                    ? "You declined this Live Squad invite."
+                                    : participant.status === "missed"
+                                      ? "This Live Mini timer expired."
+                                      : "Open the board to see the squad status."}
+                          </Text>
+                          <View style={styles.inviteActions}>
+                            {pending ? (
+                              <TouchableOpacity
+                                style={[styles.declineBtn, { borderColor: theme.colors.border }]}
+                                onPress={() => void handleDeclineLiveMiniInvite(liveInvite)}
+                                disabled={inviteBusy === busyKey}
+                              >
+                                <Text style={{ color: theme.colors.textMuted, fontWeight: "700" }}>Decline</Text>
+                              </TouchableOpacity>
+                            ) : null}
+                            <TouchableOpacity
+                              style={[
+                                pending ? styles.acceptBtn : styles.inviteFullActionBtn,
+                                {
+                                  backgroundColor: theme.colors.indigo[600],
+                                  ...theme.shadow.glow,
+                                },
+                              ]}
+                              onPress={() => {
+                                if (canOpenTimer && localMissionId) router.push(`/mini/${localMissionId}`);
+                                else router.push(`/live-mini/${squad.id}`);
+                              }}
+                              disabled={inviteBusy === busyKey}
+                              activeOpacity={0.88}
+                            >
+                              {inviteBusy === busyKey ? (
+                                <ActivityIndicator color={theme.colors.white} />
+                              ) : (
+                                <>
+                                  {pending ? (
+                                    <Radio size={15} color={theme.colors.white} />
+                                  ) : canOpenTimer ? (
+                                    <Clock size={15} color={theme.colors.white} />
+                                  ) : (
+                                    <Eye size={15} color={theme.colors.white} />
+                                  )}
+                                  <Text style={styles.acceptBtnText}>
+                                    {pending ? "View & Start" : canOpenTimer ? "Open Timer" : "Open Board"}
+                                  </Text>
+                                </>
+                              )}
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                      );
+                    })}
+                  </>
+                ) : null}
+
+                {groupInvites.length > 0 ? (
+                  <Text
+                    style={[
+                      styles.sectionLabel,
+                      styles.inviteSubSectionLabel,
+                      { color: theme.colors.textMuted, marginTop: liveMiniInvites.length > 0 ? 14 : 0 },
+                    ]}
+                  >
+                    GROUP MISSION INVITES
+                  </Text>
+                ) : null}
+
+                {groupInvites.map((inv) => {
                 const pending = inv.status === "pending";
                 const meta = inviteCardMeta[inv.id];
                 const missionTitle = meta?.challengeName ?? "Group mission";
@@ -1235,7 +1461,8 @@ export default function CompeteScreen() {
                     {resolvedBlock}
                   </View>
                 );
-              })
+                })}
+              </>
             )}
           </>
         ) : (
@@ -1627,6 +1854,20 @@ const styles = StyleSheet.create({
   inviteHint: { fontSize: 12, lineHeight: 17, fontWeight: "500", marginTop: 8, marginBottom: 12 },
   invitePlusHint: { fontSize: 11, lineHeight: 16, fontWeight: "600", marginTop: -6, marginBottom: 10, fontStyle: "italic" },
   inviteSyncHint: { fontSize: 11, lineHeight: 16, marginTop: 8, fontStyle: "italic" },
+  inviteSubSectionLabel: { marginTop: 0, marginBottom: 10 },
+  liveInviteFrom: { fontSize: 11, lineHeight: 15, fontWeight: "800", marginTop: 6 },
+  liveInviteTimerPill: {
+    marginLeft: 8,
+    minHeight: 27,
+    maxWidth: 170,
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 9,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  liveInviteTimerText: { flexShrink: 1, fontSize: 11, lineHeight: 14, fontWeight: "900" },
   inviteGroupStreaksBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -1650,6 +1891,18 @@ const styles = StyleSheet.create({
   },
   acceptBtn: {
     flex: 1,
+    flexDirection: "row",
+    gap: 7,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 12,
+    borderRadius: 12,
+    minHeight: 44,
+  },
+  inviteFullActionBtn: {
+    flex: 1,
+    flexDirection: "row",
+    gap: 7,
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 12,

@@ -18,6 +18,7 @@ import { NotificationGateProvider } from "../src/context/NotificationGateContext
 import { PlusUpsellProvider } from "../src/context/PlusUpsellContext";
 import { CoachMarkProvider } from "../src/context/CoachMarkContext";
 import { AppVersionProvider, useAppVersion } from "../src/context/AppVersionContext";
+import { InviteBadgeProvider } from "../src/context/InviteBadgeContext";
 import { ForceUpdateModal } from "../src/components/ForceUpdateModal";
 import { SplashGate } from "../src/components/SplashGate";
 import { AppLaunchNotificationNudge } from "../src/components/AppLaunchNotificationNudge";
@@ -339,23 +340,25 @@ export default function Layout() {
     <ThemeProvider>
       <ToastProvider>
         <AuthProvider>
-          <UsernameGateProvider>
-            <NotificationGateProvider>
-              <BillingProvider>
-                <PremiumProvider>
-                  <PlusUpsellProvider>
-                    <CoachMarkProvider>
-                      <AppVersionProvider>
-                        <SplashGate>
-                          <RootLayoutNav />
-                        </SplashGate>
-                      </AppVersionProvider>
-                    </CoachMarkProvider>
-                  </PlusUpsellProvider>
-                </PremiumProvider>
-              </BillingProvider>
-            </NotificationGateProvider>
-          </UsernameGateProvider>
+          <InviteBadgeProvider>
+            <UsernameGateProvider>
+              <NotificationGateProvider>
+                <BillingProvider>
+                  <PremiumProvider>
+                    <PlusUpsellProvider>
+                      <CoachMarkProvider>
+                        <AppVersionProvider>
+                          <SplashGate>
+                            <RootLayoutNav />
+                          </SplashGate>
+                        </AppVersionProvider>
+                      </CoachMarkProvider>
+                    </PlusUpsellProvider>
+                  </PremiumProvider>
+                </BillingProvider>
+              </NotificationGateProvider>
+            </UsernameGateProvider>
+          </InviteBadgeProvider>
         </AuthProvider>
       </ToastProvider>
     </ThemeProvider>

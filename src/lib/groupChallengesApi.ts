@@ -315,6 +315,22 @@ export async function listPendingInvitesForMe(): Promise<ChallengeInviteRow[]> {
 }
 
 /** All invites for the current user (pending, accepted, declined) — newest first within each group. */
+export async function countPendingInvitesForMe(): Promise<number> {
+  const supabase = getSupabase();
+  if (!supabase) return 0;
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return 0;
+  const { count, error } = await supabase
+    .from("challenge_invites")
+    .select("id", { count: "exact", head: true })
+    .eq("invitee_id", user.id)
+    .eq("status", "pending");
+  if (error) throw error;
+  return count ?? 0;
+}
+
 export async function listInvitesForMe(limit = 40): Promise<ChallengeInviteRow[]> {
   const supabase = getSupabase();
   if (!supabase) return [];

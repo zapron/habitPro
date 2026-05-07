@@ -11,6 +11,12 @@ export type LiveMiniActionResult =
   | { ok: true }
   | { ok: false; error: string; reason?: "auth_required" | "premium_required" };
 
+export type LiveMiniInviteForMe = {
+  participant: LiveMiniParticipantRow;
+  squad: LiveMiniSquadRow;
+  creator: { username: string; displayName: string | null; xp: number | null } | undefined;
+};
+
 function errorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
   if (error && typeof error === "object" && "message" in error) {
@@ -158,6 +164,69 @@ export async function fetchLiveMiniSquad(squadId: string): Promise<LiveMiniSquad
     participants,
     profiles,
   };
+}
+
+export async function listLiveMiniInvitesForMe(limit = 40): Promise<LiveMiniInviteForMe[]> {
+  const supabase = getSupabase();
+  if (!supabase) return [];
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return [];
+
+  const { data, error } = await supabase
+    .from("live_mini_participants")
+    .select("*, live_mini_squads!inner(*)")
+    .eq("user_id", user.id)
+    .eq("role", "member")
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+
+  const rows = (data ?? [])
+    .map((raw) => {
+      const row = raw as LiveMiniParticipantRow & {
+        live_mini_squads?: LiveMiniSquadRow | LiveMiniSquadRow[] | null;
+      };
+      const rawSquad = row.live_mini_squads;
+      const squad = Array.isArray(rawSquad) ? rawSquad[0] : rawSquad;
+      if (!squad?.id) return null;
+      return {
+        participant: row as LiveMiniParticipantRow,
+        squad: squad as LiveMiniSquadRow,
+      };
+    })
+    .filter((r): r is { participant: LiveMiniParticipantRow; squad: LiveMiniSquadRow } => r !== null);
+
+  const creators = await getProfileLabelsForIds(rows.map((r) => r.squad.creator_id));
+  return rows
+    .map((row) => ({
+      ...row,
+      creator: creators[row.squad.creator_id],
+    }))
+    .sort((a, b) => {
+      const ap = a.participant.status === "invited" ? 0 : 1;
+      const bp = b.participant.status === "invited" ? 0 : 1;
+      if (ap !== bp) return ap - bp;
+      return new Date(b.participant.created_at).getTime() - new Date(a.participant.created_at).getTime();
+    });
+}
+
+export async function countPendingLiveMiniInvitesForMe(): Promise<number> {
+  const supabase = getSupabase();
+  if (!supabase) return 0;
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return 0;
+  const { count, error } = await supabase
+    .from("live_mini_participants")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", user.id)
+    .eq("role", "member")
+    .eq("status", "invited");
+  if (error) throw error;
+  return count ?? 0;
 }
 
 export async function listLiveMiniParticipantStatuses(
