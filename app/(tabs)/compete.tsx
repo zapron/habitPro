@@ -52,6 +52,7 @@ import {
 } from "../../src/lib/groupChallengesApi";
 import { subscribeSyncSuccess } from "../../src/lib/syncQueue";
 import { upsertRemoteHabit } from "../../src/lib/sync";
+import { traceAsync } from "../../src/lib/perfTrace";
 import { PlusBadge } from "../../src/components/PlusBadge";
 import { ShimmerBlock } from "../../src/components/ShimmerBlock";
 import { useRefreshPremiumAccess } from "../../src/hooks/useRefreshPremiumAccess";
@@ -514,7 +515,11 @@ export default function CompeteScreen() {
     }
     setInvitesLoading(true);
     try {
-      const [rows, liveRows] = await Promise.all([listInvitesForMe(), listLiveMiniInvitesForMe()]);
+      const [rows, liveRows] = await traceAsync(
+        "compete.invites.loadLists",
+        () => Promise.all([listInvitesForMe(), listLiveMiniInvitesForMe()]),
+        { slowMs: 900 },
+      );
       if (userIdRef.current !== requestedUserId) return;
       setGroupInvites(rows);
       setLiveMiniInvites(liveRows);
@@ -523,11 +528,16 @@ export default function CompeteScreen() {
           liveRows.filter((i) => i.participant.status === "invited").length,
       );
       const meta: Record<string, InviteCardMeta> = {};
-      await Promise.all(
-        rows.map(async (inv) => {
-          const g = await getChallengeGroup(inv.challenge_id);
-          if (g) meta[inv.id] = parseInviteCardMeta(g);
-        }),
+      await traceAsync(
+        "compete.invites.loadMeta",
+        () =>
+          Promise.all(
+            rows.map(async (inv) => {
+              const g = await getChallengeGroup(inv.challenge_id);
+              if (g) meta[inv.id] = parseInviteCardMeta(g);
+            }),
+          ),
+        { slowMs: 900, meta: { count: rows.length } },
       );
       if (userIdRef.current !== requestedUserId) return;
       setInviteCardMeta(meta);
@@ -549,7 +559,11 @@ export default function CompeteScreen() {
     setLeagueLoading(true);
     setLeagueError(null);
     try {
-      const res = await fetchWeeklyLeaderboard(WEEKLY_RANK_PAGE_SIZE, 0);
+      const res = await traceAsync(
+        "compete.league.load",
+        () => fetchWeeklyLeaderboard(WEEKLY_RANK_PAGE_SIZE, 0),
+        { slowMs: 900 },
+      );
       if (userIdRef.current !== requestedUserId) return;
       if (res.ok === true) {
         setLeagueRows(res.items);
@@ -577,7 +591,11 @@ export default function CompeteScreen() {
     setLeagueLoadingMore(true);
     setLeagueError(null);
     try {
-      const res = await fetchWeeklyLeaderboard(WEEKLY_RANK_PAGE_SIZE, leagueRows.length);
+      const res = await traceAsync(
+        "compete.league.loadMore",
+        () => fetchWeeklyLeaderboard(WEEKLY_RANK_PAGE_SIZE, leagueRows.length),
+        { slowMs: 900, meta: { offset: leagueRows.length } },
+      );
       if (userIdRef.current !== requestedUserId) return;
       if (res.ok === true) {
         setLeagueRows((prev) => {
@@ -667,7 +685,11 @@ export default function CompeteScreen() {
         openUpsell("invite_accept");
         return;
       }
-      const group = await getChallengeGroup(invite.challenge_id);
+      const group = await traceAsync(
+        "compete.groupInvite.fetchGroup",
+        () => getChallengeGroup(invite.challenge_id),
+        { slowMs: 800 },
+      );
       if (!group) {
         showToast("Group mission not found.", "error");
         return;
@@ -700,14 +722,22 @@ export default function CompeteScreen() {
         throw new Error("Could not create the mission on this device.");
       }
 
-      await upsertRemoteHabit(userId, habit);
-      const { error } = await acceptInviteAndJoin(invite, newHabitId);
+      await traceAsync("compete.groupInvite.upsertHabit", () => upsertRemoteHabit(userId, habit), {
+        slowMs: 900,
+      });
+      const { error } = await traceAsync(
+        "compete.groupInvite.accept",
+        () => acceptInviteAndJoin(invite, newHabitId),
+        { slowMs: 900 },
+      );
       if (error) throw error;
 
       useHabitStore.getState().synchronizeHabitWithChallengeGroup(newHabitId, group);
       const alignedHabit = useHabitStore.getState().habits.find((h) => h.id === newHabitId);
       if (alignedHabit) {
-        await upsertRemoteHabit(userId, alignedHabit);
+        await traceAsync("compete.groupInvite.upsertAlignedHabit", () => upsertRemoteHabit(userId, alignedHabit), {
+          slowMs: 900,
+        });
       }
       void refreshCohortPeerHabits();
       void loadInvites();

@@ -31,6 +31,7 @@ import {
   toggleCheer,
   type CommunityWinFeedItem,
 } from "../lib/communityWinsApi";
+import { traceAsync } from "../lib/perfTrace";
 import { CommunityWinFeedPost } from "./CommunityWinFeedPost";
 import { CommunityWinFeedSkeletonRow } from "./CommunityWinFeedSkeleton";
 import { CommunityWinImageLightbox } from "./CommunityWinImageLightbox";
@@ -80,6 +81,7 @@ export function CommunityWinsFeed({
   const [cheerersSheet, setCheerersSheet] = useState<CheerersSheetState | null>(null);
   const [playerDrawerWin, setPlayerDrawerWin] = useState<CommunityPlayerDrawerSeed | null>(null);
   const itemsRef = useRef<CommunityWinFeedItem[]>([]);
+  const initialLoadInFlight = useRef(false);
   const loadMoreInFlight = useRef(false);
   const userId = session?.user?.id ?? null;
   const userIdRef = useRef<string | null>(userId);
@@ -97,6 +99,7 @@ export function CommunityWinsFeed({
     setLoading(Boolean(userId && isSupabaseConfigured()));
     setRefreshing(false);
     setLoadingMore(false);
+    initialLoadInFlight.current = false;
     loadMoreInFlight.current = false;
   }, [userId]);
 
@@ -141,25 +144,43 @@ export function CommunityWinsFeed({
       setLoading(false);
       return;
     }
-    setLoading(true);
-    const { items: first, hasMore: more } = await fetchCommunityWinsFeedPage(0, COMMUNITY_WINS_PAGE_SIZE);
-    if (userIdRef.current !== requestedUserId) return;
-    setItems(first);
-    setHasMore(more);
-    setLoading(false);
-  }, [userId]);
+    if (initialLoadInFlight.current) return;
+    initialLoadInFlight.current = true;
+    if (itemsRef.current.length === 0) setLoading(true);
+    try {
+      const { items: first, hasMore: more } = await traceAsync(
+        "community.feed.loadInitial",
+        () => fetchCommunityWinsFeedPage(0, COMMUNITY_WINS_PAGE_SIZE),
+        { slowMs: 900 },
+      );
+      if (userIdRef.current !== requestedUserId) return;
+      setItems(first);
+      setHasMore(more);
+    } catch (e: unknown) {
+      console.warn("[habitPro] community loadInitial", e);
+      if (userIdRef.current === requestedUserId) {
+        showToast("Could not load Community wins.", "error");
+      }
+    } finally {
+      initialLoadInFlight.current = false;
+      if (userIdRef.current === requestedUserId) setLoading(false);
+    }
+  }, [showToast, userId]);
 
   useFocusEffect(
     useCallback(() => {
-      setLoading(true);
+      if (itemsRef.current.length === 0) setLoading(true);
       void loadInitial();
     }, [loadInitial]),
   );
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await loadInitial();
-    setRefreshing(false);
+    try {
+      await loadInitial();
+    } finally {
+      setRefreshing(false);
+    }
   }, [loadInitial]);
 
   const loadMore = useCallback(async () => {
@@ -167,32 +188,40 @@ export function CommunityWinsFeed({
     if (!requestedUserId || !hasMore || loadMoreInFlight.current) return;
     loadMoreInFlight.current = true;
     setLoadingMore(true);
-    const offset = itemsRef.current.length;
-    const { items: next, hasMore: more } = await fetchCommunityWinsFeedPage(offset, COMMUNITY_WINS_PAGE_SIZE);
-    if (userIdRef.current !== requestedUserId) {
-      loadMoreInFlight.current = false;
-      setLoadingMore(false);
-      return;
-    }
-    loadMoreInFlight.current = false;
-    setLoadingMore(false);
-    if (next.length === 0) {
-      setHasMore(false);
-      return;
-    }
-    setItems((prev) => {
-      const seen = new Set(prev.map((x) => x.id));
-      const merged = [...prev];
-      for (const row of next) {
-        if (!seen.has(row.id)) {
-          seen.add(row.id);
-          merged.push(row);
-        }
+    try {
+      const offset = itemsRef.current.length;
+      const { items: next, hasMore: more } = await traceAsync(
+        "community.feed.loadMore",
+        () => fetchCommunityWinsFeedPage(offset, COMMUNITY_WINS_PAGE_SIZE),
+        { slowMs: 900, meta: { offset } },
+      );
+      if (userIdRef.current !== requestedUserId) return;
+      if (next.length === 0) {
+        setHasMore(false);
+        return;
       }
-      return merged;
-    });
-    setHasMore(more);
-  }, [hasMore, userId]);
+      setItems((prev) => {
+        const seen = new Set(prev.map((x) => x.id));
+        const merged = [...prev];
+        for (const row of next) {
+          if (!seen.has(row.id)) {
+            seen.add(row.id);
+            merged.push(row);
+          }
+        }
+        return merged;
+      });
+      setHasMore(more);
+    } catch (e: unknown) {
+      console.warn("[habitPro] community loadMore", e);
+      if (userIdRef.current === requestedUserId) {
+        showToast("Could not load more wins.", "error");
+      }
+    } finally {
+      loadMoreInFlight.current = false;
+      if (userIdRef.current === requestedUserId) setLoadingMore(false);
+    }
+  }, [hasMore, showToast, userId]);
 
   const toggleExpanded = useCallback((id: string) => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -214,12 +243,20 @@ export function CommunityWinsFeed({
       }
       const ok = await requireUsername("community_like");
       if (!ok) return false;
-      const firstResult = await toggleCheer(win.id, win.viewerHasCheered);
+      const firstResult = await traceAsync(
+        "community.cheer.toggle",
+        () => toggleCheer(win.id, win.viewerHasCheered),
+        { slowMs: 800 },
+      );
       let finalResult = firstResult;
       if (firstResult.ok === false && firstResult.reason === "premium_required" && validateCheerAccess) {
         const allowed = await validateCheerAccess();
         if (allowed) {
-          finalResult = await toggleCheer(win.id, win.viewerHasCheered);
+          finalResult = await traceAsync(
+            "community.cheer.retryAfterPremium",
+            () => toggleCheer(win.id, win.viewerHasCheered),
+            { slowMs: 800 },
+          );
         }
       }
       if (finalResult.ok === false) {

@@ -3,6 +3,7 @@ import { useAuth } from "../context/AuthContext";
 import { useBilling } from "../context/BillingContext";
 import { usePremium } from "../context/PremiumContext";
 import { HABITPRO_COMMUNITY_ENTITLEMENT_ID } from "../constants/revenueCat";
+import { traceAsync } from "../lib/perfTrace";
 
 const DEFAULT_MIN_INTERVAL_MS = 30_000;
 
@@ -65,28 +66,38 @@ export function useRefreshPremiumAccess(minIntervalMs = DEFAULT_MIN_INTERVAL_MS)
       }
       cache.lastRefreshAt = now;
 
-      const request = (async () => {
-        const [billingResult, premiumResult] = await Promise.allSettled([
-          refreshBilling(),
-          refreshPremium(),
-        ]);
-        const info = billingResult.status === "fulfilled" ? billingResult.value : null;
-        const dbPremium = premiumResult.status === "fulfilled" ? premiumResult.value : null;
+      const request = traceAsync(
+        "premium.refresh",
+        async () => {
+          const [billingResult, premiumResult] = await Promise.allSettled([
+            refreshBilling(),
+            refreshPremium(),
+          ]);
+          const info = billingResult.status === "fulfilled" ? billingResult.value : null;
+          const dbPremium = premiumResult.status === "fulfilled" ? premiumResult.value : null;
 
-        if (info == null && dbPremium == null) {
-          return { access: null, serverAccess: null, revenueCatAccess: false };
-        }
+          if (info == null && dbPremium == null) {
+            return { access: null, serverAccess: null, revenueCatAccess: false };
+          }
 
-        const revenueCatAccess = Boolean(
-          info?.entitlements?.active?.[HABITPRO_COMMUNITY_ENTITLEMENT_ID],
-        );
-        const serverAccess = dbPremium == null ? null : Boolean(dbPremium);
-        return {
-          access: Boolean(dbPremium) || revenueCatAccess,
-          serverAccess,
-          revenueCatAccess,
-        };
-      })();
+          const revenueCatAccess = Boolean(
+            info?.entitlements?.active?.[HABITPRO_COMMUNITY_ENTITLEMENT_ID],
+          );
+          const serverAccess = dbPremium == null ? null : Boolean(dbPremium);
+          return {
+            access: Boolean(dbPremium) || revenueCatAccess,
+            serverAccess,
+            revenueCatAccess,
+          };
+        },
+        {
+          slowMs: 700,
+          meta: {
+            force: Boolean(options?.force),
+            serverOnly: Boolean(options?.serverOnly),
+          },
+        },
+      );
       cache.inFlight = request;
 
       try {

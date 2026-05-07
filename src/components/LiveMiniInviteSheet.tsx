@@ -27,6 +27,7 @@ import {
   inviteLiveMiniParticipant,
   listLiveMiniParticipantStatuses,
 } from "../lib/liveMiniMissionsApi";
+import { traceAsync } from "../lib/perfTrace";
 import {
   searchProfilesByUsernamePrefix,
 } from "../lib/groupChallengesApi";
@@ -94,7 +95,9 @@ export function LiveMiniInviteSheet({ visible, mission, onClose }: Props) {
 
   const loadStatuses = useCallback(async (id: string) => {
     try {
-      const next = await listLiveMiniParticipantStatuses(id);
+      const next = await traceAsync("liveMini.inviteSheet.statuses", () => listLiveMiniParticipantStatuses(id), {
+        slowMs: 700,
+      });
       setStatusByUserId(next);
     } catch {
       setStatusByUserId({});
@@ -161,13 +164,21 @@ export function LiveMiniInviteSheet({ visible, mission, onClose }: Props) {
         showToast("Choose a username to start Live Squad.", "info");
         return;
       }
-      const res = await createLiveMiniSquad({
-        miniMissionId: mission.id,
-        title: mission.title,
-        objective: mission.objective ?? null,
-        plannedMinutes: mission.estimatedMinutes,
-        startedAt: mission.startedAt ?? null,
-      });
+      const res = await traceAsync(
+        "liveMini.createSquad",
+        () =>
+          createLiveMiniSquad({
+            miniMissionId: mission.id,
+            title: mission.title,
+            objective: mission.objective ?? null,
+            plannedMinutes: mission.estimatedMinutes,
+            startedAt: mission.startedAt ?? null,
+          }),
+        {
+          slowMs: 900,
+          meta: { hasStarted: Boolean(mission.startedAt) },
+        },
+      );
       if (res.ok === false) {
         if (res.reason === "premium_required") openUpsell("live_mini");
         else showToast(res.error, "error");
@@ -212,7 +223,11 @@ export function LiveMiniInviteSheet({ visible, mission, onClose }: Props) {
           showToast("Choose a username to invite people.", "info");
           return;
         }
-        const res = await inviteLiveMiniParticipant(squadId, userId);
+        const res = await traceAsync(
+          "liveMini.inviteParticipant",
+          () => inviteLiveMiniParticipant(squadId, userId),
+          { slowMs: 900 },
+        );
         if (res.ok === false) {
           showToast(res.error, "error");
           return;

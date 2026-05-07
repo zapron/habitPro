@@ -36,6 +36,7 @@ import {
   subscribeLiveMiniSquad,
 } from "../../src/lib/liveMiniMissionsApi";
 import { syncLiveMiniFromLocalMission } from "../../src/lib/liveMiniMissionProgress";
+import { traceAsync } from "../../src/lib/perfTrace";
 import { useHabitStore } from "../../src/store/habitStore";
 import type { MiniMission } from "../../src/types/habit";
 import type {
@@ -827,7 +828,10 @@ export default function LiveMiniSquadScreen() {
       loadInFlightRef.current = true;
       if (!silent && !snapshotRef.current) setLoading(true);
       try {
-        const next = await fetchLiveMiniSquad(squadId);
+        const next = await traceAsync("liveMini.board.load", () => fetchLiveMiniSquad(squadId), {
+          slowMs: silent ? 1_200 : 800,
+          meta: { silent },
+        });
         if (userIdRef.current !== userId) return;
         snapshotRef.current = next;
         setSnapshot(next);
@@ -858,7 +862,10 @@ export default function LiveMiniSquadScreen() {
     ].join(":");
     if (liveSyncKeyRef.current === key) return;
     liveSyncKeyRef.current = key;
-    void syncLiveMiniFromLocalMission(localLiveMission)
+    void traceAsync("liveMini.progress.syncLocal", () => syncLiveMiniFromLocalMission(localLiveMission), {
+      slowMs: 900,
+      meta: { status: localLiveMission.status },
+    })
       .then(() => load(true))
       .catch(() => {});
   }, [load, localLiveMission, squadId]);
@@ -964,12 +971,17 @@ export default function LiveMiniSquadScreen() {
     const startedAt = new Date().toISOString();
     setBusy("accept");
     try {
-      const res = await acceptLiveMiniInvite({
-        squadId,
-        localMiniMissionId: localId,
-        plannedMinutes: minutes,
-        startedAt,
-      });
+      const res = await traceAsync(
+        "liveMini.acceptStart",
+        () =>
+          acceptLiveMiniInvite({
+            squadId,
+            localMiniMissionId: localId,
+            plannedMinutes: minutes,
+            startedAt,
+          }),
+        { slowMs: 900, meta: { minutes } },
+      );
       if (res.ok === false) {
         showToast(res.error, "error");
         return;
@@ -1001,7 +1013,9 @@ export default function LiveMiniSquadScreen() {
     if (!squadId || !myParticipant || myParticipant.status !== "invited" || busy) return;
     setBusy("decline");
     try {
-      const res = await declineLiveMiniInvite(squadId);
+      const res = await traceAsync("liveMini.decline", () => declineLiveMiniInvite(squadId), {
+        slowMs: 900,
+      });
       if (res.ok === false) {
         showToast(res.error, "error");
         return;
