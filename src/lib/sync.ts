@@ -501,6 +501,17 @@ export async function deleteRemoteHabit(sessionUserId: string, habitId: string):
   if (error) throw error;
 }
 
+export async function upsertRemoteHabit(sessionUserId: string, habit: Habit): Promise<void> {
+  const supabase = getSupabase();
+  if (!supabase || !sessionUserId) return;
+  const normalized = await habitForRemote(habit);
+  const row = habitToRow(sessionUserId, normalized);
+  const { error } = await supabase.from("habits").upsert(row, {
+    onConflict: "user_id,id",
+  });
+  if (error) throw error;
+}
+
 export async function deleteRemoteMiniMission(sessionUserId: string, miniMissionId: string): Promise<void> {
   const supabase = getSupabase();
   if (!supabase || !sessionUserId || !miniMissionId) return;

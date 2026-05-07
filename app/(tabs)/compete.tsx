@@ -51,6 +51,7 @@ import {
   refreshCohortPeerHabits,
 } from "../../src/lib/groupChallengesApi";
 import { subscribeSyncSuccess } from "../../src/lib/syncQueue";
+import { upsertRemoteHabit } from "../../src/lib/sync";
 import { PlusBadge } from "../../src/components/PlusBadge";
 import { ShimmerBlock } from "../../src/components/ShimmerBlock";
 import { useRefreshPremiumAccess } from "../../src/hooks/useRefreshPremiumAccess";
@@ -68,7 +69,6 @@ import {
 } from "../../src/lib/liveMiniMissionsApi";
 import { levelFromTotalXp, xpInCurrentLevel } from "../../src/utils/xpLevel";
 
-const INVITE_ACCEPT_TIMEOUT_MS = 45_000;
 const WEEKLY_RANK_PAGE_SIZE = 20;
 
 type CompeteSegment = "leaderboard" | "challenges";
@@ -655,13 +655,18 @@ export default function CompeteScreen() {
   }, [highlightInviteId, highlightChallengeId]);
 
   const handleAcceptGroupInvite = async (invite: ChallengeInviteRow) => {
-    const freshPremium = await refreshPremiumAccess({ force: true });
-    if (freshPremium !== true) {
-      openUpsell("invite_accept");
+    if (inviteBusy) return;
+    if (!userId) {
+      showToast("Sign in to accept this invite.", "error");
       return;
     }
     setInviteBusy(invite.id);
     try {
+      const freshPremium = await refreshPremiumAccess({ force: true });
+      if (freshPremium !== true) {
+        openUpsell("invite_accept");
+        return;
+      }
       const group = await getChallengeGroup(invite.challenge_id);
       if (!group) {
         showToast("Group mission not found.", "error");
@@ -676,21 +681,10 @@ export default function CompeteScreen() {
         typeof tpl.endDate === "string" && tpl.endDate.trim().length > 0 ? tpl.endDate.trim() : undefined;
       const startIso = inviteeHabitStartIsoFromGroupStartDate(group.start_date);
 
-      let newHabitId = "";
-      await new Promise<void>((resolve, reject) => {
-        let unsub: (() => void) | undefined;
-        const timeoutId = setTimeout(() => {
-          unsub?.();
-          reject(new Error("Couldn’t sync in time. Check your connection and try again."));
-        }, INVITE_ACCEPT_TIMEOUT_MS);
-
-        const finish = (err?: unknown) => {
-          clearTimeout(timeoutId);
-          if (err) reject(err);
-          else resolve();
-        };
-
-        newHabitId = addHabit({
+      const existingHabit = useHabitStore.getState().habits.find((h) => h.challengeGroupId === group.id);
+      const newHabitId =
+        existingHabit?.id ??
+        addHabit({
           title,
           description,
           mode,
@@ -701,27 +695,26 @@ export default function CompeteScreen() {
           endDate: mode === "manual" ? tplEnd : undefined,
         });
 
-        unsub = subscribeSyncSuccess(() => {
-          unsub?.();
-          unsub = undefined;
-          void acceptInviteAndJoin(invite, newHabitId)
-            .then(({ error }) => {
-              if (error) {
-                finish(error);
-                return;
-              }
-              useHabitStore.getState().synchronizeHabitWithChallengeGroup(newHabitId, group);
-              void refreshCohortPeerHabits();
-              void loadInvites();
-              showToast("Joined the group mission", "success");
-              setTimeout(() => {
-                void suggestNotifications("invite_accept");
-              }, 450);
-              finish();
-            })
-            .catch(finish);
-        });
-      });
+      const habit = useHabitStore.getState().habits.find((h) => h.id === newHabitId);
+      if (!habit) {
+        throw new Error("Could not create the mission on this device.");
+      }
+
+      await upsertRemoteHabit(userId, habit);
+      const { error } = await acceptInviteAndJoin(invite, newHabitId);
+      if (error) throw error;
+
+      useHabitStore.getState().synchronizeHabitWithChallengeGroup(newHabitId, group);
+      const alignedHabit = useHabitStore.getState().habits.find((h) => h.id === newHabitId);
+      if (alignedHabit) {
+        await upsertRemoteHabit(userId, alignedHabit);
+      }
+      void refreshCohortPeerHabits();
+      void loadInvites();
+      showToast("Joined the group mission", "success");
+      setTimeout(() => {
+        void suggestNotifications("invite_accept");
+      }, 450);
     } catch (e: unknown) {
       const msg =
         e instanceof Error

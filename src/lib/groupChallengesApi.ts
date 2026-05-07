@@ -461,7 +461,9 @@ export async function acceptInviteAndJoin(
     habit_id: newHabitId,
     role: "member",
   });
-  if (mErr) return { error: new Error(mErr.message) };
+  if (mErr && (mErr as { code?: string }).code !== "23505") {
+    return { error: new Error(mErr.message) };
+  }
 
   const { error: iErr } = await supabase
     .from("challenge_invites")
