@@ -1096,6 +1096,7 @@ export default function MiniMissionDetail() {
 
   const isTimerUp = mission?.status === "in_progress" && countdown === 0;
   const isLiveMiniMission = Boolean(mission?.liveSquadId);
+  const isLiveMiniCreator = mission?.liveSquadRole === "creator";
 
   const openLiveSquadBoard = useCallback(() => {
     const squadId = mission?.liveSquadId;
@@ -1107,6 +1108,18 @@ export default function MiniMissionDetail() {
     setFocusModeOpen(false);
     router.push(`/live-mini/${squadId}`);
   }, [mission?.liveSquadId, router]);
+
+  const openLiveSquadEntry = useCallback(() => {
+    if (!mission?.liveSquadId) {
+      setLiveMiniSheetOpen(true);
+      return;
+    }
+    if (isLiveMiniCreator) {
+      setLiveMiniSheetOpen(true);
+      return;
+    }
+    openLiveSquadBoard();
+  }, [isLiveMiniCreator, mission?.liveSquadId, openLiveSquadBoard]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1819,9 +1832,15 @@ export default function MiniMissionDetail() {
               },
             ]}
             activeOpacity={0.86}
-            onPress={mission.liveSquadId ? openLiveSquadBoard : () => setLiveMiniSheetOpen(true)}
+            onPress={openLiveSquadEntry}
             accessibilityRole="button"
-            accessibilityLabel={mission.liveSquadId ? "Open Live Squad board" : "Start Live Squad"}
+            accessibilityLabel={
+              mission.liveSquadId
+                ? isLiveMiniCreator
+                  ? "Invite more people to Live Squad"
+                  : "Open Live Squad board"
+                : "Start Live Squad"
+            }
           >
             <View style={styles.liveMiniEntryIcon}>
               {mission.liveSquadId ? (
@@ -1832,11 +1851,17 @@ export default function MiniMissionDetail() {
             </View>
             <View style={styles.liveMiniEntryText}>
               <Text style={[styles.liveMiniEntryTitle, { color: theme.colors.textPrimary }]} numberOfLines={1}>
-                {mission.liveSquadId ? "Live Squad is on" : "Do it with others?"}
+                {mission.liveSquadId
+                  ? isLiveMiniCreator
+                    ? "Invite more people"
+                    : "Live Squad is on"
+                  : "Do it with others?"}
               </Text>
               <Text style={[styles.liveMiniEntryBody, { color: theme.colors.textSecondary }]} numberOfLines={2}>
                 {mission.liveSquadId
-                  ? "Open the board to see who joined, finished, or missed."
+                  ? isLiveMiniCreator
+                    ? "Live Squad is on. Search by username and send more invites."
+                    : "Open the board to see who joined, finished, or missed."
                   : "Invite people by username. They pick their own timer."}
               </Text>
             </View>

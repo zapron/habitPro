@@ -84,6 +84,7 @@ export function LiveMiniInviteSheet({ visible, mission, onClose }: Props) {
   const signedIn = Boolean(session?.user);
   const configured = isSupabaseConfigured();
   const plusOk = isPremium && !premiumLoading;
+  const canInviteInExistingSquad = !squadId || mission.liveSquadRole === "creator";
 
   useEffect(() => {
     if (visible) setSquadId(mission.liveSquadId ?? null);
@@ -188,6 +189,10 @@ export function LiveMiniInviteSheet({ visible, mission, onClose }: Props) {
   const handleInvite = useCallback(
     async (userId: string) => {
       if (!squadId || statusByUserId[userId]) return;
+      if (mission.liveSquadRole !== "creator") {
+        showToast("Only the Live Squad creator can invite more people.", "info");
+        return;
+      }
       const freshPremium = await refreshPremiumAccess({ force: true });
       if (freshPremium !== true) {
         openUpsell("live_mini");
@@ -211,7 +216,7 @@ export function LiveMiniInviteSheet({ visible, mission, onClose }: Props) {
         setInvitingId(null);
       }
     },
-    [loadStatuses, openUpsell, refreshPremiumAccess, requireUsername, showToast, squadId, statusByUserId],
+    [loadStatuses, mission.liveSquadRole, openUpsell, refreshPremiumAccess, requireUsername, showToast, squadId, statusByUserId],
   );
 
   const openBoard = () => {
@@ -302,72 +307,80 @@ export function LiveMiniInviteSheet({ visible, mission, onClose }: Props) {
                 </TouchableOpacity>
               </View>
 
-              <Text style={[styles.sectionLabel, { color: theme.colors.textMuted }]}>INVITE BY USERNAME</Text>
-              <TextInput
-                editable={plusOk}
-                value={query}
-                onChangeText={setQuery}
-                placeholder="Search username"
-                placeholderTextColor={theme.colors.textMuted}
-                autoCapitalize="none"
-                autoCorrect={false}
-                style={[
-                  styles.input,
-                  {
-                    color: theme.colors.textPrimary,
-                    borderColor: theme.colors.border,
-                    backgroundColor: theme.colors.background,
-                  },
-                ]}
-              />
-              {searching ? (
-                <ActivityIndicator color={theme.colors.indigo[400]} style={{ marginVertical: 10 }} />
+              {canInviteInExistingSquad ? (
+                <>
+                  <Text style={[styles.sectionLabel, { color: theme.colors.textMuted }]}>INVITE BY USERNAME</Text>
+                  <TextInput
+                    editable={plusOk}
+                    value={query}
+                    onChangeText={setQuery}
+                    placeholder="Search username"
+                    placeholderTextColor={theme.colors.textMuted}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    style={[
+                      styles.input,
+                      {
+                        color: theme.colors.textPrimary,
+                        borderColor: theme.colors.border,
+                        backgroundColor: theme.colors.background,
+                      },
+                    ]}
+                  />
+                  {searching ? (
+                    <ActivityIndicator color={theme.colors.indigo[400]} style={{ marginVertical: 10 }} />
+                  ) : (
+                    <FlatList
+                      data={results}
+                      keyExtractor={(item) => item.id}
+                      keyboardShouldPersistTaps="handled"
+                      style={styles.resultsList}
+                      ListEmptyComponent={
+                        query.trim().length >= 3 ? (
+                          <Text style={[styles.emptySearch, { color: theme.colors.textMuted }]}>No matches</Text>
+                        ) : null
+                      }
+                      renderItem={({ item }) => {
+                        const st = statusByUserId[item.id];
+                        const label = statusLabel(st);
+                        const blocked = Boolean(st);
+                        return (
+                          <TouchableOpacity
+                            style={[styles.resultRow, { borderColor: theme.colors.border, opacity: blocked ? 0.72 : 1 }]}
+                            onPress={() => void handleInvite(item.id)}
+                            disabled={blocked || invitingId === item.id}
+                            activeOpacity={0.86}
+                          >
+                            <View style={styles.resultIdentity}>
+                              <Text style={[styles.username, { color: theme.colors.textPrimary }]}>
+                                @{item.username}
+                              </Text>
+                              {item.display_name ? (
+                                <Text style={[styles.displayName, { color: theme.colors.textMuted }]} numberOfLines={1}>
+                                  {item.display_name}
+                                </Text>
+                              ) : null}
+                            </View>
+                            {label ? (
+                              <Text style={[styles.statusText, { color: theme.colors.textMuted }]}>{label}</Text>
+                            ) : invitingId === item.id ? (
+                              <ActivityIndicator size="small" color={theme.colors.indigo[400]} />
+                            ) : (
+                              <View style={styles.inviteCta}>
+                                <UserPlus size={15} color={theme.colors.cyan[400]} />
+                                <Text style={[styles.inviteCtaText, { color: theme.colors.cyan[400] }]}>Invite</Text>
+                              </View>
+                            )}
+                          </TouchableOpacity>
+                        );
+                      }}
+                    />
+                  )}
+                </>
               ) : (
-                <FlatList
-                  data={results}
-                  keyExtractor={(item) => item.id}
-                  keyboardShouldPersistTaps="handled"
-                  style={styles.resultsList}
-                  ListEmptyComponent={
-                    query.trim().length >= 3 ? (
-                      <Text style={[styles.emptySearch, { color: theme.colors.textMuted }]}>No matches</Text>
-                    ) : null
-                  }
-                  renderItem={({ item }) => {
-                    const st = statusByUserId[item.id];
-                    const label = statusLabel(st);
-                    const blocked = Boolean(st);
-                    return (
-                      <TouchableOpacity
-                        style={[styles.resultRow, { borderColor: theme.colors.border, opacity: blocked ? 0.72 : 1 }]}
-                        onPress={() => void handleInvite(item.id)}
-                        disabled={blocked || invitingId === item.id}
-                        activeOpacity={0.86}
-                      >
-                        <View style={styles.resultIdentity}>
-                          <Text style={[styles.username, { color: theme.colors.textPrimary }]}>
-                            @{item.username}
-                          </Text>
-                          {item.display_name ? (
-                            <Text style={[styles.displayName, { color: theme.colors.textMuted }]} numberOfLines={1}>
-                              {item.display_name}
-                            </Text>
-                          ) : null}
-                        </View>
-                        {label ? (
-                          <Text style={[styles.statusText, { color: theme.colors.textMuted }]}>{label}</Text>
-                        ) : invitingId === item.id ? (
-                          <ActivityIndicator size="small" color={theme.colors.indigo[400]} />
-                        ) : (
-                          <View style={styles.inviteCta}>
-                            <UserPlus size={15} color={theme.colors.cyan[400]} />
-                            <Text style={[styles.inviteCtaText, { color: theme.colors.cyan[400] }]}>Invite</Text>
-                          </View>
-                        )}
-                      </TouchableOpacity>
-                    );
-                  }}
-                />
+                <Text style={[styles.body, { color: theme.colors.textSecondary }]}>
+                  Only the Live Squad creator can invite more people.
+                </Text>
               )}
             </>
           )}
