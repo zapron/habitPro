@@ -52,6 +52,7 @@ import {
   refreshCohortPeerHabits,
   type ProfileLabel,
 } from "../../src/lib/groupChallengesApi";
+import { backOrReplace } from "../../src/lib/navigation";
 import { isSupabaseConfigured } from "../../src/lib/env";
 import { deleteAllCommunityWinsForHabit } from "../../src/lib/communityWinsApi";
 import { PlusBadge } from "../../src/components/PlusBadge";
@@ -299,7 +300,7 @@ export default function ChallengeDetailScreen() {
         deleteHabit(habitId);
         await refreshCohortPeerHabits().catch(() => {});
         showToast("Left group mission", "success");
-        router.back();
+        backOrReplace(router, "/(tabs)/compete");
       } finally {
         setLeaveBusy(false);
       }
@@ -511,7 +512,7 @@ export default function ChallengeDetailScreen() {
       <View style={styles.header}>
         <TouchableOpacity
           style={[styles.iconButton, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}
-          onPress={() => router.back()}
+          onPress={() => backOrReplace(router, "/(tabs)/compete")}
         >
           <ArrowLeft size={theme.icon.xl} color={theme.colors.textPrimary} />
         </TouchableOpacity>

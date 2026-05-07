@@ -20,6 +20,7 @@ import { useTheme } from "../src/context/ThemeContext";
 import { useAuth } from "../src/context/AuthContext";
 import { listNotifications, markAllNotificationsRead, markNotificationRead } from "../src/lib/groupChallengesApi";
 import { parseCommunityWinCheerPayload } from "../src/lib/notificationPayloads";
+import { backOrReplace } from "../src/lib/navigation";
 import type { ChallengeNudgeKind, NotificationRow } from "../src/types/groupChallenge";
 import { ShimmerBlock } from "../src/components/ShimmerBlock";
 
@@ -322,7 +323,7 @@ export default function NotificationsScreen() {
       <View style={styles.header}>
         <TouchableOpacity
           style={[styles.iconButton, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}
-          onPress={() => router.back()}
+          onPress={() => backOrReplace(router, "/")}
         >
           <ArrowLeft size={theme.icon.xl} color={theme.colors.textPrimary} />
         </TouchableOpacity>

@@ -9,6 +9,7 @@ import { useHabitStore } from "../../src/store/habitStore";
 import { useTheme } from "../../src/context/ThemeContext";
 import { FuelTimePresetButton } from "../../src/components/fuel/FuelTimePresetButton";
 import { FuelQuickMinutesStrip } from "../../src/components/fuel/FuelQuickMinutesStrip";
+import { backOrReplace } from "../../src/lib/navigation";
 
 type StartMode = "now" | "later";
 
@@ -81,7 +82,7 @@ export default function CreateMiniMission() {
       <View style={styles.header}>
         <TouchableOpacity
           style={[styles.backButton, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}
-          onPress={() => router.back()}
+          onPress={() => backOrReplace(router, "/mini")}
         >
           <ArrowLeft size={20} color={theme.colors.textPrimary} />
         </TouchableOpacity>

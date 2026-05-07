@@ -90,6 +90,7 @@ import {
   uploadMiniStreakMemoryImage,
 } from "../../src/lib/streakMemoryStorage";
 import { syncLiveMiniFromLocalMission } from "../../src/lib/liveMiniMissionProgress";
+import { backOrReplace } from "../../src/lib/navigation";
 
 // Notification handler is configured globally in _layout.tsx via setupNotifications()
 
@@ -1296,7 +1297,7 @@ export default function MiniMissionDetail() {
             <Text style={[styles.notFound, { color: theme.colors.textPrimary }]}>
               Mini mission not found
             </Text>
-            <Button title="Go Back" onPress={() => router.back()} />
+            <Button title="Go Back" onPress={() => backOrReplace(router, "/mini")} />
           </View>
         )}
       </Screen>
@@ -1634,7 +1635,7 @@ export default function MiniMissionDetail() {
               borderColor: theme.colors.border,
             },
           ]}
-          onPress={() => router.back()}
+          onPress={() => backOrReplace(router, "/mini")}
         >
           <ArrowLeft size={theme.icon.lg} color={theme.colors.textPrimary} />
         </TouchableOpacity>

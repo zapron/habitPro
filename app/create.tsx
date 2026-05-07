@@ -29,6 +29,7 @@ import type { HabitMode, MissionVisibility } from "../src/types/habit";
 import { PlusBadge } from "../src/components/PlusBadge";
 import { usePremium } from "../src/context/PremiumContext";
 import { usePlusUpsell } from "../src/context/PlusUpsellContext";
+import { backOrReplace } from "../src/lib/navigation";
 import { useNotificationGate } from "../src/context/NotificationGateContext";
 import { useRefreshPremiumAccess } from "../src/hooks/useRefreshPremiumAccess";
 
@@ -104,7 +105,7 @@ export default function CreateHabit() {
               borderColor: theme.colors.border,
             },
           ]}
-          onPress={() => router.back()}
+          onPress={() => backOrReplace(router, "/")}
         >
           <ArrowLeft size={20} color={theme.colors.textPrimary} />
         </TouchableOpacity>

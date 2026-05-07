@@ -33,6 +33,7 @@ import { useTheme } from "../../src/context/ThemeContext";
 import { useHabitStore } from "../../src/store/habitStore";
 import { MiniMission } from "../../src/types/habit";
 import { useRemoteStoreRefreshOnFocus } from "../../src/hooks/useRemoteStoreRefreshOnFocus";
+import { backOrReplace } from "../../src/lib/navigation";
 import { getMiniRemainingMs } from "../../src/utils/miniMissionTime";
 import {
   MINI_MISSION_KEEP_SCREEN_ON_KEY,
@@ -352,7 +353,7 @@ export default function MiniMissionsScreen() {
     <Screen>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={theme.colors.background} />
       <View style={styles.headerControls}>
-        <TouchableOpacity style={[styles.iconButton, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]} onPress={() => router.back()} activeOpacity={0.8}>
+        <TouchableOpacity style={[styles.iconButton, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]} onPress={() => backOrReplace(router, "/")} activeOpacity={0.8}>
           <ArrowLeft size={20} color={theme.colors.textPrimary} />
         </TouchableOpacity>
         <Text style={[styles.headerAccent, { color: theme.colors.textSecondary, fontSize: theme.typography.caption }]}>Mission deck</Text>

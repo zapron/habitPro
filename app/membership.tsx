@@ -25,6 +25,7 @@ import {
   formatMembershipDate,
   storeDisplayName,
 } from "../src/lib/membershipFromCustomerInfo";
+import { backOrReplace } from "../src/lib/navigation";
 
 function DetailRow({
   label,
@@ -136,7 +137,7 @@ export default function MembershipScreen() {
 
       <View style={styles.topBar}>
         <TouchableOpacity
-          onPress={() => router.back()}
+          onPress={() => backOrReplace(router, "/(tabs)/profile")}
           style={[styles.backBtn, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}
           accessibilityRole="button"
           accessibilityLabel="Go back"

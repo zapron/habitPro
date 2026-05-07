@@ -35,6 +35,7 @@ import { useTheme } from '../../src/context/ThemeContext';
 import { useToast } from '../../src/context/ToastContext';
 import { useReducedMotion } from '../../src/hooks/useReducedMotion';
 import { subscribeSyncFailure, subscribeSyncSuccess } from '../../src/lib/syncQueue';
+import { backOrReplace } from '../../src/lib/navigation';
 import type { MissionVisibility } from '../../src/types/habit';
 import { ConfettiBurst } from '../../src/components/ConfettiBurst';
 import { StreakBanner } from '../../src/components/StreakBanner';
@@ -783,7 +784,7 @@ export default function HabitDetail() {
                 ) : (
                     <View style={styles.notFoundContainer}>
                         <Text style={[styles.notFoundText, { color: theme.colors.textPrimary, fontSize: theme.typography.body }]}>Mission not found</Text>
-                        <Button title='Go Back' onPress={() => router.back()} style={styles.notFoundButton} />
+                        <Button title='Go Back' onPress={() => backOrReplace(router, "/")} style={styles.notFoundButton} />
                     </View>
                 )}
             </Screen>
@@ -861,7 +862,7 @@ export default function HabitDetail() {
             <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={theme.colors.background} />
 
             <View style={styles.header}>
-                <TouchableOpacity style={[styles.iconButton, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]} onPress={() => router.back()}>
+                <TouchableOpacity style={[styles.iconButton, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]} onPress={() => backOrReplace(router, "/")}>
                     <ArrowLeft size={theme.icon.xl} color={theme.colors.textPrimary} />
                 </TouchableOpacity>
                 <View style={styles.headerActions}>
@@ -1434,7 +1435,7 @@ export default function HabitDetail() {
                                         if (resetHabit(habit.id)) {
                                             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                                             showToast('Mission reset', 'success');
-                                            router.back();
+                                            backOrReplace(router, "/");
                                         }
                                     },
                                 },
@@ -1453,7 +1454,7 @@ export default function HabitDetail() {
                                               deleteHabit(habit.id);
                                               Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                                               showToast('Mission deleted', 'success');
-                                              router.back();
+                                              backOrReplace(router, "/");
                                           })();
                                       },
                                   },
@@ -1480,7 +1481,7 @@ export default function HabitDetail() {
                                                 await refreshCohortPeerHabits().catch(() => {});
                                                 Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
                                                 showToast('Left group mission', 'success');
-                                                router.back();
+                                                backOrReplace(router, "/");
                                             })();
                                         },
                                     },

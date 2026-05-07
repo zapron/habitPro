@@ -18,6 +18,7 @@ import { useTheme } from "../../src/context/ThemeContext";
 import { useAuth } from "../../src/context/AuthContext";
 import { Button } from "../../src/components/Button";
 import { getPasswordResetRedirectUrl } from "../../src/lib/authRedirects";
+import { backOrReplace } from "../../src/lib/navigation";
 import { getSupabase } from "../../src/lib/supabase";
 
 const FORM_MAX_WIDTH = 400;
@@ -58,7 +59,7 @@ export default function ForgotPasswordScreen() {
     Alert.alert(
       "Check your inbox",
       "If an account exists for that email, we sent reset instructions. Open the link on this device to choose a new password.",
-      [{ text: "OK", onPress: () => router.back() }],
+      [{ text: "OK", onPress: () => backOrReplace(router, "/login") }],
     );
   };
 
@@ -126,7 +127,7 @@ export default function ForgotPasswordScreen() {
 
               <TouchableOpacity
                 style={styles.backRow}
-                onPress={() => router.back()}
+                onPress={() => backOrReplace(router, "/login")}
                 activeOpacity={0.8}
                 disabled={submitting}
               >

@@ -36,6 +36,7 @@ import {
   subscribeLiveMiniSquad,
 } from "../../src/lib/liveMiniMissionsApi";
 import { syncLiveMiniFromLocalMission } from "../../src/lib/liveMiniMissionProgress";
+import { backOrReplace } from "../../src/lib/navigation";
 import { traceAsync } from "../../src/lib/perfTrace";
 import { useHabitStore } from "../../src/store/habitStore";
 import type { MiniMission } from "../../src/types/habit";
@@ -1047,7 +1048,7 @@ export default function LiveMiniSquadScreen() {
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={theme.colors.background} />
       <View style={styles.header}>
         <TouchableOpacity
-          onPress={() => router.back()}
+          onPress={() => backOrReplace(router, "/mini")}
           activeOpacity={0.86}
           style={[styles.iconButton, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}
         >
