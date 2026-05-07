@@ -1325,6 +1325,7 @@ export default function MiniMissionDetail() {
     setFocusModeOpen(false);
     setTimerFrozenAtMs(Date.now());
     setCompleteSheetOpen(true);
+    void refreshPremiumAccess({ force: true });
   };
 
   const handleCompleteCommit = async (

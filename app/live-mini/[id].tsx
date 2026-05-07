@@ -14,7 +14,8 @@ import {
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { ArrowLeft, Check, Flame, Radio, Timer, Trophy, Users, X } from "lucide-react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { ArrowLeft, Check, Flame, Info, Radio, Timer, Trophy, Users, X } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import { Text } from "../../src/components/AppText";
 import { Screen } from "../../src/components/Screen";
@@ -99,6 +100,23 @@ function withImageVersion(url: string, version: string | null | undefined): stri
   return `${url}${url.includes("?") ? "&" : "?"}v=${encodeURIComponent(version)}`;
 }
 
+function formatShortDateTime(iso?: string | null): string {
+  if (!iso) return "Not set";
+  try {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return iso;
+    return d.toLocaleString(undefined, {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  } catch {
+    return iso;
+  }
+}
+
 function statusCopy(status: LiveMiniParticipantStatus): string {
   switch (status) {
     case "invited":
@@ -149,6 +167,138 @@ function ordinalLabel(rank: number): string {
   if (rank === 2) return "2nd";
   if (rank === 3) return "3rd";
   return `${rank}th`;
+}
+
+function LiveSquadDetailsSheet({
+  visible,
+  snapshot,
+  onClose,
+}: {
+  visible: boolean;
+  snapshot: LiveMiniSquadSnapshot;
+  onClose: () => void;
+}) {
+  const { theme, isDark } = useTheme();
+  const insets = useSafeAreaInsets();
+  const { squad, participants, profiles } = snapshot;
+  const objective =
+    typeof squad.objective === "string" && squad.objective.trim().length > 0
+      ? squad.objective.trim()
+      : "No objective added.";
+  const creatorName = displayName(profiles[squad.creator_id]);
+  const completed = participants.filter((p) => p.status === "completed").length;
+  const onMission = participants.filter((p) => p.status === "in_progress").length;
+  const waiting = participants.filter((p) => p.status === "invited" || p.status === "joined").length;
+  const inactive = participants.filter((p) =>
+    p.status === "declined" || p.status === "cancelled" || p.status === "missed",
+  ).length;
+  const statusLabel =
+    squad.status === "active" ? "Active" : squad.status === "ended" ? "Ended" : "Cancelled";
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <View style={styles.detailsRoot}>
+        <Pressable
+          style={styles.detailsBackdrop}
+          onPress={onClose}
+          accessibilityRole="button"
+          accessibilityLabel="Close Live Squad details"
+        />
+        <View
+          style={[
+            styles.detailsSheet,
+            {
+              backgroundColor: theme.colors.surface,
+              borderColor: theme.colors.border,
+              paddingBottom: Math.max(insets.bottom, 16),
+            },
+          ]}
+        >
+          <View style={styles.detailsHeader}>
+            <Text
+              style={[
+                styles.detailsHeaderTitle,
+                { color: isDark ? theme.colors.indigo[400] : theme.colors.indigo[500] },
+              ]}
+              numberOfLines={2}
+            >
+              {squad.title}
+            </Text>
+            <TouchableOpacity
+              onPress={onClose}
+              activeOpacity={0.86}
+              hitSlop={12}
+              style={[styles.detailsClose, { backgroundColor: theme.colors.surfaceElevated, borderColor: theme.colors.border }]}
+              accessibilityRole="button"
+              accessibilityLabel="Close details"
+            >
+              <X size={20} color={theme.colors.textMuted} />
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={styles.detailsContent}
+          >
+            <View
+              style={[
+                styles.detailsModePill,
+                {
+                  backgroundColor: isDark ? "rgba(34,211,238,0.1)" : "rgba(8,145,178,0.08)",
+                  borderColor: isDark ? "rgba(34,211,238,0.3)" : "rgba(8,145,178,0.2)",
+                },
+              ]}
+            >
+              <Radio size={14} color={theme.colors.cyan[400]} />
+              <Text style={[styles.detailsModeText, { color: theme.colors.cyan[400] }]}>Live Squad</Text>
+            </View>
+
+            <Text style={[styles.detailsSectionLabel, { color: theme.colors.textMuted }]}>Objective</Text>
+            <Text style={[styles.detailsBody, { color: theme.colors.textSecondary }]}>{objective}</Text>
+
+            <Text style={[styles.detailsSectionLabel, { color: theme.colors.textMuted }]}>Squad</Text>
+            <Text style={[styles.detailsLine, { color: theme.colors.textPrimary }]}>Creator: {creatorName}</Text>
+            <Text style={[styles.detailsSubLine, { color: theme.colors.textSecondary }]}>Status: {statusLabel}</Text>
+
+            <View style={styles.detailsStatsGrid}>
+              <View style={[styles.detailsStat, { backgroundColor: theme.colors.surfaceElevated, borderColor: theme.colors.border }]}>
+                <Text style={[styles.detailsStatValue, { color: theme.colors.textPrimary }]}>{participants.length}</Text>
+                <Text style={[styles.detailsStatLabel, { color: theme.colors.textMuted }]}>players</Text>
+              </View>
+              <View style={[styles.detailsStat, { backgroundColor: theme.colors.surfaceElevated, borderColor: theme.colors.border }]}>
+                <Text style={[styles.detailsStatValue, { color: theme.colors.green[500] }]}>{completed}</Text>
+                <Text style={[styles.detailsStatLabel, { color: theme.colors.textMuted }]}>done</Text>
+              </View>
+              <View style={[styles.detailsStat, { backgroundColor: theme.colors.surfaceElevated, borderColor: theme.colors.border }]}>
+                <Text style={[styles.detailsStatValue, { color: theme.colors.cyan[400] }]}>{onMission}</Text>
+                <Text style={[styles.detailsStatLabel, { color: theme.colors.textMuted }]}>on mission</Text>
+              </View>
+              <View style={[styles.detailsStat, { backgroundColor: theme.colors.surfaceElevated, borderColor: theme.colors.border }]}>
+                <Text style={[styles.detailsStatValue, { color: theme.colors.indigo[400] }]}>{waiting}</Text>
+                <Text style={[styles.detailsStatLabel, { color: theme.colors.textMuted }]}>waiting</Text>
+              </View>
+            </View>
+
+            {inactive > 0 ? (
+              <>
+                <Text style={[styles.detailsSectionLabel, { color: theme.colors.textMuted }]}>Closed slots</Text>
+                <Text style={[styles.detailsLine, { color: theme.colors.textPrimary }]}>
+                  {inactive} declined, missed, or cancelled
+                </Text>
+              </>
+            ) : null}
+
+            <Text style={[styles.detailsSectionLabel, { color: theme.colors.textMuted }]}>Created</Text>
+            <Text style={[styles.detailsLine, { color: theme.colors.textPrimary }]}>{formatShortDateTime(squad.created_at)}</Text>
+
+            <Text style={[styles.detailsSectionLabel, { color: theme.colors.textMuted }]}>Last update</Text>
+            <Text style={[styles.detailsLine, { color: theme.colors.textPrimary }]}>{formatShortDateTime(squad.updated_at)}</Text>
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
+  );
 }
 
 function LiveSquadHero({
@@ -521,6 +671,7 @@ export default function LiveMiniSquadScreen() {
   const [selectedMinutes, setSelectedMinutes] = useState(15);
   const [manualMinutes, setManualMinutes] = useState("15");
   const [openImageUri, setOpenImageUri] = useState<string | null>(null);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const userIdRef = useRef(userId);
   const liveSyncKeyRef = useRef<string | null>(null);
 
@@ -709,17 +860,30 @@ export default function LiveMiniSquadScreen() {
         >
           <ArrowLeft size={20} color={theme.colors.textPrimary} />
         </TouchableOpacity>
-        <View
-          style={[
-            styles.livePill,
-            {
-              backgroundColor: isDark ? "rgba(34,211,238,0.12)" : "rgba(8,145,178,0.1)",
-              borderColor: isDark ? "rgba(34,211,238,0.24)" : "rgba(8,145,178,0.16)",
-            },
-          ]}
-        >
-          <Radio size={14} color={theme.colors.cyan[400]} />
-          <Text style={[styles.livePillText, { color: theme.colors.cyan[400] }]}>Live Squad</Text>
+        <View style={styles.headerActions}>
+          {snapshot?.squad ? (
+            <TouchableOpacity
+              onPress={() => setDetailsOpen(true)}
+              activeOpacity={0.86}
+              style={[styles.iconButton, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}
+              accessibilityRole="button"
+              accessibilityLabel="Open Live Squad details"
+            >
+              <Info size={18} color={theme.colors.indigo[400]} />
+            </TouchableOpacity>
+          ) : null}
+          <View
+            style={[
+              styles.livePill,
+              {
+                backgroundColor: isDark ? "rgba(34,211,238,0.12)" : "rgba(8,145,178,0.1)",
+                borderColor: isDark ? "rgba(34,211,238,0.24)" : "rgba(8,145,178,0.16)",
+              },
+            ]}
+          >
+            <Radio size={14} color={theme.colors.cyan[400]} />
+            <Text style={[styles.livePillText, { color: theme.colors.cyan[400] }]}>Live Squad</Text>
+          </View>
         </View>
       </View>
 
@@ -753,7 +917,7 @@ export default function LiveMiniSquadScreen() {
             {squad.title}
           </Text>
           {squad.objective ? (
-            <Text style={[styles.objective, { color: theme.colors.textSecondary }]} numberOfLines={4}>
+            <Text style={[styles.objective, { color: theme.colors.textSecondary }]} numberOfLines={2}>
               {squad.objective}
             </Text>
           ) : null}
@@ -903,6 +1067,14 @@ export default function LiveMiniSquadScreen() {
         </ScrollView>
       )}
 
+      {snapshot ? (
+        <LiveSquadDetailsSheet
+          visible={detailsOpen}
+          snapshot={snapshot}
+          onClose={() => setDetailsOpen(false)}
+        />
+      ) : null}
+
       <Modal
         visible={openImageUri !== null}
         transparent
@@ -937,6 +1109,7 @@ export default function LiveMiniSquadScreen() {
 
 const styles = StyleSheet.create({
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 14 },
+  headerActions: { flexDirection: "row", alignItems: "center", gap: 8 },
   iconButton: { width: 40, height: 40, borderRadius: 999, alignItems: "center", justifyContent: "center", borderWidth: 1 },
   livePill: { minHeight: 36, borderRadius: 999, paddingHorizontal: 13, flexDirection: "row", alignItems: "center", gap: 6, borderWidth: 1 },
   livePillText: { fontSize: 12, fontWeight: "900" },
@@ -1067,4 +1240,70 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  detailsRoot: {
+    flex: 1,
+    justifyContent: "flex-end",
+  },
+  detailsBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.45)",
+  },
+  detailsSheet: {
+    width: "100%",
+    maxHeight: "88%",
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    borderWidth: 1,
+    paddingHorizontal: 18,
+    paddingTop: 16,
+  },
+  detailsHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 12,
+    marginBottom: 10,
+  },
+  detailsHeaderTitle: { flex: 1, minWidth: 0, fontSize: 23, lineHeight: 29, fontWeight: "900" },
+  detailsClose: {
+    width: 40,
+    height: 40,
+    borderRadius: 999,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  detailsContent: { paddingBottom: 20 },
+  detailsModePill: {
+    alignSelf: "flex-start",
+    minHeight: 30,
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 14,
+  },
+  detailsModeText: { fontSize: 12, lineHeight: 15, fontWeight: "900" },
+  detailsSectionLabel: { fontSize: 11, lineHeight: 15, fontWeight: "900", letterSpacing: 1.1, marginTop: 14, marginBottom: 6 },
+  detailsBody: { fontSize: 14, lineHeight: 21, fontWeight: "600" },
+  detailsLine: { fontSize: 14, lineHeight: 20, fontWeight: "800" },
+  detailsSubLine: { fontSize: 13, lineHeight: 19, fontWeight: "600", marginTop: 2 },
+  detailsStatsGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 8,
+  },
+  detailsStat: {
+    width: "48%",
+    minHeight: 66,
+    borderRadius: 14,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  detailsStatValue: { fontSize: 20, lineHeight: 24, fontWeight: "900", fontVariant: ["tabular-nums"] },
+  detailsStatLabel: { fontSize: 11, lineHeight: 15, fontWeight: "800", marginTop: 2 },
 });

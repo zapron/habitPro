@@ -171,6 +171,7 @@ export function CommunityWinFeedPost({
   const showMissionTitle = !streakKicker;
   const showDetailsToggle = hasLongNote || expanded;
   const isLiveSquadWin = win.feed_source === "mini" && Boolean(win.live_squad_id);
+  const showMiniMissionBanner = showMissionTitle;
 
   const lastTapRef = useRef(0);
   const lightboxTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -411,11 +412,44 @@ export function CommunityWinFeedPost({
           accessibilityRole="text"
           accessibilityLabel={`${streakKicker.line1}. ${streakKicker.missionLine}`}
         >
-          <Text style={[styles.streakLine1, { color: isDark ? theme.colors.textPrimary : theme.colors.cyan[700] }]}>
+          <Text style={[styles.streakLine1, { color: isDark ? theme.colors.textPrimary : theme.colors.cyan[500] }]}>
             {streakKicker.line1}
           </Text>
           <Text style={[styles.streakMission, { color: isDark ? theme.colors.cyan[400] : theme.colors.indigo[600] }]} numberOfLines={2}>
             {streakKicker.missionLine}
+          </Text>
+        </LinearGradient>
+      ) : null}
+
+      {showMiniMissionBanner ? (
+        <LinearGradient
+          colors={
+            isDark
+              ? ["rgba(8, 47, 73, 0.72)", "rgba(49, 46, 129, 0.58)", "rgba(30, 41, 59, 0.72)"]
+              : ["rgba(236, 254, 255, 0.92)", "rgba(238, 242, 255, 0.92)", "rgba(255, 255, 255, 0.96)"]
+          }
+          start={{ x: 0, y: 0.5 }}
+          end={{ x: 1, y: 0.5 }}
+          style={[
+            styles.miniMissionBanner,
+            {
+              borderLeftColor: isDark ? "rgba(34, 211, 238, 0.82)" : "rgba(6, 182, 212, 0.72)",
+              borderBottomColor: isDark ? "rgba(34, 211, 238, 0.14)" : "rgba(99, 102, 241, 0.14)",
+            },
+            isFeed ? styles.padHFeed : styles.padCardInner,
+          ]}
+          accessibilityRole="text"
+          accessibilityLabel={`Mini Mission. ${win.title}`}
+        >
+          <Text style={[styles.miniMissionBannerLabel, { color: theme.colors.cyan[400] }]}>Mini Mission</Text>
+          <Text
+            style={[
+              styles.miniMissionBannerTitle,
+              { color: isDark ? theme.colors.textPrimary : theme.colors.indigo[600] },
+            ]}
+            numberOfLines={2}
+          >
+            {win.title}
           </Text>
         </LinearGradient>
       ) : null}
@@ -489,14 +523,9 @@ export function CommunityWinFeedPost({
             </Text>
           </View>
         </View>
-        {(showMissionTitle || hasNote) ? (
+        {hasNote ? (
           <View style={styles.captionRow}>
             <View style={styles.captionTextCol}>
-              {showMissionTitle ? (
-                <Text style={[styles.missionTitle, { color: theme.colors.textPrimary }]} numberOfLines={2}>
-                  {win.title}
-                </Text>
-              ) : null}
               {hasNote && !expanded ? (
                 <Text style={[styles.memNotePreview, { color: theme.colors.textMuted }]} numberOfLines={2}>
                   {noteText}
@@ -669,6 +698,24 @@ const styles = StyleSheet.create({
     marginTop: 1,
     lineHeight: 16,
     letterSpacing: 0.1,
+  },
+  miniMissionBanner: {
+    paddingTop: 8,
+    paddingBottom: 8,
+    borderLeftWidth: 4,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  miniMissionBannerLabel: {
+    fontSize: 10,
+    lineHeight: 13,
+    fontWeight: "900",
+    letterSpacing: 1,
+  },
+  miniMissionBannerTitle: {
+    fontSize: 14,
+    lineHeight: 18,
+    fontWeight: "900",
+    marginTop: 2,
   },
   metaBlock: {
     paddingTop: 6,
