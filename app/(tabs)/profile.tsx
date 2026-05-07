@@ -266,7 +266,7 @@ const hubVisStyles = StyleSheet.create({
 export default function ProfileScreen() {
   const { theme, isDark } = useTheme();
   const insets = useSafeAreaInsets();
-  const { session, signOut, syncReady } = useAuth();
+  const { session, signOut, syncReady, syncError, retryHydrate } = useAuth();
   const { isPremium } = usePremium();
   const { openUpsell } = usePlusUpsell();
   const refreshPremiumAccess = useRefreshPremiumAccess();
@@ -278,6 +278,7 @@ export default function ProfileScreen() {
   const rawMiniMissions = useHabitStore((s) => s.miniMissions);
   const showAccount = isSupabaseConfigured();
   const accountHydrating = Boolean(showAccount && session?.user && !syncReady);
+  const cloudSyncBlocked = Boolean(showAccount && session?.user && syncError);
   const xp = accountHydrating ? 0 : rawXp;
   const username = accountHydrating ? null : rawUsername;
   const habits = useMemo(() => (accountHydrating ? [] : rawHabits), [accountHydrating, rawHabits]);
@@ -495,6 +496,29 @@ export default function ProfileScreen() {
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: bottomPad }}>
+        {cloudSyncBlocked ? (
+          <View
+            style={[
+              styles.syncErrorCard,
+              { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, ...theme.shadow.card },
+            ]}
+          >
+            <Text style={[styles.syncErrorTitle, { color: theme.colors.textPrimary }]}>Cloud sync paused</Text>
+            <Text style={[styles.syncErrorBody, { color: theme.colors.textSecondary }]}>
+              We could not safely load your account data. Remote writes are blocked until retry succeeds.
+            </Text>
+            <TouchableOpacity
+              onPress={retryHydrate}
+              activeOpacity={0.88}
+              style={[styles.syncRetryButton, { backgroundColor: theme.colors.indigo[600] }]}
+              accessibilityRole="button"
+              accessibilityLabel="Retry cloud sync"
+            >
+              <Text style={styles.syncRetryText}>Retry Sync</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
+
         <View style={[styles.hero, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, ...theme.shadow.card }]}>
           <LevelXpRing level={level} xpInLevel={xpInLevel}>
             <View
@@ -838,6 +862,22 @@ const styles = StyleSheet.create({
   plusCardTitle: { fontSize: 16, fontWeight: "900", letterSpacing: -0.2, marginTop: 10 },
   plusCardBody: { fontSize: 13, lineHeight: 19, fontWeight: "600", marginBottom: 10 },
   plusCardCta: { fontSize: 13, fontWeight: "900" },
+  syncErrorCard: {
+    borderRadius: 18,
+    borderWidth: 1,
+    padding: 16,
+    marginBottom: 18,
+  },
+  syncErrorTitle: { fontSize: 16, fontWeight: "900", marginBottom: 6 },
+  syncErrorBody: { fontSize: 13, lineHeight: 19, fontWeight: "600" },
+  syncRetryButton: {
+    alignSelf: "flex-start",
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginTop: 12,
+  },
+  syncRetryText: { color: "#fff", fontSize: 13, fontWeight: "900" },
   sectionLabel: {
     fontSize: 11,
     fontWeight: "800",

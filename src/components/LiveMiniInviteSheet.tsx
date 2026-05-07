@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -80,6 +80,8 @@ export function LiveMiniInviteSheet({ visible, mission, onClose }: Props) {
   const [searching, setSearching] = useState(false);
   const [invitingId, setInvitingId] = useState<string | null>(null);
   const [statusByUserId, setStatusByUserId] = useState<Record<string, LiveMiniParticipantStatus>>({});
+  const createBusyRef = useRef(false);
+  const inviteBusyRef = useRef<string | null>(null);
 
   const signedIn = Boolean(session?.user);
   const configured = isSupabaseConfigured();
@@ -144,19 +146,21 @@ export function LiveMiniInviteSheet({ visible, mission, onClose }: Props) {
   }, [query, session?.user?.id, showToast, squadId, visible]);
 
   const handleCreate = useCallback(async () => {
+    if (createBusyRef.current) return;
     if (!configured || !signedIn) return;
-    const freshPremium = await refreshPremiumAccess({ force: true });
-    if (freshPremium !== true) {
-      openUpsell("live_mini");
-      return;
-    }
-    const ok = await requireUsername("live_mini_create");
-    if (!ok) {
-      showToast("Choose a username to start Live Squad.", "info");
-      return;
-    }
+    createBusyRef.current = true;
     setCreating(true);
     try {
+      const freshPremium = await refreshPremiumAccess({ force: true });
+      if (freshPremium !== true) {
+        openUpsell("live_mini");
+        return;
+      }
+      const ok = await requireUsername("live_mini_create");
+      if (!ok) {
+        showToast("Choose a username to start Live Squad.", "info");
+        return;
+      }
       const res = await createLiveMiniSquad({
         miniMissionId: mission.id,
         title: mission.title,
@@ -173,6 +177,7 @@ export function LiveMiniInviteSheet({ visible, mission, onClose }: Props) {
       setSquadId(res.squadId);
       showToast("Live Squad ready. Invite someone to join this mini mission.", "success");
     } finally {
+      createBusyRef.current = false;
       setCreating(false);
     }
   }, [
@@ -189,22 +194,24 @@ export function LiveMiniInviteSheet({ visible, mission, onClose }: Props) {
   const handleInvite = useCallback(
     async (userId: string) => {
       if (!squadId || statusByUserId[userId]) return;
+      if (inviteBusyRef.current) return;
       if (mission.liveSquadRole !== "creator") {
         showToast("Only the Live Squad creator can invite more people.", "info");
         return;
       }
-      const freshPremium = await refreshPremiumAccess({ force: true });
-      if (freshPremium !== true) {
-        openUpsell("live_mini");
-        return;
-      }
-      const ok = await requireUsername("live_mini_invite");
-      if (!ok) {
-        showToast("Choose a username to invite people.", "info");
-        return;
-      }
+      inviteBusyRef.current = userId;
       setInvitingId(userId);
       try {
+        const freshPremium = await refreshPremiumAccess({ force: true });
+        if (freshPremium !== true) {
+          openUpsell("live_mini");
+          return;
+        }
+        const ok = await requireUsername("live_mini_invite");
+        if (!ok) {
+          showToast("Choose a username to invite people.", "info");
+          return;
+        }
         const res = await inviteLiveMiniParticipant(squadId, userId);
         if (res.ok === false) {
           showToast(res.error, "error");
@@ -213,6 +220,7 @@ export function LiveMiniInviteSheet({ visible, mission, onClose }: Props) {
         await loadStatuses(squadId);
         showToast("Invite sent.", "success");
       } finally {
+        inviteBusyRef.current = null;
         setInvitingId(null);
       }
     },

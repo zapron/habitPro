@@ -212,7 +212,7 @@ export default function Home() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { theme, isDark } = useTheme();
-  const { session, syncReady } = useAuth();
+  const { session, syncReady, syncError, retryHydrate } = useAuth();
   const reduceMotion = useReducedMotion();
   const habits = useHabitStore((state) => state.habits);
   const miniMissions = useHabitStore((state) => state.miniMissions);
@@ -233,7 +233,8 @@ export default function Home() {
   const showAccount = isSupabaseConfigured();
   // On new devices, zustand can hydrate an "empty" store before Supabase hydrate completes.
   // Show skeleton until first Supabase hydrate finishes to avoid a confusing empty flash.
-  const waitingForFirstSync = Boolean(showAccount && session?.user && !syncReady);
+  const waitingForFirstSync = Boolean(showAccount && session?.user && !syncReady && !syncError);
+  const cloudSyncBlocked = Boolean(showAccount && session?.user && syncError);
 
   const bellScale = useRef(new Animated.Value(1)).current;
   const bellBuzz = useRef(new Animated.Value(0)).current;
@@ -789,7 +790,36 @@ export default function Home() {
         ) : null}
 
         <View style={styles.listWrap}>
-          {!storeHydrated || waitingForFirstSync ? (
+          {cloudSyncBlocked ? (
+            <ScrollView
+              style={styles.emptyScroll}
+              contentContainerStyle={styles.emptyScrollContent}
+              showsVerticalScrollIndicator={false}
+            >
+              <View style={styles.emptyStateInner}>
+                <View
+                  style={[
+                    styles.emptyIconContainer,
+                    {
+                      backgroundColor: theme.colors.surface,
+                      borderColor: theme.colors.border,
+                    },
+                  ]}
+                >
+                  <Bell size={42} color={theme.colors.red[500]} />
+                </View>
+                <Text style={[styles.emptyTitle, { color: theme.colors.textPrimary, fontSize: theme.typography.h3 }]}>
+                  Cloud sync paused
+                </Text>
+                <Text style={[styles.emptyDescription, { color: theme.colors.textSecondary }]}>
+                  We could not safely load your account data. Remote writes are blocked until this retry succeeds.
+                </Text>
+                <View style={styles.emptyActions}>
+                  <Button title="Retry Sync" onPress={retryHydrate} style={styles.emptyButton} />
+                </View>
+              </View>
+            </ScrollView>
+          ) : !storeHydrated || waitingForFirstSync ? (
             <ListSkeleton theme={theme} isDark={isDark} reduceMotion={reduceMotion} />
           ) : filteredHabits.length === 0 ? (
             <ScrollView

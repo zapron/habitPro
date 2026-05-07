@@ -22,6 +22,7 @@ import { extractOAuthCodeFromUrl } from "../lib/oauthExchange";
 import { getSignupConfirmationRedirectUrl } from "../lib/authRedirects";
 import { isPasswordRecoverySession } from "../lib/passwordRecovery";
 import { clearSupabaseAuthStorage, getSupabase } from "../lib/supabase";
+import { saveAccountSnapshotBackup } from "../lib/accountBackup";
 import { hydrateStoreAfterAuth } from "../lib/sync";
 import { disableAndCancelRemoteSync } from "../lib/syncQueue";
 import {
@@ -41,6 +42,9 @@ type AuthContextValue = {
   initializing: boolean;
   /** True after first hydrate from Supabase for this session (safe to push). */
   syncReady: boolean;
+  /** Hydrate failure blocks remote writes until retry succeeds. */
+  syncError: string | null;
+  retryHydrate: () => void;
   supabaseConfigured: boolean;
   /** True after PASSWORD_RECOVERY until password is updated or cleared — used to avoid routing recovery to home. */
   passwordRecoveryPending: boolean;
@@ -59,6 +63,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [initializing, setInitializing] = useState(true);
   const [syncReady, setSyncReady] = useState(false);
+  const [syncError, setSyncError] = useState<string | null>(null);
+  const [hydrateAttempt, setHydrateAttempt] = useState(0);
   const [passwordRecoveryPending, setPasswordRecoveryPending] = useState(false);
   const prevAuthUserIdRef = useRef<string | null>(null);
   const activeAuthUserIdRef = useRef<string | null>(null);
@@ -72,6 +78,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     useHabitStore.getState().resetStore();
     useChallengeStore.getState().reset();
     setSyncReady(false);
+    setSyncError(null);
     setPasswordRecoveryPending(false);
 
     await Promise.allSettled([
@@ -165,12 +172,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!supabaseConfigured || !session?.user) {
       setSyncReady(false);
+      setSyncError(null);
       return;
     }
 
     let cancelled = false;
     const uid = session.user.id;
     setSyncReady(false);
+    setSyncError(null);
 
     void hydrateStoreAfterAuth(
       uid,
@@ -178,6 +187,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       (next) => {
         if (!cancelled && activeAuthUserIdRef.current === uid) {
           useHabitStore.setState(next);
+          void saveAccountSnapshotBackup(uid, next, "auth-hydrate");
         }
       },
     )
@@ -186,13 +196,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       })
       .catch((e) => {
         console.warn("[habitPro] hydrate failed", e);
-        if (!cancelled && activeAuthUserIdRef.current === uid) setSyncReady(true);
+        if (!cancelled && activeAuthUserIdRef.current === uid) {
+          const msg = e instanceof Error ? e.message : String(e);
+          setSyncReady(false);
+          setSyncError(msg || "Could not load your cloud data.");
+        }
       });
 
     return () => {
       cancelled = true;
     };
-  }, [session?.user?.id, supabaseConfigured]);
+  }, [hydrateAttempt, session?.user?.id, supabaseConfigured]);
+
+  const retryHydrate = useCallback(() => {
+    setSyncReady(false);
+    setSyncError(null);
+    setHydrateAttempt((n) => n + 1);
+  }, []);
 
   useEffect(() => {
     if (!supabaseConfigured || !session?.user || !syncReady) return;
@@ -330,6 +350,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       session,
       initializing,
       syncReady,
+      syncError,
+      retryHydrate,
       supabaseConfigured,
       passwordRecoveryPending,
       clearPasswordRecovery,
@@ -342,6 +364,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       session,
       initializing,
       syncReady,
+      syncError,
+      retryHydrate,
       supabaseConfigured,
       passwordRecoveryPending,
       clearPasswordRecovery,

@@ -1,5 +1,6 @@
 import type { HabitStore } from "../types/habit";
-import { pushFullState } from "./sync";
+import { saveAccountSnapshotBackup } from "./accountBackup";
+import { deleteRemoteHabit, deleteRemoteMiniMission, pushFullState } from "./sync";
 
 type Snapshot = Pick<HabitStore, "habits" | "miniMissions" | "xp" | "username">;
 
@@ -9,6 +10,7 @@ let getSnapshot: (() => Snapshot) | null = null;
 
 let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 let inFlightPushes = 0;
+let failedSinceLastSuccess = false;
 const DEFAULT_DEBOUNCE_MS = 450;
 
 type SyncFailureListener = (error: unknown) => void;
@@ -32,6 +34,7 @@ export function subscribeSyncSuccess(listener: SyncSuccessListener): () => void 
 }
 
 function notifySyncFailure(error: unknown) {
+  failedSinceLastSuccess = true;
   syncFailureListeners.forEach((l) => {
     try {
       l(error);
@@ -42,6 +45,7 @@ function notifySyncFailure(error: unknown) {
 }
 
 function notifySyncSuccess() {
+  failedSinceLastSuccess = false;
   syncSuccessListeners.forEach((l) => {
     try {
       l();
@@ -65,8 +69,12 @@ export function getRemoteSyncUserId(): string | null {
 }
 
 export function setRemoteSyncContext(uid: string | null, enabled: boolean) {
+  const userChanged = userId !== uid;
   userId = uid;
   syncEnabled = enabled;
+  if (userChanged || !enabled) {
+    failedSinceLastSuccess = false;
+  }
   if (!enabled && debounceTimer) {
     clearTimeout(debounceTimer);
     debounceTimer = null;
@@ -82,9 +90,14 @@ function canPush(): boolean {
   return Boolean(syncEnabled && userId && getSnapshot);
 }
 
+function canWriteRemote(): boolean {
+  return Boolean(syncEnabled && userId);
+}
+
 function flush() {
   if (!canPush()) return;
   const snap = getSnapshot!();
+  void saveAccountSnapshotBackup(userId, snap, "pre-remote-push");
   inFlightPushes += 1;
   void pushFullState(userId!, snap)
     .then(() => {
@@ -101,6 +114,10 @@ function flush() {
 
 export function hasPendingRemoteSync(): boolean {
   return Boolean(debounceTimer || inFlightPushes > 0);
+}
+
+export function hasRemoteSyncFault(): boolean {
+  return failedSinceLastSuccess;
 }
 
 /**
@@ -130,4 +147,36 @@ export function requestRemoteSync(options?: {
     debounceTimer = null;
     flush();
   }, debounceMs);
+}
+
+export function requestRemoteHabitDelete(habitId: string) {
+  if (!canWriteRemote() || !habitId) return;
+  inFlightPushes += 1;
+  void deleteRemoteHabit(userId!, habitId)
+    .then(() => {
+      notifySyncSuccess();
+    })
+    .catch((e) => {
+      console.warn("[habitPro] remote habit delete failed", e);
+      notifySyncFailure(e);
+    })
+    .finally(() => {
+      inFlightPushes = Math.max(0, inFlightPushes - 1);
+    });
+}
+
+export function requestRemoteMiniMissionDelete(miniMissionId: string) {
+  if (!canWriteRemote() || !miniMissionId) return;
+  inFlightPushes += 1;
+  void deleteRemoteMiniMission(userId!, miniMissionId)
+    .then(() => {
+      notifySyncSuccess();
+    })
+    .catch((e) => {
+      console.warn("[habitPro] remote mini mission delete failed", e);
+      notifySyncFailure(e);
+    })
+    .finally(() => {
+      inFlightPushes = Math.max(0, inFlightPushes - 1);
+    });
 }

@@ -4,6 +4,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   getRemoteSyncUserId,
   registerSyncSnapshotGetter,
+  requestRemoteHabitDelete,
+  requestRemoteMiniMissionDelete,
   requestRemoteSync,
 } from "../lib/syncQueue";
 import {
@@ -313,7 +315,7 @@ export const useHabitStore = create<HabitStore>()(
         set((state) => ({
           habits: state.habits.filter((h) => h.id !== id),
         }));
-        requestRemoteSync({ immediate: true });
+        requestRemoteHabitDelete(id);
       },
       resetHabit: (id) => {
         const target = get().habits.find((h) => h.id === id);
@@ -588,7 +590,7 @@ export const useHabitStore = create<HabitStore>()(
             (mission) => mission.id !== id,
           ),
         }));
-        requestRemoteSync({ immediate: true });
+        requestRemoteMiniMissionDelete(id);
       },
       getMiniMission: (id) => {
         return get().miniMissions.find((mission) => mission.id === id);

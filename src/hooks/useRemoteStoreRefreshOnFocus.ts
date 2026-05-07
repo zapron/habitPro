@@ -1,8 +1,9 @@
 import { useCallback, useRef } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import { useAuth } from "../context/AuthContext";
+import { saveAccountSnapshotBackup } from "../lib/accountBackup";
 import { pullFromSupabase } from "../lib/sync";
-import { hasPendingRemoteSync, requestRemoteSync } from "../lib/syncQueue";
+import { hasPendingRemoteSync, hasRemoteSyncFault, requestRemoteSync } from "../lib/syncQueue";
 import { useHabitStore } from "../store/habitStore";
 import type { HabitStore, MiniMission } from "../types/habit";
 
@@ -68,13 +69,15 @@ export function useRemoteStoreRefreshOnFocus(enabled = true) {
 
     busyRef.current = true;
     try {
-      if (hasPendingRemoteSync()) {
+      if (hasPendingRemoteSync() || hasRemoteSyncFault()) {
         return;
       }
       const remote = await pullFromSupabase(userId);
       const local = useHabitStore.getState();
       const { snapshot, preserved } = preserveLocalMiniProgress(remote, local);
+      void saveAccountSnapshotBackup(userId, local, "pre-focus-refresh");
       useHabitStore.setState(snapshot);
+      void saveAccountSnapshotBackup(userId, snapshot, "focus-refresh");
       if (preserved) {
         requestRemoteSync({ immediate: true });
       }

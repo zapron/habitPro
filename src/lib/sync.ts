@@ -463,23 +463,6 @@ export async function pushFullState(
     if (error) throw error;
   }
 
-  const { data: existingHabits } = await supabase
-    .from("habits")
-    .select("id")
-    .eq("user_id", sessionUserId);
-  const wantHabitIds = new Set(habitsForUser.map((h) => h.id));
-  const habitIdsToRemove =
-    existingHabits?.map((r) => r.id).filter((id) => !wantHabitIds.has(id)) ??
-    [];
-  for (const id of habitIdsToRemove) {
-    const { error } = await supabase
-      .from("habits")
-      .delete()
-      .eq("user_id", sessionUserId)
-      .eq("id", id);
-    if (error) throw error;
-  }
-
   if (miniRows.length > 0) {
     const { error } = await supabase.from("mini_missions").upsert(miniRows, {
       onConflict: "user_id,id",
@@ -487,30 +470,46 @@ export async function pushFullState(
     if (error) throw error;
   }
 
-  const { data: existingMini } = await supabase
-    .from("mini_missions")
-    .select("id")
-    .eq("user_id", sessionUserId);
-  const wantMiniIds = new Set(minisForUser.map((m) => m.id));
-  const miniIdsToRemove =
-    existingMini?.map((r) => r.id).filter((id) => !wantMiniIds.has(id)) ?? [];
-  for (const id of miniIdsToRemove) {
-    const { error } = await supabase
-      .from("mini_missions")
-      .delete()
-      .eq("user_id", sessionUserId)
-      .eq("id", id);
-    if (error) throw error;
-  }
-
   const username = typeof state.username === "string" && state.username.trim().length > 0
     ? state.username.trim().toLowerCase()
     : undefined;
+  const { data: existingProfile, error: existingProfileErr } = await supabase
+    .from("profiles")
+    .select("xp")
+    .eq("id", sessionUserId)
+    .maybeSingle();
+  if (existingProfileErr) throw existingProfileErr;
+  const existingXp =
+    typeof existingProfile?.xp === "number" && Number.isFinite(existingProfile.xp)
+      ? existingProfile.xp
+      : 0;
   const { error: profileErr } = await supabase.from("profiles").upsert(
-    { id: sessionUserId, xp: state.xp, ...(username ? { username } : {}) },
+    { id: sessionUserId, xp: Math.max(existingXp, state.xp), ...(username ? { username } : {}) },
     { onConflict: "id" },
   );
   if (profileErr) throw profileErr;
+}
+
+export async function deleteRemoteHabit(sessionUserId: string, habitId: string): Promise<void> {
+  const supabase = getSupabase();
+  if (!supabase || !sessionUserId || !habitId) return;
+  const { error } = await supabase
+    .from("habits")
+    .delete()
+    .eq("user_id", sessionUserId)
+    .eq("id", habitId);
+  if (error) throw error;
+}
+
+export async function deleteRemoteMiniMission(sessionUserId: string, miniMissionId: string): Promise<void> {
+  const supabase = getSupabase();
+  if (!supabase || !sessionUserId || !miniMissionId) return;
+  const { error } = await supabase
+    .from("mini_missions")
+    .delete()
+    .eq("user_id", sessionUserId)
+    .eq("id", miniMissionId);
+  if (error) throw error;
 }
 
 function isRemoteEmpty(snapshot: RemoteSnapshot): boolean {

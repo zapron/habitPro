@@ -796,9 +796,12 @@ export default function LiveMiniSquadScreen() {
   const liveSyncKeyRef = useRef<string | null>(null);
   const previousParticipantStatusRef = useRef<Record<string, LiveMiniParticipantStatus>>({});
   const finishHighlightTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const snapshotRef = useRef<LiveMiniSquadSnapshot | null>(null);
+  const loadInFlightRef = useRef(false);
 
   useEffect(() => {
     userIdRef.current = userId;
+    snapshotRef.current = null;
     setSnapshot(null);
     setLoading(Boolean(userId));
     setFinishHighlightIds(new Set());
@@ -815,14 +818,18 @@ export default function LiveMiniSquadScreen() {
   const load = useCallback(
     async (silent = false) => {
       if (!squadId || !userId) {
+        snapshotRef.current = null;
         setSnapshot(null);
         setLoading(false);
         return;
       }
-      if (!silent) setLoading(true);
+      if (loadInFlightRef.current) return;
+      loadInFlightRef.current = true;
+      if (!silent && !snapshotRef.current) setLoading(true);
       try {
         const next = await fetchLiveMiniSquad(squadId);
         if (userIdRef.current !== userId) return;
+        snapshotRef.current = next;
         setSnapshot(next);
         const mine = next?.participants.find((p) => p.user_id === userId);
         if (mine?.planned_minutes) {
@@ -833,6 +840,7 @@ export default function LiveMiniSquadScreen() {
         const msg = e instanceof Error ? e.message : String(e);
         showToast(msg, "error");
       } finally {
+        loadInFlightRef.current = false;
         if (!silent) setLoading(false);
       }
     },
