@@ -8,6 +8,7 @@ let syncEnabled = false;
 let getSnapshot: (() => Snapshot) | null = null;
 
 let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+let inFlightPushes = 0;
 const DEFAULT_DEBOUNCE_MS = 450;
 
 type SyncFailureListener = (error: unknown) => void;
@@ -84,6 +85,7 @@ function canPush(): boolean {
 function flush() {
   if (!canPush()) return;
   const snap = getSnapshot!();
+  inFlightPushes += 1;
   void pushFullState(userId!, snap)
     .then(() => {
       notifySyncSuccess();
@@ -91,12 +93,19 @@ function flush() {
     .catch((e) => {
       console.warn("[habitPro] remote sync failed", e);
       notifySyncFailure(e);
+    })
+    .finally(() => {
+      inFlightPushes = Math.max(0, inFlightPushes - 1);
     });
+}
+
+export function hasPendingRemoteSync(): boolean {
+  return Boolean(debounceTimer || inFlightPushes > 0);
 }
 
 /**
  * Queue a push of habits / mini missions / xp to Supabase.
- * Use `immediate: true` when creating missions so rows appear in the DB right away.
+ * Use `immediate: true` for user-visible transitions that must survive focus refreshes.
  */
 export function requestRemoteSync(options?: {
   immediate?: boolean;

@@ -2,13 +2,29 @@ import { useCallback, useRef } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import { useAuth } from "../context/AuthContext";
 import { pullFromSupabase } from "../lib/sync";
-import { requestRemoteSync } from "../lib/syncQueue";
+import { hasPendingRemoteSync, requestRemoteSync } from "../lib/syncQueue";
 import { useHabitStore } from "../store/habitStore";
 import type { HabitStore, MiniMission } from "../types/habit";
 
 type RemoteStoreSnapshot = Awaited<ReturnType<typeof pullFromSupabase>>;
 
-function preserveLocalCompletedMinis(
+function shouldPreserveLocalMini(remoteMini: MiniMission, localMini: MiniMission): boolean {
+  if (localMini.status === "completed" && remoteMini.status !== "completed") {
+    return true;
+  }
+  if (
+    localMini.status === "in_progress" &&
+    remoteMini.status !== "completed" &&
+    remoteMini.status !== "cancelled"
+  ) {
+    const localStarted = localMini.startedAt ? new Date(localMini.startedAt).getTime() : 0;
+    const remoteStarted = remoteMini.startedAt ? new Date(remoteMini.startedAt).getTime() : 0;
+    return remoteMini.status !== "in_progress" || localStarted > remoteStarted;
+  }
+  return false;
+}
+
+function preserveLocalMiniProgress(
   remote: RemoteStoreSnapshot,
   local: Pick<HabitStore, "miniMissions">,
 ): { snapshot: RemoteStoreSnapshot; preserved: boolean } {
@@ -17,7 +33,7 @@ function preserveLocalCompletedMinis(
   const remoteIds = new Set(remote.miniMissions.map((m) => m.id));
   const miniMissions = remote.miniMissions.map((remoteMini): MiniMission => {
     const localMini = localById.get(remoteMini.id);
-    if (localMini?.status === "completed" && remoteMini.status !== "completed") {
+    if (localMini && shouldPreserveLocalMini(remoteMini, localMini)) {
       preserved = true;
       return localMini;
     }
@@ -25,7 +41,10 @@ function preserveLocalCompletedMinis(
   });
 
   for (const localMini of local.miniMissions) {
-    if (localMini.status === "completed" && !remoteIds.has(localMini.id)) {
+    if (
+      (localMini.status === "completed" || localMini.status === "in_progress") &&
+      !remoteIds.has(localMini.id)
+    ) {
       preserved = true;
       miniMissions.push(localMini);
     }
@@ -49,9 +68,12 @@ export function useRemoteStoreRefreshOnFocus(enabled = true) {
 
     busyRef.current = true;
     try {
+      if (hasPendingRemoteSync()) {
+        return;
+      }
       const remote = await pullFromSupabase(userId);
       const local = useHabitStore.getState();
-      const { snapshot, preserved } = preserveLocalCompletedMinis(remote, local);
+      const { snapshot, preserved } = preserveLocalMiniProgress(remote, local);
       useHabitStore.setState(snapshot);
       if (preserved) {
         requestRemoteSync({ immediate: true });

@@ -466,10 +466,11 @@ export const useHabitStore = create<HabitStore>()(
               ...mission,
               status: "in_progress",
               startedAt: mission.startedAt ?? now,
+              scheduledStartAt: undefined,
             };
           }),
         }));
-        requestRemoteSync({ immediate: false });
+        requestRemoteSync({ immediate: true });
       },
       completeMiniMission: (id, memory, opts) => {
         const now = new Date().toISOString();

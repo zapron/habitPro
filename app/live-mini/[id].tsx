@@ -144,6 +144,13 @@ function rankFor(row: LiveMiniParticipantRow, completed: LiveMiniParticipantRow[
   return idx >= 0 ? idx + 1 : null;
 }
 
+function ordinalLabel(rank: number): string {
+  if (rank === 1) return "1st";
+  if (rank === 2) return "2nd";
+  if (rank === 3) return "3rd";
+  return `${rank}th`;
+}
+
 function LiveSquadHero({
   completedRows,
   participants,
@@ -158,19 +165,27 @@ function LiveSquadHero({
   const { theme, isDark } = useTheme();
   const leader = completedRows[0] ?? null;
   const runnerUp = completedRows[1] ?? null;
+  const topRows = completedRows.slice(0, 3);
   const leaderProfile = leader ? profiles[leader.user_id] : undefined;
   const leaderLevel =
     leaderProfile?.xp != null && Number.isFinite(leaderProfile.xp)
       ? levelFromTotalXp(leaderProfile.xp)
       : null;
   const leaderName = leader ? shortDisplayName(leaderProfile) : "Squad";
-  const leaderTotal = leader ? (leader.planned_minutes ?? 0) + (leader.reserve_minutes ?? 0) : 1;
-  const runnerTotal = runnerUp ? (runnerUp.planned_minutes ?? 0) + (runnerUp.reserve_minutes ?? 0) : leaderTotal;
-  const leaderSeconds = leader?.final_elapsed_seconds ?? 0;
-  const runnerSeconds = runnerUp?.final_elapsed_seconds ?? 0;
-  const maxSeconds = Math.max(60, leaderTotal * 60, runnerTotal * 60, leaderSeconds, runnerSeconds);
-  const leaderProgress = leader ? Math.max(0.04, Math.min(1, leaderSeconds / maxSeconds)) : 0;
-  const runnerProgress = runnerUp ? Math.max(0.04, Math.min(1, runnerSeconds / maxSeconds)) : 0;
+  const maxSeconds = Math.max(
+    60,
+    ...topRows.map((row) =>
+      Math.max(
+        ((row.planned_minutes ?? 0) + (row.reserve_minutes ?? 0)) * 60,
+        row.final_elapsed_seconds ?? 0,
+      ),
+    ),
+  );
+  const boardCanStillFlip = participants.some(
+    (p) => p.status === "invited" || p.status === "joined" || p.status === "in_progress",
+  );
+  const allCompleted = participants.length > 0 && participants.every((p) => p.status === "completed");
+  const paceColors = [theme.colors.indigo[500], theme.colors.cyan[500], theme.colors.amber[500]];
   const waitingCount = participants.filter((p) => p.status === "invited" || p.status === "joined").length;
   const activeCount = participants.filter((p) => p.status === "in_progress").length;
 
@@ -221,7 +236,13 @@ function LiveSquadHero({
                 ) : null}
               </View>
               <Text style={[styles.heroSubtitle, { color: theme.colors.textMuted }]} numberOfLines={2}>
-                {runnerUp ? "Fastest so far, with pressure behind." : "Fastest finisher on the board."}
+                {runnerUp
+                  ? boardCanStillFlip
+                    ? "Fastest so far, with pressure behind."
+                    : "Fastest finish is locked."
+                  : boardCanStillFlip
+                    ? "Fastest finisher on the board."
+                    : "Final fastest finish."}
               </Text>
             </View>
             <View
@@ -240,42 +261,40 @@ function LiveSquadHero({
           </View>
 
           <View style={styles.paceRows}>
-            <View style={styles.paceRow}>
-              <Text style={[styles.paceLabel, { color: theme.colors.textMuted }]} numberOfLines={1}>
-                1st · {leaderName}
-              </Text>
-              <View style={[styles.paceTrack, { backgroundColor: isDark ? "rgba(255,255,255,0.09)" : "rgba(15,23,42,0.06)" }]}>
-                <View style={[styles.paceFill, { width: `${leaderProgress * 100}%`, backgroundColor: theme.colors.indigo[500] }]} />
-              </View>
-              <Text style={[styles.paceValue, { color: theme.colors.textSecondary }]}>
-                {formatLiveMiniElapsed(leader.final_elapsed_seconds)}
-              </Text>
-            </View>
-
-            {runnerUp ? (
-              <View style={styles.paceRow}>
-                <Text style={[styles.paceLabel, { color: theme.colors.textMuted }]} numberOfLines={1}>
-                  2nd · {shortDisplayName(profiles[runnerUp.user_id])}
-                </Text>
-                <View style={[styles.paceTrack, { backgroundColor: isDark ? "rgba(255,255,255,0.09)" : "rgba(15,23,42,0.06)" }]}>
-                  <View style={[styles.paceFill, { width: `${runnerProgress * 100}%`, backgroundColor: theme.colors.cyan[500] }]} />
+            {topRows.map((row, index) => {
+              const elapsed = row.final_elapsed_seconds ?? 0;
+              const progress = Math.max(0.04, Math.min(1, elapsed / maxSeconds));
+              return (
+                <View key={row.id} style={styles.paceRow}>
+                  <Text style={[styles.paceLabel, { color: theme.colors.textMuted }]} numberOfLines={1}>
+                    {ordinalLabel(index + 1)} - {shortDisplayName(profiles[row.user_id])}
+                  </Text>
+                  <View style={[styles.paceTrack, { backgroundColor: isDark ? "rgba(255,255,255,0.09)" : "rgba(15,23,42,0.06)" }]}>
+                    <View style={[styles.paceFill, { width: `${progress * 100}%`, backgroundColor: paceColors[index] }]} />
+                  </View>
+                  <Text style={[styles.paceValue, { color: theme.colors.textSecondary }]}>
+                    {formatLiveMiniElapsed(row.final_elapsed_seconds)}
+                  </Text>
                 </View>
-                <Text style={[styles.paceValue, { color: theme.colors.textSecondary }]}>
-                  {formatLiveMiniElapsed(runnerUp.final_elapsed_seconds)}
-                </Text>
-              </View>
-            ) : null}
+              );
+            })}
           </View>
 
           <View style={[styles.heroNarrative, { borderTopColor: theme.colors.border }]}>
             <Trophy size={28} color={theme.colors.amber[500]} />
             <Text style={[styles.heroNarrativeText, { color: theme.colors.textSecondary }]}>
               <Text style={{ color: theme.colors.textPrimary, fontWeight: "900" }}>{leaderName}</Text>
-              {" leads with "}
+              {boardCanStillFlip ? " leads with " : allCompleted ? " wins with " : " leads the final board with "}
               <Text style={{ color: theme.colors.indigo[400], fontWeight: "900" }}>
                 {formatLiveMiniElapsed(leader.final_elapsed_seconds)}
               </Text>
-              {runnerUp ? ", but the board can still flip." : ". Waiting for the next finisher."}
+              {boardCanStillFlip
+                ? runnerUp
+                  ? ", but the board can still flip."
+                  : ". Waiting for the next finisher."
+                : allCompleted
+                  ? ". Squad board is final."
+                  : "."}
             </Text>
           </View>
         </>
