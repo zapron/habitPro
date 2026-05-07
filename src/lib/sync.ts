@@ -503,8 +503,11 @@ export async function pushFullState(
     if (error) throw error;
   }
 
+  const username = typeof state.username === "string" && state.username.trim().length > 0
+    ? state.username.trim().toLowerCase()
+    : undefined;
   const { error: profileErr } = await supabase.from("profiles").upsert(
-    { id: sessionUserId, xp: state.xp, username: state.username },
+    { id: sessionUserId, xp: state.xp, ...(username ? { username } : {}) },
     { onConflict: "id" },
   );
   if (profileErr) throw profileErr;

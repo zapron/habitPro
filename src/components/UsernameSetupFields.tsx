@@ -27,7 +27,6 @@ export function UsernameSetupFields({ compact = false }: Props) {
   const { session } = useAuth();
   const username = useHabitStore((s) => s.username);
   const setUsername = useHabitStore((s) => s.setUsername);
-  const xp = useHabitStore((s) => s.xp);
   const [usernameDraft, setUsernameDraft] = useState("");
   const [usernameSaving, setUsernameSaving] = useState(false);
 
@@ -50,7 +49,7 @@ export function UsernameSetupFields({ compact = false }: Props) {
     setUsernameSaving(true);
     try {
       const { error } = await supabase.from("profiles").upsert(
-        { id: session.user.id, xp, username: v.value },
+        { id: session.user.id, username: v.value },
         { onConflict: "id" },
       );
       if (error) {
@@ -62,11 +61,23 @@ export function UsernameSetupFields({ compact = false }: Props) {
         Alert.alert("Could not save username", taken ? "That username is already taken." : error.message);
         return;
       }
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("xp")
+        .eq("id", session.user.id)
+        .maybeSingle();
+      if (typeof profile?.xp === "number" && Number.isFinite(profile.xp)) {
+        useHabitStore.setState((state) => ({
+          username: v.value,
+          xp: Math.max(state.xp, profile.xp),
+        }));
+        return;
+      }
       setUsername(v.value);
     } finally {
       setUsernameSaving(false);
     }
-  }, [session?.user, username, usernameDraft, xp, setUsername]);
+  }, [session?.user, username, usernameDraft, setUsername]);
 
   if (!isSupabaseConfigured() || !session?.user || username) {
     return null;
