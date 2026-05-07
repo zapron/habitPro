@@ -377,6 +377,16 @@ export async function getChallengeGroup(id: string): Promise<ChallengeGroupRow |
   return (data as ChallengeGroupRow) ?? null;
 }
 
+export async function getChallengeGroupsByIds(ids: string[]): Promise<ChallengeGroupRow[]> {
+  const supabase = getSupabase();
+  if (!supabase) return [];
+  const uniq = [...new Set(ids)].filter(Boolean);
+  if (uniq.length === 0) return [];
+  const { data, error } = await supabase.from("challenge_groups").select("*").in("id", uniq);
+  if (error) throw error;
+  return (data ?? []) as ChallengeGroupRow[];
+}
+
 export async function listChallengeMembers(challengeId: string): Promise<ChallengeMemberRow[]> {
   const supabase = getSupabase();
   if (!supabase) return [];

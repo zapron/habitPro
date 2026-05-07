@@ -47,6 +47,7 @@ import {
   acceptInviteAndJoin,
   declineInvite,
   getChallengeGroup,
+  getChallengeGroupsByIds,
   listInvitesForMe,
   refreshCohortPeerHabits,
 } from "../../src/lib/groupChallengesApi";
@@ -473,6 +474,8 @@ export default function CompeteScreen() {
   const [leaguePlayerDrawer, setLeaguePlayerDrawer] = useState<CommunityPlayerDrawerSeed | null>(null);
   const deepLinkHandledRef = useRef(false);
   const userIdRef = useRef<string | null>(userId);
+  const invitesLoadInFlightRef = useRef(false);
+  const leagueLoadInFlightRef = useRef(false);
 
   useLayoutEffect(() => {
     userIdRef.current = userId;
@@ -487,6 +490,8 @@ export default function CompeteScreen() {
     setLeagueHasMore(false);
     setLeagueError(userId ? null : "Sign in to view Weekly Ranks.");
     setLeaguePlayerDrawer(null);
+    invitesLoadInFlightRef.current = false;
+    leagueLoadInFlightRef.current = false;
   }, [userId]);
 
   const xp = useHabitStore((s) => s.xp);
@@ -513,6 +518,8 @@ export default function CompeteScreen() {
       syncInviteBadgeCount(0);
       return;
     }
+    if (invitesLoadInFlightRef.current) return;
+    invitesLoadInFlightRef.current = true;
     setInvitesLoading(true);
     try {
       const [rows, liveRows] = await traceAsync(
@@ -530,13 +537,14 @@ export default function CompeteScreen() {
       const meta: Record<string, InviteCardMeta> = {};
       await traceAsync(
         "compete.invites.loadMeta",
-        () =>
-          Promise.all(
-            rows.map(async (inv) => {
-              const g = await getChallengeGroup(inv.challenge_id);
-              if (g) meta[inv.id] = parseInviteCardMeta(g);
-            }),
-          ),
+        async () => {
+          const groups = await getChallengeGroupsByIds(rows.map((inv) => inv.challenge_id));
+          const byId = new Map(groups.map((group) => [group.id, group]));
+          for (const inv of rows) {
+            const group = byId.get(inv.challenge_id);
+            if (group) meta[inv.id] = parseInviteCardMeta(group);
+          }
+        },
         { slowMs: 900, meta: { count: rows.length } },
       );
       if (userIdRef.current !== requestedUserId) return;
@@ -544,7 +552,8 @@ export default function CompeteScreen() {
     } catch (e: unknown) {
       console.warn("[habitPro] loadInvites", e);
     } finally {
-      setInvitesLoading(false);
+      invitesLoadInFlightRef.current = false;
+      if (userIdRef.current === requestedUserId) setInvitesLoading(false);
     }
   }, [syncInviteBadgeCount, userId]);
 
@@ -556,6 +565,8 @@ export default function CompeteScreen() {
       setLeagueError("Sign in to view Weekly Ranks.");
       return;
     }
+    if (leagueLoadInFlightRef.current) return;
+    leagueLoadInFlightRef.current = true;
     setLeagueLoading(true);
     setLeagueError(null);
     try {
@@ -579,7 +590,8 @@ export default function CompeteScreen() {
       setLeagueHasMore(false);
       setLeagueError("Couldn’t load Weekly Ranks.");
     } finally {
-      setLeagueLoading(false);
+      leagueLoadInFlightRef.current = false;
+      if (userIdRef.current === requestedUserId) setLeagueLoading(false);
     }
   }, [userId]);
 
@@ -620,8 +632,10 @@ export default function CompeteScreen() {
       if (segment === "leaderboard") {
         void loadLeague();
       }
-      void refreshPremiumAccess();
-    }, [loadInvites, loadLeague, refreshPremiumAccess, segment]),
+      if (!isPremium || premiumLoading) {
+        void refreshPremiumAccess();
+      }
+    }, [isPremium, loadInvites, loadLeague, premiumLoading, refreshPremiumAccess, segment]),
   );
 
   useEffect(() => {
