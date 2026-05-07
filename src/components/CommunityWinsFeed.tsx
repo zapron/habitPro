@@ -235,12 +235,6 @@ export function CommunityWinsFeed({
         onCheerBlocked?.();
         return false;
       }
-      if (validateCheerAccess) {
-        const allowed = await validateCheerAccess();
-        if (!allowed) {
-          return false;
-        }
-      }
       const ok = await requireUsername("community_like");
       if (!ok) return false;
       const firstResult = await traceAsync(

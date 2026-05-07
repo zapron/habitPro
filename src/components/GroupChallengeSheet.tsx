@@ -130,19 +130,19 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
   }, [query, visible, session?.user?.id, showToast]);
 
   const handleCreateGroup = useCallback(async () => {
-    if (!configured || !signedIn) return;
-    const freshPremium = await refreshPremiumAccess({ force: true });
-    if (freshPremium !== true) {
-      openUpsell("group_mission");
-      return;
-    }
-    const ok = await requireUsername("group_mission_create");
-    if (!ok) {
-      showToast("Choose a username to start a group mission.", "info");
-      return;
-    }
+    if (!configured || !signedIn || creating) return;
     setCreating(true);
     try {
+      const freshPremium = await refreshPremiumAccess({ force: true, cachedAccessOk: true });
+      if (freshPremium !== true) {
+        openUpsell("group_mission");
+        return;
+      }
+      const ok = await requireUsername("group_mission_create");
+      if (!ok) {
+        showToast("Choose a username to start a group mission.", "info");
+        return;
+      }
       const { group, error } = await createGroupChallengeFromHabit(habit);
       if (error || !group) {
         showToast(error?.message ?? "Unknown error", "error");
@@ -153,31 +153,31 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
     } finally {
       setCreating(false);
     }
-  }, [configured, signedIn, habit, showToast, openUpsell, requireUsername, refreshPremiumAccess]);
+  }, [configured, creating, signedIn, habit, showToast, openUpsell, requireUsername, refreshPremiumAccess]);
 
   const handleInvite = useCallback(
     async (userId: string) => {
-      const freshPremium = await refreshPremiumAccess({ force: true });
-      if (freshPremium !== true) {
-        openUpsell("group_mission");
-        return;
-      }
-      const gid = habit.challengeGroupId;
-      if (!gid) {
-        showToast("Start a group mission from this habit, then invite friends.", "info");
-        return;
-      }
-      const uname = myUsername?.trim() ?? "";
-      if (!uname) {
-        const ok = await requireUsername("group_invite");
-        if (!ok) {
-          showToast("Choose a username to invite your squad.", "info");
-        }
-        return;
-      }
-      if (inviteeStatusById[userId]) return;
+      if (invitingId || inviteeStatusById[userId]) return;
       setInvitingId(userId);
       try {
+        const freshPremium = await refreshPremiumAccess({ force: true, cachedAccessOk: true });
+        if (freshPremium !== true) {
+          openUpsell("group_mission");
+          return;
+        }
+        const gid = habit.challengeGroupId;
+        if (!gid) {
+          showToast("Start a group mission from this habit, then invite friends.", "info");
+          return;
+        }
+        const uname = myUsername?.trim() ?? "";
+        if (!uname) {
+          const ok = await requireUsername("group_invite");
+          if (!ok) {
+            showToast("Choose a username to invite your squad.", "info");
+          }
+          return;
+        }
         const { error } = await sendChallengeInvite(gid, userId);
         if (error) {
           showToast(error.message, "error");
@@ -190,7 +190,7 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
         setInvitingId(null);
       }
     },
-    [habit.challengeGroupId, inviteeStatusById, myUsername, showToast, openUpsell, requireUsername, refreshPremiumAccess],
+    [habit.challengeGroupId, inviteeStatusById, invitingId, myUsername, showToast, openUpsell, requireUsername, refreshPremiumAccess],
   );
 
   const openChallenge = () => {

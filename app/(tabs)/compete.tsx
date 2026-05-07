@@ -680,7 +680,7 @@ export default function CompeteScreen() {
     }
     setInviteBusy(invite.id);
     try {
-      const freshPremium = await refreshPremiumAccess({ force: true });
+      const freshPremium = await refreshPremiumAccess({ force: true, cachedAccessOk: true });
       if (freshPremium !== true) {
         openUpsell("invite_accept");
         return;

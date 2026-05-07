@@ -11,6 +11,8 @@ type RefreshPremiumAccessOptions = {
   force?: boolean;
   /** Server-gated Community actions need Supabase `profiles.is_premium`, not just local RevenueCat access. */
   serverOnly?: boolean;
+  /** For actions that have server-side enforcement, trust current local premium state before forcing a refresh. */
+  cachedAccessOk?: boolean;
 };
 
 type PremiumAccessSnapshot = {
@@ -50,12 +52,15 @@ function selectAccess(
 export function useRefreshPremiumAccess(minIntervalMs = DEFAULT_MIN_INTERVAL_MS) {
   const { session } = useAuth();
   const { refresh: refreshBilling } = useBilling();
-  const { refresh: refreshPremium } = usePremium();
+  const { isPremium, refresh: refreshPremium } = usePremium();
   const userId = session?.user?.id ?? null;
 
   return useCallback(
     async (options?: RefreshPremiumAccessOptions) => {
       if (!userId) return null;
+      if (options?.cachedAccessOk && !options.serverOnly && isPremium) {
+        return true;
+      }
       const cache = cacheForUser(userId);
       const now = Date.now();
       if (!options?.force && cache.inFlight) {
@@ -95,6 +100,7 @@ export function useRefreshPremiumAccess(minIntervalMs = DEFAULT_MIN_INTERVAL_MS)
           meta: {
             force: Boolean(options?.force),
             serverOnly: Boolean(options?.serverOnly),
+            cachedAccessOk: Boolean(options?.cachedAccessOk),
           },
         },
       );
@@ -109,6 +115,6 @@ export function useRefreshPremiumAccess(minIntervalMs = DEFAULT_MIN_INTERVAL_MS)
         }
       }
     },
-    [minIntervalMs, refreshBilling, refreshPremium, userId],
+    [isPremium, minIntervalMs, refreshBilling, refreshPremium, userId],
   );
 }

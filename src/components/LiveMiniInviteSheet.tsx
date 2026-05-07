@@ -154,7 +154,7 @@ export function LiveMiniInviteSheet({ visible, mission, onClose }: Props) {
     createBusyRef.current = true;
     setCreating(true);
     try {
-      const freshPremium = await refreshPremiumAccess({ force: true });
+      const freshPremium = await refreshPremiumAccess({ force: true, cachedAccessOk: true });
       if (freshPremium !== true) {
         openUpsell("live_mini");
         return;
@@ -213,7 +213,7 @@ export function LiveMiniInviteSheet({ visible, mission, onClose }: Props) {
       inviteBusyRef.current = userId;
       setInvitingId(userId);
       try {
-        const freshPremium = await refreshPremiumAccess({ force: true });
+        const freshPremium = await refreshPremiumAccess({ force: true, cachedAccessOk: true });
         if (freshPremium !== true) {
           openUpsell("live_mini");
           return;
