@@ -16,14 +16,17 @@ import {
 import type { ImageStyle } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
-import { Settings, Zap, Globe, User, Target, Flame, LogOut, Crown } from "lucide-react-native";
+import { Settings, Zap, Globe, User, Target, Flame, LogOut, Crown, ShieldCheck } from "lucide-react-native";
 import { Screen } from "../../src/components/Screen";
 import { useTheme } from "../../src/context/ThemeContext";
 import { useAuth } from "../../src/context/AuthContext";
 import { usePremium } from "../../src/context/PremiumContext";
 import { usePlusUpsell } from "../../src/context/PlusUpsellContext";
+import { useToast } from "../../src/context/ToastContext";
 import { useHabitStore } from "../../src/store/habitStore";
 import { isSupabaseConfigured } from "../../src/lib/env";
+import { listAccountSnapshotBackups, type AccountBackupSnapshot } from "../../src/lib/accountBackup";
+import { requestRemoteSync } from "../../src/lib/syncQueue";
 import { useAppVersion } from "../../src/context/AppVersionContext";
 import { useRouter } from "expo-router";
 import { SettingsModal } from "../../src/components/SettingsModal";
@@ -77,6 +80,37 @@ function FigureLabel({ color, children }: { color: string; children: string }) {
       {children}
     </Text>
   );
+}
+
+function formatBackupSavedAt(savedAt: string): string {
+  const d = new Date(savedAt);
+  if (Number.isNaN(d.getTime())) return "Recent snapshot";
+  return d.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function backupReasonLabel(reason: string): string {
+  switch (reason) {
+    case "auth-hydrate":
+      return "After cloud load";
+    case "pre-remote-push":
+      return "Before cloud save";
+    case "pre-focus-refresh":
+      return "Before refresh";
+    case "focus-refresh":
+      return "After refresh";
+    default:
+      return "Safety snapshot";
+  }
+}
+
+function backupSummary(backup: AccountBackupSnapshot): string {
+  const level = levelFromTotalXp(backup.xp);
+  return `${backup.habits.length} habits - ${backup.miniMissions.length} minis - Level ${level}`;
 }
 
 function VisibilityHabitColumn({
@@ -265,6 +299,7 @@ const hubVisStyles = StyleSheet.create({
 
 export default function ProfileScreen() {
   const { theme, isDark } = useTheme();
+  const { showToast } = useToast();
   const insets = useSafeAreaInsets();
   const { session, signOut, syncReady, syncError, retryHydrate } = useAuth();
   const { isPremium } = usePremium();
@@ -272,12 +307,14 @@ export default function ProfileScreen() {
   const refreshPremiumAccess = useRefreshPremiumAccess();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [hubSheet, setHubSheet] = useState<HubSheetState>(null);
+  const [backups, setBackups] = useState<AccountBackupSnapshot[]>([]);
+  const [restoringBackupAt, setRestoringBackupAt] = useState<string | null>(null);
   const rawXp = useHabitStore((s) => s.xp);
   const rawUsername = useHabitStore((s) => s.username);
   const rawHabits = useHabitStore((s) => s.habits);
   const rawMiniMissions = useHabitStore((s) => s.miniMissions);
   const showAccount = isSupabaseConfigured();
-  const accountHydrating = Boolean(showAccount && session?.user && !syncReady);
+  const accountHydrating = Boolean(showAccount && session?.user && !syncReady && !syncError);
   const cloudSyncBlocked = Boolean(showAccount && session?.user && syncError);
   const xp = accountHydrating ? 0 : rawXp;
   const username = accountHydrating ? null : rawUsername;
@@ -288,14 +325,80 @@ export default function ProfileScreen() {
   );
   const profileIsPremium = !accountHydrating && isPremium;
 
+  const loadBackups = useCallback(async () => {
+    const userId = session?.user?.id ?? null;
+    if (!userId) {
+      setBackups([]);
+      return;
+    }
+    setBackups(await listAccountSnapshotBackups(userId));
+  }, [session?.user?.id]);
+
   useFocusEffect(
     useCallback(() => {
       void refreshPremiumAccess();
-    }, [refreshPremiumAccess]),
+      void loadBackups();
+    }, [loadBackups, refreshPremiumAccess]),
   );
 
   const level = levelFromTotalXp(xp);
   const xpInLevel = xpInCurrentLevel(xp);
+  const recoveryBackups = useMemo(() => {
+    if (cloudSyncBlocked) return backups.slice(0, 3);
+    return backups
+      .filter(
+        (backup) =>
+          backup.habits.length > rawHabits.length ||
+          backup.miniMissions.length > rawMiniMissions.length ||
+          backup.xp > rawXp,
+      )
+      .slice(0, 3);
+  }, [backups, cloudSyncBlocked, rawHabits.length, rawMiniMissions.length, rawXp]);
+  const showRecoveryBackups = Boolean(showAccount && session?.user && recoveryBackups.length > 0);
+
+  const restoreBackup = useCallback(
+    async (backup: AccountBackupSnapshot) => {
+      const userId = session?.user?.id;
+      if (!userId) return;
+      setRestoringBackupAt(backup.savedAt);
+      try {
+        useHabitStore.setState({
+          habits: backup.habits,
+          miniMissions: backup.miniMissions,
+          xp: backup.xp,
+          username: backup.username,
+          cohortPeerHabits: [],
+        });
+        if (syncReady && !syncError) {
+          requestRemoteSync({ immediate: true });
+          showToast("Backup restored and queued for cloud save.", "success");
+        } else {
+          showToast("Backup restored locally. Retry Sync when your connection is stable.", "info");
+        }
+        await loadBackups();
+      } finally {
+        setRestoringBackupAt(null);
+      }
+    },
+    [loadBackups, session?.user?.id, showToast, syncError, syncReady],
+  );
+
+  const confirmRestoreBackup = useCallback(
+    (backup: AccountBackupSnapshot) => {
+      Alert.alert(
+        "Restore this backup?",
+        `${backupSummary(backup)}\n${formatBackupSavedAt(backup.savedAt)}\n\nThis replaces the account data currently on this device.`,
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Restore",
+            onPress: () => void restoreBackup(backup),
+          },
+        ],
+      );
+    },
+    [restoreBackup],
+  );
 
   const missionStats = useMemo(() => {
     const visibilityBucket = (v: string | undefined): "public" | "solo" =>
@@ -519,6 +622,71 @@ export default function ProfileScreen() {
           </View>
         ) : null}
 
+        {showRecoveryBackups ? (
+          <View
+            style={[
+              styles.recoveryCard,
+              { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, ...theme.shadow.card },
+            ]}
+          >
+            <View style={styles.recoveryHeader}>
+              <View
+                style={[
+                  styles.recoveryIcon,
+                  {
+                    backgroundColor: isDark ? "rgba(34,197,94,0.14)" : "rgba(22,163,74,0.1)",
+                    borderColor: isDark ? "rgba(34,197,94,0.28)" : "rgba(22,163,74,0.18)",
+                  },
+                ]}
+              >
+                <ShieldCheck size={18} color={theme.colors.green[500]} />
+              </View>
+              <View style={styles.recoveryTitleBlock}>
+                <Text style={[styles.recoveryTitle, { color: theme.colors.textPrimary }]}>Recovery snapshots</Text>
+                <Text style={[styles.recoveryBody, { color: theme.colors.textSecondary }]}>
+                  Recent safety backups from this account are available on this device.
+                </Text>
+              </View>
+            </View>
+            <View style={styles.recoveryList}>
+              {recoveryBackups.map((backup) => {
+                const busy = restoringBackupAt === backup.savedAt;
+                return (
+                  <View
+                    key={`${backup.savedAt}-${backup.reason}`}
+                    style={[
+                      styles.recoveryRow,
+                      { backgroundColor: theme.colors.surfaceElevated, borderColor: theme.colors.border },
+                    ]}
+                  >
+                    <View style={styles.recoveryRowText}>
+                      <Text style={[styles.recoveryReason, { color: theme.colors.textPrimary }]} numberOfLines={1}>
+                        {backupReasonLabel(backup.reason)}
+                      </Text>
+                      <Text style={[styles.recoveryMeta, { color: theme.colors.textMuted }]} numberOfLines={1}>
+                        {formatBackupSavedAt(backup.savedAt)} - {backupSummary(backup)}
+                      </Text>
+                    </View>
+                    <TouchableOpacity
+                      onPress={() => confirmRestoreBackup(backup)}
+                      disabled={busy}
+                      activeOpacity={0.88}
+                      style={[
+                        styles.recoveryRestoreButton,
+                        { backgroundColor: theme.colors.indigo[600], opacity: busy ? 0.65 : 1 },
+                      ]}
+                      accessibilityRole="button"
+                      accessibilityLabel="Restore account backup"
+                    >
+                      <Text style={styles.recoveryRestoreText}>{busy ? "..." : "Restore"}</Text>
+                    </TouchableOpacity>
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+        ) : null}
+
         <View style={[styles.hero, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, ...theme.shadow.card }]}>
           <LevelXpRing level={level} xpInLevel={xpInLevel}>
             <View
@@ -564,7 +732,7 @@ export default function ProfileScreen() {
               <Text style={[styles.handle, { color: theme.colors.cyan[400] }]} numberOfLines={1}>
                 @{username}
               </Text>
-            ) : showAccount && session?.user && !accountHydrating ? (
+            ) : showAccount && session?.user && !accountHydrating && !cloudSyncBlocked ? (
               <UsernameSetupFields compact />
             ) : null}
             {profileIsPremium ? (
@@ -878,6 +1046,45 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   syncRetryText: { color: "#fff", fontSize: 13, fontWeight: "900" },
+  recoveryCard: {
+    borderRadius: 18,
+    borderWidth: 1,
+    padding: 16,
+    marginBottom: 18,
+    gap: 14,
+  },
+  recoveryHeader: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
+  recoveryIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  recoveryTitleBlock: { flex: 1, minWidth: 0 },
+  recoveryTitle: { fontSize: 16, fontWeight: "900", marginBottom: 4 },
+  recoveryBody: { fontSize: 13, lineHeight: 18, fontWeight: "600" },
+  recoveryList: { gap: 10 },
+  recoveryRow: {
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  recoveryRowText: { flex: 1, minWidth: 0 },
+  recoveryReason: { fontSize: 13, fontWeight: "900" },
+  recoveryMeta: { fontSize: 11, lineHeight: 15, fontWeight: "700", marginTop: 2 },
+  recoveryRestoreButton: {
+    borderRadius: 11,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    minWidth: 74,
+    alignItems: "center",
+  },
+  recoveryRestoreText: { color: "#fff", fontSize: 12, fontWeight: "900" },
   sectionLabel: {
     fontSize: 11,
     fontWeight: "800",
