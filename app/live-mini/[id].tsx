@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Animated,
+  Easing,
   Image,
   Modal,
   Pressable,
@@ -15,9 +17,10 @@ import {
 import { useFocusEffect } from "@react-navigation/native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ArrowLeft, Check, Flame, Info, Radio, Timer, Trophy, Users, X } from "lucide-react-native";
+import { ArrowLeft, Check, Flame, Info, Radio, Timer, Trophy, UserPlus, Users, X } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import { Text } from "../../src/components/AppText";
+import { LiveMiniInviteSheet } from "../../src/components/LiveMiniInviteSheet";
 import { Screen } from "../../src/components/Screen";
 import { FuelQuickMinutesStrip } from "../../src/components/fuel/FuelQuickMinutesStrip";
 import { FuelTimePresetButton } from "../../src/components/fuel/FuelTimePresetButton";
@@ -336,8 +339,25 @@ function LiveSquadHero({
   );
   const allCompleted = participants.length > 0 && participants.every((p) => p.status === "completed");
   const paceColors = [theme.colors.indigo[500], theme.colors.cyan[500], theme.colors.amber[500]];
+  const activeRows = participants.filter((p) => p.status === "in_progress");
   const waitingCount = participants.filter((p) => p.status === "invited" || p.status === "joined").length;
-  const activeCount = participants.filter((p) => p.status === "in_progress").length;
+  const activeCount = activeRows.length;
+  const leaderGapSeconds =
+    leader && runnerUp && leader.final_elapsed_seconds != null && runnerUp.final_elapsed_seconds != null
+      ? Math.max(0, runnerUp.final_elapsed_seconds - leader.final_elapsed_seconds)
+      : null;
+  const emptyHeroTitle =
+    activeCount > 1
+      ? `${activeCount} are racing the clock`
+      : activeCount === 1
+        ? `${shortDisplayName(profiles[activeRows[0].user_id])} is racing the clock`
+        : "Squad is warming up";
+  const emptyHeroSubtitle =
+    activeCount > 0
+      ? waitingCount > 0
+        ? `One finish can flip the board. ${waitingCount} still choosing a timer.`
+        : "First finisher locks the pace."
+      : bottomText;
 
   return (
     <View
@@ -388,10 +408,14 @@ function LiveSquadHero({
               <Text style={[styles.heroSubtitle, { color: theme.colors.textMuted }]} numberOfLines={2}>
                 {runnerUp
                   ? boardCanStillFlip
-                    ? "Fastest so far, with pressure behind."
+                    ? leaderGapSeconds != null && leaderGapSeconds > 0
+                      ? `${formatLiveMiniElapsed(leaderGapSeconds)} ahead. One finish can flip it.`
+                      : "Tied at the top. One finish can flip it."
                     : "Fastest finish is locked."
-                  : boardCanStillFlip
-                    ? "Fastest finisher on the board."
+                  : activeCount > 0 && boardCanStillFlip
+                    ? "First finish is on the board. Chasers still running."
+                    : boardCanStillFlip
+                      ? "Fastest finisher on the board."
                     : "Final fastest finish."}
               </Text>
             </View>
@@ -462,11 +486,9 @@ function LiveSquadHero({
             <Flame size={28} color={theme.colors.cyan[400]} />
           </View>
           <View style={styles.emptyHeroCopy}>
-            <Text style={[styles.heroLeaderName, { color: theme.colors.textPrimary }]}>Squad is warming up</Text>
+            <Text style={[styles.heroLeaderName, { color: theme.colors.textPrimary }]}>{emptyHeroTitle}</Text>
             <Text style={[styles.heroSubtitle, { color: theme.colors.textMuted }]}>
-              {activeCount > 0
-                ? `${activeCount} on mission. ${waitingCount} still choosing a timer.`
-                : bottomText}
+              {emptyHeroSubtitle}
             </Text>
           </View>
         </View>
@@ -502,12 +524,57 @@ function StatusLegend() {
   );
 }
 
+function PulsingOnMissionDot({ color }: { color: string }) {
+  const pulse = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, {
+          toValue: 1,
+          duration: 920,
+          easing: Easing.out(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulse, {
+          toValue: 0,
+          duration: 260,
+          easing: Easing.in(Easing.quad),
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [pulse]);
+
+  const scale = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.72, 1.85] });
+  const opacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.55, 0] });
+
+  return (
+    <View style={styles.statusPulseWrap} pointerEvents="none">
+      <Animated.View
+        style={[
+          styles.statusPulseHalo,
+          {
+            backgroundColor: color,
+            opacity,
+            transform: [{ scale }],
+          },
+        ]}
+      />
+      <View style={[styles.statusPulseCore, { backgroundColor: color }]} />
+    </View>
+  );
+}
+
 function ParticipantCard({
   row,
   rank,
   profile,
   isMe,
   localMission,
+  highlightFinish,
   onOpenMine,
   onOpenImage,
 }: {
@@ -516,10 +583,12 @@ function ParticipantCard({
   profile: LiveMiniProfileLabel | undefined;
   isMe: boolean;
   localMission?: MiniMission;
+  highlightFinish: boolean;
   onOpenMine: () => void;
   onOpenImage: (uri: string) => void;
 }) {
   const { theme, isDark } = useTheme();
+  const finishGlow = useRef(new Animated.Value(0)).current;
   const tone = statusTone(row.status, theme, isDark);
   const planned = row.planned_minutes ?? localMission?.estimatedMinutes ?? null;
   const reserve = row.reserve_minutes ?? 0;
@@ -539,15 +608,51 @@ function ParticipantCard({
   const showProgress = row.status === "completed" || row.status === "in_progress";
   const memoryImage = row.memory_image_url ? withImageVersion(row.memory_image_url, row.updated_at) : null;
 
+  useEffect(() => {
+    if (!highlightFinish) return;
+    finishGlow.setValue(0.18);
+    Animated.timing(finishGlow, {
+      toValue: 0,
+      duration: 2200,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [finishGlow, highlightFinish]);
+
   return (
-    <View style={[styles.participantCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, ...theme.shadow.card }]}>
+    <View
+      style={[
+        styles.participantCard,
+        {
+          backgroundColor: theme.colors.surface,
+          borderColor: highlightFinish ? theme.colors.green[500] : theme.colors.border,
+          ...theme.shadow.card,
+        },
+      ]}
+    >
+      <Animated.View
+        pointerEvents="none"
+        style={[styles.finishGlow, { backgroundColor: theme.colors.green[500], opacity: finishGlow }]}
+      />
       <View style={styles.participantTop}>
         <View style={styles.nameBlock}>
           <View style={styles.participantNameRow}>
             <Text style={[styles.participantName, { color: theme.colors.textPrimary }]} numberOfLines={1}>
               {displayName(profile)}
-              {isMe ? "  You" : ""}
             </Text>
+            {isMe ? (
+              <View
+                style={[
+                  styles.youBadge,
+                  {
+                    backgroundColor: isDark ? "rgba(99, 102, 241, 0.18)" : "rgba(79, 70, 229, 0.1)",
+                    borderColor: isDark ? "rgba(129, 140, 248, 0.36)" : "rgba(79, 70, 229, 0.22)",
+                  },
+                ]}
+              >
+                <Text style={[styles.youBadgeText, { color: theme.colors.indigo[400] }]}>You</Text>
+              </View>
+            ) : null}
             {level != null ? (
               <View
                 style={[
@@ -574,6 +679,7 @@ function ParticipantCard({
         </View>
 
         <View style={[styles.statusPill, { backgroundColor: tone.bg }]}>
+          {row.status === "in_progress" ? <PulsingOnMissionDot color={theme.colors.green[500]} /> : null}
           <Text style={[styles.statusPillText, { color: tone.fg }]}>{statusCopy(row.status)}</Text>
         </View>
       </View>
@@ -589,6 +695,18 @@ function ParticipantCard({
           <Text style={[styles.elapsedText, { color: theme.colors.textPrimary }]}>
             {formatLiveMiniElapsed(row.final_elapsed_seconds)}
           </Text>
+          <View
+            style={[
+              styles.lockedPill,
+              {
+                backgroundColor: isDark ? "rgba(34,197,94,0.12)" : "rgba(22,163,74,0.08)",
+                borderColor: isDark ? "rgba(34,197,94,0.34)" : "rgba(22,163,74,0.22)",
+              },
+            ]}
+          >
+            <Check size={12} color={theme.colors.green[500]} />
+            <Text style={[styles.lockedPillText, { color: theme.colors.green[500] }]}>Locked</Text>
+          </View>
         </View>
       ) : null}
 
@@ -672,14 +790,22 @@ export default function LiveMiniSquadScreen() {
   const [manualMinutes, setManualMinutes] = useState("15");
   const [openImageUri, setOpenImageUri] = useState<string | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [finishHighlightIds, setFinishHighlightIds] = useState<Set<string>>(() => new Set());
   const userIdRef = useRef(userId);
   const liveSyncKeyRef = useRef<string | null>(null);
+  const previousParticipantStatusRef = useRef<Record<string, LiveMiniParticipantStatus>>({});
+  const finishHighlightTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   useEffect(() => {
     userIdRef.current = userId;
     setSnapshot(null);
     setLoading(Boolean(userId));
-  }, [userId]);
+    setFinishHighlightIds(new Set());
+    previousParticipantStatusRef.current = {};
+    Object.values(finishHighlightTimersRef.current).forEach(clearTimeout);
+    finishHighlightTimersRef.current = {};
+  }, [squadId, userId]);
 
   const localLiveMission = useMemo(
     () => miniMissions.find((m) => m.liveSquadId === squadId),
@@ -755,6 +881,13 @@ export default function LiveMiniSquadScreen() {
   const squad = snapshot?.squad ?? null;
   const participants = snapshot?.participants ?? [];
   const myParticipant = participants.find((p) => p.user_id === userId);
+  const creatorInviteMission = useMemo<MiniMission | null>(() => {
+    if (!localLiveMission || !squad || squad.status !== "active") return null;
+    if (localLiveMission.liveSquadRole === "creator" || myParticipant?.role === "creator") {
+      return { ...localLiveMission, liveSquadRole: "creator" };
+    }
+    return null;
+  }, [localLiveMission, myParticipant?.role, squad]);
   const completedRows = useMemo(
     () =>
       participants
@@ -775,6 +908,44 @@ export default function LiveMiniSquadScreen() {
       }),
     [participants],
   );
+
+  useEffect(() => {
+    const previous = previousParticipantStatusRef.current;
+    const next: Record<string, LiveMiniParticipantStatus> = {};
+    const previousWasLoaded = Object.keys(previous).length > 0;
+
+    for (const row of participants) {
+      next[row.id] = row.status;
+      if (!previousWasLoaded) continue;
+      if (row.status === "completed" && previous[row.id] && previous[row.id] !== "completed") {
+        if (finishHighlightTimersRef.current[row.id]) {
+          clearTimeout(finishHighlightTimersRef.current[row.id]);
+        }
+        setFinishHighlightIds((prev) => {
+          const copy = new Set(prev);
+          copy.add(row.id);
+          return copy;
+        });
+        finishHighlightTimersRef.current[row.id] = setTimeout(() => {
+          setFinishHighlightIds((prev) => {
+            const copy = new Set(prev);
+            copy.delete(row.id);
+            return copy;
+          });
+          delete finishHighlightTimersRef.current[row.id];
+        }, 2400);
+      }
+    }
+
+    previousParticipantStatusRef.current = next;
+  }, [participants]);
+
+  useEffect(() => {
+    return () => {
+      Object.values(finishHighlightTimersRef.current).forEach(clearTimeout);
+      finishHighlightTimersRef.current = {};
+    };
+  }, []);
 
   const acceptDisabled = busy !== null || !myParticipant || myParticipant.status !== "invited";
 
@@ -967,6 +1138,38 @@ export default function LiveMiniSquadScreen() {
             bottomText={bottomText}
           />
 
+          {creatorInviteMission ? (
+            <TouchableOpacity
+              onPress={() => setInviteOpen(true)}
+              activeOpacity={0.88}
+              style={[
+                styles.inviteMoreCard,
+                {
+                  backgroundColor: isDark ? "rgba(34,211,238,0.08)" : "rgba(8,145,178,0.06)",
+                  borderColor: isDark ? "rgba(34,211,238,0.24)" : "rgba(8,145,178,0.16)",
+                },
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Invite more people to Live Squad"
+            >
+              <View
+                style={[
+                  styles.inviteMoreIcon,
+                  { backgroundColor: isDark ? "rgba(34,211,238,0.14)" : "rgba(8,145,178,0.1)" },
+                ]}
+              >
+                <UserPlus size={18} color={theme.colors.cyan[400]} />
+              </View>
+              <View style={styles.inviteMoreTextCol}>
+                <Text style={[styles.inviteMoreTitle, { color: theme.colors.textPrimary }]}>Invite more</Text>
+                <Text style={[styles.inviteMoreBody, { color: theme.colors.textSecondary }]} numberOfLines={2}>
+                  Add people while the squad is active. They pick their own timer.
+                </Text>
+              </View>
+              <Text style={[styles.inviteMoreCta, { color: theme.colors.cyan[400] }]}>Open</Text>
+            </TouchableOpacity>
+          ) : null}
+
           {myParticipant?.status === "invited" ? (
             <View style={[styles.acceptCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, ...theme.shadow.card }]}>
               <Text style={[styles.acceptTitle, { color: theme.colors.textPrimary }]}>Pick your timer</Text>
@@ -1057,6 +1260,7 @@ export default function LiveMiniSquadScreen() {
               profile={snapshot.profiles[row.user_id]}
               isMe={row.user_id === userId}
               localMission={row.user_id === userId ? localLiveMission : undefined}
+              highlightFinish={finishHighlightIds.has(row.id)}
               onOpenMine={() => {
                 const mid = row.local_mini_mission_id ?? localLiveMission?.id;
                 if (mid) router.push(`/mini/${mid}`);
@@ -1072,6 +1276,17 @@ export default function LiveMiniSquadScreen() {
           visible={detailsOpen}
           snapshot={snapshot}
           onClose={() => setDetailsOpen(false)}
+        />
+      ) : null}
+
+      {creatorInviteMission ? (
+        <LiveMiniInviteSheet
+          visible={inviteOpen}
+          mission={creatorInviteMission}
+          onClose={() => {
+            setInviteOpen(false);
+            void load(true);
+          }}
         />
       ) : null}
 
@@ -1185,6 +1400,26 @@ const styles = StyleSheet.create({
   declineText: { fontSize: 14, fontWeight: "900" },
   acceptButton: { flex: 1.2, minHeight: 50, borderRadius: 16, alignItems: "center", justifyContent: "center", paddingHorizontal: 12 },
   acceptButtonText: { color: "#fff", fontSize: 14, fontWeight: "900", textAlign: "center" },
+  inviteMoreCard: {
+    borderWidth: 1,
+    borderRadius: 18,
+    padding: 13,
+    marginBottom: 18,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 11,
+  },
+  inviteMoreIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  inviteMoreTextCol: { flex: 1, minWidth: 0 },
+  inviteMoreTitle: { fontSize: 15, lineHeight: 19, fontWeight: "900" },
+  inviteMoreBody: { fontSize: 12, lineHeight: 17, fontWeight: "600", marginTop: 2 },
+  inviteMoreCta: { fontSize: 12, lineHeight: 16, fontWeight: "900" },
   participantsSectionHeader: {
     flexDirection: "row",
     alignItems: "center",
@@ -1199,19 +1434,48 @@ const styles = StyleSheet.create({
   legendItem: { flexDirection: "row", alignItems: "center", gap: 4, flexShrink: 0 },
   legendDot: { width: 9, height: 9, borderRadius: 999, borderWidth: 2 },
   legendText: { fontSize: 9, lineHeight: 12, fontWeight: "900" },
-  participantCard: { borderWidth: 1, borderRadius: 20, padding: 16, marginBottom: 14 },
+  participantCard: { borderWidth: 1, borderRadius: 20, padding: 16, marginBottom: 14, overflow: "hidden", position: "relative" },
+  finishGlow: { ...StyleSheet.absoluteFillObject },
   participantTop: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
   nameBlock: { flex: 1, minWidth: 0 },
   participantNameRow: { flexDirection: "row", alignItems: "center", gap: 7, minWidth: 0 },
   participantName: { fontSize: 19, lineHeight: 24, fontWeight: "900", flexShrink: 1 },
+  youBadge: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 7, paddingVertical: 3, flexShrink: 0 },
+  youBadgeText: { fontSize: 10, lineHeight: 12, fontWeight: "900" },
   metaLineWrap: { marginTop: 4 },
   metaLine: { fontSize: 12, lineHeight: 16, fontWeight: "700" },
-  statusPill: { borderRadius: 999, paddingVertical: 5, paddingHorizontal: 9 },
+  statusPill: {
+    borderRadius: 999,
+    paddingVertical: 5,
+    paddingHorizontal: 9,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
   statusPillText: { fontSize: 11, fontWeight: "900" },
-  resultRow: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 12 },
+  statusPulseWrap: {
+    width: 10,
+    height: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  statusPulseHalo: {
+    position: "absolute",
+    width: 10,
+    height: 10,
+    borderRadius: 999,
+  },
+  statusPulseCore: {
+    width: 6,
+    height: 6,
+    borderRadius: 999,
+  },
+  resultRow: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 12, flexWrap: "wrap" },
   rankBadge: { borderWidth: 1, borderRadius: 999, paddingVertical: 5, paddingHorizontal: 9, flexDirection: "row", alignItems: "center", gap: 5 },
   rankText: { fontSize: 12, fontWeight: "900" },
   elapsedText: { fontSize: 16, fontWeight: "900", fontVariant: ["tabular-nums"] },
+  lockedPill: { borderWidth: 1, borderRadius: 999, paddingVertical: 4, paddingHorizontal: 8, flexDirection: "row", alignItems: "center", gap: 4 },
+  lockedPillText: { fontSize: 11, lineHeight: 14, fontWeight: "900" },
   progressBlock: { marginTop: 12, gap: 7 },
   resultTrack: { height: 10, borderRadius: 999, overflow: "hidden" },
   resultFill: { height: "100%", borderRadius: 999 },
