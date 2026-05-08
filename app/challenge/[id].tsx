@@ -59,6 +59,7 @@ import { PlusBadge } from "../../src/components/PlusBadge";
 import { listChallengeStreakRepairs, voteStreakRepair, type StreakRepairRow, type StreakRepairVoteRow } from "../../src/lib/streakRepairApi";
 import { ShimmerBlock } from "../../src/components/ShimmerBlock";
 import { useRefreshPremiumAccess } from "../../src/hooks/useRefreshPremiumAccess";
+import { getSupabase } from "../../src/lib/supabase";
 import type {
   ChallengeActivityRow,
   ChallengeGroupRow,
@@ -131,7 +132,10 @@ export default function ChallengeDetailScreen() {
   const [customNoteToUserId, setCustomNoteToUserId] = useState<string | null>(null);
   const [repairRows, setRepairRows] = useState<StreakRepairRow[]>([]);
   const [repairVotes, setRepairVotes] = useState<StreakRepairVoteRow[]>([]);
-  const [repairBusyId, setRepairBusyId] = useState<string | null>(null);
+  const [repairBusyAction, setRepairBusyAction] = useState<{
+    id: string;
+    vote: "approve" | "decline";
+  } | null>(null);
   const [missionDetailsOpen, setMissionDetailsOpen] = useState(false);
 
   const focusOnceRef = useRef(false);
@@ -141,34 +145,30 @@ export default function ChallengeDetailScreen() {
     const silent = opts?.silent ?? false;
     if (!silent) setLoading(true);
     try {
-      const [g, members, activity, nudges] = await Promise.all([
+      const [g, members, activity, nudges, repairsRes] = await Promise.all([
         getChallengeGroup(challengeId),
         listChallengeMembers(challengeId),
         listChallengeActivity(challengeId).catch(() => [] as ChallengeActivityRow[]),
         listRecentNudges(challengeId).catch(() => [] as ChallengeNudgeRow[]),
+        listChallengeStreakRepairs(challengeId),
       ]);
       setGroup(g);
       const ids = members.map((m) => m.user_id);
       setMemberIdsOrdered(ids);
       setFeedActivity(activity);
       setFeedNudges(nudges);
+      const nextRepairRows = repairsRes.ok ? repairsRes.repairs : [];
+      setRepairRows(nextRepairRows);
+      setRepairVotes(repairsRes.ok ? repairsRes.votes : []);
       const labelIds = new Set<string>(ids);
       for (const a of activity) labelIds.add(a.actor_user_id);
       for (const n of nudges) {
         labelIds.add(n.from_user_id);
         labelIds.add(n.to_user_id);
       }
+      for (const r of nextRepairRows) labelIds.add(r.user_id);
       const labels = await getProfileLabelsForIds([...labelIds]);
       setProfileLabels(labels);
-
-      const repairsRes = await listChallengeStreakRepairs(challengeId);
-      if (repairsRes.ok) {
-        setRepairRows(repairsRes.repairs);
-        setRepairVotes(repairsRes.votes);
-      } else {
-        setRepairRows([]);
-        setRepairVotes([]);
-      }
     } finally {
       if (!silent) setLoading(false);
     }
@@ -185,6 +185,51 @@ export default function ChallengeDetailScreen() {
     }, [load, refreshPremiumAccess]),
   );
 
+  useEffect(() => {
+    if (!challengeId || !isSupabaseConfigured()) return undefined;
+    const supabase = getSupabase();
+    if (!supabase) return undefined;
+
+    const channel = supabase
+      .channel(`challenge_repairs_${challengeId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "streak_repairs",
+          filter: `challenge_id=eq.${challengeId}`,
+        },
+        (payload) => {
+          const next = payload.new as { id?: string; status?: string } | null;
+          if (!next?.id) return;
+          if (next.status && next.status !== "pending") {
+            setRepairRows((prev) => prev.filter((row) => row.id !== next.id));
+            setRepairVotes((prev) => prev.filter((vote) => vote.repair_id !== next.id));
+            return;
+          }
+          void load({ silent: true });
+        },
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "streak_repairs",
+          filter: `challenge_id=eq.${challengeId}`,
+        },
+        () => {
+          void load({ silent: true });
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [challengeId, load]);
+
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
@@ -194,10 +239,18 @@ export default function ChallengeDetailScreen() {
     }
   }, [load]);
 
+  const handleServerPremiumRequired = useCallback(
+    async (reason: "squad_nudge" | "streak_repair") => {
+      await refreshPremiumAccess({ force: true, serverOnly: true });
+      openUpsell(reason);
+    },
+    [openUpsell, refreshPremiumAccess],
+  );
+
   const onSendNudge = useCallback(
     async (toUserId: string, kind: PresetChallengeNudgeKind) => {
       if (!challengeId || !myUserId || toUserId === myUserId) return;
-      const freshPremium = await refreshPremiumAccess({ force: true });
+      const freshPremium = await refreshPremiumAccess({ force: true, cachedAccessOk: true });
       if (freshPremium !== true) {
         openUpsell("squad_nudge");
         return;
@@ -213,8 +266,12 @@ export default function ChallengeDetailScreen() {
       const key = `${toUserId}-${kind}`;
       setNudgeBusyKey(key);
       try {
-        const { error } = await sendChallengeNudge(challengeId, toUserId, kind);
+        const { error, reason } = await sendChallengeNudge(challengeId, toUserId, kind);
         if (error) {
+          if (reason === "premium_required") {
+            await handleServerPremiumRequired("squad_nudge");
+            return;
+          }
           showToast(error.message, "error");
           return;
         }
@@ -223,13 +280,13 @@ export default function ChallengeDetailScreen() {
         setNudgeBusyKey(null);
       }
     },
-    [challengeId, myUserId, load, habits, showToast, openUpsell, refreshPremiumAccess],
+    [challengeId, myUserId, load, habits, showToast, openUpsell, refreshPremiumAccess, handleServerPremiumRequired],
   );
 
   const onCongrats = useCallback(
     async (actorUserId: string, activityId: string) => {
       if (!challengeId || !myUserId || actorUserId === myUserId) return;
-      const freshPremium = await refreshPremiumAccess({ force: true });
+      const freshPremium = await refreshPremiumAccess({ force: true, cachedAccessOk: true });
       if (freshPremium !== true) {
         openUpsell("squad_nudge");
         return;
@@ -245,8 +302,12 @@ export default function ChallengeDetailScreen() {
       const key = `${actorUserId}-congrats`;
       setNudgeBusyKey(key);
       try {
-        const { error } = await sendChallengeNudge(challengeId, actorUserId, "congrats", { activityId });
+        const { error, reason } = await sendChallengeNudge(challengeId, actorUserId, "congrats", { activityId });
         if (error) {
+          if (reason === "premium_required") {
+            await handleServerPremiumRequired("squad_nudge");
+            return;
+          }
           showToast(error.message, "error");
           return;
         }
@@ -255,7 +316,7 @@ export default function ChallengeDetailScreen() {
         setNudgeBusyKey(null);
       }
     },
-    [challengeId, myUserId, load, habits, showToast, openUpsell, refreshPremiumAccess],
+    [challengeId, myUserId, load, habits, showToast, openUpsell, refreshPremiumAccess, handleServerPremiumRequired],
   );
 
   const congratsSentActivityIds = useMemo(() => {
@@ -268,6 +329,71 @@ export default function ChallengeDetailScreen() {
     }
     return s;
   }, [feedNudges, myUserId]);
+
+  const onRepairVote = useCallback(
+    async (repair: StreakRepairRow, vote: "approve" | "decline") => {
+      if (!myUserId || repairBusyAction) return;
+      const votesForRepair = repairVotes.filter((v) => v.repair_id === repair.id);
+      if (votesForRepair.some((v) => v.voter_id === myUserId)) return;
+
+      setRepairBusyAction({ id: repair.id, vote });
+      try {
+        const freshPremium = await refreshPremiumAccess({ force: true, cachedAccessOk: true });
+        if (freshPremium !== true) {
+          openUpsell("streak_repair");
+          return;
+        }
+
+        const res = await voteStreakRepair({ repairId: repair.id, vote });
+        if (!res.ok) {
+          if ("reason" in res && res.reason === "premium_required") {
+            await handleServerPremiumRequired("streak_repair");
+            return;
+          }
+          const msg = "error" in res ? res.error : "Could not save vote.";
+          showToast(msg, "error");
+          return;
+        }
+
+        const nextVote: StreakRepairVoteRow = {
+          repair_id: repair.id,
+          voter_id: myUserId,
+          vote,
+        };
+        setRepairVotes((prev) => [
+          ...prev.filter((v) => !(v.repair_id === repair.id && v.voter_id === myUserId)),
+          nextVote,
+        ]);
+
+        const approveCount =
+          votesForRepair.filter((v) => v.vote === "approve").length +
+          (vote === "approve" ? 1 : 0);
+        const resolvesRequest = vote === "decline" || approveCount >= repair.approvals_required;
+        if (resolvesRequest) {
+          setRepairRows((prev) => prev.filter((row) => row.id !== repair.id));
+          showToast(vote === "approve" ? "Repair vote saved." : "Repair declined.", "success");
+        } else {
+          showToast("Repair vote saved.", "success");
+        }
+
+        void load({ silent: true });
+        void refreshCohortPeerHabits();
+      } finally {
+        setRepairBusyAction(null);
+      }
+    },
+    [
+      load,
+      myUserId,
+      openUpsell,
+      refreshCohortPeerHabits,
+      refreshPremiumAccess,
+      handleServerPremiumRequired,
+      repairBusyAction,
+      repairVotes,
+      showToast,
+    ],
+  );
 
   const myHabit = useMemo(
     () => habits.find((h) => h.challengeGroupId === challengeId),
@@ -451,7 +577,7 @@ export default function ChallengeDetailScreen() {
   const onOpenCustomNote = useCallback(
     (toUserId: string) => {
       void (async () => {
-        const freshPremium = await refreshPremiumAccess({ force: true });
+        const freshPremium = await refreshPremiumAccess({ force: true, cachedAccessOk: true });
         if (freshPremium !== true) {
           openUpsell("squad_nudge");
           return;
@@ -465,7 +591,7 @@ export default function ChallengeDetailScreen() {
   const onSubmitCustomNote = useCallback(
     async (text: string) => {
       if (!challengeId || !customNoteToUserId || !myUserId) return;
-      const freshPremium = await refreshPremiumAccess({ force: true });
+      const freshPremium = await refreshPremiumAccess({ force: true, cachedAccessOk: true });
       if (freshPremium !== true) {
         openUpsell("squad_nudge");
         return;
@@ -481,8 +607,12 @@ export default function ChallengeDetailScreen() {
       }
       setNudgeBusyKey(`${customNoteToUserId}-custom_note`);
       try {
-        const { error } = await sendChallengeCustomNudge(challengeId, customNoteToUserId, text);
+        const { error, reason } = await sendChallengeCustomNudge(challengeId, customNoteToUserId, text);
         if (error) {
+          if (reason === "premium_required") {
+            await handleServerPremiumRequired("squad_nudge");
+            return;
+          }
           showToast(error.message, "error");
           return;
         }
@@ -492,7 +622,7 @@ export default function ChallengeDetailScreen() {
         setNudgeBusyKey(null);
       }
     },
-    [challengeId, customNoteToUserId, myUserId, habits, showToast, load, openUpsell, refreshPremiumAccess],
+    [challengeId, customNoteToUserId, myUserId, habits, showToast, load, openUpsell, refreshPremiumAccess, handleServerPremiumRequired],
   );
 
   const bottomPad = 40;
@@ -720,7 +850,8 @@ export default function ChallengeDetailScreen() {
                   const declines = votes.filter((v) => v.vote === "decline").length;
                   const myVote = myUserId ? votes.find((v) => v.voter_id === myUserId)?.vote ?? null : null;
                   const isRequester = Boolean(myUserId && myUserId === r.user_id);
-                  const canVote = Boolean(myUserId && !isRequester && declines === 0);
+                  const busyVote = repairBusyAction?.id === r.id ? repairBusyAction.vote : null;
+                  const canVote = Boolean(myUserId && !isRequester && !myVote && declines === 0 && !busyVote);
                   return (
                     <View
                       key={r.id}
@@ -758,25 +889,10 @@ export default function ChallengeDetailScreen() {
                       ) : (
                         <View style={styles.repairActionsRow}>
                           <TouchableOpacity
-                            disabled={!canVote || repairBusyId === r.id}
+                            disabled={!canVote}
                             onPress={() => {
                               if (!canVote) return;
-                              void (async () => {
-                                const freshPremium = await refreshPremiumAccess({ force: true });
-                                if (freshPremium !== true) {
-                                  openUpsell("streak_repair");
-                                  return;
-                                }
-                                setRepairBusyId(r.id);
-                                const res = await voteStreakRepair({ repairId: r.id, vote: "approve" });
-                                setRepairBusyId(null);
-                                if (!res.ok) {
-                                  const msg = "error" in res ? res.error : "Could not approve.";
-                                  showToast(msg, "error");
-                                  return;
-                                }
-                                await Promise.all([load({ silent: true }), refreshCohortPeerHabits()]);
-                              })();
+                              void onRepairVote(r, "approve");
                             }}
                             activeOpacity={0.88}
                             style={[
@@ -784,35 +900,24 @@ export default function ChallengeDetailScreen() {
                               {
                                 backgroundColor: myVote === "approve" ? theme.colors.indigo[600] : theme.colors.surfaceElevated,
                                 borderColor: theme.colors.border,
-                                opacity: !canVote || repairBusyId === r.id ? 0.6 : 1,
+                                opacity: !canVote ? 0.6 : 1,
                               },
                             ]}
                           >
-                            <Text style={[styles.repairBtnText, { color: myVote === "approve" ? "#fff" : theme.colors.textPrimary }]}>
-                              Approve
-                            </Text>
+                            {busyVote === "approve" ? (
+                              <ActivityIndicator size="small" color={theme.colors.indigo[400]} />
+                            ) : (
+                              <Text style={[styles.repairBtnText, { color: myVote === "approve" ? "#fff" : theme.colors.textPrimary }]}>
+                                {myVote === "approve" ? "Approved" : "Approve"}
+                              </Text>
+                            )}
                           </TouchableOpacity>
 
                           <TouchableOpacity
-                            disabled={!canVote || repairBusyId === r.id}
+                            disabled={!canVote}
                             onPress={() => {
                               if (!canVote) return;
-                              void (async () => {
-                                const freshPremium = await refreshPremiumAccess({ force: true });
-                                if (freshPremium !== true) {
-                                  openUpsell("streak_repair");
-                                  return;
-                                }
-                                setRepairBusyId(r.id);
-                                const res = await voteStreakRepair({ repairId: r.id, vote: "decline" });
-                                setRepairBusyId(null);
-                                if (!res.ok) {
-                                  const msg = "error" in res ? res.error : "Could not decline.";
-                                  showToast(msg, "error");
-                                  return;
-                                }
-                                await Promise.all([load({ silent: true }), refreshCohortPeerHabits()]);
-                              })();
+                              void onRepairVote(r, "decline");
                             }}
                             activeOpacity={0.88}
                             style={[
@@ -820,13 +925,17 @@ export default function ChallengeDetailScreen() {
                               {
                                 backgroundColor: myVote === "decline" ? "rgba(239, 68, 68, 0.14)" : theme.colors.surfaceElevated,
                                 borderColor: theme.colors.border,
-                                opacity: !canVote || repairBusyId === r.id ? 0.6 : 1,
+                                opacity: !canVote ? 0.6 : 1,
                               },
                             ]}
                           >
-                            <Text style={[styles.repairBtnText, { color: myVote === "decline" ? theme.colors.red[500] : theme.colors.textPrimary }]}>
-                              Decline
-                            </Text>
+                            {busyVote === "decline" ? (
+                              <ActivityIndicator size="small" color={theme.colors.red[500]} />
+                            ) : (
+                              <Text style={[styles.repairBtnText, { color: myVote === "decline" ? theme.colors.red[500] : theme.colors.textPrimary }]}>
+                                {myVote === "decline" ? "Declined" : "Decline"}
+                              </Text>
+                            )}
                           </TouchableOpacity>
                         </View>
                       )}

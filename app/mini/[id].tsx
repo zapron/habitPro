@@ -1326,7 +1326,7 @@ export default function MiniMissionDetail() {
     setFocusModeOpen(false);
     setTimerFrozenAtMs(Date.now());
     setCompleteSheetOpen(true);
-    void refreshPremiumAccess({ force: true });
+    void refreshPremiumAccess();
   };
 
   const handleCompleteCommit = async (
@@ -1356,7 +1356,7 @@ export default function MiniMissionDetail() {
     const wantsPublish = meta?.publishToCommunity === true;
     const publishCloudReady = wantsPublish && isSupabaseConfigured() && session?.user != null;
     const freshPremium = publishCloudReady
-      ? await refreshPremiumAccess({ force: true })
+      ? await refreshPremiumAccess({ force: true, cachedAccessOk: true })
       : null;
     let canPublish = publishCloudReady && freshPremium === true;
     if (publishCloudReady && freshPremium !== true) {
@@ -1421,6 +1421,11 @@ export default function MiniMissionDetail() {
         setMiniMissionVisibility(mission.id, "public");
         setMiniMissionCommunityFeedRevoked(mission.id, false);
       } else {
+        if (res.reason === "premium_required") {
+          await refreshPremiumAccess({ force: true, serverOnly: true });
+          openUpsell("community_publish");
+          return;
+        }
         Alert.alert("Couldn’t publish", res.error, [{ text: "OK" }]);
       }
     }
@@ -1487,7 +1492,7 @@ export default function MiniMissionDetail() {
         return;
       }
       void (async () => {
-        const freshPremium = await refreshPremiumAccess({ force: true });
+        const freshPremium = await refreshPremiumAccess({ force: true, cachedAccessOk: true });
         if (freshPremium !== true) {
           openUpsell("community_publish");
           return;
@@ -1508,6 +1513,12 @@ export default function MiniMissionDetail() {
           liveSquadId: mission.liveSquadId ?? null,
         });
         if (res.ok === false) {
+          if (res.reason === "premium_required") {
+            await refreshPremiumAccess({ force: true, serverOnly: true });
+            openUpsell("community_publish");
+            lastVisibilityRef.current = null;
+            return;
+          }
           Alert.alert("Couldn’t publish", res.error, [{ text: "OK" }]);
           lastVisibilityRef.current = null;
           return;

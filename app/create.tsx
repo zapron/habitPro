@@ -60,7 +60,7 @@ export default function CreateHabit() {
       return;
     }
     if (visibility === "public") {
-      const freshPremium = await refreshPremiumAccess({ force: true });
+      const freshPremium = await refreshPremiumAccess({ force: true, serverOnly: true });
       if (freshPremium !== true) {
         openUpsell("visibility");
         return;
@@ -477,7 +477,7 @@ export default function CreateHabit() {
             ]}
             onPress={() => {
               void (async () => {
-                const freshPremium = await refreshPremiumAccess({ force: true });
+                const freshPremium = await refreshPremiumAccess({ force: true, serverOnly: true });
                 if (freshPremium !== true) {
                   openUpsell("visibility");
                   return;

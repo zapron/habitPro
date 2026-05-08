@@ -22,6 +22,17 @@ export type StreakRepairVoteRow = {
   vote: "approve" | "decline";
 };
 
+type StreakRepairActionFailure = { ok: false; error: string; reason?: "premium_required" };
+
+function actionError(error: { message?: string } | null | undefined): StreakRepairActionFailure {
+  const message = String(error?.message ?? "Streak repair failed.");
+  return {
+    ok: false,
+    error: message,
+    reason: message.toLowerCase().includes("premium_required") ? "premium_required" : undefined,
+  };
+}
+
 export async function requestStreakRepair(input: {
   habitId: string;
   dateStr: string;
@@ -29,7 +40,7 @@ export async function requestStreakRepair(input: {
   xpCost: number;
   challengeId?: string | null;
   approvalsRequired?: number;
-}): Promise<{ ok: true; repairId: string } | { ok: false; error: string }> {
+}): Promise<{ ok: true; repairId: string } | StreakRepairActionFailure> {
   const supabase = getSupabase();
   if (!supabase) return { ok: false, error: "Cloud sync not configured." };
 
@@ -42,7 +53,7 @@ export async function requestStreakRepair(input: {
     p_approvals_required: input.approvalsRequired ?? 2,
   });
 
-  if (error) return { ok: false, error: error.message };
+  if (error) return actionError(error);
   const repairId = typeof data === "string" ? data : String(data ?? "");
   if (!repairId) return { ok: false, error: "Failed to create repair request." };
   return { ok: true, repairId };
@@ -51,7 +62,7 @@ export async function requestStreakRepair(input: {
 export async function voteStreakRepair(input: {
   repairId: string;
   vote: "approve" | "decline";
-}): Promise<{ ok: true } | { ok: false; error: string }> {
+}): Promise<{ ok: true } | StreakRepairActionFailure> {
   const supabase = getSupabase();
   if (!supabase) return { ok: false, error: "Cloud sync not configured." };
 
@@ -60,7 +71,7 @@ export async function voteStreakRepair(input: {
     p_vote: input.vote,
   });
 
-  if (error) return { ok: false, error: error.message };
+  if (error) return actionError(error);
   return { ok: true };
 }
 

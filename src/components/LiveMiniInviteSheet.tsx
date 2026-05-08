@@ -194,8 +194,12 @@ export function LiveMiniInviteSheet({ visible, mission, onClose }: Props) {
         },
       );
       if (res.ok === false) {
-        if (res.reason === "premium_required") openUpsell("live_mini");
-        else showToast(res.error, "error");
+        if (res.reason === "premium_required") {
+          await refreshPremiumAccess({ force: true, serverOnly: true });
+          openUpsell("live_mini");
+        } else {
+          showToast(res.error, "error");
+        }
         return;
       }
       setMiniMissionLiveSquad(mission.id, res.squadId, "creator");
@@ -247,6 +251,11 @@ export function LiveMiniInviteSheet({ visible, mission, onClose }: Props) {
           { slowMs: 900 },
         );
         if (res.ok === false) {
+          if (res.reason === "premium_required") {
+            await refreshPremiumAccess({ force: true, serverOnly: true });
+            openUpsell("live_mini");
+            return;
+          }
           showToast(res.error, "error");
           return;
         }

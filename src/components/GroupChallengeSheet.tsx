@@ -73,6 +73,11 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
     void refreshPremiumAccess();
   }, [visible, configured, signedIn, refreshPremiumAccess]);
 
+  const handleServerPremiumRequired = useCallback(async () => {
+    await refreshPremiumAccess({ force: true, serverOnly: true });
+    openUpsell("group_mission");
+  }, [openUpsell, refreshPremiumAccess]);
+
   useEffect(() => {
     if (!visible || !habit.challengeGroupId || !configured || !signedIn) {
       setInviteeStatusById({});
@@ -143,8 +148,12 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
         showToast("Choose a username to start a group mission.", "info");
         return;
       }
-      const { group, error } = await createGroupChallengeFromHabit(habit);
+      const { group, error, reason } = await createGroupChallengeFromHabit(habit);
       if (error || !group) {
+        if (reason === "premium_required") {
+          await handleServerPremiumRequired();
+          return;
+        }
         showToast(error?.message ?? "Unknown error", "error");
         return;
       }
@@ -153,7 +162,7 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
     } finally {
       setCreating(false);
     }
-  }, [configured, creating, signedIn, habit, showToast, openUpsell, requireUsername, refreshPremiumAccess]);
+  }, [configured, creating, signedIn, habit, showToast, openUpsell, requireUsername, refreshPremiumAccess, handleServerPremiumRequired]);
 
   const handleInvite = useCallback(
     async (userId: string) => {
@@ -178,8 +187,12 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
           }
           return;
         }
-        const { error } = await sendChallengeInvite(gid, userId);
+        const { error, reason } = await sendChallengeInvite(gid, userId);
         if (error) {
+          if (reason === "premium_required") {
+            await handleServerPremiumRequired();
+            return;
+          }
           showToast(error.message, "error");
           return;
         }
@@ -190,7 +203,7 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
         setInvitingId(null);
       }
     },
-    [habit.challengeGroupId, inviteeStatusById, invitingId, myUsername, showToast, openUpsell, requireUsername, refreshPremiumAccess],
+    [habit.challengeGroupId, inviteeStatusById, invitingId, myUsername, showToast, openUpsell, requireUsername, refreshPremiumAccess, handleServerPremiumRequired],
   );
 
   const openChallenge = () => {

@@ -10,10 +10,18 @@ import { getSupabase } from "./supabase";
 const MISSION_DAY_MILESTONES = [7, 14, 21] as const;
 const STREAK_MILESTONES = [7, 14, 21, 30] as const;
 
+type ChallengeActionResult = { error: Error | null; reason?: "premium_required" };
+
 function isDuplicateKeyError(err: { code?: string; message?: string } | null): boolean {
   if (!err) return false;
   if (err.code === "23505") return true;
   return String(err.message ?? "").toLowerCase().includes("duplicate");
+}
+
+function isPremiumPolicyError(err: { code?: string; message?: string } | null): boolean {
+  if (!err) return false;
+  const msg = String(err.message ?? "").toLowerCase();
+  return err.code === "42501" || msg.includes("premium_required") || msg.includes("row-level security");
 }
 
 /**
@@ -75,7 +83,7 @@ export async function sendChallengeNudge(
   toUserId: string,
   kind: PresetChallengeNudgeKind,
   opts?: { activityId?: string },
-): Promise<{ error: Error | null }> {
+): Promise<ChallengeActionResult> {
   const supabase = getSupabase();
   if (!supabase) return { error: new Error("Supabase not configured") };
   const {
@@ -97,6 +105,12 @@ export async function sendChallengeNudge(
     .single();
 
   if (error) {
+    if (isPremiumPolicyError(error)) {
+      return {
+        error: new Error("Squad nudges are a HabitPro Community feature."),
+        reason: "premium_required",
+      };
+    }
     const msg =
       error.code === "23505" || String(error.message).includes("duplicate")
         ? kind === "congrats"
@@ -133,7 +147,7 @@ export async function sendChallengeCustomNudge(
   challengeId: string,
   toUserId: string,
   message: string,
-): Promise<{ error: Error | null }> {
+): Promise<ChallengeActionResult> {
   const supabase = getSupabase();
   if (!supabase) return { error: new Error("Supabase not configured") };
   const {
@@ -157,7 +171,7 @@ export async function sendChallengeCustomNudge(
     const raw = String(error.message ?? "");
     const low = raw.toLowerCase();
     if (low.includes("premium_required")) {
-      return { error: new Error("Custom notes are a HabitPro Community feature.") };
+      return { error: new Error("Custom notes are a HabitPro Community feature."), reason: "premium_required" };
     }
     if (low.includes("custom_note_daily_limit") || low.includes("custom_note_already_sent")) {
       return { error: new Error("You can send one note per person every 24 hours.") };

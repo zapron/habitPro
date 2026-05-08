@@ -6,6 +6,8 @@ import { isSupabaseConfigured } from "../lib/env";
 import { getProfileIsPremiumForUser } from "../lib/groupChallengesApi";
 import { getSupabase } from "../lib/supabase";
 
+const APP_ACTIVE_PREMIUM_REFRESH_IDLE_MS = 5 * 60 * 1000;
+
 type PremiumContextValue = {
   /**
    * HabitPro Community access: Supabase `profiles.is_premium` (webhook / admin) **or**
@@ -26,6 +28,7 @@ export function PremiumProvider({ children }: { children: React.ReactNode }) {
   const [dbPremiumUserId, setDbPremiumUserId] = useState<string | null>(null);
   const [dbLoading, setDbLoading] = useState(false);
   const activeUserIdRef = useRef<string | null>(null);
+  const lastInactiveAtRef = useRef<number | null>(null);
 
   const userId = session?.user?.id ?? null;
 
@@ -34,6 +37,7 @@ export function PremiumProvider({ children }: { children: React.ReactNode }) {
     setDbPremium(false);
     setDbPremiumUserId(null);
     setDbLoading(false);
+    lastInactiveAtRef.current = null;
   }, [userId]);
 
   const refresh = useCallback(async () => {
@@ -70,7 +74,20 @@ export function PremiumProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (initializing) return;
     const sub = AppState.addEventListener("change", (st) => {
-      if (st === "active") void refresh();
+      if (st === "active") {
+        const lastInactiveAt = lastInactiveAtRef.current;
+        lastInactiveAtRef.current = null;
+        if (
+          lastInactiveAt != null &&
+          Date.now() - lastInactiveAt >= APP_ACTIVE_PREMIUM_REFRESH_IDLE_MS
+        ) {
+          void refresh();
+        }
+        return;
+      }
+      if (st === "inactive" || st === "background") {
+        lastInactiveAtRef.current ??= Date.now();
+      }
     });
     return () => sub.remove();
   }, [initializing, refresh]);

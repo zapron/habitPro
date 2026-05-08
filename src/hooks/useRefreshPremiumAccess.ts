@@ -23,8 +23,10 @@ type PremiumAccessSnapshot = {
 
 type PremiumAccessCache = {
   lastRefreshAt: number;
+  lastServerRefreshAt: number;
   lastSnapshot: PremiumAccessSnapshot | null;
   inFlight: Promise<PremiumAccessSnapshot> | null;
+  serverInFlight: Promise<PremiumAccessSnapshot> | null;
 };
 
 const cacheByUserId = new Map<string, PremiumAccessCache>();
@@ -34,8 +36,10 @@ function cacheForUser(userId: string): PremiumAccessCache {
   if (existing) return existing;
   const next: PremiumAccessCache = {
     lastRefreshAt: 0,
+    lastServerRefreshAt: 0,
     lastSnapshot: null,
     inFlight: null,
+    serverInFlight: null,
   };
   cacheByUserId.set(userId, next);
   return next;
@@ -63,6 +67,49 @@ export function useRefreshPremiumAccess(minIntervalMs = DEFAULT_MIN_INTERVAL_MS)
       }
       const cache = cacheForUser(userId);
       const now = Date.now();
+
+      if (options?.serverOnly) {
+        if (!options.force && cache.serverInFlight) {
+          return selectAccess(await cache.serverInFlight, options);
+        }
+        if (!options.force && now - cache.lastServerRefreshAt < minIntervalMs) {
+          return selectAccess(cache.lastSnapshot, options);
+        }
+        cache.lastServerRefreshAt = now;
+
+        const request = traceAsync(
+          "premium.refresh",
+          async () => {
+            const dbPremium = await refreshPremium();
+            const priorRevenueCatAccess = cache.lastSnapshot?.revenueCatAccess === true;
+            const serverAccess = dbPremium == null ? null : Boolean(dbPremium);
+            return {
+              access: serverAccess === true || priorRevenueCatAccess,
+              serverAccess,
+              revenueCatAccess: priorRevenueCatAccess,
+            };
+          },
+          {
+            slowMs: 700,
+            meta: {
+              force: Boolean(options.force),
+              serverOnly: true,
+              cachedAccessOk: Boolean(options.cachedAccessOk),
+            },
+          },
+        );
+        cache.serverInFlight = request;
+
+        try {
+          cache.lastSnapshot = await request;
+          return selectAccess(cache.lastSnapshot, options);
+        } finally {
+          if (cache.serverInFlight === request) {
+            cache.serverInFlight = null;
+          }
+        }
+      }
+
       if (!options?.force && cache.inFlight) {
         return selectAccess(await cache.inFlight, options);
       }

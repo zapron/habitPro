@@ -13,6 +13,23 @@ import { pullFromSupabase } from "./sync";
 import { getRemoteSyncUserId } from "./syncQueue";
 import { getSupabase } from "./supabase";
 
+type PremiumFailureReason = "premium_required";
+type GroupActionErrorResult = { error: Error | null; reason?: PremiumFailureReason };
+
+function isPremiumPolicyError(err: { code?: string; message?: string } | null | undefined): boolean {
+  if (!err) return false;
+  const msg = String(err.message ?? "").toLowerCase();
+  return err.code === "42501" || msg.includes("premium_required") || msg.includes("row-level security");
+}
+
+function groupActionError(err: { code?: string; message?: string } | null | undefined, fallback: string): GroupActionErrorResult {
+  const message = String(err?.message ?? fallback);
+  return {
+    error: new Error(message),
+    reason: isPremiumPolicyError(err) ? "premium_required" : undefined,
+  };
+}
+
 function getTz(): string {
   try {
     return Intl.DateTimeFormat().resolvedOptions().timeZone ?? "UTC";
@@ -52,7 +69,7 @@ export async function searchProfilesByUsernamePrefix(
 export async function createGroupChallengeFromHabit(
   habit: Habit,
   titleOverride?: string,
-): Promise<{ group: ChallengeGroupRow; error: Error | null }> {
+): Promise<{ group: ChallengeGroupRow; error: Error | null; reason?: PremiumFailureReason }> {
   const supabase = getSupabase();
   if (!supabase) return { group: null as unknown as ChallengeGroupRow, error: new Error("Supabase not configured") };
   const {
@@ -86,7 +103,12 @@ export async function createGroupChallengeFromHabit(
     .select()
     .single();
 
-  if (gErr || !group) return { group: null as unknown as ChallengeGroupRow, error: new Error(gErr?.message ?? "create group failed") };
+  if (gErr || !group) {
+    return {
+      group: null as unknown as ChallengeGroupRow,
+      ...groupActionError(gErr, "create group failed"),
+    };
+  }
 
   const canonicalStartIso = canonicalGroupMissionHabitStartIso(startDate);
   const td = Math.max(1, habit.totalDays ?? 21);
@@ -108,7 +130,7 @@ export async function createGroupChallengeFromHabit(
     .eq("user_id", user.id)
     .eq("id", habit.id);
 
-  if (hErr) return { group: null as unknown as ChallengeGroupRow, error: new Error(hErr.message) };
+  if (hErr) return { group: null as unknown as ChallengeGroupRow, ...groupActionError(hErr, "update habit failed") };
 
   const { error: mErr } = await supabase.from("challenge_members").insert({
     challenge_id: group.id,
@@ -117,7 +139,7 @@ export async function createGroupChallengeFromHabit(
     role: "creator",
   });
 
-  if (mErr) return { group: null as unknown as ChallengeGroupRow, error: new Error(mErr.message) };
+  if (mErr) return { group: null as unknown as ChallengeGroupRow, ...groupActionError(mErr, "join group failed") };
 
   return { group: group as ChallengeGroupRow, error: null };
 }
@@ -222,7 +244,7 @@ export async function getProfileLabelsForIds(userIds: string[]): Promise<Record<
 export async function sendChallengeInvite(
   challengeId: string,
   inviteeUserId: string,
-): Promise<{ error: Error | null }> {
+): Promise<GroupActionErrorResult> {
   const supabase = getSupabase();
   if (!supabase) return { error: new Error("Supabase not configured") };
   const {
@@ -275,6 +297,12 @@ export async function sendChallengeInvite(
     .select("id")
     .single();
   if (invErr) {
+    if (isPremiumPolicyError(invErr)) {
+      return {
+        error: new Error("Group invites are a HabitPro Community feature."),
+        reason: "premium_required",
+      };
+    }
     const msg =
       invErr.message.toLowerCase().includes("unique") || invErr.code === "23505"
         ? "There is already a pending invite to this person for this group mission."
@@ -457,7 +485,7 @@ export async function declineInvite(inviteId: string): Promise<{ error: Error | 
 export async function acceptInviteAndJoin(
   invite: ChallengeInviteRow,
   newHabitId: string,
-): Promise<{ error: Error | null }> {
+): Promise<GroupActionErrorResult> {
   const supabase = getSupabase();
   if (!supabase) return { error: new Error("Supabase not configured") };
   const {
@@ -472,7 +500,7 @@ export async function acceptInviteAndJoin(
     role: "member",
   });
   if (mErr && (mErr as { code?: string }).code !== "23505") {
-    return { error: new Error(mErr.message) };
+    return groupActionError(mErr, "Could not join group mission.");
   }
 
   const { error: iErr } = await supabase

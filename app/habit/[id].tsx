@@ -422,7 +422,7 @@ export default function HabitDetail() {
         if (!eligibleRepair || repairStatus === "pending") return;
         const isGroupRepair = Boolean(habit?.challengeGroupId);
         if (isGroupRepair) {
-          const freshPremium = await refreshPremiumAccess({ force: true });
+          const freshPremium = await refreshPremiumAccess({ force: true, cachedAccessOk: true });
           if (freshPremium !== true) {
             openUpsell("streak_repair");
             return;
@@ -556,7 +556,7 @@ export default function HabitDetail() {
                     return;
                 }
                 if (isSupabaseConfigured() && session?.user) {
-                    const freshPremium = await refreshPremiumAccess({ force: true });
+                    const freshPremium = await refreshPremiumAccess({ force: true, cachedAccessOk: true });
                     if (freshPremium !== true) {
                         openUpsell('community_publish');
                         return;
@@ -618,6 +618,11 @@ export default function HabitDetail() {
                 if (res.ok === true) {
                     patchStreakMemory(habit.id, ctx.dateStr, { communityPosted: true });
                 } else {
+                    if (res.reason === "premium_required") {
+                        await refreshPremiumAccess({ force: true, serverOnly: true });
+                        openUpsell('community_publish');
+                        return;
+                    }
                     Alert.alert('Couldn’t publish', res.error, [{ text: 'OK' }]);
                 }
             }
@@ -643,7 +648,7 @@ export default function HabitDetail() {
             if (!mem || mem.communityFeedRevoked) return;
 
             if (next) {
-                const freshPremium = await refreshPremiumAccess({ force: true });
+                const freshPremium = await refreshPremiumAccess({ force: true, cachedAccessOk: true });
                 if (freshPremium !== true) {
                     openUpsell('community_publish');
                     return;
@@ -703,6 +708,11 @@ export default function HabitDetail() {
                     if (res.ok === true) {
                         patchStreakMemory(habit.id, dateStr, { communityPosted: true });
                     } else {
+                        if (res.reason === "premium_required") {
+                            await refreshPremiumAccess({ force: true, serverOnly: true });
+                            openUpsell('community_publish');
+                            return;
+                        }
                         Alert.alert('Couldn’t publish', res.error, [{ text: 'OK' }]);
                     }
                 } finally {
@@ -913,7 +923,7 @@ export default function HabitDetail() {
                             const prev = habit.visibility ?? 'solo';
                             if (prev === next) return;
                             if (next === 'public') {
-                                const freshPremium = await refreshPremiumAccess({ force: true });
+                                const freshPremium = await refreshPremiumAccess({ force: true, serverOnly: true });
                                 if (freshPremium !== true) {
                                     openUpsell('visibility');
                                     return;
@@ -1103,7 +1113,7 @@ export default function HabitDetail() {
                                 const prev = habit.visibility ?? 'solo';
                                 if (prev === next) return;
                                 if (next === 'public') {
-                                    const freshPremium = await refreshPremiumAccess({ force: true });
+                                    const freshPremium = await refreshPremiumAccess({ force: true, serverOnly: true });
                                     if (freshPremium !== true) {
                                         openUpsell('visibility');
                                         return;

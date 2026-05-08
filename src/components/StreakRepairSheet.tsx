@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Text } from "./AppText";
 import {
+  ActivityIndicator,
   Modal,
   Pressable,
   StyleSheet,
@@ -43,8 +44,6 @@ export function StreakRepairSheet({ visible, onClose, habit, eligible, onRequest
   const { openUpsell } = usePlusUpsell();
   const refreshPremiumAccess = useRefreshPremiumAccess();
   const xp = useHabitStore((s) => s.xp);
-  const addXp = useHabitStore((s) => s.addXp);
-  const toggleCompletion = useHabitStore((s) => s.toggleCompletion);
 
   const isGroup = Boolean(habit.challengeGroupId);
   const plusOk = !isGroup || (isPremium && !premiumLoading);
@@ -230,48 +229,55 @@ export function StreakRepairSheet({ visible, onClose, habit, eligible, onRequest
             activeOpacity={0.88}
             disabled={!canSubmit}
             onPress={async () => {
-              if (isGroup) {
-                const freshPremium = await refreshPremiumAccess({ force: true });
-                if (freshPremium !== true) {
-                  openUpsell("streak_repair");
-                  return;
-                }
-              }
-              if (!trimmed) return;
+              if (!trimmed || busy) return;
               if (!isGroup && !hasXp) return;
               setBusy(true);
-              const res = await requestStreakRepair({
-                habitId: habit.id,
-                dateStr: eligible.dateStr,
-                reason: trimmed,
-                xpCost: cost,
-                challengeId: habit.challengeGroupId ?? null,
-                approvalsRequired,
-              });
-              setBusy(false);
-              if (!res.ok) {
-                const msg = "error" in res ? res.error : "Streak repair failed.";
-                showToast(msg, "error");
-                return;
-              }
-
-              if (!isGroup) {
-                // Solo repair: server already charged XP; keep local UX snappy and consistent.
-                addXp(-cost);
-                toggleCompletion(habit.id, eligible.dateStr);
-                useHabitStore.getState().applyStreakRepairLocally({
+              try {
+                if (isGroup) {
+                  const freshPremium = await refreshPremiumAccess({ force: true, cachedAccessOk: true });
+                  if (freshPremium !== true) {
+                    openUpsell("streak_repair");
+                    return;
+                  }
+                }
+                const res = await requestStreakRepair({
                   habitId: habit.id,
                   dateStr: eligible.dateStr,
-                  repairSource: "solo",
-                  deductXp: false,
+                  reason: trimmed,
+                  xpCost: cost,
+                  challengeId: habit.challengeGroupId ?? null,
+                  approvalsRequired,
                 });
-                showToast("Streak repaired.", "success");
-                onRequested?.({ status: "applied" });
-              } else {
-                showToast("Request sent to your squad.", "success");
-                onRequested?.({ status: "pending" });
+                if (!res.ok) {
+                  if ("reason" in res && res.reason === "premium_required") {
+                    await refreshPremiumAccess({ force: true, serverOnly: true });
+                    openUpsell("streak_repair");
+                    return;
+                  }
+                  const msg = "error" in res ? res.error : "Streak repair failed.";
+                  showToast(msg, "error");
+                  return;
+                }
+
+                if (!isGroup) {
+                  // Server already charged XP and repaired the date; mirror that without granting completion XP.
+                  useHabitStore.getState().applyStreakRepairLocally({
+                    habitId: habit.id,
+                    dateStr: eligible.dateStr,
+                    xpCost: cost,
+                    repairSource: "solo",
+                    deductXp: true,
+                  });
+                  showToast("Streak repaired.", "success");
+                  onRequested?.({ status: "applied" });
+                } else {
+                  showToast("Request sent to your squad.", "success");
+                  onRequested?.({ status: "pending" });
+                }
+                onClose();
+              } finally {
+                setBusy(false);
               }
-              onClose();
             }}
             style={[
               styles.primaryBtn,
@@ -280,7 +286,10 @@ export function StreakRepairSheet({ visible, onClose, habit, eligible, onRequest
               },
             ]}
           >
-            <Text style={[styles.primaryBtnText, { color: "#111827" }]}>{busy ? "Working..." : primaryLabel}</Text>
+            <View style={styles.primaryBtnContent}>
+              {busy ? <ActivityIndicator size="small" color="#111827" /> : null}
+              <Text style={[styles.primaryBtnText, { color: "#111827" }]}>{busy ? "Working..." : primaryLabel}</Text>
+            </View>
           </TouchableOpacity>
         </Pressable>
       </Pressable>
@@ -320,6 +329,7 @@ const styles = StyleSheet.create({
   togglePill: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8 },
   togglePillText: { fontSize: 12, fontWeight: "900" },
   primaryBtn: { borderRadius: 14, paddingVertical: 14, alignItems: "center" },
+  primaryBtnContent: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
   primaryBtnText: { fontSize: 14, fontWeight: "900" },
 });
 
