@@ -72,7 +72,8 @@ import {
 import { levelFromTotalXp, xpInCurrentLevel } from "../../src/utils/xpLevel";
 
 const WEEKLY_RANK_PAGE_SIZE = 20;
-const COMPETE_AUTO_RELOAD_COOLDOWN_MS = 15_000;
+const COMPETE_INVITES_RELOAD_TTL_MS = 30_000;
+const COMPETE_LEAGUE_RELOAD_TTL_MS = 60_000;
 
 type CompeteSegment = "leaderboard" | "challenges";
 
@@ -477,8 +478,15 @@ export default function CompeteScreen() {
   const userIdRef = useRef<string | null>(userId);
   const invitesLoadInFlightRef = useRef(false);
   const leagueLoadInFlightRef = useRef(false);
+  const pendingInvitesForceLoadRef = useRef(false);
+  const pendingLeagueForceLoadRef = useRef(false);
   const lastInvitesLoadAtRef = useRef(0);
   const lastLeagueLoadAtRef = useRef(0);
+  const groupInvitesRef = useRef<ChallengeInviteRow[]>([]);
+  const liveMiniInvitesRef = useRef<LiveMiniInviteForMe[]>([]);
+
+  groupInvitesRef.current = groupInvites;
+  liveMiniInvitesRef.current = liveMiniInvites;
 
   useLayoutEffect(() => {
     userIdRef.current = userId;
@@ -495,6 +503,8 @@ export default function CompeteScreen() {
     setLeaguePlayerDrawer(null);
     invitesLoadInFlightRef.current = false;
     leagueLoadInFlightRef.current = false;
+    pendingInvitesForceLoadRef.current = false;
+    pendingLeagueForceLoadRef.current = false;
     lastInvitesLoadAtRef.current = 0;
     lastLeagueLoadAtRef.current = 0;
   }, [userId]);
@@ -523,12 +533,17 @@ export default function CompeteScreen() {
       syncInviteBadgeCount(0);
       return;
     }
-    if (invitesLoadInFlightRef.current) return;
+    if (invitesLoadInFlightRef.current) {
+      if (options?.force) pendingInvitesForceLoadRef.current = true;
+      return;
+    }
     const now = Date.now();
-    if (!options?.force && now - lastInvitesLoadAtRef.current < COMPETE_AUTO_RELOAD_COOLDOWN_MS) return;
+    if (!options?.force && now - lastInvitesLoadAtRef.current < COMPETE_INVITES_RELOAD_TTL_MS) return;
     lastInvitesLoadAtRef.current = now;
     invitesLoadInFlightRef.current = true;
-    setInvitesLoading(true);
+    if (groupInvitesRef.current.length === 0 && liveMiniInvitesRef.current.length === 0) {
+      setInvitesLoading(true);
+    }
     try {
       const [rows, liveRows] = await traceAsync(
         "compete.invites.loadLists",
@@ -562,6 +577,14 @@ export default function CompeteScreen() {
     } finally {
       invitesLoadInFlightRef.current = false;
       if (userIdRef.current === requestedUserId) setInvitesLoading(false);
+      if (pendingInvitesForceLoadRef.current && userIdRef.current === requestedUserId) {
+        pendingInvitesForceLoadRef.current = false;
+        setTimeout(() => {
+          void loadInvites({ force: true });
+        }, 0);
+      } else {
+        pendingInvitesForceLoadRef.current = false;
+      }
     }
   }, [syncInviteBadgeCount, userId]);
 
@@ -573,9 +596,12 @@ export default function CompeteScreen() {
       setLeagueError("Sign in to view Weekly Ranks.");
       return;
     }
-    if (leagueLoadInFlightRef.current) return;
+    if (leagueLoadInFlightRef.current) {
+      if (options?.force) pendingLeagueForceLoadRef.current = true;
+      return;
+    }
     const now = Date.now();
-    if (!options?.force && now - lastLeagueLoadAtRef.current < COMPETE_AUTO_RELOAD_COOLDOWN_MS) return;
+    if (!options?.force && now - lastLeagueLoadAtRef.current < COMPETE_LEAGUE_RELOAD_TTL_MS) return;
     lastLeagueLoadAtRef.current = now;
     leagueLoadInFlightRef.current = true;
     setLeagueLoading(true);
@@ -603,6 +629,14 @@ export default function CompeteScreen() {
     } finally {
       leagueLoadInFlightRef.current = false;
       if (userIdRef.current === requestedUserId) setLeagueLoading(false);
+      if (pendingLeagueForceLoadRef.current && userIdRef.current === requestedUserId) {
+        pendingLeagueForceLoadRef.current = false;
+        setTimeout(() => {
+          void loadLeague({ force: true });
+        }, 0);
+      } else {
+        pendingLeagueForceLoadRef.current = false;
+      }
     }
   }, [userId]);
 
@@ -681,6 +715,7 @@ export default function CompeteScreen() {
     if (focus || inviteId || challengeId) {
       setSegment("challenges");
       setChallengesSubTab("invites");
+      void loadInvites({ force: true });
     }
     if (inviteId) {
       setHighlightInviteId(inviteId);
@@ -691,7 +726,7 @@ export default function CompeteScreen() {
     }
 
     router.setParams({ inviteId: undefined, challengeId: undefined, focusInvites: undefined });
-  }, [params.inviteId, params.challengeId, params.focusInvites, router]);
+  }, [loadInvites, params.inviteId, params.challengeId, params.focusInvites, router]);
 
   useEffect(() => {
     if (!highlightInviteId && !highlightChallengeId) return;
@@ -710,7 +745,7 @@ export default function CompeteScreen() {
     }
     setInviteBusy(invite.id);
     try {
-      const freshPremium = await refreshPremiumAccess({ force: true, cachedAccessOk: true });
+      const freshPremium = await refreshPremiumAccess({ force: true, serverOnly: true });
       if (freshPremium !== true) {
         openUpsell("invite_accept");
         return;
@@ -755,12 +790,19 @@ export default function CompeteScreen() {
       await traceAsync("compete.groupInvite.upsertHabit", () => upsertRemoteHabit(userId, habit), {
         slowMs: 900,
       });
-      const { error } = await traceAsync(
+      const { error, reason } = await traceAsync(
         "compete.groupInvite.accept",
         () => acceptInviteAndJoin(invite, newHabitId),
         { slowMs: 900 },
       );
-      if (error) throw error;
+      if (error) {
+        if (reason === "premium_required") {
+          await refreshPremiumAccess({ force: true, serverOnly: true });
+          openUpsell("invite_accept");
+          return;
+        }
+        throw error;
+      }
 
       useHabitStore.getState().synchronizeHabitWithChallengeGroup(newHabitId, group);
       const alignedHabit = useHabitStore.getState().habits.find((h) => h.id === newHabitId);

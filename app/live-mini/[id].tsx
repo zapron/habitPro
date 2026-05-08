@@ -63,6 +63,9 @@ const LONG_PRESETS = [
   { label: "8h", minutes: 480 },
 ];
 
+const LIVE_MINI_BOARD_RELOAD_TTL_MS = 12_000;
+const LIVE_MINI_REALTIME_DEBOUNCE_MS = 350;
+
 function clampMinutes(value: number): number {
   return Math.max(1, Math.min(480, Math.round(value)));
 }
@@ -800,6 +803,9 @@ export default function LiveMiniSquadScreen() {
   const finishHighlightTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const snapshotRef = useRef<LiveMiniSquadSnapshot | null>(null);
   const loadInFlightRef = useRef(false);
+  const pendingSilentLoadRef = useRef(false);
+  const lastBoardLoadAtRef = useRef(0);
+  const realtimeDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     userIdRef.current = userId;
@@ -808,6 +814,12 @@ export default function LiveMiniSquadScreen() {
     setLoading(Boolean(userId));
     setFinishHighlightIds(new Set());
     previousParticipantStatusRef.current = {};
+    pendingSilentLoadRef.current = false;
+    lastBoardLoadAtRef.current = 0;
+    if (realtimeDebounceRef.current) {
+      clearTimeout(realtimeDebounceRef.current);
+      realtimeDebounceRef.current = null;
+    }
     Object.values(finishHighlightTimersRef.current).forEach(clearTimeout);
     finishHighlightTimersRef.current = {};
   }, [squadId, userId]);
@@ -818,14 +830,25 @@ export default function LiveMiniSquadScreen() {
   );
 
   const load = useCallback(
-    async (silent = false) => {
+    async (silent = false, options?: { force?: boolean }) => {
       if (!squadId || !userId) {
         snapshotRef.current = null;
         setSnapshot(null);
         setLoading(false);
         return;
       }
-      if (loadInFlightRef.current) return;
+      if (loadInFlightRef.current) {
+        if (silent || options?.force) pendingSilentLoadRef.current = true;
+        return;
+      }
+      const now = Date.now();
+      if (
+        !options?.force &&
+        snapshotRef.current &&
+        now - lastBoardLoadAtRef.current < LIVE_MINI_BOARD_RELOAD_TTL_MS
+      ) {
+        return;
+      }
       loadInFlightRef.current = true;
       if (!silent && !snapshotRef.current) setLoading(true);
       try {
@@ -836,6 +859,7 @@ export default function LiveMiniSquadScreen() {
         if (userIdRef.current !== userId) return;
         snapshotRef.current = next;
         setSnapshot(next);
+        lastBoardLoadAtRef.current = Date.now();
         const mine = next?.participants.find((p) => p.user_id === userId);
         if (mine?.planned_minutes) {
           setSelectedMinutes(mine.planned_minutes);
@@ -847,10 +871,26 @@ export default function LiveMiniSquadScreen() {
       } finally {
         loadInFlightRef.current = false;
         if (!silent) setLoading(false);
+        if (pendingSilentLoadRef.current) {
+          pendingSilentLoadRef.current = false;
+          setTimeout(() => {
+            void load(true, { force: true });
+          }, 0);
+        }
       }
     },
     [showToast, squadId, userId],
   );
+
+  const scheduleRealtimeLoad = useCallback(() => {
+    if (realtimeDebounceRef.current) {
+      clearTimeout(realtimeDebounceRef.current);
+    }
+    realtimeDebounceRef.current = setTimeout(() => {
+      realtimeDebounceRef.current = null;
+      void load(true, { force: true });
+    }, LIVE_MINI_REALTIME_DEBOUNCE_MS);
+  }, [load]);
 
   useEffect(() => {
     if (!localLiveMission?.liveSquadId || localLiveMission.liveSquadId !== squadId) return;
@@ -867,7 +907,7 @@ export default function LiveMiniSquadScreen() {
       slowMs: 900,
       meta: { status: localLiveMission.status },
     })
-      .then(() => load(true))
+      .then(() => load(true, { force: true }))
       .catch(() => {});
   }, [load, localLiveMission, squadId]);
 
@@ -879,16 +919,20 @@ export default function LiveMiniSquadScreen() {
 
   useEffect(() => {
     if (!squadId) return undefined;
-    const unsub = subscribeLiveMiniSquad(squadId, () => void load(true));
+    const unsub = subscribeLiveMiniSquad(squadId, scheduleRealtimeLoad);
     return () => {
       unsub?.();
+      if (realtimeDebounceRef.current) {
+        clearTimeout(realtimeDebounceRef.current);
+        realtimeDebounceRef.current = null;
+      }
     };
-  }, [load, squadId]);
+  }, [scheduleRealtimeLoad, squadId]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      await load(true);
+      await load(true, { force: true });
     } finally {
       setRefreshing(false);
     }
@@ -1003,7 +1047,7 @@ export default function LiveMiniSquadScreen() {
       setTimeout(() => {
         void suggestNotifications("invite_accept");
       }, 350);
-      await load(true);
+      await load(true, { force: true });
       router.push(`/mini/${localId}`);
     } finally {
       setBusy(null);
@@ -1022,7 +1066,7 @@ export default function LiveMiniSquadScreen() {
         return;
       }
       showToast("Invite declined.", "success");
-      await load(true);
+      await load(true, { force: true });
     } finally {
       setBusy(null);
     }

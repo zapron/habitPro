@@ -124,6 +124,7 @@ const STORE_PRODUCT_IDS: Record<PlanId, string> = {
 };
 
 const MAX_REVENUECAT_LOGS = 40;
+const BILLING_APP_ACTIVE_REFRESH_IDLE_MS = 5 * 60 * 1000;
 
 type RevenueCatErrorLike = {
   code?: string | number;
@@ -272,6 +273,7 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
   const logBufferRef = useRef<string[]>([]);
   const activeBillingUserIdRef = useRef<string | null>(null);
   const identitySyncRef = useRef<Promise<void>>(Promise.resolve());
+  const lastInactiveAtRef = useRef<number | null>(null);
   const isExpoGo = shouldSkipNativePurchases();
 
   const { androidApiKey, iosApiKey } = getRevenueCatConfig();
@@ -283,6 +285,7 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
     activeBillingUserIdRef.current = userId;
     setCustomerInfo(null);
     setCustomerInfoUserId(null);
+    lastInactiveAtRef.current = null;
   }, [userId]);
 
   const appendRevenueCatLog = useCallback((level: unknown, message: unknown) => {
@@ -575,7 +578,18 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
     if (!ready || !configured || isExpoGo) return;
     const sub = AppState.addEventListener("change", (state) => {
       if (state === "active") {
-        void refresh();
+        const lastInactiveAt = lastInactiveAtRef.current;
+        lastInactiveAtRef.current = null;
+        if (
+          lastInactiveAt != null &&
+          Date.now() - lastInactiveAt >= BILLING_APP_ACTIVE_REFRESH_IDLE_MS
+        ) {
+          void refresh();
+        }
+        return;
+      }
+      if (state === "inactive" || state === "background") {
+        lastInactiveAtRef.current ??= Date.now();
       }
     });
     return () => sub.remove();

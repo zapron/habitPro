@@ -58,6 +58,8 @@ type ListRow =
   | { kind: "post"; win: CommunityWinFeedItem }
   | { kind: "skeleton"; id: string };
 
+const COMMUNITY_FOCUS_RELOAD_TTL_MS = 45_000;
+
 export function CommunityWinsFeed({
   contentPaddingBottom = 24,
   variant = "feed",
@@ -83,6 +85,7 @@ export function CommunityWinsFeed({
   const itemsRef = useRef<CommunityWinFeedItem[]>([]);
   const initialLoadInFlight = useRef(false);
   const loadMoreInFlight = useRef(false);
+  const lastInitialLoadAtRef = useRef(0);
   const userId = session?.user?.id ?? null;
   const userIdRef = useRef<string | null>(userId);
 
@@ -101,6 +104,7 @@ export function CommunityWinsFeed({
     setLoadingMore(false);
     initialLoadInFlight.current = false;
     loadMoreInFlight.current = false;
+    lastInitialLoadAtRef.current = 0;
   }, [userId]);
 
   useEffect(() => {
@@ -136,7 +140,7 @@ export function CommunityWinsFeed({
     return items.map((win) => ({ kind: "post" as const, win }));
   }, [loading, items, session]);
 
-  const loadInitial = useCallback(async () => {
+  const loadInitial = useCallback(async (options?: { force?: boolean }) => {
     const requestedUserId = userId;
     if (!isSupabaseConfigured() || !requestedUserId) {
       setItems([]);
@@ -145,6 +149,14 @@ export function CommunityWinsFeed({
       return;
     }
     if (initialLoadInFlight.current) return;
+    const now = Date.now();
+    if (
+      !options?.force &&
+      itemsRef.current.length > 0 &&
+      now - lastInitialLoadAtRef.current < COMMUNITY_FOCUS_RELOAD_TTL_MS
+    ) {
+      return;
+    }
     initialLoadInFlight.current = true;
     if (itemsRef.current.length === 0) setLoading(true);
     try {
@@ -156,6 +168,7 @@ export function CommunityWinsFeed({
       if (userIdRef.current !== requestedUserId) return;
       setItems(first);
       setHasMore(more);
+      lastInitialLoadAtRef.current = Date.now();
     } catch (e: unknown) {
       console.warn("[habitPro] community loadInitial", e);
       if (userIdRef.current === requestedUserId) {
@@ -169,7 +182,6 @@ export function CommunityWinsFeed({
 
   useFocusEffect(
     useCallback(() => {
-      if (itemsRef.current.length === 0) setLoading(true);
       void loadInitial();
     }, [loadInitial]),
   );
@@ -177,7 +189,7 @@ export function CommunityWinsFeed({
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      await loadInitial();
+      await loadInitial({ force: true });
     } finally {
       setRefreshing(false);
     }

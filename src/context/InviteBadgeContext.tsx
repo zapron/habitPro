@@ -8,9 +8,11 @@ import { useAuth } from "./AuthContext";
 type InviteBadgeContextValue = {
   pendingInviteCount: number;
   refreshing: boolean;
-  refreshInviteBadge: () => Promise<void>;
+  refreshInviteBadge: (options?: { force?: boolean }) => Promise<void>;
   syncInviteBadgeCount: (count: number) => void;
 };
+
+const INVITE_BADGE_REFRESH_TTL_MS = 45_000;
 
 const InviteBadgeContext = createContext<InviteBadgeContextValue | null>(null);
 
@@ -20,17 +22,28 @@ export function InviteBadgeProvider({ children }: { children: React.ReactNode })
   const [pendingInviteCount, setPendingInviteCount] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const requestIdRef = useRef(0);
+  const refreshInFlightRef = useRef(false);
+  const lastRefreshAtRef = useRef(0);
 
   const syncInviteBadgeCount = useCallback((count: number) => {
+    lastRefreshAtRef.current = Date.now();
     setPendingInviteCount(Math.max(0, Math.floor(count)));
   }, []);
 
-  const refreshInviteBadge = useCallback(async () => {
-    const requestId = ++requestIdRef.current;
+  const refreshInviteBadge = useCallback(async (options?: { force?: boolean }) => {
     if (initializing || !userId || !isSupabaseConfigured()) {
+      requestIdRef.current += 1;
       setPendingInviteCount(0);
+      lastRefreshAtRef.current = 0;
       return;
     }
+    if (refreshInFlightRef.current) return;
+    const now = Date.now();
+    if (!options?.force && now - lastRefreshAtRef.current < INVITE_BADGE_REFRESH_TTL_MS) {
+      return;
+    }
+    const requestId = ++requestIdRef.current;
+    refreshInFlightRef.current = true;
     setRefreshing(true);
     try {
       const [groupCount, liveMiniCount] = await Promise.all([
@@ -39,9 +52,11 @@ export function InviteBadgeProvider({ children }: { children: React.ReactNode })
       ]);
       if (requestIdRef.current !== requestId) return;
       setPendingInviteCount(groupCount + liveMiniCount);
+      lastRefreshAtRef.current = Date.now();
     } catch (e) {
       console.warn("[habitPro] refreshInviteBadge", e);
     } finally {
+      refreshInFlightRef.current = false;
       if (requestIdRef.current === requestId) setRefreshing(false);
     }
   }, [initializing, userId]);
@@ -49,9 +64,10 @@ export function InviteBadgeProvider({ children }: { children: React.ReactNode })
   useEffect(() => {
     if (!userId || initializing) {
       setPendingInviteCount(0);
+      lastRefreshAtRef.current = 0;
       return;
     }
-    void refreshInviteBadge();
+    void refreshInviteBadge({ force: true });
   }, [initializing, refreshInviteBadge, userId]);
 
   useEffect(() => {

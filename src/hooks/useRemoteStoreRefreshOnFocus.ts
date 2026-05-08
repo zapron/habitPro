@@ -1,13 +1,24 @@
-import { useCallback, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import { useAuth } from "../context/AuthContext";
 import { saveAccountSnapshotBackup } from "../lib/accountBackup";
 import { pullFromSupabase } from "../lib/sync";
-import { hasPendingRemoteSync, hasRemoteSyncFault, requestRemoteSync } from "../lib/syncQueue";
+import {
+  hasPendingRemoteSync,
+  hasRemoteSyncFault,
+  requestRemoteSync,
+  subscribeSyncFailure,
+  subscribeSyncSuccess,
+} from "../lib/syncQueue";
 import { useHabitStore } from "../store/habitStore";
 import type { HabitStore, MiniMission } from "../types/habit";
 
+const REMOTE_FOCUS_REFRESH_TTL_MS = 60_000;
+const lastRemoteFocusRefreshAtByUserId = new Map<string, number>();
+let lastRemoteFocusUserId: string | null = null;
+
 type RemoteStoreSnapshot = Awaited<ReturnType<typeof pullFromSupabase>>;
+type RefreshOptions = { force?: boolean };
 
 function shouldPreserveLocalMini(remoteMini: MiniMission, localMini: MiniMission): boolean {
   if (localMini.status === "completed" && remoteMini.status !== "completed") {
@@ -62,7 +73,7 @@ export function useRemoteStoreRefreshOnFocus(enabled = true) {
   const userId = session?.user?.id ?? null;
   const busyRef = useRef(false);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (options?: RefreshOptions) => {
     if (!enabled || !supabaseConfigured || !syncReady || !userId || busyRef.current) {
       return;
     }
@@ -72,12 +83,22 @@ export function useRemoteStoreRefreshOnFocus(enabled = true) {
       if (hasPendingRemoteSync() || hasRemoteSyncFault()) {
         return;
       }
+      if (lastRemoteFocusUserId !== userId) {
+        lastRemoteFocusRefreshAtByUserId.clear();
+        lastRemoteFocusUserId = userId;
+      }
+      const now = Date.now();
+      const lastRefreshAt = lastRemoteFocusRefreshAtByUserId.get(userId) ?? 0;
+      if (!options?.force && now - lastRefreshAt < REMOTE_FOCUS_REFRESH_TTL_MS) {
+        return;
+      }
       const remote = await pullFromSupabase(userId);
       const local = useHabitStore.getState();
       const { snapshot, preserved } = preserveLocalMiniProgress(remote, local);
       void saveAccountSnapshotBackup(userId, local, "pre-focus-refresh");
       useHabitStore.setState(snapshot);
       void saveAccountSnapshotBackup(userId, snapshot, "focus-refresh");
+      lastRemoteFocusRefreshAtByUserId.set(userId, Date.now());
       if (preserved) {
         requestRemoteSync({ immediate: true });
       }
@@ -87,6 +108,23 @@ export function useRemoteStoreRefreshOnFocus(enabled = true) {
       busyRef.current = false;
     }
   }, [enabled, supabaseConfigured, syncReady, userId]);
+
+  useEffect(() => {
+    if (!userId) {
+      lastRemoteFocusUserId = null;
+      lastRemoteFocusRefreshAtByUserId.clear();
+      return undefined;
+    }
+    const invalidate = () => {
+      lastRemoteFocusRefreshAtByUserId.delete(userId);
+    };
+    const unsubSuccess = subscribeSyncSuccess(invalidate);
+    const unsubFailure = subscribeSyncFailure(invalidate);
+    return () => {
+      unsubSuccess();
+      unsubFailure();
+    };
+  }, [userId]);
 
   useFocusEffect(
     useCallback(() => {
