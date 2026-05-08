@@ -766,8 +766,7 @@ export default function Home() {
                 style={[
                   styles.reportSegBtn,
                   reportsSegment === key && {
-                    backgroundColor: theme.colors.indigo[600],
-                    ...theme.shadow.glow,
+                    backgroundColor: isDark ? "rgba(99, 102, 241, 0.2)" : "rgba(79, 70, 229, 0.12)",
                   },
                 ]}
                 onPress={() => setReportsSegment(key)}
@@ -777,7 +776,7 @@ export default function Home() {
                   style={[
                     styles.reportSegText,
                     { color: theme.colors.textSecondary },
-                    reportsSegment === key && styles.activeTabText,
+                    reportsSegment === key && { color: theme.colors.indigo[400] },
                   ]}
                   numberOfLines={1}
                 >
