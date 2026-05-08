@@ -103,17 +103,17 @@ export function LiveMiniInviteSheet({ visible, mission, onClose }: Props) {
     if (visible) setSquadId(mission.liveSquadId ?? null);
   }, [mission.liveSquadId, visible]);
 
-  const loadStatuses = useCallback(async (id: string) => {
-    setStatusesLoading(true);
+  const loadStatuses = useCallback(async (id: string, options?: { silent?: boolean }) => {
+    if (!options?.silent) setStatusesLoading(true);
     try {
       const next = await traceAsync("liveMini.inviteSheet.statuses", () => listLiveMiniParticipantStatuses(id), {
         slowMs: 700,
       });
       setStatusByUserId(next);
     } catch {
-      setStatusByUserId({});
+      if (!options?.silent) setStatusByUserId({});
     } finally {
-      setStatusesLoading(false);
+      if (!options?.silent) setStatusesLoading(false);
     }
   }, []);
 
@@ -259,8 +259,9 @@ export function LiveMiniInviteSheet({ visible, mission, onClose }: Props) {
           showToast(res.error, "error");
           return;
         }
-        await loadStatuses(squadId);
+        setStatusByUserId((prev) => ({ ...prev, [userId]: "invited" }));
         showToast("Invite sent.", "success");
+        void loadStatuses(squadId, { silent: true });
       } finally {
         inviteBusyRef.current = null;
         setInvitingId(null);

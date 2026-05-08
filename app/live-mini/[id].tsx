@@ -1047,7 +1047,7 @@ export default function LiveMiniSquadScreen() {
       setTimeout(() => {
         void suggestNotifications("invite_accept");
       }, 350);
-      await load(true, { force: true });
+      void load(true, { force: true });
       router.push(`/mini/${localId}`);
     } finally {
       setBusy(null);

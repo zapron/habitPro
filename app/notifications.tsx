@@ -218,10 +218,11 @@ export default function NotificationsScreen() {
     }, [load]),
   );
 
-  const onPressRow = async (n: NotificationRow) => {
+  const onPressRow = (n: NotificationRow) => {
     if (!n.read_at) {
-      await markNotificationRead(n.id);
-      setItems((prev) => prev.map((x) => (x.id === n.id ? { ...x, read_at: new Date().toISOString() } : x)));
+      const readAt = new Date().toISOString();
+      setItems((prev) => prev.map((x) => (x.id === n.id ? { ...x, read_at: readAt } : x)));
+      void markNotificationRead(n.id).catch(() => undefined);
     }
     const p = n.payload ?? {};
     const challengeId = typeof p.challenge_id === "string" ? p.challenge_id : "";

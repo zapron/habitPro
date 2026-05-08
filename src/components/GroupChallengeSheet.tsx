@@ -196,9 +196,9 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
           showToast(error.message, "error");
           return;
         }
-        const m = await listChallengeInviteeStatusesForChallenge(gid);
-        setInviteeStatusById(m);
+        setInviteeStatusById((prev) => ({ ...prev, [userId]: "pending" }));
         showToast("Invite sent. They’ll see it under Compete and in notifications.", "success");
+        void listChallengeInviteeStatusesForChallenge(gid).then(setInviteeStatusById).catch(() => undefined);
       } finally {
         setInvitingId(null);
       }
