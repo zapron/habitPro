@@ -63,6 +63,10 @@ function statusLabel(status: LiveMiniParticipantStatus | undefined): string | nu
   }
 }
 
+function isTerminalLiveMiniStatus(status: LiveMiniParticipantStatus): boolean {
+  return status === "completed" || status === "missed" || status === "cancelled" || status === "declined";
+}
+
 export function LiveMiniInviteSheet({ visible, mission, onClose }: Props) {
   const router = useRouter();
   const { theme, isDark } = useTheme();
@@ -81,19 +85,26 @@ export function LiveMiniInviteSheet({ visible, mission, onClose }: Props) {
   const [searching, setSearching] = useState(false);
   const [invitingId, setInvitingId] = useState<string | null>(null);
   const [statusByUserId, setStatusByUserId] = useState<Record<string, LiveMiniParticipantStatus>>({});
+  const [statusesLoading, setStatusesLoading] = useState(false);
   const createBusyRef = useRef(false);
   const inviteBusyRef = useRef<string | null>(null);
 
   const signedIn = Boolean(session?.user);
   const configured = isSupabaseConfigured();
   const plusOk = isPremium && !premiumLoading;
-  const canInviteInExistingSquad = !squadId || mission.liveSquadRole === "creator";
+  const participantStatuses = Object.values(statusByUserId);
+  const squadSettled =
+    Boolean(squadId) &&
+    participantStatuses.length > 0 &&
+    participantStatuses.every(isTerminalLiveMiniStatus);
+  const canInviteInExistingSquad = (!squadId || mission.liveSquadRole === "creator") && !squadSettled;
 
   useEffect(() => {
     if (visible) setSquadId(mission.liveSquadId ?? null);
   }, [mission.liveSquadId, visible]);
 
   const loadStatuses = useCallback(async (id: string) => {
+    setStatusesLoading(true);
     try {
       const next = await traceAsync("liveMini.inviteSheet.statuses", () => listLiveMiniParticipantStatuses(id), {
         slowMs: 700,
@@ -101,12 +112,15 @@ export function LiveMiniInviteSheet({ visible, mission, onClose }: Props) {
       setStatusByUserId(next);
     } catch {
       setStatusByUserId({});
+    } finally {
+      setStatusesLoading(false);
     }
   }, []);
 
   useEffect(() => {
     if (!visible || !squadId) {
       setStatusByUserId({});
+      setStatusesLoading(false);
       return;
     }
     void loadStatuses(squadId);
@@ -206,6 +220,10 @@ export function LiveMiniInviteSheet({ visible, mission, onClose }: Props) {
     async (userId: string) => {
       if (!squadId || statusByUserId[userId]) return;
       if (inviteBusyRef.current) return;
+      if (squadSettled) {
+        showToast("This Live Squad is already finished.", "info");
+        return;
+      }
       if (mission.liveSquadRole !== "creator") {
         showToast("Only the Live Squad creator can invite more people.", "info");
         return;
@@ -239,7 +257,7 @@ export function LiveMiniInviteSheet({ visible, mission, onClose }: Props) {
         setInvitingId(null);
       }
     },
-    [loadStatuses, mission.liveSquadRole, openUpsell, refreshPremiumAccess, requireUsername, showToast, squadId, statusByUserId],
+    [loadStatuses, mission.liveSquadRole, openUpsell, refreshPremiumAccess, requireUsername, showToast, squadId, squadSettled, statusByUserId],
   );
 
   const openBoard = () => {
@@ -330,7 +348,14 @@ export function LiveMiniInviteSheet({ visible, mission, onClose }: Props) {
                 </TouchableOpacity>
               </View>
 
-              {canInviteInExistingSquad ? (
+              {statusesLoading ? (
+                <View style={styles.statusCheck}>
+                  <ActivityIndicator color={theme.colors.indigo[400]} />
+                  <Text style={[styles.body, { color: theme.colors.textSecondary }]}>
+                    Checking Live Squad status...
+                  </Text>
+                </View>
+              ) : canInviteInExistingSquad ? (
                 <>
                   <Text style={[styles.sectionLabel, { color: theme.colors.textMuted }]}>INVITE BY USERNAME</Text>
                   <TextInput
@@ -400,6 +425,10 @@ export function LiveMiniInviteSheet({ visible, mission, onClose }: Props) {
                     />
                   )}
                 </>
+              ) : squadSettled ? (
+                <Text style={[styles.body, { color: theme.colors.textSecondary }]}>
+                  This Live Squad is finished. Results stay locked on the board, so new invites are closed.
+                </Text>
               ) : (
                 <Text style={[styles.body, { color: theme.colors.textSecondary }]}>
                   Only the Live Squad creator can invite more people.
@@ -438,6 +467,7 @@ const styles = StyleSheet.create({
   liveInfoBody: { fontSize: 13, lineHeight: 18, fontWeight: "600" },
   plusHint: { fontSize: 12, lineHeight: 17, fontWeight: "600" },
   boardRow: { marginBottom: 16 },
+  statusCheck: { alignItems: "center", gap: 10, paddingVertical: 10 },
   boardButton: {
     minHeight: 48,
     borderRadius: 16,
