@@ -14,6 +14,8 @@ import {
   StatusBar,
   ActivityIndicator,
   Platform,
+  Animated,
+  Easing,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
@@ -48,8 +50,10 @@ import {
   declineInvite,
   getChallengeGroup,
   getChallengeGroupsByIds,
+  getProfileLabelsForIds,
   listInvitesForMe,
   refreshCohortPeerHabits,
+  type ProfileLabel,
 } from "../../src/lib/groupChallengesApi";
 import { subscribeSyncSuccess } from "../../src/lib/syncQueue";
 import { upsertRemoteHabit } from "../../src/lib/sync";
@@ -57,6 +61,7 @@ import { traceAsync } from "../../src/lib/perfTrace";
 import { PlusBadge } from "../../src/components/PlusBadge";
 import { ShimmerBlock } from "../../src/components/ShimmerBlock";
 import { useRefreshPremiumAccess } from "../../src/hooks/useRefreshPremiumAccess";
+import { useReducedMotion } from "../../src/hooks/useReducedMotion";
 import { LevelXpRing } from "../../src/components/LevelXpRing";
 import { CommunityPlayerDrawer, type CommunityPlayerDrawerSeed } from "../../src/components/CommunityPlayerDrawer";
 import {
@@ -204,7 +209,7 @@ function InviteStatusPill({
 function liveMiniStatusLabel(status: LiveMiniInviteForMe["participant"]["status"]): string {
   switch (status) {
     case "invited":
-      return "Pending";
+      return "Action needed";
     case "joined":
       return "Joined";
     case "in_progress":
@@ -220,17 +225,42 @@ function liveMiniStatusLabel(status: LiveMiniInviteForMe["participant"]["status"
   }
 }
 
+function inviteCreatedAtMs(value: string | null | undefined): number {
+  const ms = new Date(value ?? "").getTime();
+  return Number.isFinite(ms) ? ms : 0;
+}
+
+function sortGroupInvitesDesc(a: ChallengeInviteRow, b: ChallengeInviteRow): number {
+  return inviteCreatedAtMs(b.created_at) - inviteCreatedAtMs(a.created_at);
+}
+
+function sortLiveMiniInvitesDesc(a: LiveMiniInviteForMe, b: LiveMiniInviteForMe): number {
+  return inviteCreatedAtMs(b.participant.created_at) - inviteCreatedAtMs(a.participant.created_at);
+}
+
 function liveMiniStatusVariant(status: LiveMiniInviteForMe["participant"]["status"]): "pending" | "accepted" | "declined" {
   if (status === "invited" || status === "joined") return "pending";
   if (status === "in_progress" || status === "completed") return "accepted";
   return "declined";
 }
 
-function liveMiniCreatorLabel(invite: LiveMiniInviteForMe): string {
-  const creator = invite.creator;
-  if (creator?.displayName?.trim()) return creator.displayName.trim();
-  if (creator?.username?.trim()) return `@${creator.username.trim().toLowerCase()}`;
-  return "Someone";
+function requesterHandle(username: string | null | undefined): string {
+  const clean = username?.trim().toLowerCase();
+  return clean ? `@${clean}` : "Someone";
+}
+
+function InviteRequesterLine({
+  username,
+  theme,
+}: {
+  username: string | null | undefined;
+  theme: ReturnType<typeof useTheme>["theme"];
+}) {
+  return (
+    <Text style={[styles.liveInviteFrom, { color: theme.colors.textMuted }]} numberOfLines={1}>
+      From <Text style={[styles.inviteRequesterHandle, { color: theme.colors.cyan[400] }]}>{requesterHandle(username)}</Text>
+    </Text>
+  );
 }
 
 function formatLiveMiniMinutes(minutes: number | null | undefined): string {
@@ -440,6 +470,7 @@ function LeagueRow({
 export default function CompeteScreen() {
   const { theme, isDark } = useTheme();
   const { showToast } = useToast();
+  const reduceMotion = useReducedMotion();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const params = useLocalSearchParams<{
@@ -463,6 +494,7 @@ export default function CompeteScreen() {
   const [groupInvites, setGroupInvites] = useState<ChallengeInviteRow[]>([]);
   const [liveMiniInvites, setLiveMiniInvites] = useState<LiveMiniInviteForMe[]>([]);
   const [inviteCardMeta, setInviteCardMeta] = useState<Record<string, InviteCardMeta>>({});
+  const [inviteRequesterLabels, setInviteRequesterLabels] = useState<Record<string, ProfileLabel>>({});
   const [inviteBusy, setInviteBusy] = useState<string | null>(null);
   const [invitesLoading, setInvitesLoading] = useState(false);
   const [leaveEnrollmentId, setLeaveEnrollmentId] = useState<string | null>(null);
@@ -484,6 +516,10 @@ export default function CompeteScreen() {
   const lastLeagueLoadAtRef = useRef(0);
   const groupInvitesRef = useRef<ChallengeInviteRow[]>([]);
   const liveMiniInvitesRef = useRef<LiveMiniInviteForMe[]>([]);
+  const invitePulse = useRef(new Animated.Value(0)).current;
+  const hasAwaitingInvite =
+    groupInvites.some((i) => i.status === "pending") ||
+    liveMiniInvites.some((i) => i.participant.status === "invited");
 
   groupInvitesRef.current = groupInvites;
   liveMiniInvitesRef.current = liveMiniInvites;
@@ -493,6 +529,7 @@ export default function CompeteScreen() {
     setGroupInvites([]);
     setLiveMiniInvites([]);
     setInviteCardMeta({});
+    setInviteRequesterLabels({});
     setInviteBusy(null);
     setInvitesLoading(Boolean(userId && isSupabaseConfigured()));
     setLeagueRows([]);
@@ -508,6 +545,31 @@ export default function CompeteScreen() {
     lastInvitesLoadAtRef.current = 0;
     lastLeagueLoadAtRef.current = 0;
   }, [userId]);
+
+  useEffect(() => {
+    if (reduceMotion || !hasAwaitingInvite) {
+      invitePulse.setValue(0);
+      return undefined;
+    }
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(invitePulse, {
+          toValue: 1,
+          duration: 1050,
+          easing: Easing.inOut(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.timing(invitePulse, {
+          toValue: 0,
+          duration: 1050,
+          easing: Easing.inOut(Easing.quad),
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [hasAwaitingInvite, invitePulse, reduceMotion]);
 
   const xp = useHabitStore((s) => s.xp);
   const habits = useHabitStore((s) => s.habits);
@@ -530,6 +592,7 @@ export default function CompeteScreen() {
       setGroupInvites([]);
       setLiveMiniInvites([]);
       setInviteCardMeta({});
+      setInviteRequesterLabels({});
       syncInviteBadgeCount(0);
       return;
     }
@@ -558,10 +621,15 @@ export default function CompeteScreen() {
           liveRows.filter((i) => i.participant.status === "invited").length,
       );
       const meta: Record<string, InviteCardMeta> = {};
+      let requesterLabels: Record<string, ProfileLabel> = {};
       await traceAsync(
         "compete.invites.loadMeta",
         async () => {
-          const groups = await getChallengeGroupsByIds(rows.map((inv) => inv.challenge_id));
+          const [groups, labels] = await Promise.all([
+            getChallengeGroupsByIds(rows.map((inv) => inv.challenge_id)),
+            getProfileLabelsForIds(rows.map((inv) => inv.inviter_id)),
+          ]);
+          requesterLabels = labels;
           const byId = new Map(groups.map((group) => [group.id, group]));
           for (const inv of rows) {
             const group = byId.get(inv.challenge_id);
@@ -572,6 +640,7 @@ export default function CompeteScreen() {
       );
       if (userIdRef.current !== requestedUserId) return;
       setInviteCardMeta(meta);
+      setInviteRequesterLabels(requesterLabels);
     } catch (e: unknown) {
       console.warn("[habitPro] loadInvites", e);
     } finally {
@@ -895,6 +964,30 @@ export default function CompeteScreen() {
     }
     return m;
   }, [miniMissions]);
+
+  const sortedGroupInvites = useMemo(
+    () => [...groupInvites].sort(sortGroupInvitesDesc),
+    [groupInvites],
+  );
+  const sortedLiveMiniInvites = useMemo(
+    () => [...liveMiniInvites].sort(sortLiveMiniInvitesDesc),
+    [liveMiniInvites],
+  );
+  const awaitingInvitePulseStyle = useMemo(
+    () => ({
+      opacity: reduceMotion
+        ? 0.34
+        : invitePulse.interpolate({ inputRange: [0, 1], outputRange: [0.18, 0.48] }),
+      transform: [
+        {
+          scale: reduceMotion
+            ? 1
+            : invitePulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.012] }),
+        },
+      ],
+    }),
+    [invitePulse, reduceMotion],
+  );
 
   const pendingInviteCount = useMemo(
     () =>
@@ -1237,7 +1330,6 @@ export default function CompeteScreen() {
           </>
         ) : challengesSubTab === "invites" ? (
           <>
-            <Text style={[styles.sectionLabel, { color: theme.colors.textMuted }]}>INVITES</Text>
             {invitesLoading ? (
               <View style={{ gap: 12 }}>
                 {Array.from({ length: 3 }, (_, i) => (
@@ -1269,7 +1361,7 @@ export default function CompeteScreen() {
                   </View>
                 ))}
               </View>
-            ) : groupInvites.length === 0 && liveMiniInvites.length === 0 ? (
+            ) : sortedGroupInvites.length === 0 && sortedLiveMiniInvites.length === 0 ? (
               <View
                 style={[styles.card, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, ...theme.shadow.card }]}
               >
@@ -1280,12 +1372,9 @@ export default function CompeteScreen() {
               </View>
             ) : (
               <>
-                {liveMiniInvites.length > 0 ? (
+                {sortedLiveMiniInvites.length > 0 ? (
                   <>
-                    <Text style={[styles.sectionLabel, styles.inviteSubSectionLabel, { color: theme.colors.textMuted }]}>
-                      LIVE MINI INVITES
-                    </Text>
-                    {liveMiniInvites.map((liveInvite) => {
+                    {sortedLiveMiniInvites.map((liveInvite) => {
                       const participant = liveInvite.participant;
                       const squad = liveInvite.squad;
                       const pending = participant.status === "invited";
@@ -1320,10 +1409,21 @@ export default function CompeteScreen() {
                             },
                           ]}
                         >
+                          {pending ? (
+                            <Animated.View
+                              pointerEvents="none"
+                              style={[
+                                styles.awaitingInvitePulse,
+                                {
+                                  borderColor: theme.colors.cyan[400],
+                                  backgroundColor: isDark ? "rgba(34, 211, 238, 0.05)" : "rgba(8, 145, 178, 0.04)",
+                                },
+                                awaitingInvitePulseStyle,
+                              ]}
+                            />
+                          ) : null}
                           <InviteMissionHeader meta={liveMeta} theme={theme} isDark={isDark} />
-                          <Text style={[styles.liveInviteFrom, { color: theme.colors.textMuted }]} numberOfLines={1}>
-                            From {liveMiniCreatorLabel(liveInvite)}
-                          </Text>
+                          <InviteRequesterLine username={liveInvite.creator?.username} theme={theme} />
                           <View style={styles.inviteStatusRow}>
                             <InviteStatusPill
                               variant={liveMiniStatusVariant(participant.status)}
@@ -1373,10 +1473,15 @@ export default function CompeteScreen() {
                             <TouchableOpacity
                               style={[
                                 pending ? styles.acceptBtn : styles.inviteFullActionBtn,
-                                {
-                                  backgroundColor: theme.colors.indigo[600],
-                                  ...theme.shadow.glow,
-                                },
+                                pending
+                                  ? {
+                                      backgroundColor: theme.colors.indigo[600],
+                                      ...theme.shadow.glow,
+                                    }
+                                  : {
+                                      backgroundColor: isDark ? "rgba(148, 163, 184, 0.08)" : theme.colors.surfaceElevated,
+                                      borderColor: theme.colors.border,
+                                    },
                               ]}
                               onPress={() => {
                                 if (canOpenTimer && localMissionId) router.push(`/mini/${localMissionId}`);
@@ -1386,17 +1491,17 @@ export default function CompeteScreen() {
                               activeOpacity={0.88}
                             >
                               {inviteBusy === busyKey ? (
-                                <ActivityIndicator color={theme.colors.white} />
+                                <ActivityIndicator color={pending ? theme.colors.white : theme.colors.cyan[400]} />
                               ) : (
                                 <>
                                   {pending ? (
                                     <Radio size={15} color={theme.colors.white} />
                                   ) : canOpenTimer ? (
-                                    <Clock size={15} color={theme.colors.white} />
+                                    <Clock size={15} color={theme.colors.cyan[400]} />
                                   ) : (
-                                    <Eye size={15} color={theme.colors.white} />
+                                    <Eye size={15} color={theme.colors.cyan[400]} />
                                   )}
-                                  <Text style={styles.acceptBtnText}>
+                                  <Text style={pending ? styles.acceptBtnText : [styles.invitePassiveActionText, { color: theme.colors.textPrimary }]}>
                                     {pending ? "View & Start" : canOpenTimer ? "Open Timer" : "Open Board"}
                                   </Text>
                                 </>
@@ -1414,16 +1519,17 @@ export default function CompeteScreen() {
                     style={[
                       styles.sectionLabel,
                       styles.inviteSubSectionLabel,
-                      { color: theme.colors.textMuted, marginTop: liveMiniInvites.length > 0 ? 14 : 0 },
+                      { color: theme.colors.textMuted, marginTop: sortedLiveMiniInvites.length > 0 ? 14 : 0 },
                     ]}
                   >
                     GROUP MISSION INVITES
                   </Text>
                 ) : null}
 
-                {groupInvites.map((inv) => {
+                {sortedGroupInvites.map((inv) => {
                 const pending = inv.status === "pending";
                 const meta = inviteCardMeta[inv.id];
+                const requesterLabel = inviteRequesterLabels[inv.inviter_id];
                 const missionTitle = meta?.challengeName ?? "Group mission";
                 const linkedHabitId =
                   inv.status === "accepted" ? habitIdByChallengeId.get(inv.challenge_id) : undefined;
@@ -1493,9 +1599,21 @@ export default function CompeteScreen() {
                 if (pending) {
                   return (
                     <View key={inv.id} style={cardStyle}>
+                      <Animated.View
+                        pointerEvents="none"
+                        style={[
+                          styles.awaitingInvitePulse,
+                          {
+                            borderColor: theme.colors.cyan[400],
+                            backgroundColor: isDark ? "rgba(34, 211, 238, 0.05)" : "rgba(8, 145, 178, 0.04)",
+                          },
+                          awaitingInvitePulseStyle,
+                        ]}
+                      />
                       <InviteMissionHeader meta={meta} theme={theme} isDark={isDark} />
+                      <InviteRequesterLine username={requesterLabel?.username} theme={theme} />
                       <View style={styles.inviteStatusRow}>
-                        <InviteStatusPill variant="pending" label="Pending" theme={theme} />
+                        <InviteStatusPill variant="pending" label="Action needed" theme={theme} />
                       </View>
                       {groupStreaksButton}
                       <Text style={[styles.inviteHint, { color: theme.colors.textSecondary }]}>
@@ -1545,6 +1663,7 @@ export default function CompeteScreen() {
                         isDark={isDark}
                         onPress={() => router.push(`/habit/${linkedHabitId}`)}
                       />
+                      <InviteRequesterLine username={requesterLabel?.username} theme={theme} />
                       {resolvedBlock}
                     </View>
                   );
@@ -1553,6 +1672,7 @@ export default function CompeteScreen() {
                 return (
                   <View key={inv.id} style={cardStyle}>
                     <InviteMissionHeader meta={meta} theme={theme} isDark={isDark} />
+                    <InviteRequesterLine username={requesterLabel?.username} theme={theme} />
                     {resolvedBlock}
                   </View>
                 );
@@ -1708,10 +1828,20 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   card: {
+    position: "relative",
     borderRadius: 16,
     borderWidth: 1,
     padding: 18,
     marginBottom: 14,
+  },
+  awaitingInvitePulse: {
+    position: "absolute",
+    top: -3,
+    right: -3,
+    bottom: -3,
+    left: -3,
+    borderRadius: 19,
+    borderWidth: 2,
   },
   cardTitle: { fontWeight: "800", fontSize: 17, marginBottom: 10 },
   inviteTitleRow: {
@@ -1951,6 +2081,7 @@ const styles = StyleSheet.create({
   inviteSyncHint: { fontSize: 11, lineHeight: 16, marginTop: 8, fontStyle: "italic" },
   inviteSubSectionLabel: { marginTop: 0, marginBottom: 10 },
   liveInviteFrom: { fontSize: 11, lineHeight: 15, fontWeight: "800", marginTop: 6 },
+  inviteRequesterHandle: { fontWeight: "900" },
   liveInviteTimerPill: {
     marginLeft: 8,
     minHeight: 27,
@@ -2002,8 +2133,10 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingVertical: 12,
     borderRadius: 12,
+    borderWidth: 1,
     minHeight: 44,
   },
+  invitePassiveActionText: { fontWeight: "800", fontSize: 15 },
   acceptBtnText: { color: "#fff", fontWeight: "800", fontSize: 15 },
 });
 

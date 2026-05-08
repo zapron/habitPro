@@ -27,7 +27,6 @@ import {
   CircleX,
 } from "lucide-react-native";
 import { Screen } from "../../src/components/Screen";
-import { Button } from "../../src/components/Button";
 import { MiniMissionFireProgressBar } from "../../src/components/MiniMissionFireProgressBar";
 import { useTheme } from "../../src/context/ThemeContext";
 import { useHabitStore } from "../../src/store/habitStore";
@@ -112,7 +111,7 @@ function MiniMissionCard({ item, now }: { item: MiniMission; now: number }) {
         accessibilityLabel={`Open mission: ${item.title}`}
       >
       {/* Top row: title + status badge */}
-      <View style={styles.cardTopRow}>
+      <View style={[styles.cardTopRow, isTimerUp && styles.failedCardTopRow]}>
         <View style={styles.cardTitleRow}>
           {(item.visibility ?? "solo") === "public" && (
             <Globe size={theme.icon.md} color={theme.colors.cyan[400]} style={styles.publicTitleIcon} />
@@ -121,7 +120,31 @@ function MiniMissionCard({ item, now }: { item: MiniMission; now: number }) {
             {item.title}
           </Text>
         </View>
-        <View style={styles.cardBadgeStack}>
+        {!isTimerUp ? (
+          <View style={styles.cardBadgeStack}>
+            {item.liveSquadId ? (
+              <View
+                style={[
+                  styles.liveBadge,
+                  {
+                    backgroundColor: isDark ? "rgba(34,211,238,0.12)" : "rgba(8,145,178,0.1)",
+                    borderColor: isDark ? "rgba(34,211,238,0.3)" : "rgba(8,145,178,0.2)",
+                  },
+                ]}
+              >
+                <Radio size={12} color={theme.colors.cyan[400]} />
+                <Text style={[styles.liveBadgeText, { color: theme.colors.cyan[400] }]}>Live</Text>
+              </View>
+            ) : null}
+            <View style={[styles.statusBadge, { backgroundColor: statusConfig.color + "18" }]}>
+              <Text style={[styles.statusBadgeText, { color: statusConfig.color }]}>{statusConfig.label}</Text>
+            </View>
+          </View>
+        ) : null}
+      </View>
+
+      {isTimerUp ? (
+        <View style={styles.failedMetaInlineRow}>
           {item.liveSquadId ? (
             <View
               style={[
@@ -139,8 +162,11 @@ function MiniMissionCard({ item, now }: { item: MiniMission; now: number }) {
           <View style={[styles.statusBadge, { backgroundColor: statusConfig.color + "18" }]}>
             <Text style={[styles.statusBadgeText, { color: statusConfig.color }]}>{statusConfig.label}</Text>
           </View>
+          <Text style={[styles.failedInlineTime, { color: theme.colors.textMuted }]} numberOfLines={1}>
+            {totalMinutes} min total
+          </Text>
         </View>
-      </View>
+      ) : null}
 
       {/* Objective */}
       {!!item.objective && (
@@ -150,15 +176,15 @@ function MiniMissionCard({ item, now }: { item: MiniMission; now: number }) {
       )}
 
       {/* In-progress: live countdown + fire progress bar */}
-      {isInProgress && (
+      {isInProgress && !isTimerUp && (
         <View style={styles.timerSection}>
           <View style={styles.timerRow}>
             <View style={styles.timerLeft}>
-              <Timer size={16} color={isTimerUp ? "#ef4444" : "#f97316"} />
+              <Timer size={16} color="#f97316" />
               <Text
                 style={[
                   styles.countdownText,
-                  { color: isTimerUp ? "#ef4444" : theme.colors.textPrimary },
+                  { color: theme.colors.textPrimary },
                 ]}
               >
                 {formatCountdown(remainingMs)}
@@ -170,9 +196,9 @@ function MiniMissionCard({ item, now }: { item: MiniMission; now: number }) {
             </Text>
           </View>
           <MiniMissionFireProgressBar
-            progress={isTimerUp ? 1 : progress}
+            progress={progress}
             isDark={isDark}
-            showCompleteEffect={isTimerUp}
+            showCompleteEffect={false}
           />
         </View>
       )}
@@ -212,17 +238,41 @@ function MiniMissionCard({ item, now }: { item: MiniMission; now: number }) {
       {isTimerUp ? (
         <View style={[styles.cardRetrySection, { borderTopColor: theme.colors.border }]}>
           {item.liveSquadId ? (
-            <Button
-              title="Open Live Squad"
+            <TouchableOpacity
               onPress={() => router.push(`/live-mini/${item.liveSquadId}`)}
+              activeOpacity={0.86}
+              style={[
+                styles.failedActionButton,
+                {
+                  backgroundColor: isDark ? "rgba(34,211,238,0.08)" : theme.colors.surfaceElevated,
+                  borderColor: isDark ? "rgba(34,211,238,0.28)" : theme.colors.border,
+                },
+              ]}
               accessibilityLabel={`Open Live Squad: ${item.title}`}
-            />
+            >
+              <Radio size={16} color={theme.colors.cyan[400]} />
+              <Text style={[styles.failedActionText, { color: theme.colors.textPrimary }]}>
+                Open Live Squad
+              </Text>
+            </TouchableOpacity>
           ) : (
-            <Button
-              title="Retry mission"
+            <TouchableOpacity
               onPress={handleRetry}
+              activeOpacity={0.86}
+              style={[
+                styles.failedActionButton,
+                {
+                  backgroundColor: theme.colors.surfaceElevated,
+                  borderColor: theme.colors.border,
+                },
+              ]}
               accessibilityLabel={`Retry mission: ${item.title}`}
-            />
+            >
+              <Timer size={16} color={theme.colors.textSecondary} />
+              <Text style={[styles.failedActionText, { color: theme.colors.textPrimary }]}>
+                Retry mission
+              </Text>
+            </TouchableOpacity>
           )}
         </View>
       ) : null}
@@ -536,11 +586,25 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     borderTopWidth: StyleSheet.hairlineWidth,
   },
+  failedActionButton: {
+    minHeight: 48,
+    borderRadius: 14,
+    borderWidth: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 11,
+    paddingHorizontal: 16,
+  },
+  failedActionText: { fontSize: 15, fontWeight: "800" },
   cardTopRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 4 },
+  failedCardTopRow: { alignItems: "flex-start", marginBottom: 0 },
   cardTitleRow: { flex: 1, flexDirection: "row", alignItems: "center", marginRight: 8, minWidth: 0 },
   publicTitleIcon: { marginRight: 6 },
   cardTitle: { fontWeight: "700", flex: 1, minWidth: 0 },
   cardBadgeStack: { alignItems: "flex-end", gap: 5, maxWidth: 118 },
+  failedMetaInlineRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 10, flexWrap: "wrap" },
   liveBadge: {
     flexDirection: "row",
     alignItems: "center",
@@ -561,6 +625,7 @@ const styles = StyleSheet.create({
   countdownText: { fontSize: 22, fontWeight: "800", fontVariant: ["tabular-nums"] },
   remainLabel: { fontSize: 11, fontWeight: "600" },
   totalTime: { fontSize: 11, fontWeight: "600" },
+  failedInlineTime: { fontSize: 11, fontWeight: "800", lineHeight: 15 },
   // Footer (queued / completed)
   cardFooter: { marginTop: 10, flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" },
   metaPill: { flexDirection: "row", alignItems: "center", gap: 6, borderRadius: 9999, borderWidth: 1, paddingVertical: 4, paddingHorizontal: 10 },
