@@ -158,6 +158,10 @@ type Props = {
   congratsSentActivityIds?: Set<string>;
   /** When false (e.g. viewer mission window ended), hide Congrats on milestones */
   allowNudgeActions?: boolean;
+  loading?: boolean;
+  loadingMore?: boolean;
+  hasMore?: boolean;
+  onLoadMore?: () => void;
   /** Expand accordion and scroll parent ScrollView to this section (e.g. challenge screen). */
   onScrollToSection?: () => void;
 };
@@ -173,11 +177,15 @@ export function SquadActivitySection({
   onCongrats,
   congratsSentActivityIds,
   allowNudgeActions = true,
+  loading = false,
+  loadingMore = false,
+  hasMore = false,
+  onLoadMore,
   onScrollToSection,
 }: Props) {
   const [expanded, setExpanded] = useState(false);
 
-  if (feedActivity.length === 0 && feedNudges.length === 0) return null;
+  if (feedActivity.length === 0 && feedNudges.length === 0 && !loading) return null;
 
   // Dedupe: when a check-in triggers both mission_day and streak_milestone at the same value
   // (common on 7/14/21), prefer showing the streak milestone to avoid repetitive rows.
@@ -209,7 +217,7 @@ export function SquadActivitySection({
   const summaryParts: string[] = [];
   if (mCount > 0) summaryParts.push(`${mCount} milestone${mCount === 1 ? "" : "s"}`);
   if (nCount > 0) summaryParts.push(`${nCount} nudge${nCount === 1 ? "" : "s"}`);
-  const summaryLine = summaryParts.length > 0 ? summaryParts.join(" · ") : "Activity";
+  const summaryLine = summaryParts.length > 0 ? summaryParts.join(" · ") : loading ? "Loading activity" : "Activity";
 
   return (
     <View style={styles.section}>
@@ -392,7 +400,7 @@ export function SquadActivitySection({
               <Sparkles size={theme.icon.sm} color={theme.colors.amber[500]} strokeWidth={2.2} />
               <Text style={[styles.subsectionTitle, { color: theme.colors.textMuted }]}>Recent nudges</Text>
             </View>
-            {feedNudges.slice(0, 12).map((row) => (
+            {feedNudges.map((row) => (
               <View key={row.id} style={styles.nudgeRow}>
                 <View
                   style={[
@@ -415,6 +423,31 @@ export function SquadActivitySection({
               </View>
             ))}
           </View>
+        ) : null}
+        {hasMore && onLoadMore ? (
+          <Pressable
+            accessibilityRole="button"
+            onPress={onLoadMore}
+            disabled={loadingMore}
+            style={({ pressed }) => [
+              styles.loadMoreBtn,
+              {
+                borderColor: border,
+                backgroundColor: pressed
+                  ? isDark
+                    ? "rgba(255,255,255,0.06)"
+                    : "rgba(0,0,0,0.04)"
+                  : "transparent",
+                opacity: loadingMore ? 0.72 : 1,
+              },
+            ]}
+          >
+            {loadingMore ? (
+              <ActivityIndicator size="small" color={theme.colors.indigo[400]} />
+            ) : (
+              <Text style={[styles.loadMoreText, { color: theme.colors.textSecondary }]}>Load older activity</Text>
+            )}
+          </Pressable>
         ) : null}
           </View>
         ) : null}
@@ -574,6 +607,20 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "800",
     letterSpacing: 0.2,
+  },
+  loadMoreBtn: {
+    minHeight: 44,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    marginHorizontal: 4,
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  loadMoreText: {
+    fontSize: 12,
+    fontWeight: "900",
   },
   nudgeBlock: {
     marginTop: 4,
