@@ -8,6 +8,7 @@ import type {
   NotificationRow,
   ProfileSearchRow,
 } from "../types/groupChallenge";
+import type { PageRequest, PageResult } from "../types/paging";
 import { useHabitStore } from "../store/habitStore";
 import { pullFromSupabase } from "./sync";
 import { getRemoteSyncUserId } from "./syncQueue";
@@ -382,6 +383,38 @@ export async function listInvitesForMe(limit = 40): Promise<ChallengeInviteRow[]
   });
 }
 
+export async function listInvitesForMePage(
+  request: PageRequest,
+): Promise<PageResult<ChallengeInviteRow>> {
+  const supabase = getSupabase();
+  if (!supabase) return { items: [], hasMore: false, nextOffset: null };
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { items: [], hasMore: false, nextOffset: null };
+  const offset = Math.max(0, Math.floor(request.offset));
+  const limit = Math.max(1, Math.floor(request.limit));
+  const { data, error } = await supabase
+    .from("challenge_invites")
+    .select("*")
+    .eq("invitee_id", user.id)
+    .order("created_at", { ascending: false })
+    .range(offset, offset + limit);
+  if (error) throw error;
+  const rows = ((data ?? []) as ChallengeInviteRow[]).sort((a, b) => {
+    const pa = a.status === "pending" ? 0 : 1;
+    const pb = b.status === "pending" ? 0 : 1;
+    if (pa !== pb) return pa - pb;
+    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+  });
+  const hasMore = rows.length > limit;
+  return {
+    items: hasMore ? rows.slice(0, limit) : rows,
+    hasMore,
+    nextOffset: hasMore ? offset + limit : null,
+  };
+}
+
 export async function listMyChallengeGroups(): Promise<ChallengeGroupRow[]> {
   const supabase = getSupabase();
   if (!supabase) return [];
@@ -548,6 +581,33 @@ export async function listNotifications(limit = 40): Promise<NotificationRow[]> 
   return (data ?? []) as NotificationRow[];
 }
 
+export async function listNotificationsPage(
+  request: PageRequest,
+): Promise<PageResult<NotificationRow>> {
+  const supabase = getSupabase();
+  if (!supabase) return { items: [], hasMore: false, nextOffset: null };
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { items: [], hasMore: false, nextOffset: null };
+  const offset = Math.max(0, Math.floor(request.offset));
+  const limit = Math.max(1, Math.floor(request.limit));
+  const { data, error } = await supabase
+    .from("notifications")
+    .select("*")
+    .eq("user_id", user.id)
+    .order("created_at", { ascending: false })
+    .range(offset, offset + limit);
+  if (error) throw error;
+  const rows = (data ?? []) as NotificationRow[];
+  const hasMore = rows.length > limit;
+  return {
+    items: hasMore ? rows.slice(0, limit) : rows,
+    hasMore,
+    nextOffset: hasMore ? offset + limit : null,
+  };
+}
+
 export async function countUnreadNotifications(): Promise<number> {
   const supabase = getSupabase();
   if (!supabase) return 0;
@@ -594,7 +654,9 @@ export async function refreshCohortPeerHabits(): Promise<void> {
 
 export {
   listChallengeActivity,
+  listChallengeActivityPage,
   listRecentNudges,
+  listRecentNudgesPage,
   sendChallengeNudge,
   tryRecordChallengeMilestones,
 } from "./challengeCohort";

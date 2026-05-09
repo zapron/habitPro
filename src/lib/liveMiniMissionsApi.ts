@@ -4,6 +4,7 @@ import type {
   LiveMiniSquadRow,
   LiveMiniSquadSnapshot,
 } from "../types/liveMiniMission";
+import type { PageRequest, PageResult } from "../types/paging";
 import { getProfileLabelsForIds } from "./groupChallengesApi";
 import { getSupabase } from "./supabase";
 
@@ -210,6 +211,63 @@ export async function listLiveMiniInvitesForMe(limit = 40): Promise<LiveMiniInvi
       if (ap !== bp) return ap - bp;
       return new Date(b.participant.created_at).getTime() - new Date(a.participant.created_at).getTime();
     });
+}
+
+export async function listLiveMiniInvitesForMePage(
+  request: PageRequest,
+): Promise<PageResult<LiveMiniInviteForMe>> {
+  const supabase = getSupabase();
+  if (!supabase) return { items: [], hasMore: false, nextOffset: null };
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { items: [], hasMore: false, nextOffset: null };
+
+  const offset = Math.max(0, Math.floor(request.offset));
+  const limit = Math.max(1, Math.floor(request.limit));
+  const { data, error } = await supabase
+    .from("live_mini_participants")
+    .select("*, live_mini_squads!inner(*)")
+    .eq("user_id", user.id)
+    .eq("role", "member")
+    .order("created_at", { ascending: false })
+    .range(offset, offset + limit);
+  if (error) throw error;
+
+  const rawRows = ((data ?? []) as unknown[]).slice(0, limit + 1);
+  const hasMore = rawRows.length > limit;
+  const rows = rawRows
+    .slice(0, limit)
+    .map((raw) => {
+      const row = raw as LiveMiniParticipantRow & {
+        live_mini_squads?: LiveMiniSquadRow | LiveMiniSquadRow[] | null;
+      };
+      const rawSquad = row.live_mini_squads;
+      const squad = Array.isArray(rawSquad) ? rawSquad[0] : rawSquad;
+      if (!squad?.id) return null;
+      return {
+        participant: row as LiveMiniParticipantRow,
+        squad: squad as LiveMiniSquadRow,
+      };
+    })
+    .filter((r): r is { participant: LiveMiniParticipantRow; squad: LiveMiniSquadRow } => r !== null);
+
+  const creators = await getProfileLabelsForIds(rows.map((r) => r.squad.creator_id));
+  return {
+    items: rows
+      .map((row) => ({
+        ...row,
+        creator: creators[row.squad.creator_id],
+      }))
+      .sort((a, b) => {
+        const ap = a.participant.status === "invited" ? 0 : 1;
+        const bp = b.participant.status === "invited" ? 0 : 1;
+        if (ap !== bp) return ap - bp;
+        return new Date(b.participant.created_at).getTime() - new Date(a.participant.created_at).getTime();
+      }),
+    hasMore,
+    nextOffset: hasMore ? offset + limit : null,
+  };
 }
 
 export async function countPendingLiveMiniInvitesForMe(): Promise<number> {

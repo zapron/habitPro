@@ -1,4 +1,5 @@
 import { getSupabase } from "./supabase";
+import type { PageRequest, PageResult } from "../types/paging";
 
 export type StreakRepairStatus = "pending" | "approved" | "declined" | "applied";
 
@@ -105,6 +106,53 @@ export async function listChallengeStreakRepairs(challengeId: string): Promise<
   return {
     ok: true,
     repairs: (repairsRes.data ?? []) as unknown as StreakRepairRow[],
+    votes: ((votesRes as { data?: unknown[] }).data ?? []) as unknown as StreakRepairVoteRow[],
+  };
+}
+
+export async function listChallengeStreakRepairsPage(
+  challengeId: string,
+  request: PageRequest,
+): Promise<
+  { ok: true; page: PageResult<StreakRepairRow>; votes: StreakRepairVoteRow[] } | { ok: false; error: string }
+> {
+  const supabase = getSupabase();
+  if (!supabase) {
+    return { ok: false, error: "Cloud sync not configured." };
+  }
+
+  const offset = Math.max(0, Math.floor(request.offset));
+  const limit = Math.max(1, Math.floor(request.limit));
+  const repairsRes = await supabase
+    .from("streak_repairs")
+    .select("*")
+    .eq("challenge_id", challengeId)
+    .order("created_at", { ascending: false })
+    .range(offset, offset + limit);
+  if (repairsRes.error) return { ok: false, error: repairsRes.error.message };
+
+  const rows = (repairsRes.data ?? []) as unknown as StreakRepairRow[];
+  const hasMore = rows.length > limit;
+  const repairs = hasMore ? rows.slice(0, limit) : rows;
+  const ids = repairs.map((r) => r.id);
+  const votesRes =
+    ids.length > 0
+      ? await supabase
+          .from("streak_repair_votes")
+          .select("repair_id, voter_id, vote")
+          .in("repair_id", ids)
+      : { data: [] as unknown[] };
+  if ("error" in votesRes && (votesRes as { error?: { message: string } }).error) {
+    return { ok: false, error: (votesRes as { error: { message: string } }).error.message };
+  }
+
+  return {
+    ok: true,
+    page: {
+      items: repairs,
+      hasMore,
+      nextOffset: hasMore ? offset + limit : null,
+    },
     votes: ((votesRes as { data?: unknown[] }).data ?? []) as unknown as StreakRepairVoteRow[],
   };
 }

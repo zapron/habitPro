@@ -5,6 +5,7 @@ import type {
   ChallengeNudgeRow,
   PresetChallengeNudgeKind,
 } from "../types/groupChallenge";
+import type { PageRequest, PageResult } from "../types/paging";
 import { getSupabase } from "./supabase";
 
 const MISSION_DAY_MILESTONES = [7, 14, 21] as const;
@@ -201,6 +202,30 @@ export async function listRecentNudges(
   return (data ?? []) as ChallengeNudgeRow[];
 }
 
+export async function listRecentNudgesPage(
+  challengeId: string,
+  request: PageRequest,
+): Promise<PageResult<ChallengeNudgeRow>> {
+  const supabase = getSupabase();
+  if (!supabase) return { items: [], hasMore: false, nextOffset: null };
+  const offset = Math.max(0, Math.floor(request.offset));
+  const limit = Math.max(1, Math.floor(request.limit));
+  const { data, error } = await supabase
+    .from("challenge_nudges")
+    .select("id, challenge_id, from_user_id, to_user_id, kind, activity_id, message, created_at")
+    .eq("challenge_id", challengeId)
+    .order("created_at", { ascending: false })
+    .range(offset, offset + limit);
+  if (error) throw error;
+  const rows = (data ?? []) as ChallengeNudgeRow[];
+  const hasMore = rows.length > limit;
+  return {
+    items: hasMore ? rows.slice(0, limit) : rows,
+    hasMore,
+    nextOffset: hasMore ? offset + limit : null,
+  };
+}
+
 export async function listChallengeActivity(
   challengeId: string,
   limit = 30,
@@ -215,4 +240,28 @@ export async function listChallengeActivity(
     .limit(limit);
   if (error) throw error;
   return (data ?? []) as ChallengeActivityRow[];
+}
+
+export async function listChallengeActivityPage(
+  challengeId: string,
+  request: PageRequest,
+): Promise<PageResult<ChallengeActivityRow>> {
+  const supabase = getSupabase();
+  if (!supabase) return { items: [], hasMore: false, nextOffset: null };
+  const offset = Math.max(0, Math.floor(request.offset));
+  const limit = Math.max(1, Math.floor(request.limit));
+  const { data, error } = await supabase
+    .from("challenge_activity")
+    .select("id, challenge_id, actor_user_id, kind, value, created_at")
+    .eq("challenge_id", challengeId)
+    .order("created_at", { ascending: false })
+    .range(offset, offset + limit);
+  if (error) throw error;
+  const rows = (data ?? []) as ChallengeActivityRow[];
+  const hasMore = rows.length > limit;
+  return {
+    items: hasMore ? rows.slice(0, limit) : rows,
+    hasMore,
+    nextOffset: hasMore ? offset + limit : null,
+  };
 }
