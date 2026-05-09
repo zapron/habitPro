@@ -32,6 +32,7 @@ import {
 import { CohortStreakPill } from "../../src/components/CohortStreakPill";
 import { SquadActivitySection } from "../../src/components/SquadActivitySection";
 import { MissionDetailsSheet } from "../../src/components/MissionDetailsSheet";
+import { Button } from "../../src/components/Button";
 import { useTheme } from "../../src/context/ThemeContext";
 import { useToast } from "../../src/context/ToastContext";
 import { useAuth } from "../../src/context/AuthContext";
@@ -1035,55 +1036,40 @@ export default function ChallengeDetailScreen() {
                         </View>
                       ) : (
                         <View style={styles.repairActionsRow}>
-                          <TouchableOpacity
+                          <Button
+                            title={myVote === "approve" ? "Approved" : "Approve"}
+                            variant={myVote === "approve" ? "primary" : "subtle"}
+                            loading={busyVote === "approve"}
                             disabled={!canVote}
                             onPress={() => {
                               if (!canVote) return;
                               void onRepairVote(r, "approve");
                             }}
-                            activeOpacity={0.88}
-                            style={[
-                              styles.repairBtn,
-                              {
-                                backgroundColor: myVote === "approve" ? theme.colors.indigo[600] : theme.colors.surfaceElevated,
-                                borderColor: theme.colors.border,
-                                opacity: !canVote ? 0.6 : 1,
-                              },
+                            style={styles.repairBtn}
+                            textStyle={[
+                              styles.repairBtnText,
+                              { color: myVote === "approve" ? "#fff" : theme.colors.textPrimary },
                             ]}
-                          >
-                            {busyVote === "approve" ? (
-                              <ActivityIndicator size="small" color={theme.colors.indigo[400]} />
-                            ) : (
-                              <Text style={[styles.repairBtnText, { color: myVote === "approve" ? "#fff" : theme.colors.textPrimary }]}>
-                                {myVote === "approve" ? "Approved" : "Approve"}
-                              </Text>
-                            )}
-                          </TouchableOpacity>
+                          />
 
-                          <TouchableOpacity
+                          <Button
+                            title={myVote === "decline" ? "Declined" : "Decline"}
+                            variant="subtle"
+                            loading={busyVote === "decline"}
                             disabled={!canVote}
                             onPress={() => {
                               if (!canVote) return;
                               void onRepairVote(r, "decline");
                             }}
-                            activeOpacity={0.88}
                             style={[
                               styles.repairBtn,
-                              {
-                                backgroundColor: myVote === "decline" ? "rgba(239, 68, 68, 0.14)" : theme.colors.surfaceElevated,
-                                borderColor: theme.colors.border,
-                                opacity: !canVote ? 0.6 : 1,
-                              },
+                              myVote === "decline" ? { backgroundColor: "rgba(239, 68, 68, 0.14)" } : null,
                             ]}
-                          >
-                            {busyVote === "decline" ? (
-                              <ActivityIndicator size="small" color={theme.colors.red[500]} />
-                            ) : (
-                              <Text style={[styles.repairBtnText, { color: myVote === "decline" ? theme.colors.red[500] : theme.colors.textPrimary }]}>
-                                {myVote === "decline" ? "Declined" : "Decline"}
-                              </Text>
-                            )}
-                          </TouchableOpacity>
+                            textStyle={[
+                              styles.repairBtnText,
+                              { color: myVote === "decline" ? theme.colors.red[500] : theme.colors.textPrimary },
+                            ]}
+                          />
                         </View>
                       )}
                     </View>

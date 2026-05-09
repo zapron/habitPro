@@ -22,6 +22,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { ChevronRight, Crown, Eye, Medal, Radio, RefreshCw, Swords, Trophy, Clock, X, Zap } from "lucide-react-native";
 import { Screen } from "../../src/components/Screen";
+import { Button } from "../../src/components/Button";
 import { ConfirmDialog } from "../../src/components/ConfirmDialog";
 import { useTheme } from "../../src/context/ThemeContext";
 import { useToast } from "../../src/context/ToastContext";
@@ -1262,51 +1263,39 @@ export default function CompeteScreen() {
         </Text>
         <View style={styles.inviteActions}>
           {pending ? (
-            <TouchableOpacity
-              style={[styles.declineBtn, { borderColor: theme.colors.border }]}
+            <Button
+              title="Decline"
+              variant="subtle"
               onPress={() => void handleDeclineLiveMiniInvite(liveInvite)}
               disabled={inviteBusy === busyKey}
-            >
-              <Text style={{ color: theme.colors.textMuted, fontWeight: "700" }}>Decline</Text>
-            </TouchableOpacity>
+              style={styles.declineBtn}
+              textStyle={[styles.declineBtnText, { color: theme.colors.textMuted }]}
+            />
           ) : null}
-          <TouchableOpacity
-            style={[
-              pending ? styles.acceptBtn : styles.inviteFullActionBtn,
-              pending
-                ? {
-                    backgroundColor: theme.colors.indigo[600],
-                    ...theme.shadow.glow,
-                  }
-                : {
-                    backgroundColor: isDark ? "rgba(148, 163, 184, 0.08)" : theme.colors.surfaceElevated,
-                    borderColor: theme.colors.border,
-                  },
-            ]}
+          <Button
+            title={pending ? "View & Start" : canOpenTimer ? "Open Timer" : "Open Board"}
+            variant={pending ? "primary" : "subtle"}
+            icon={
+              pending ? (
+                <Radio size={15} color={theme.colors.white} />
+              ) : canOpenTimer ? (
+                <Clock size={15} color={theme.colors.cyan[400]} />
+              ) : (
+                <Eye size={15} color={theme.colors.cyan[400]} />
+              )
+            }
+            loading={inviteBusy === busyKey}
             onPress={() => {
               if (canOpenTimer && localMissionId) router.push(`/mini/${localMissionId}`);
               else router.push(`/live-mini/${squad.id}`);
             }}
             disabled={inviteBusy === busyKey}
-            activeOpacity={0.88}
-          >
-            {inviteBusy === busyKey ? (
-              <ActivityIndicator color={pending ? theme.colors.white : theme.colors.cyan[400]} />
-            ) : (
-              <>
-                {pending ? (
-                  <Radio size={15} color={theme.colors.white} />
-                ) : canOpenTimer ? (
-                  <Clock size={15} color={theme.colors.cyan[400]} />
-                ) : (
-                  <Eye size={15} color={theme.colors.cyan[400]} />
-                )}
-                <Text style={pending ? styles.acceptBtnText : [styles.invitePassiveActionText, { color: theme.colors.textPrimary }]}>
-                  {pending ? "View & Start" : canOpenTimer ? "Open Timer" : "Open Board"}
-                </Text>
-              </>
-            )}
-          </TouchableOpacity>
+            style={[
+              pending ? styles.acceptBtn : styles.inviteFullActionBtn,
+              pending ? theme.shadow.glow : null,
+            ]}
+            textStyle={pending ? styles.acceptBtnText : styles.invitePassiveActionText}
+          />
         </View>
       </View>
     );
@@ -1335,24 +1324,16 @@ export default function CompeteScreen() {
     ];
 
     const groupStreaksButton = (
-      <TouchableOpacity
-        style={[
-          styles.inviteGroupStreaksBtn,
-          {
-            backgroundColor: isDark ? "rgba(99, 102, 241, 0.16)" : "rgba(79, 70, 229, 0.1)",
-            borderColor: isDark ? "rgba(129, 140, 248, 0.35)" : "rgba(79, 70, 229, 0.28)",
-          },
-        ]}
+      <Button
+        title="View Group Streaks"
+        variant="subtle"
+        icon={<Eye size={18} color={theme.colors.indigo[400]} />}
         onPress={() => router.push(`/challenge/${inv.challenge_id}`)}
-        activeOpacity={0.88}
         accessibilityRole="button"
         accessibilityLabel={`View group streaks: ${missionTitle}`}
-      >
-        <Eye size={18} color={theme.colors.indigo[400]} />
-        <Text style={[styles.inviteGroupStreaksBtnText, { color: theme.colors.indigo[400] }]}>
-          View Group Streaks
-        </Text>
-      </TouchableOpacity>
+        style={styles.inviteGroupStreaksBtn}
+        textStyle={[styles.inviteGroupStreaksBtnText, { color: theme.colors.indigo[400] }]}
+      />
     );
 
     const resolvedBlock = (
@@ -1411,30 +1392,23 @@ export default function CompeteScreen() {
             </Text>
           ) : null}
           <View style={styles.inviteActions}>
-            <TouchableOpacity
-              style={[styles.declineBtn, { borderColor: theme.colors.border }]}
+            <Button
+              title="Decline"
+              variant="subtle"
               onPress={() => void handleDeclineGroupInvite(inv)}
               disabled={inviteBusy === inv.id}
-            >
-              <Text style={{ color: theme.colors.textMuted, fontWeight: "700" }}>Decline</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[
-                styles.acceptBtn,
-                {
-                  backgroundColor: theme.colors.indigo[600],
-                  ...theme.shadow.glow,
-                },
-              ]}
+              style={styles.declineBtn}
+              textStyle={[styles.declineBtnText, { color: theme.colors.textMuted }]}
+            />
+            <Button
+              title="Accept"
+              variant="primary"
               onPress={() => void handleAcceptGroupInvite(inv)}
               disabled={inviteAcceptPremiumUnknown || inviteBusy === inv.id}
-            >
-              {inviteBusy === inv.id ? (
-                <ActivityIndicator color={theme.colors.white} />
-              ) : (
-                <Text style={styles.acceptBtnText}>Accept</Text>
-              )}
-            </TouchableOpacity>
+              loading={inviteBusy === inv.id}
+              style={[styles.acceptBtn, theme.shadow.glow]}
+              textStyle={styles.acceptBtnText}
+            />
           </View>
         </View>
       );
@@ -2294,6 +2268,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
   },
+  declineBtnText: { fontWeight: "800", fontSize: 14 },
   acceptBtn: {
     flex: 1,
     flexDirection: "row",

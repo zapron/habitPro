@@ -27,6 +27,7 @@ import {
   CircleX,
 } from "lucide-react-native";
 import { Screen } from "../../src/components/Screen";
+import { Button } from "../../src/components/Button";
 import { MiniMissionFireProgressBar } from "../../src/components/MiniMissionFireProgressBar";
 import { useTheme } from "../../src/context/ThemeContext";
 import { useHabitStore } from "../../src/store/habitStore";
@@ -238,41 +239,25 @@ function MiniMissionCard({ item, now }: { item: MiniMission; now: number }) {
       {isTimerUp ? (
         <View style={[styles.cardRetrySection, { borderTopColor: theme.colors.border }]}>
           {item.liveSquadId ? (
-            <TouchableOpacity
+            <Button
+              title="Open Live Squad"
+              variant="subtle"
+              icon={<Radio size={16} color={theme.colors.cyan[400]} />}
               onPress={() => router.push(`/live-mini/${item.liveSquadId}`)}
-              activeOpacity={0.86}
-              style={[
-                styles.failedActionButton,
-                {
-                  backgroundColor: isDark ? "rgba(34,211,238,0.08)" : theme.colors.surfaceElevated,
-                  borderColor: isDark ? "rgba(34,211,238,0.28)" : theme.colors.border,
-                },
-              ]}
+              style={styles.failedActionButton}
+              textStyle={styles.failedActionText}
               accessibilityLabel={`Open Live Squad: ${item.title}`}
-            >
-              <Radio size={16} color={theme.colors.cyan[400]} />
-              <Text style={[styles.failedActionText, { color: theme.colors.textPrimary }]}>
-                Open Live Squad
-              </Text>
-            </TouchableOpacity>
+            />
           ) : (
-            <TouchableOpacity
+            <Button
+              title="Retry mission"
+              variant="subtle"
+              icon={<Timer size={16} color={theme.colors.textSecondary} />}
               onPress={handleRetry}
-              activeOpacity={0.86}
-              style={[
-                styles.failedActionButton,
-                {
-                  backgroundColor: theme.colors.surfaceElevated,
-                  borderColor: theme.colors.border,
-                },
-              ]}
+              style={styles.failedActionButton}
+              textStyle={styles.failedActionText}
               accessibilityLabel={`Retry mission: ${item.title}`}
-            >
-              <Timer size={16} color={theme.colors.textSecondary} />
-              <Text style={[styles.failedActionText, { color: theme.colors.textPrimary }]}>
-                Retry mission
-              </Text>
-            </TouchableOpacity>
+            />
           )}
         </View>
       ) : null}

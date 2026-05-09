@@ -22,6 +22,7 @@ import * as Haptics from "expo-haptics";
 import { Text } from "../../src/components/AppText";
 import { LiveMiniInviteSheet } from "../../src/components/LiveMiniInviteSheet";
 import { Screen } from "../../src/components/Screen";
+import { Button } from "../../src/components/Button";
 import { FuelQuickMinutesStrip } from "../../src/components/fuel/FuelQuickMinutesStrip";
 import { FuelTimePresetButton } from "../../src/components/fuel/FuelTimePresetButton";
 import { useAuth } from "../../src/context/AuthContext";
@@ -762,14 +763,14 @@ function ParticipantCard({
       ) : null}
 
       {isMe && localMission ? (
-        <TouchableOpacity
+        <Button
+          title="Open my timer"
+          variant="subtle"
+          icon={<Timer size={16} color={theme.colors.cyan[400]} />}
           onPress={onOpenMine}
-          activeOpacity={0.86}
-          style={[styles.openMineButton, { borderColor: theme.colors.border, backgroundColor: theme.colors.surfaceElevated }]}
-        >
-          <Timer size={16} color={theme.colors.cyan[400]} />
-          <Text style={[styles.openMineText, { color: theme.colors.textPrimary }]}>Open my timer</Text>
-        </TouchableOpacity>
+          style={styles.openMineButton}
+          textStyle={styles.openMineText}
+        />
       ) : null}
     </View>
   );
@@ -1282,33 +1283,25 @@ export default function LiveMiniSquadScreen() {
                 ]}
               />
               <View style={styles.acceptActions}>
-                <TouchableOpacity
+                <Button
+                  title="Decline"
+                  variant="subtle"
+                  icon={<X size={16} color={theme.colors.textMuted} />}
+                  loading={busy === "decline"}
                   onPress={() => void handleDecline()}
                   disabled={busy !== null}
-                  activeOpacity={0.86}
-                  style={[styles.declineButton, { borderColor: theme.colors.border }]}
-                >
-                  {busy === "decline" ? (
-                    <ActivityIndicator color={theme.colors.textMuted} />
-                  ) : (
-                    <>
-                      <X size={16} color={theme.colors.textMuted} />
-                      <Text style={[styles.declineText, { color: theme.colors.textMuted }]}>Decline</Text>
-                    </>
-                  )}
-                </TouchableOpacity>
-                <TouchableOpacity
+                  style={styles.declineButton}
+                  textStyle={[styles.declineText, { color: theme.colors.textMuted }]}
+                />
+                <Button
+                  title="Accept & Start"
+                  variant="primary"
+                  loading={busy === "accept"}
                   onPress={() => void handleAccept()}
                   disabled={acceptDisabled}
-                  activeOpacity={0.9}
-                  style={[styles.acceptButton, { backgroundColor: theme.colors.indigo[600], opacity: acceptDisabled ? 0.65 : 1 }]}
-                >
-                  {busy === "accept" ? (
-                    <ActivityIndicator color={theme.colors.white} />
-                  ) : (
-                    <Text style={styles.acceptButtonText}>Accept & Start</Text>
-                  )}
-                </TouchableOpacity>
+                  style={styles.acceptButton}
+                  textStyle={styles.acceptButtonText}
+                />
               </View>
             </View>
           ) : null}

@@ -14,7 +14,7 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
-import { ArrowLeft } from "lucide-react-native";
+import { ArrowLeft, Bell } from "lucide-react-native";
 import { Screen } from "../src/components/Screen";
 import { useTheme } from "../src/context/ThemeContext";
 import { useAuth } from "../src/context/AuthContext";
@@ -383,8 +383,9 @@ export default function NotificationsScreen() {
           accessibilityRole="button"
           accessibilityLabel={markingAll ? "Marking all notifications read" : "Mark all notifications read"}
         >
+          {markingAll ? <ActivityIndicator size="small" color={theme.colors.indigo[400]} /> : null}
           <Text style={[styles.markAllText, { color: theme.colors.indigo[400] }]}>
-            {markingAll ? "Marking…" : "Mark all read"}
+            {markingAll ? "Marking..." : "Mark all read"}
           </Text>
         </TouchableOpacity>
       </View>
@@ -428,7 +429,13 @@ export default function NotificationsScreen() {
           onEndReached={() => void loadMore()}
           onEndReachedThreshold={0.45}
           ListEmptyComponent={
-            <Text style={{ color: theme.colors.textMuted, marginTop: 14 }}>Nothing here yet.</Text>
+            <View style={[styles.emptyCard, { borderColor: theme.colors.border, backgroundColor: theme.colors.surface }]}>
+              <Bell size={28} color={theme.colors.indigo[400]} />
+              <Text style={[styles.emptyTitle, { color: theme.colors.textPrimary }]}>No notifications yet</Text>
+              <Text style={[styles.emptyBody, { color: theme.colors.textSecondary }]}>
+                Invites, approvals, cheers, and reminders will show up here.
+              </Text>
+            </View>
           }
           ListFooterComponent={
             loadingMore ? (
@@ -481,11 +488,14 @@ const styles = StyleSheet.create({
   header: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 16 },
   iconButton: { padding: 8, borderRadius: 9999, borderWidth: 1 },
   title: { fontWeight: "800", flex: 1 },
-  markAllBtn: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 9999, borderWidth: 1 },
+  markAllBtn: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 9999, borderWidth: 1, flexDirection: "row", alignItems: "center", gap: 6 },
   markAllText: { fontWeight: "800", fontSize: 12, letterSpacing: 0.2 },
   row: { borderRadius: 12, borderWidth: 1, padding: 14, marginBottom: 10 },
   rowInner: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
   unreadDot: { width: 10, height: 10, borderRadius: 9999, marginTop: 5 },
   unreadSpacer: { width: 10, marginTop: 5 },
   footerLoader: { paddingVertical: 18, alignItems: "center", justifyContent: "center" },
+  emptyCard: { borderRadius: 16, borderWidth: 1, padding: 20, alignItems: "center", marginTop: 8 },
+  emptyTitle: { fontSize: 17, lineHeight: 22, fontWeight: "900", marginTop: 12, textAlign: "center" },
+  emptyBody: { fontSize: 13, lineHeight: 19, fontWeight: "600", marginTop: 6, textAlign: "center" },
 });
