@@ -18,7 +18,7 @@ import {
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
 import * as Haptics from "expo-haptics";
-import { ArrowLeft, Info, LogOut, Users } from "lucide-react-native";
+import { ArrowLeft, Clock, Info, LogOut, Users, X } from "lucide-react-native";
 import { CohortLeaderHero } from "../../src/components/CohortLeaderHero";
 import type { CohortMastheadModel } from "../../src/components/CohortMasthead";
 import { CohortNudgeChips } from "../../src/components/CohortNudgeChips";
@@ -136,6 +136,7 @@ export default function ChallengeDetailScreen() {
   const [nudgeBusyKey, setNudgeBusyKey] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [secondaryLoading, setSecondaryLoading] = useState(false);
+  const [secondaryHydrated, setSecondaryHydrated] = useState(false);
   const [activityLoadingMore, setActivityLoadingMore] = useState(false);
   const [repairLoadingMore, setRepairLoadingMore] = useState(false);
   const [activityNextOffset, setActivityNextOffset] = useState<number | null>(null);
@@ -147,6 +148,7 @@ export default function ChallengeDetailScreen() {
   const [customNoteToUserId, setCustomNoteToUserId] = useState<string | null>(null);
   const [repairRows, setRepairRows] = useState<StreakRepairRow[]>([]);
   const [repairVotes, setRepairVotes] = useState<StreakRepairVoteRow[]>([]);
+  const [dismissedRepairIds, setDismissedRepairIds] = useState<Set<string>>(() => new Set());
   const [repairBusyAction, setRepairBusyAction] = useState<{
     id: string;
     vote: "approve" | "decline";
@@ -155,6 +157,7 @@ export default function ChallengeDetailScreen() {
 
   const focusOnceRef = useRef(false);
   const secondaryLoadInFlightRef = useRef(false);
+  const secondaryHydratedRef = useRef(false);
   const activityLoadMoreInFlightRef = useRef(false);
   const repairLoadMoreInFlightRef = useRef(false);
 
@@ -162,8 +165,10 @@ export default function ChallengeDetailScreen() {
     if (!challengeId) return;
     if (secondaryLoadInFlightRef.current) return;
     const silent = opts?.silent ?? false;
+    const firstSecondaryLoad = !secondaryHydratedRef.current;
+    const showSecondaryLoading = !silent || firstSecondaryLoad;
     secondaryLoadInFlightRef.current = true;
-    if (!silent) setSecondaryLoading(true);
+    if (showSecondaryLoading) setSecondaryLoading(true);
     try {
       const [activityPage, nudgePage, repairsRes] = await Promise.all([
         listChallengeActivityPage(challengeId, {
@@ -197,8 +202,10 @@ export default function ChallengeDetailScreen() {
       const labels = await getProfileLabelsForIds([...labelIds]);
       setProfileLabels((prev) => ({ ...prev, ...labels }));
     } finally {
+      secondaryHydratedRef.current = true;
+      setSecondaryHydrated(true);
       secondaryLoadInFlightRef.current = false;
-      if (!silent) setSecondaryLoading(false);
+      if (showSecondaryLoading) setSecondaryLoading(false);
     }
   }, [challengeId]);
 
@@ -228,10 +235,14 @@ export default function ChallengeDetailScreen() {
     setFeedNudges([]);
     setRepairRows([]);
     setRepairVotes([]);
+    setDismissedRepairIds(new Set());
+    setSecondaryHydrated(false);
+    setSecondaryLoading(false);
     setActivityNextOffset(null);
     setNudgeNextOffset(null);
     setRepairNextOffset(null);
     secondaryLoadInFlightRef.current = false;
+    secondaryHydratedRef.current = false;
     activityLoadMoreInFlightRef.current = false;
     repairLoadMoreInFlightRef.current = false;
   }, [challengeId]);
@@ -479,6 +490,15 @@ export default function ChallengeDetailScreen() {
     return s;
   }, [feedNudges, myUserId]);
 
+  const dismissRepairRequest = useCallback((repairId: string) => {
+    setDismissedRepairIds((prev) => {
+      if (prev.has(repairId)) return prev;
+      const next = new Set(prev);
+      next.add(repairId);
+      return next;
+    });
+  }, []);
+
   const onRepairVote = useCallback(
     async (repair: StreakRepairRow, vote: "approve" | "decline") => {
       if (!myUserId || repairBusyAction) return;
@@ -522,6 +542,7 @@ export default function ChallengeDetailScreen() {
           setRepairRows((prev) => prev.filter((row) => row.id !== repair.id));
           showToast(vote === "approve" ? "Repair vote saved." : "Repair declined.", "success");
         } else {
+          if (vote === "approve") dismissRepairRequest(repair.id);
           showToast("Repair vote saved.", "success");
         }
 
@@ -533,6 +554,7 @@ export default function ChallengeDetailScreen() {
     },
     [
       loadSecondary,
+      dismissRepairRequest,
       myUserId,
       openUpsell,
       refreshCohortPeerHabits,
@@ -774,6 +796,12 @@ export default function ChallengeDetailScreen() {
     [challengeId, customNoteToUserId, myUserId, habits, showToast, load, openUpsell, refreshPremiumAccess, handleServerPremiumRequired],
   );
 
+  const pendingRepairRows = useMemo(
+    () => repairRows.filter((r) => r.status === "pending" && !dismissedRepairIds.has(r.id)),
+    [dismissedRepairIds, repairRows],
+  );
+  const showRepairSkeleton = secondaryLoading && !secondaryHydrated && pendingRepairRows.length === 0;
+
   const bottomPad = 40;
 
   if (!challengeId) {
@@ -985,11 +1013,46 @@ export default function ChallengeDetailScreen() {
             </View>
           ) : null}
 
-          {repairRows.some((r) => r.status === "pending") ? (
+          {pendingRepairRows.length > 0 || showRepairSkeleton ? (
             <>
               <Text style={[styles.sectionLabel, { color: theme.colors.textMuted }]}>REPAIR REQUESTS</Text>
-              {repairRows
-                .filter((r) => r.status === "pending")
+              {showRepairSkeleton ? (
+                <View
+                  style={[
+                    styles.repairCard,
+                    styles.repairSkeletonCard,
+                    {
+                      backgroundColor: theme.colors.surface,
+                      borderColor: theme.colors.border,
+                      ...theme.shadow.card,
+                    },
+                  ]}
+                >
+                  <View style={styles.repairSkeletonTopRow}>
+                    <View
+                      style={[
+                        styles.repairIconBadge,
+                        {
+                          backgroundColor: isDark ? "rgba(34, 211, 238, 0.10)" : "rgba(6, 182, 212, 0.10)",
+                          borderColor: isDark ? "rgba(34, 211, 238, 0.24)" : "rgba(6, 182, 212, 0.22)",
+                        },
+                      ]}
+                    >
+                      <Clock size={18} color={theme.colors.cyan[500]} />
+                    </View>
+                    <View style={styles.repairSkeletonCopy}>
+                      <Text style={[styles.repairTitle, { color: theme.colors.textPrimary }]}>
+                        Checking repair requests
+                      </Text>
+                      <Text style={[styles.repairSkeletonHint, { color: theme.colors.textMuted }]}>
+                        Squad approvals will appear here if someone needs a repair.
+                      </Text>
+                    </View>
+                  </View>
+                  <ShimmerBlock isDark={isDark} height={8} radius={9999} style={styles.repairSkeletonBar} />
+                </View>
+              ) : null}
+              {pendingRepairRows
                 .map((r) => {
                   const requester = profileLabels[r.user_id];
                   const name = participantDisplayName(requester);
@@ -1000,6 +1063,20 @@ export default function ChallengeDetailScreen() {
                   const isRequester = Boolean(myUserId && myUserId === r.user_id);
                   const busyVote = repairBusyAction?.id === r.id ? repairBusyAction.vote : null;
                   const canVote = Boolean(myUserId && !isRequester && !myVote && declines === 0 && !busyVote);
+                  const approvalsRequired = Math.max(1, r.approvals_required);
+                  const approvalsLeft = Math.max(0, approvalsRequired - approves);
+                  const approvalProgress = Math.min(1, approves / approvalsRequired);
+                  const approvalProgressWidth = `${Math.round(approvalProgress * 100)}%` as const;
+                  const repairToneBg = isDark ? "rgba(34, 211, 238, 0.10)" : "rgba(6, 182, 212, 0.10)";
+                  const repairToneBorder = isDark ? "rgba(34, 211, 238, 0.24)" : "rgba(6, 182, 212, 0.22)";
+                  const approveBg = isDark ? "rgba(34, 211, 238, 0.14)" : "rgba(6, 182, 212, 0.08)";
+                  const approveSelectedBg = isDark ? "rgba(34, 211, 238, 0.22)" : "rgba(6, 182, 212, 0.13)";
+                  const approveBorder = isDark ? "rgba(34, 211, 238, 0.38)" : "rgba(6, 182, 212, 0.26)";
+                  const declineBg = theme.colors.surfaceElevated;
+                  const declineSelectedBg = isDark ? "rgba(239, 68, 68, 0.14)" : "rgba(220, 38, 38, 0.08)";
+                  const declineBorder = theme.colors.border;
+                  const declineSelectedBorder = isDark ? "rgba(239, 68, 68, 0.32)" : "rgba(220, 38, 38, 0.24)";
+                  const actionDisabled = Boolean(!myUserId || isRequester || declines !== 0 || busyVote);
                   return (
                     <View
                       key={r.id}
@@ -1013,42 +1090,178 @@ export default function ChallengeDetailScreen() {
                       ]}
                     >
                       <View style={styles.repairTopRow}>
+                        <View
+                          style={[
+                            styles.repairIconBadge,
+                            {
+                              backgroundColor: repairToneBg,
+                              borderColor: repairToneBorder,
+                            },
+                          ]}
+                        >
+                          <Users size={18} color={theme.colors.cyan[500]} />
+                        </View>
                         <View style={{ flex: 1, minWidth: 0 }}>
+                          <View style={styles.repairEyebrowRow}>
+                            <Text style={[styles.repairEyebrow, { color: theme.colors.cyan[500] }]}>
+                              Squad repair
+                            </Text>
+                            <View
+                              style={[
+                                styles.repairXpChip,
+                                {
+                                  backgroundColor: isDark
+                                    ? "rgba(251, 191, 36, 0.12)"
+                                    : "rgba(234, 179, 8, 0.12)",
+                                  borderColor: isDark
+                                    ? "rgba(251, 191, 36, 0.28)"
+                                    : "rgba(234, 179, 8, 0.24)",
+                                },
+                              ]}
+                            >
+                              <Text style={[styles.repairXpChipText, { color: theme.colors.yellow[400] }]}>
+                                {r.xp_cost} XP
+                              </Text>
+                            </View>
+                          </View>
                           <Text style={[styles.repairTitle, { color: theme.colors.textPrimary }]} numberOfLines={2}>
                             Approve streak repair?
                           </Text>
-                          <Text style={[styles.repairMeta, { color: theme.colors.textSecondary }]} numberOfLines={2}>
-                            {name} missed {r.date_str} · {approves} / {r.approvals_required} approvals · {r.xp_cost} XP
-                          </Text>
                         </View>
-                        <Users size={18} color={theme.colors.indigo[400]} />
+                        {!isRequester ? (
+                          <TouchableOpacity
+                            activeOpacity={0.75}
+                            hitSlop={8}
+                            accessibilityRole="button"
+                            accessibilityLabel="Hide repair request"
+                            onPress={() => dismissRepairRequest(r.id)}
+                            style={[
+                              styles.repairDismissButton,
+                              {
+                                backgroundColor: theme.colors.surfaceElevated,
+                                borderColor: theme.colors.border,
+                              },
+                            ]}
+                          >
+                            <X size={15} color={theme.colors.textMuted} />
+                          </TouchableOpacity>
+                        ) : null}
                       </View>
 
-                      <Text style={[styles.repairReason, { color: theme.colors.textMuted }]} numberOfLines={3}>
-                        “{r.reason}”
-                      </Text>
+                      <View style={styles.repairFactsRow}>
+                        <View
+                          style={[
+                            styles.repairFactChip,
+                            {
+                              backgroundColor: theme.colors.surfaceElevated,
+                              borderColor: theme.colors.border,
+                            },
+                          ]}
+                        >
+                          <Text style={[styles.repairFactLabel, { color: theme.colors.textMuted }]}>From</Text>
+                          <Text style={[styles.repairFactValue, { color: theme.colors.textPrimary }]} numberOfLines={1}>
+                            {name}
+                          </Text>
+                        </View>
+                        <View
+                          style={[
+                            styles.repairFactChip,
+                            {
+                              backgroundColor: theme.colors.surfaceElevated,
+                              borderColor: theme.colors.border,
+                            },
+                          ]}
+                        >
+                          <Text style={[styles.repairFactLabel, { color: theme.colors.textMuted }]}>Missed</Text>
+                          <Text style={[styles.repairFactValue, { color: theme.colors.textPrimary }]} numberOfLines={1}>
+                            {r.date_str}
+                          </Text>
+                        </View>
+                      </View>
+
+                      <View
+                        style={[
+                          styles.repairProgressPanel,
+                          {
+                            backgroundColor: theme.colors.surfaceElevated,
+                            borderColor: theme.colors.border,
+                          },
+                        ]}
+                      >
+                        <View style={styles.repairProgressHead}>
+                          <Text style={[styles.repairProgressTitle, { color: theme.colors.textSecondary }]}>
+                            {approves} of {approvalsRequired} approvals
+                          </Text>
+                          <Text style={[styles.repairProgressHint, { color: theme.colors.textMuted }]}>
+                            {approvalsLeft === 0 ? "Ready" : `${approvalsLeft} more`}
+                          </Text>
+                        </View>
+                        <View style={[styles.repairProgressTrack, { backgroundColor: theme.colors.border }]}>
+                          <View
+                            style={[
+                              styles.repairProgressFill,
+                              {
+                                width: approvalProgressWidth,
+                                backgroundColor: theme.colors.cyan[500],
+                              },
+                            ]}
+                          />
+                        </View>
+                      </View>
+
+                      {r.reason ? (
+                        <View
+                          style={[
+                            styles.repairReasonBox,
+                            {
+                              backgroundColor: isDark ? "rgba(15, 23, 42, 0.7)" : "rgba(241, 245, 249, 0.9)",
+                              borderColor: theme.colors.border,
+                            },
+                          ]}
+                        >
+                          <Text style={[styles.repairReasonLabel, { color: theme.colors.textMuted }]}>Reason</Text>
+                          <Text style={[styles.repairReason, { color: theme.colors.textSecondary }]} numberOfLines={3}>
+                            "{r.reason}"
+                          </Text>
+                        </View>
+                      ) : null}
 
                       {isRequester ? (
-                        <View style={styles.repairRequesterRow}>
-                          <Text style={[styles.repairRequesterText, { color: theme.colors.textMuted }]}>
-                            Waiting for approvals…
+                        <View
+                          style={[
+                            styles.repairRequesterRow,
+                            {
+                              backgroundColor: repairToneBg,
+                              borderColor: repairToneBorder,
+                            },
+                          ]}
+                        >
+                          <Clock size={15} color={theme.colors.cyan[500]} />
+                          <Text style={[styles.repairRequesterText, { color: theme.colors.textSecondary }]}>
+                            Waiting for squad approvals...
                           </Text>
                         </View>
                       ) : (
                         <View style={styles.repairActionsRow}>
                           <Button
                             title={myVote === "approve" ? "Approved" : "Approve"}
-                            variant={myVote === "approve" ? "primary" : "subtle"}
+                            variant="subtle"
                             loading={busyVote === "approve"}
-                            disabled={!canVote}
+                            disabled={actionDisabled || Boolean(myVote && myVote !== "approve")}
                             onPress={() => {
                               if (!canVote) return;
                               void onRepairVote(r, "approve");
                             }}
-                            style={styles.repairBtn}
+                            style={[
+                              styles.repairBtn,
+                              {
+                                backgroundColor: myVote === "approve" ? approveSelectedBg : approveBg,
+                                borderColor: myVote === "approve" ? theme.colors.cyan[500] : approveBorder,
+                              },
+                            ]}
                             textStyle={[
                               styles.repairBtnText,
-                              { color: myVote === "approve" ? "#fff" : theme.colors.textPrimary },
+                              { color: theme.colors.cyan[500] },
                             ]}
                           />
 
@@ -1056,18 +1269,21 @@ export default function ChallengeDetailScreen() {
                             title={myVote === "decline" ? "Declined" : "Decline"}
                             variant="subtle"
                             loading={busyVote === "decline"}
-                            disabled={!canVote}
+                            disabled={actionDisabled || Boolean(myVote && myVote !== "decline")}
                             onPress={() => {
                               if (!canVote) return;
                               void onRepairVote(r, "decline");
                             }}
                             style={[
                               styles.repairBtn,
-                              myVote === "decline" ? { backgroundColor: "rgba(239, 68, 68, 0.14)" } : null,
+                              {
+                                backgroundColor: myVote === "decline" ? declineSelectedBg : declineBg,
+                                borderColor: myVote === "decline" ? declineSelectedBorder : declineBorder,
+                              },
                             ]}
                             textStyle={[
                               styles.repairBtnText,
-                              { color: myVote === "decline" ? theme.colors.red[500] : theme.colors.textPrimary },
+                              { color: theme.colors.red[500] },
                             ]}
                           />
                         </View>
@@ -1364,9 +1580,30 @@ const styles = StyleSheet.create({
   },
   repairCard: {
     borderWidth: 1,
-    borderRadius: 16,
+    borderRadius: 18,
     padding: 14,
-    marginBottom: 12,
+    marginBottom: 14,
+  },
+  repairSkeletonCard: {
+    paddingVertical: 14,
+  },
+  repairSkeletonTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  repairSkeletonCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  repairSkeletonHint: {
+    fontSize: 12,
+    fontWeight: "700",
+    lineHeight: 17,
+    marginTop: 4,
+  },
+  repairSkeletonBar: {
+    marginTop: 14,
   },
   card: {
     borderRadius: 18,
@@ -1375,15 +1612,96 @@ const styles = StyleSheet.create({
   },
   repairTopRow: {
     flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+  },
+  repairIconBadge: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  repairDismissButton: {
+    width: 30,
+    height: 30,
+    borderRadius: 9999,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  repairEyebrowRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 5,
+  },
+  repairEyebrow: { fontSize: 10, fontWeight: "900" },
+  repairXpChip: {
+    borderRadius: 9999,
+    borderWidth: 1,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+  },
+  repairXpChipText: { fontSize: 10, fontWeight: "900" },
+  repairTitle: { fontSize: 16, fontWeight: "900" },
+  repairFactsRow: { flexDirection: "row", gap: 8, marginTop: 12 },
+  repairFactChip: {
+    flex: 1,
+    minWidth: 0,
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  repairFactLabel: { fontSize: 9, fontWeight: "900", marginBottom: 3 },
+  repairFactValue: { fontSize: 12, fontWeight: "900" },
+  repairProgressPanel: {
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 10,
+    marginTop: 10,
+  },
+  repairProgressHead: {
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     gap: 10,
+    marginBottom: 8,
   },
-  repairTitle: { fontSize: 14, fontWeight: "900" },
-  repairMeta: { fontSize: 12, fontWeight: "700", marginTop: 4 },
-  repairReason: { fontSize: 12, fontWeight: "600", marginTop: 10, lineHeight: 17 },
+  repairProgressTitle: { fontSize: 12, fontWeight: "900" },
+  repairProgressHint: { fontSize: 11, fontWeight: "800" },
+  repairProgressTrack: {
+    height: 7,
+    borderRadius: 9999,
+    overflow: "hidden",
+  },
+  repairProgressFill: {
+    height: "100%",
+    borderRadius: 9999,
+  },
+  repairReasonBox: {
+    borderRadius: 14,
+    borderWidth: 1,
+    paddingHorizontal: 11,
+    paddingVertical: 10,
+    marginTop: 10,
+  },
+  repairReasonLabel: { fontSize: 9, fontWeight: "900", marginBottom: 4 },
+  repairReason: { fontSize: 12, fontWeight: "700", lineHeight: 17 },
   repairActionsRow: { flexDirection: "row", gap: 10, marginTop: 12 },
-  repairRequesterRow: { marginTop: 12 },
+  repairRequesterRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    borderRadius: 14,
+    borderWidth: 1,
+    paddingHorizontal: 11,
+    paddingVertical: 10,
+    marginTop: 12,
+  },
   repairRequesterText: { fontSize: 12, fontWeight: "800" },
   loadMoreSecondaryBtn: {
     minHeight: 46,
@@ -1397,11 +1715,14 @@ const styles = StyleSheet.create({
   repairBtn: {
     flex: 1,
     borderWidth: 1,
-    borderRadius: 14,
-    paddingVertical: 10,
+    borderRadius: 12,
+    paddingVertical: 7,
+    paddingHorizontal: 12,
     alignItems: "center",
+    justifyContent: "center",
+    minHeight: 40,
   },
-  repairBtnText: { fontSize: 12, fontWeight: "900" },
+  repairBtnText: { fontSize: 13, fontWeight: "900", letterSpacing: 0 },
   participantCard: {
     borderRadius: 18,
     borderWidth: 1,
