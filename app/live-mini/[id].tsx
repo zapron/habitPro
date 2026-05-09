@@ -158,6 +158,10 @@ function statusTone(status: LiveMiniParticipantStatus, theme: ReturnType<typeof 
   return { fg: theme.colors.indigo[400], bg: isDark ? "rgba(129,140,248,0.15)" : "rgba(99,102,241,0.1)" };
 }
 
+function isTerminalLiveMiniStatus(status: LiveMiniParticipantStatus): boolean {
+  return status === "completed" || status === "missed" || status === "cancelled" || status === "declined";
+}
+
 function participantSortValue(row: LiveMiniParticipantRow): number {
   if (row.status === "completed") return 0;
   if (row.status === "in_progress") return 1;
@@ -343,6 +347,8 @@ function LiveSquadHero({
   const boardCanStillFlip = participants.some(
     (p) => p.status === "invited" || p.status === "joined" || p.status === "in_progress",
   );
+  const squadSettled =
+    participants.length > 0 && participants.every((p) => isTerminalLiveMiniStatus(p.status));
   const allCompleted = participants.length > 0 && participants.every((p) => p.status === "completed");
   const paceColors = [theme.colors.indigo[500], theme.colors.cyan[500], theme.colors.amber[500]];
   const activeRows = participants.filter((p) => p.status === "in_progress");
@@ -353,13 +359,17 @@ function LiveSquadHero({
       ? Math.max(0, runnerUp.final_elapsed_seconds - leader.final_elapsed_seconds)
       : null;
   const emptyHeroTitle =
-    activeCount > 1
+    squadSettled
+      ? "Squad run ended"
+      : activeCount > 1
       ? `${activeCount} are racing the clock`
       : activeCount === 1
         ? `${shortDisplayName(profiles[activeRows[0].user_id])} is racing the clock`
         : "Squad is warming up";
   const emptyHeroSubtitle =
-    activeCount > 0
+    squadSettled
+      ? "No ranked finish this time. Results stay locked."
+      : activeCount > 0
       ? waitingCount > 0
         ? `One finish can flip the board. ${waitingCount} still choosing a timer.`
         : "First finisher locks the pace."
@@ -942,13 +952,17 @@ export default function LiveMiniSquadScreen() {
   const squad = snapshot?.squad ?? null;
   const participants = snapshot?.participants ?? [];
   const myParticipant = participants.find((p) => p.user_id === userId);
+  const squadSettled = useMemo(
+    () => participants.length > 0 && participants.every((p) => isTerminalLiveMiniStatus(p.status)),
+    [participants],
+  );
   const creatorInviteMission = useMemo<MiniMission | null>(() => {
-    if (!localLiveMission || !squad || squad.status !== "active") return null;
+    if (!localLiveMission || !squad || squad.status !== "active" || squadSettled) return null;
     if (localLiveMission.liveSquadRole === "creator" || myParticipant?.role === "creator") {
       return { ...localLiveMission, liveSquadRole: "creator" };
     }
     return null;
-  }, [localLiveMission, myParticipant?.role, squad]);
+  }, [localLiveMission, myParticipant?.role, squad, squadSettled]);
   const completedRows = useMemo(
     () =>
       participants
