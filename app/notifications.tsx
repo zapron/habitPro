@@ -18,11 +18,13 @@ import { ArrowLeft } from "lucide-react-native";
 import { Screen } from "../src/components/Screen";
 import { useTheme } from "../src/context/ThemeContext";
 import { useAuth } from "../src/context/AuthContext";
-import { listNotifications, markAllNotificationsRead, markNotificationRead } from "../src/lib/groupChallengesApi";
+import { listNotificationsPage, markAllNotificationsRead, markNotificationRead } from "../src/lib/groupChallengesApi";
 import { parseCommunityWinCheerPayload } from "../src/lib/notificationPayloads";
 import { backOrReplace } from "../src/lib/navigation";
 import type { ChallengeNudgeKind, NotificationRow } from "../src/types/groupChallenge";
 import { ShimmerBlock } from "../src/components/ShimmerBlock";
+
+const NOTIFICATION_PAGE_SIZE = 20;
 
 function groupMissionInviteSubtitle(n: NotificationRow): string {
   const p = n.payload ?? {};
@@ -185,30 +187,64 @@ export default function NotificationsScreen() {
   const userId = session?.user?.id ?? null;
   const [items, setItems] = useState<NotificationRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
+  const [nextOffset, setNextOffset] = useState<number | null>(null);
   const [markingAll, setMarkingAll] = useState(false);
   const userIdRef = useRef<string | null>(userId);
+  const itemsRef = useRef<NotificationRow[]>([]);
 
-  const load = useCallback(async () => {
+  itemsRef.current = items;
+
+  const load = useCallback(async (options?: { force?: boolean }) => {
     const requestedUserId = userId;
     if (!requestedUserId) {
       setItems([]);
       setLoading(false);
+      setHasMore(false);
+      setNextOffset(null);
       return;
     }
-    setLoading(true);
+    if (itemsRef.current.length === 0 || options?.force) {
+      setLoading(true);
+    }
     try {
-      const rows = await listNotifications(50);
+      const page = await listNotificationsPage({ offset: 0, limit: NOTIFICATION_PAGE_SIZE });
       if (userIdRef.current !== requestedUserId) return;
-      setItems(rows);
+      setItems(page.items);
+      setHasMore(page.hasMore);
+      setNextOffset(page.nextOffset);
     } finally {
       setLoading(false);
     }
   }, [userId]);
 
+  const loadMore = useCallback(async () => {
+    if (loading || loadingMore || !hasMore || nextOffset == null) return;
+    const requestedUserId = userId;
+    if (!requestedUserId) return;
+    setLoadingMore(true);
+    try {
+      const page = await listNotificationsPage({ offset: nextOffset, limit: NOTIFICATION_PAGE_SIZE });
+      if (userIdRef.current !== requestedUserId) return;
+      setItems((prev) => {
+        const seen = new Set(prev.map((item) => item.id));
+        return [...prev, ...page.items.filter((item) => !seen.has(item.id))];
+      });
+      setHasMore(page.hasMore);
+      setNextOffset(page.nextOffset);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [hasMore, loading, loadingMore, nextOffset, userId]);
+
   useLayoutEffect(() => {
     userIdRef.current = userId;
     setItems([]);
     setMarkingAll(false);
+    setLoadingMore(false);
+    setHasMore(false);
+    setNextOffset(null);
     setLoading(Boolean(userId));
   }, [userId]);
 
@@ -308,10 +344,14 @@ export default function NotificationsScreen() {
   const onMarkAllRead = async () => {
     if (!hasUnread || markingAll) return;
     setMarkingAll(true);
+    const previous = itemsRef.current;
+    const nowIso = new Date().toISOString();
+    setItems((prev) => prev.map((n) => (n.read_at ? n : { ...n, read_at: nowIso })));
     try {
       await markAllNotificationsRead();
-      const nowIso = new Date().toISOString();
-      setItems((prev) => prev.map((n) => (n.read_at ? n : { ...n, read_at: nowIso })));
+    } catch (e) {
+      setItems(previous);
+      if (__DEV__) console.warn("[notifications] markAllNotificationsRead", e);
     } finally {
       setMarkingAll(false);
     }
@@ -349,7 +389,7 @@ export default function NotificationsScreen() {
         </TouchableOpacity>
       </View>
 
-      {loading ? (
+      {loading && items.length === 0 ? (
         <View style={{ marginTop: 10 }}>
           {Array.from({ length: 7 }, (_, i) => (
             <View
@@ -383,8 +423,19 @@ export default function NotificationsScreen() {
           data={items}
           keyExtractor={(item) => item.id}
           contentContainerStyle={{ paddingBottom: 32, flexGrow: 1 }}
+          refreshing={loading && items.length > 0}
+          onRefresh={() => void load({ force: true })}
+          onEndReached={() => void loadMore()}
+          onEndReachedThreshold={0.45}
           ListEmptyComponent={
             <Text style={{ color: theme.colors.textMuted, marginTop: 14 }}>Nothing here yet.</Text>
+          }
+          ListFooterComponent={
+            loadingMore ? (
+              <View style={styles.footerLoader}>
+                <ActivityIndicator size="small" color={theme.colors.indigo[400]} />
+              </View>
+            ) : null
           }
           renderItem={({ item }) => (
             <TouchableOpacity
@@ -436,4 +487,5 @@ const styles = StyleSheet.create({
   rowInner: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
   unreadDot: { width: 10, height: 10, borderRadius: 9999, marginTop: 5 },
   unreadSpacer: { width: 10, marginTop: 5 },
+  footerLoader: { paddingVertical: 18, alignItems: "center", justifyContent: "center" },
 });
