@@ -30,6 +30,10 @@ import {
   ChevronRight,
   Zap,
   Bell,
+  Plane,
+  Gamepad2,
+  Globe,
+  Swords,
 } from "lucide-react-native";
 import { useHabitStore } from "../../src/store/habitStore";
 import { useAuth } from "../../src/context/AuthContext";
@@ -120,6 +124,48 @@ function MiniMissionLiveGradientLabel({ count, reduceMotion }: { count: number; 
 
 const SECTION_GAP = 12;
 const HEADER_BOTTOM_GAP = 6;
+
+function MainMissionLegend({
+  theme,
+  isDark,
+}: {
+  theme: AppTheme;
+  isDark: boolean;
+}) {
+  const items = [
+    { key: "auto", label: "Auto", icon: Plane, color: theme.colors.cyan[400] },
+    { key: "manual", label: "Manual", icon: Gamepad2, color: theme.colors.amber[500] },
+    { key: "community", label: "Public", icon: Globe, color: theme.colors.cyan[400] },
+    { key: "squad", label: "Squad", icon: Swords, color: theme.colors.indigo[400] },
+  ] as const;
+
+  return (
+    <View style={styles.mainMissionLegend} accessibilityLabel="Main mission icon legend">
+      {items.map(({ key, label, icon: Icon, color }) => (
+        <View
+          key={key}
+          style={[
+            styles.legendPill,
+            {
+              backgroundColor: isDark ? "rgba(148, 163, 184, 0.08)" : "rgba(148, 163, 184, 0.10)",
+              borderColor: isDark ? "rgba(148, 163, 184, 0.18)" : "rgba(148, 163, 184, 0.24)",
+            },
+          ]}
+        >
+          <Icon size={11} color={color} strokeWidth={2.4} />
+          <Text
+            style={[styles.legendText, { color: theme.colors.textMuted }]}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.78}
+          >
+            {label}
+          </Text>
+        </View>
+      ))}
+    </View>
+  );
+}
 
 function ShimmerTile({
   theme,
@@ -686,9 +732,12 @@ export default function Home() {
           </TouchableOpacity>
         </CoachMarkTarget>
 
-        <Text style={[styles.missionsLabel, { color: theme.colors.textMuted }]}>
-          MAIN MISSIONS
-        </Text>
+        <View style={styles.mainMissionsHeader}>
+          <Text style={[styles.missionsLabel, { color: theme.colors.textMuted }]}>
+            MAIN MISSIONS
+          </Text>
+          <MainMissionLegend theme={theme} isDark={isDark} />
+        </View>
 
         <View
           style={[
@@ -1055,7 +1104,40 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "800",
     letterSpacing: 1.2,
+    flexShrink: 0,
+  },
+  mainMissionsHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
     marginBottom: 6,
+  },
+  mainMissionLegend: {
+    flexDirection: "row",
+    flexWrap: "nowrap",
+    justifyContent: "flex-end",
+    alignItems: "center",
+    gap: 3,
+    flex: 1,
+    minWidth: 0,
+  },
+  legendPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+    borderWidth: 1,
+    borderRadius: 9999,
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    minHeight: 20,
+    flexShrink: 1,
+  },
+  legendText: {
+    fontSize: 8,
+    lineHeight: 10,
+    fontWeight: "800",
+    flexShrink: 1,
   },
   tabContainer: {
     flexDirection: "row",
