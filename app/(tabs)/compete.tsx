@@ -92,6 +92,22 @@ type InviteCardMeta = {
   description?: string;
 };
 
+type MixedInviteItem =
+  | {
+      kind: "live";
+      id: string;
+      actionRank: number;
+      createdAtMs: number;
+      invite: LiveMiniInviteForMe;
+    }
+  | {
+      kind: "group";
+      id: string;
+      actionRank: number;
+      createdAtMs: number;
+      invite: ChallengeInviteRow;
+    };
+
 function parseInviteCardMeta(g: ChallengeGroupRow): InviteCardMeta {
   const tpl = g.habit_template as Record<string, unknown>;
   const habitTitle = typeof tpl.title === "string" ? tpl.title.trim() : "";
@@ -231,12 +247,19 @@ function inviteCreatedAtMs(value: string | null | undefined): number {
   return Number.isFinite(ms) ? ms : 0;
 }
 
-function sortGroupInvitesDesc(a: ChallengeInviteRow, b: ChallengeInviteRow): number {
-  return inviteCreatedAtMs(b.created_at) - inviteCreatedAtMs(a.created_at);
+function groupInviteActionRank(status: ChallengeInviteRow["status"]): number {
+  return status === "pending" ? 0 : 1;
 }
 
-function sortLiveMiniInvitesDesc(a: LiveMiniInviteForMe, b: LiveMiniInviteForMe): number {
-  return inviteCreatedAtMs(b.participant.created_at) - inviteCreatedAtMs(a.participant.created_at);
+function liveMiniInviteActionRank(status: LiveMiniInviteForMe["participant"]["status"]): number {
+  if (status === "invited") return 0;
+  if (status === "joined" || status === "in_progress") return 1;
+  return 2;
+}
+
+function sortMixedInvites(a: MixedInviteItem, b: MixedInviteItem): number {
+  if (a.actionRank !== b.actionRank) return a.actionRank - b.actionRank;
+  return b.createdAtMs - a.createdAtMs;
 }
 
 function liveMiniStatusVariant(status: LiveMiniInviteForMe["participant"]["status"]): "pending" | "accepted" | "declined" {
@@ -1070,13 +1093,29 @@ export default function CompeteScreen() {
     return m;
   }, [miniMissions]);
 
-  const sortedGroupInvites = useMemo(
-    () => [...groupInvites].sort(sortGroupInvitesDesc),
-    [groupInvites],
-  );
-  const sortedLiveMiniInvites = useMemo(
-    () => [...liveMiniInvites].sort(sortLiveMiniInvitesDesc),
-    [liveMiniInvites],
+  const mixedInvites = useMemo<MixedInviteItem[]>(
+    () =>
+      [
+        ...liveMiniInvites.map(
+          (invite): MixedInviteItem => ({
+            kind: "live",
+            id: `live:${invite.participant.id}`,
+            actionRank: liveMiniInviteActionRank(invite.participant.status),
+            createdAtMs: inviteCreatedAtMs(invite.participant.created_at),
+            invite,
+          }),
+        ),
+        ...groupInvites.map(
+          (invite): MixedInviteItem => ({
+            kind: "group",
+            id: `group:${invite.id}`,
+            actionRank: groupInviteActionRank(invite.status),
+            createdAtMs: inviteCreatedAtMs(invite.created_at),
+            invite,
+          }),
+        ),
+      ].sort(sortMixedInvites),
+    [groupInvites, liveMiniInvites],
   );
   const awaitingInvitePulseStyle = useMemo(
     () => ({
@@ -1133,6 +1172,296 @@ export default function CompeteScreen() {
     } else {
       showToast("Challenge joined", "success");
     }
+  };
+
+  const renderLiveMiniInviteCard = (liveInvite: LiveMiniInviteForMe) => {
+    const participant = liveInvite.participant;
+    const squad = liveInvite.squad;
+    const pending = participant.status === "invited";
+    const busyKey = `live:${participant.id}`;
+    const localMission = miniMissionByLiveSquadId.get(squad.id);
+    const localMissionId = localMission?.id ?? participant.local_mini_mission_id;
+    const canOpenTimer =
+      Boolean(localMissionId) &&
+      (participant.status === "in_progress" || participant.status === "completed");
+    const plannedMinutes = participant.planned_minutes ?? localMission?.estimatedMinutes ?? null;
+    const totalMinutes =
+      plannedMinutes == null ? null : plannedMinutes + (participant.reserve_minutes ?? 0);
+    const timerLabel =
+      participant.status === "completed" && participant.final_elapsed_seconds != null
+        ? `Done in ${formatLiveMiniElapsed(participant.final_elapsed_seconds)}`
+        : formatLiveMiniMinutes(totalMinutes);
+    const liveMeta: InviteCardMeta = {
+      challengeName: squad.title,
+      pillLabel: "Live Mini",
+      description: squad.objective ?? undefined,
+    };
+
+    return (
+      <View
+        key={`live:${participant.id}`}
+        style={[
+          styles.card,
+          {
+            backgroundColor: theme.colors.surface,
+            borderColor: theme.colors.border,
+            ...theme.shadow.card,
+          },
+        ]}
+      >
+        {pending ? (
+          <Animated.View
+            pointerEvents="none"
+            style={[
+              styles.awaitingInvitePulse,
+              {
+                borderColor: theme.colors.cyan[400],
+                backgroundColor: isDark ? "rgba(34, 211, 238, 0.05)" : "rgba(8, 145, 178, 0.04)",
+              },
+              awaitingInvitePulseStyle,
+            ]}
+          />
+        ) : null}
+        <InviteMissionHeader meta={liveMeta} theme={theme} isDark={isDark} />
+        <InviteRequesterLine username={liveInvite.creator?.username} theme={theme} />
+        <View style={styles.inviteStatusRow}>
+          <InviteStatusPill
+            variant={liveMiniStatusVariant(participant.status)}
+            label={liveMiniStatusLabel(participant.status)}
+            theme={theme}
+          />
+          {participant.status !== "declined" ? (
+            <View
+              style={[
+                styles.liveInviteTimerPill,
+                {
+                  backgroundColor: isDark ? "rgba(34, 211, 238, 0.1)" : "rgba(8, 145, 178, 0.08)",
+                  borderColor: isDark ? "rgba(34, 211, 238, 0.28)" : "rgba(8, 145, 178, 0.2)",
+                },
+              ]}
+            >
+              <Clock size={13} color={theme.colors.cyan[400]} />
+              <Text style={[styles.liveInviteTimerText, { color: theme.colors.cyan[400] }]} numberOfLines={1}>
+                {timerLabel}
+              </Text>
+            </View>
+          ) : null}
+        </View>
+        <Text style={[styles.inviteHint, { color: theme.colors.textSecondary }]}>
+          {pending
+            ? "Open this invite to choose your timer. Joining Live Mini Missions is free for invitees."
+            : participant.status === "in_progress"
+              ? "Your timer is running. Finish before the deadline to rank on the board."
+              : participant.status === "completed"
+                ? "Your result is saved on the Live Squad board."
+                : participant.status === "declined"
+                  ? "You declined this Live Squad invite."
+                  : participant.status === "missed"
+                    ? "This Live Mini timer expired."
+                    : "Open the board to see the squad status."}
+        </Text>
+        <View style={styles.inviteActions}>
+          {pending ? (
+            <TouchableOpacity
+              style={[styles.declineBtn, { borderColor: theme.colors.border }]}
+              onPress={() => void handleDeclineLiveMiniInvite(liveInvite)}
+              disabled={inviteBusy === busyKey}
+            >
+              <Text style={{ color: theme.colors.textMuted, fontWeight: "700" }}>Decline</Text>
+            </TouchableOpacity>
+          ) : null}
+          <TouchableOpacity
+            style={[
+              pending ? styles.acceptBtn : styles.inviteFullActionBtn,
+              pending
+                ? {
+                    backgroundColor: theme.colors.indigo[600],
+                    ...theme.shadow.glow,
+                  }
+                : {
+                    backgroundColor: isDark ? "rgba(148, 163, 184, 0.08)" : theme.colors.surfaceElevated,
+                    borderColor: theme.colors.border,
+                  },
+            ]}
+            onPress={() => {
+              if (canOpenTimer && localMissionId) router.push(`/mini/${localMissionId}`);
+              else router.push(`/live-mini/${squad.id}`);
+            }}
+            disabled={inviteBusy === busyKey}
+            activeOpacity={0.88}
+          >
+            {inviteBusy === busyKey ? (
+              <ActivityIndicator color={pending ? theme.colors.white : theme.colors.cyan[400]} />
+            ) : (
+              <>
+                {pending ? (
+                  <Radio size={15} color={theme.colors.white} />
+                ) : canOpenTimer ? (
+                  <Clock size={15} color={theme.colors.cyan[400]} />
+                ) : (
+                  <Eye size={15} color={theme.colors.cyan[400]} />
+                )}
+                <Text style={pending ? styles.acceptBtnText : [styles.invitePassiveActionText, { color: theme.colors.textPrimary }]}>
+                  {pending ? "View & Start" : canOpenTimer ? "Open Timer" : "Open Board"}
+                </Text>
+              </>
+            )}
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  };
+
+  const renderGroupInviteCard = (inv: ChallengeInviteRow) => {
+    const pending = inv.status === "pending";
+    const meta = inviteCardMeta[inv.id];
+    const requesterLabel = inviteRequesterLabels[inv.inviter_id];
+    const missionTitle = meta?.challengeName ?? "Group mission";
+    const linkedHabitId =
+      inv.status === "accepted" ? habitIdByChallengeId.get(inv.challenge_id) : undefined;
+    const canOpenMission = Boolean(linkedHabitId);
+    const highlighted =
+      (highlightInviteId !== null && highlightInviteId === inv.id) ||
+      (highlightChallengeId !== null && highlightChallengeId === inv.challenge_id);
+
+    const cardStyle = [
+      styles.card,
+      {
+        backgroundColor: theme.colors.surface,
+        borderColor: highlighted ? theme.colors.indigo[400] : theme.colors.border,
+        borderWidth: highlighted ? 2 : 1,
+        ...theme.shadow.card,
+      },
+    ];
+
+    const groupStreaksButton = (
+      <TouchableOpacity
+        style={[
+          styles.inviteGroupStreaksBtn,
+          {
+            backgroundColor: isDark ? "rgba(99, 102, 241, 0.16)" : "rgba(79, 70, 229, 0.1)",
+            borderColor: isDark ? "rgba(129, 140, 248, 0.35)" : "rgba(79, 70, 229, 0.28)",
+          },
+        ]}
+        onPress={() => router.push(`/challenge/${inv.challenge_id}`)}
+        activeOpacity={0.88}
+        accessibilityRole="button"
+        accessibilityLabel={`View group streaks: ${missionTitle}`}
+      >
+        <Eye size={18} color={theme.colors.indigo[400]} />
+        <Text style={[styles.inviteGroupStreaksBtnText, { color: theme.colors.indigo[400] }]}>
+          View Group Streaks
+        </Text>
+      </TouchableOpacity>
+    );
+
+    const resolvedBlock = (
+      <>
+        <View style={styles.inviteStatusRow}>
+          <InviteStatusPill
+            variant={inv.status === "accepted" ? "accepted" : "declined"}
+            label={inv.status === "accepted" ? "Accepted" : "Declined"}
+            theme={theme}
+          />
+        </View>
+        {inv.status === "accepted" ? (
+          <Text style={[styles.inviteStatusSubtext, { color: theme.colors.textSecondary }]}>
+            You're part of this group mission.
+          </Text>
+        ) : (
+          <Text style={[styles.inviteStatusSubtext, { color: theme.colors.textMuted }]}>
+            Kept on your list for your records.
+          </Text>
+        )}
+        {inv.status === "accepted" ? groupStreaksButton : null}
+        {inv.status === "accepted" && !canOpenMission ? (
+          <Text style={[styles.inviteSyncHint, { color: theme.colors.textMuted }]}>
+            Open this mission from Home once your device has finished syncing.
+          </Text>
+        ) : null}
+      </>
+    );
+
+    if (pending) {
+      return (
+        <View key={`group:${inv.id}`} style={cardStyle}>
+          <Animated.View
+            pointerEvents="none"
+            style={[
+              styles.awaitingInvitePulse,
+              {
+                borderColor: theme.colors.cyan[400],
+                backgroundColor: isDark ? "rgba(34, 211, 238, 0.05)" : "rgba(8, 145, 178, 0.04)",
+              },
+              awaitingInvitePulseStyle,
+            ]}
+          />
+          <InviteMissionHeader meta={meta} theme={theme} isDark={isDark} />
+          <InviteRequesterLine username={requesterLabel?.username} theme={theme} />
+          <View style={styles.inviteStatusRow}>
+            <InviteStatusPill variant="pending" label="Action needed" theme={theme} />
+          </View>
+          {groupStreaksButton}
+          <Text style={[styles.inviteHint, { color: theme.colors.textSecondary }]}>
+            Accept to add a matching mission and join everyone on this mission.
+          </Text>
+          {inviteNeedsCommunityForAccept ? (
+            <Text style={[styles.invitePlusHint, { color: theme.colors.textMuted }]}>
+              Group missions need Community. Tap Accept to view your Play Store options.
+            </Text>
+          ) : null}
+          <View style={styles.inviteActions}>
+            <TouchableOpacity
+              style={[styles.declineBtn, { borderColor: theme.colors.border }]}
+              onPress={() => void handleDeclineGroupInvite(inv)}
+              disabled={inviteBusy === inv.id}
+            >
+              <Text style={{ color: theme.colors.textMuted, fontWeight: "700" }}>Decline</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.acceptBtn,
+                {
+                  backgroundColor: theme.colors.indigo[600],
+                  ...theme.shadow.glow,
+                },
+              ]}
+              onPress={() => void handleAcceptGroupInvite(inv)}
+              disabled={inviteAcceptPremiumUnknown || inviteBusy === inv.id}
+            >
+              {inviteBusy === inv.id ? (
+                <ActivityIndicator color={theme.colors.white} />
+              ) : (
+                <Text style={styles.acceptBtnText}>Accept</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      );
+    }
+
+    if (inv.status === "accepted" && canOpenMission) {
+      return (
+        <View key={`group:${inv.id}`} style={cardStyle}>
+          <InviteMissionHeader
+            meta={meta}
+            theme={theme}
+            isDark={isDark}
+            onPress={() => router.push(`/habit/${linkedHabitId}`)}
+          />
+          <InviteRequesterLine username={requesterLabel?.username} theme={theme} />
+          {resolvedBlock}
+        </View>
+      );
+    }
+
+    return (
+      <View key={`group:${inv.id}`} style={cardStyle}>
+        <InviteMissionHeader meta={meta} theme={theme} isDark={isDark} />
+        <InviteRequesterLine username={requesterLabel?.username} theme={theme} />
+        {resolvedBlock}
+      </View>
+    );
   };
 
   return (
@@ -1487,7 +1816,7 @@ export default function CompeteScreen() {
                   </View>
                 ))}
               </View>
-            ) : sortedGroupInvites.length === 0 && sortedLiveMiniInvites.length === 0 ? (
+            ) : mixedInvites.length === 0 ? (
               <View
                 style={[styles.card, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, ...theme.shadow.card }]}
               >
@@ -1498,311 +1827,11 @@ export default function CompeteScreen() {
               </View>
             ) : (
               <>
-                {sortedLiveMiniInvites.length > 0 ? (
-                  <>
-                    {sortedLiveMiniInvites.map((liveInvite) => {
-                      const participant = liveInvite.participant;
-                      const squad = liveInvite.squad;
-                      const pending = participant.status === "invited";
-                      const busyKey = `live:${participant.id}`;
-                      const localMission = miniMissionByLiveSquadId.get(squad.id);
-                      const localMissionId = localMission?.id ?? participant.local_mini_mission_id;
-                      const canOpenTimer =
-                        Boolean(localMissionId) &&
-                        (participant.status === "in_progress" || participant.status === "completed");
-                      const plannedMinutes = participant.planned_minutes ?? localMission?.estimatedMinutes ?? null;
-                      const totalMinutes =
-                        plannedMinutes == null ? null : plannedMinutes + (participant.reserve_minutes ?? 0);
-                      const timerLabel =
-                        participant.status === "completed" && participant.final_elapsed_seconds != null
-                          ? `Done in ${formatLiveMiniElapsed(participant.final_elapsed_seconds)}`
-                          : formatLiveMiniMinutes(totalMinutes);
-                      const liveMeta: InviteCardMeta = {
-                        challengeName: squad.title,
-                        pillLabel: "Live Mini",
-                        description: squad.objective ?? undefined,
-                      };
-
-                      return (
-                        <View
-                          key={participant.id}
-                          style={[
-                            styles.card,
-                            {
-                              backgroundColor: theme.colors.surface,
-                              borderColor: theme.colors.border,
-                              ...theme.shadow.card,
-                            },
-                          ]}
-                        >
-                          {pending ? (
-                            <Animated.View
-                              pointerEvents="none"
-                              style={[
-                                styles.awaitingInvitePulse,
-                                {
-                                  borderColor: theme.colors.cyan[400],
-                                  backgroundColor: isDark ? "rgba(34, 211, 238, 0.05)" : "rgba(8, 145, 178, 0.04)",
-                                },
-                                awaitingInvitePulseStyle,
-                              ]}
-                            />
-                          ) : null}
-                          <InviteMissionHeader meta={liveMeta} theme={theme} isDark={isDark} />
-                          <InviteRequesterLine username={liveInvite.creator?.username} theme={theme} />
-                          <View style={styles.inviteStatusRow}>
-                            <InviteStatusPill
-                              variant={liveMiniStatusVariant(participant.status)}
-                              label={liveMiniStatusLabel(participant.status)}
-                              theme={theme}
-                            />
-                            {participant.status !== "declined" ? (
-                              <View
-                                style={[
-                                  styles.liveInviteTimerPill,
-                                  {
-                                    backgroundColor: isDark ? "rgba(34, 211, 238, 0.1)" : "rgba(8, 145, 178, 0.08)",
-                                    borderColor: isDark ? "rgba(34, 211, 238, 0.28)" : "rgba(8, 145, 178, 0.2)",
-                                  },
-                                ]}
-                              >
-                                <Clock size={13} color={theme.colors.cyan[400]} />
-                                <Text style={[styles.liveInviteTimerText, { color: theme.colors.cyan[400] }]} numberOfLines={1}>
-                                  {timerLabel}
-                                </Text>
-                              </View>
-                            ) : null}
-                          </View>
-                          <Text style={[styles.inviteHint, { color: theme.colors.textSecondary }]}>
-                            {pending
-                              ? "Open this invite to choose your timer. Joining Live Mini Missions is free for invitees."
-                              : participant.status === "in_progress"
-                                ? "Your timer is running. Finish before the deadline to rank on the board."
-                                : participant.status === "completed"
-                                  ? "Your result is saved on the Live Squad board."
-                                  : participant.status === "declined"
-                                    ? "You declined this Live Squad invite."
-                                    : participant.status === "missed"
-                                      ? "This Live Mini timer expired."
-                                      : "Open the board to see the squad status."}
-                          </Text>
-                          <View style={styles.inviteActions}>
-                            {pending ? (
-                              <TouchableOpacity
-                                style={[styles.declineBtn, { borderColor: theme.colors.border }]}
-                                onPress={() => void handleDeclineLiveMiniInvite(liveInvite)}
-                                disabled={inviteBusy === busyKey}
-                              >
-                                <Text style={{ color: theme.colors.textMuted, fontWeight: "700" }}>Decline</Text>
-                              </TouchableOpacity>
-                            ) : null}
-                            <TouchableOpacity
-                              style={[
-                                pending ? styles.acceptBtn : styles.inviteFullActionBtn,
-                                pending
-                                  ? {
-                                      backgroundColor: theme.colors.indigo[600],
-                                      ...theme.shadow.glow,
-                                    }
-                                  : {
-                                      backgroundColor: isDark ? "rgba(148, 163, 184, 0.08)" : theme.colors.surfaceElevated,
-                                      borderColor: theme.colors.border,
-                                    },
-                              ]}
-                              onPress={() => {
-                                if (canOpenTimer && localMissionId) router.push(`/mini/${localMissionId}`);
-                                else router.push(`/live-mini/${squad.id}`);
-                              }}
-                              disabled={inviteBusy === busyKey}
-                              activeOpacity={0.88}
-                            >
-                              {inviteBusy === busyKey ? (
-                                <ActivityIndicator color={pending ? theme.colors.white : theme.colors.cyan[400]} />
-                              ) : (
-                                <>
-                                  {pending ? (
-                                    <Radio size={15} color={theme.colors.white} />
-                                  ) : canOpenTimer ? (
-                                    <Clock size={15} color={theme.colors.cyan[400]} />
-                                  ) : (
-                                    <Eye size={15} color={theme.colors.cyan[400]} />
-                                  )}
-                                  <Text style={pending ? styles.acceptBtnText : [styles.invitePassiveActionText, { color: theme.colors.textPrimary }]}>
-                                    {pending ? "View & Start" : canOpenTimer ? "Open Timer" : "Open Board"}
-                                  </Text>
-                                </>
-                              )}
-                            </TouchableOpacity>
-                          </View>
-                        </View>
-                      );
-                    })}
-                  </>
-                ) : null}
-
-                {groupInvites.length > 0 ? (
-                  <Text
-                    style={[
-                      styles.sectionLabel,
-                      styles.inviteSubSectionLabel,
-                      { color: theme.colors.textMuted, marginTop: sortedLiveMiniInvites.length > 0 ? 14 : 0 },
-                    ]}
-                  >
-                    GROUP MISSION INVITES
-                  </Text>
-                ) : null}
-
-                {sortedGroupInvites.map((inv) => {
-                const pending = inv.status === "pending";
-                const meta = inviteCardMeta[inv.id];
-                const requesterLabel = inviteRequesterLabels[inv.inviter_id];
-                const missionTitle = meta?.challengeName ?? "Group mission";
-                const linkedHabitId =
-                  inv.status === "accepted" ? habitIdByChallengeId.get(inv.challenge_id) : undefined;
-                const canOpenMission = Boolean(linkedHabitId);
-                const highlighted =
-                  (highlightInviteId !== null && highlightInviteId === inv.id) ||
-                  (highlightChallengeId !== null && highlightChallengeId === inv.challenge_id);
-
-                const cardStyle = [
-                  styles.card,
-                  {
-                    backgroundColor: theme.colors.surface,
-                    borderColor: highlighted ? theme.colors.indigo[400] : theme.colors.border,
-                    borderWidth: highlighted ? 2 : 1,
-                    ...theme.shadow.card,
-                  },
-                ];
-
-                const groupStreaksButton = (
-                  <TouchableOpacity
-                    style={[
-                      styles.inviteGroupStreaksBtn,
-                      {
-                        backgroundColor: isDark ? "rgba(99, 102, 241, 0.16)" : "rgba(79, 70, 229, 0.1)",
-                        borderColor: isDark ? "rgba(129, 140, 248, 0.35)" : "rgba(79, 70, 229, 0.28)",
-                      },
-                    ]}
-                    onPress={() => router.push(`/challenge/${inv.challenge_id}`)}
-                    activeOpacity={0.88}
-                    accessibilityRole="button"
-                    accessibilityLabel={`View group streaks: ${missionTitle}`}
-                  >
-                    <Eye size={18} color={theme.colors.indigo[400]} />
-                    <Text style={[styles.inviteGroupStreaksBtnText, { color: theme.colors.indigo[400] }]}>
-                      View Group Streaks
-                    </Text>
-                  </TouchableOpacity>
-                );
-
-                const resolvedBlock = (
-                  <>
-                    <View style={styles.inviteStatusRow}>
-                      <InviteStatusPill
-                        variant={inv.status === "accepted" ? "accepted" : "declined"}
-                        label={inv.status === "accepted" ? "Accepted" : "Declined"}
-                        theme={theme}
-                      />
-                    </View>
-                    {inv.status === "accepted" ? (
-                      <Text style={[styles.inviteStatusSubtext, { color: theme.colors.textSecondary }]}>
-                        You're part of this group mission.
-                      </Text>
-                    ) : (
-                      <Text style={[styles.inviteStatusSubtext, { color: theme.colors.textMuted }]}>
-                        Kept on your list for your records.
-                      </Text>
-                    )}
-                    {inv.status === "accepted" ? groupStreaksButton : null}
-                    {inv.status === "accepted" && !canOpenMission ? (
-                      <Text style={[styles.inviteSyncHint, { color: theme.colors.textMuted }]}>
-                        Open this mission from Home once your device has finished syncing.
-                      </Text>
-                    ) : null}
-                  </>
-                );
-
-                if (pending) {
-                  return (
-                    <View key={inv.id} style={cardStyle}>
-                      <Animated.View
-                        pointerEvents="none"
-                        style={[
-                          styles.awaitingInvitePulse,
-                          {
-                            borderColor: theme.colors.cyan[400],
-                            backgroundColor: isDark ? "rgba(34, 211, 238, 0.05)" : "rgba(8, 145, 178, 0.04)",
-                          },
-                          awaitingInvitePulseStyle,
-                        ]}
-                      />
-                      <InviteMissionHeader meta={meta} theme={theme} isDark={isDark} />
-                      <InviteRequesterLine username={requesterLabel?.username} theme={theme} />
-                      <View style={styles.inviteStatusRow}>
-                        <InviteStatusPill variant="pending" label="Action needed" theme={theme} />
-                      </View>
-                      {groupStreaksButton}
-                      <Text style={[styles.inviteHint, { color: theme.colors.textSecondary }]}>
-                        Accept to add a matching mission and join everyone on this mission.
-                      </Text>
-                      {inviteNeedsCommunityForAccept ? (
-                        <Text style={[styles.invitePlusHint, { color: theme.colors.textMuted }]}>
-                          Group missions need Community. Tap Accept to view your Play Store options.
-                        </Text>
-                      ) : null}
-                      <View style={styles.inviteActions}>
-                        <TouchableOpacity
-                          style={[styles.declineBtn, { borderColor: theme.colors.border }]}
-                          onPress={() => void handleDeclineGroupInvite(inv)}
-                          disabled={inviteBusy === inv.id}
-                        >
-                          <Text style={{ color: theme.colors.textMuted, fontWeight: "700" }}>Decline</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={[
-                            styles.acceptBtn,
-                            {
-                              backgroundColor: theme.colors.indigo[600],
-                              ...theme.shadow.glow,
-                            },
-                          ]}
-                          onPress={() => void handleAcceptGroupInvite(inv)}
-                          disabled={inviteAcceptPremiumUnknown || inviteBusy === inv.id}
-                        >
-                          {inviteBusy === inv.id ? (
-                            <ActivityIndicator color={theme.colors.white} />
-                          ) : (
-                            <Text style={styles.acceptBtnText}>Accept</Text>
-                          )}
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                  );
-                }
-
-                if (inv.status === "accepted" && canOpenMission) {
-                  return (
-                    <View key={inv.id} style={cardStyle}>
-                      <InviteMissionHeader
-                        meta={meta}
-                        theme={theme}
-                        isDark={isDark}
-                        onPress={() => router.push(`/habit/${linkedHabitId}`)}
-                      />
-                      <InviteRequesterLine username={requesterLabel?.username} theme={theme} />
-                      {resolvedBlock}
-                    </View>
-                  );
-                }
-
-                return (
-                  <View key={inv.id} style={cardStyle}>
-                    <InviteMissionHeader meta={meta} theme={theme} isDark={isDark} />
-                    <InviteRequesterLine username={requesterLabel?.username} theme={theme} />
-                    {resolvedBlock}
-                  </View>
-                );
-                })}
+                {mixedInvites.map((entry) =>
+                  entry.kind === "live"
+                    ? renderLiveMiniInviteCard(entry.invite)
+                    : renderGroupInviteCard(entry.invite),
+                )}
                 {invitesHasMore ? (
                   <TouchableOpacity
                     onPress={() => void loadMoreInvites()}
