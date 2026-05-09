@@ -70,6 +70,13 @@ export function StreakMemoryGallery({
         : modalNoteTrim === REPAIR_MEMORY_NOTE_SQUAD || modalNoteTrim === REPAIR_MEMORY_NOTE_SOLO
           ? "STREAK REPAIR"
           : null;
+  const memoryCardBg = theme.colors.surface;
+  const memoryTextBg = isDark ? "#141126" : theme.colors.surface;
+  const memoryShellBg = theme.colors.surface;
+  const memoryMetaBg = theme.colors.surfaceElevated;
+  const memoryBorder = isDark ? "rgba(129, 140, 248, 0.32)" : theme.colors.border;
+  const memoryTextColor = theme.colors.textPrimary;
+  const memoryKickerColor = isDark ? theme.colors.cyan[400] : theme.colors.cyan[500];
 
   return (
     <>
@@ -113,7 +120,7 @@ export function StreakMemoryGallery({
                 onPress={() => setOpen({ dateStr, memory, missionDay })}
                 style={[
                   styles.card,
-                  { width: cardW, backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
+                  { width: cardW, backgroundColor: memoryCardBg, borderColor: theme.colors.border },
                 ]}
               >
                 {showImage ? (
@@ -123,16 +130,16 @@ export function StreakMemoryGallery({
                     style={[
                       styles.textOnlyThumb,
                       {
-                        borderColor: theme.colors.border,
+                        borderColor: memoryBorder,
                         borderLeftColor: theme.colors.indigo[500],
-                        backgroundColor: isDark ? "rgba(79, 70, 229, 0.14)" : "rgba(79, 70, 229, 0.08)",
+                        backgroundColor: memoryTextBg,
                       },
                     ]}
                   >
-                    <Text style={[styles.textOnlyThumbKicker, { color: theme.colors.cyan[400] }]}>
+                    <Text style={[styles.textOnlyThumbKicker, { color: memoryKickerColor }]}>
                       {repairKicker ?? "FIELD NOTE"}
                     </Text>
-                    <Text style={[styles.textOnlyThumbBody, { color: theme.colors.textPrimary }]} numberOfLines={6}>
+                    <Text style={[styles.textOnlyThumbBody, { color: memoryTextColor }]} numberOfLines={6}>
                       {noteTrim}
                     </Text>
                   </View>
@@ -205,7 +212,13 @@ export function StreakMemoryGallery({
 
       <Modal visible={open !== null} transparent animationType="fade" onRequestClose={() => setOpen(null)}>
         <Pressable style={[styles.viewerBackdrop, { backgroundColor: "rgba(0,0,0,0.85)" }]} onPress={() => setOpen(null)}>
-          <Pressable style={styles.viewerInner} onPress={(e) => e.stopPropagation()}>
+          <Pressable
+            style={[
+              styles.viewerInner,
+              { backgroundColor: memoryShellBg, borderColor: memoryBorder },
+            ]}
+            onPress={(e) => e.stopPropagation()}
+          >
             {modalHasRenderableImage ? (
               <Image source={{ uri: viewerUri! }} style={styles.viewerImg} resizeMode="contain" />
             ) : modalNoteTrim ? (
@@ -213,21 +226,21 @@ export function StreakMemoryGallery({
                 style={[
                   styles.viewerTextOnlyHero,
                   {
-                    borderColor: theme.colors.border,
+                    borderColor: memoryBorder,
                     borderLeftColor: theme.colors.indigo[500],
-                    backgroundColor: isDark ? "rgba(79, 70, 229, 0.16)" : "rgba(79, 70, 229, 0.09)",
+                    backgroundColor: memoryTextBg,
                   },
                 ]}
               >
-                <Text style={[styles.viewerTextOnlyKicker, { color: theme.colors.cyan[400] }]}>
+                <Text style={[styles.viewerTextOnlyKicker, { color: memoryKickerColor }]}>
                   {modalRepairKicker ?? "FIELD NOTE"}
                 </Text>
-                <Text style={[styles.viewerTextOnlyBody, { color: theme.colors.textPrimary }]}>{modalNoteTrim}</Text>
+                <Text style={[styles.viewerTextOnlyBody, { color: memoryTextColor }]}>{modalNoteTrim}</Text>
               </View>
             ) : null}
-            <View style={[styles.viewerMeta, { backgroundColor: theme.colors.surfaceElevated, borderColor: theme.colors.border }]}>
+            <View style={[styles.viewerMeta, { backgroundColor: memoryMetaBg, borderColor: memoryBorder }]}>
               <View style={styles.viewerMetaTop}>
-                <Text style={[styles.viewerDate, { color: theme.colors.cyan[400] }]}>{open?.dateStr}</Text>
+                <Text style={[styles.viewerDate, { color: memoryKickerColor }]}>{open?.dateStr}</Text>
                 {openDayLabel ? (
                   <Text style={[styles.viewerDay, { color: theme.colors.indigo[400] }]}>{openDayLabel}</Text>
                 ) : null}
