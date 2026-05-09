@@ -51,7 +51,7 @@ import {
   getChallengeGroup,
   getChallengeGroupsByIds,
   getProfileLabelsForIds,
-  listInvitesForMe,
+  listInvitesForMePage,
   refreshCohortPeerHabits,
   type ProfileLabel,
 } from "../../src/lib/groupChallengesApi";
@@ -71,12 +71,13 @@ import {
 import {
   declineLiveMiniInvite,
   formatLiveMiniElapsed,
-  listLiveMiniInvitesForMe,
+  listLiveMiniInvitesForMePage,
   type LiveMiniInviteForMe,
 } from "../../src/lib/liveMiniMissionsApi";
 import { levelFromTotalXp, xpInCurrentLevel } from "../../src/utils/xpLevel";
 
 const WEEKLY_RANK_PAGE_SIZE = 20;
+const COMPETE_INVITES_PAGE_SIZE = 20;
 const COMPETE_INVITES_RELOAD_TTL_MS = 30_000;
 const COMPETE_LEAGUE_RELOAD_TTL_MS = 60_000;
 
@@ -497,6 +498,9 @@ export default function CompeteScreen() {
   const [inviteRequesterLabels, setInviteRequesterLabels] = useState<Record<string, ProfileLabel>>({});
   const [inviteBusy, setInviteBusy] = useState<string | null>(null);
   const [invitesLoading, setInvitesLoading] = useState(false);
+  const [invitesLoadingMore, setInvitesLoadingMore] = useState(false);
+  const [groupInvitesNextOffset, setGroupInvitesNextOffset] = useState<number | null>(null);
+  const [liveMiniInvitesNextOffset, setLiveMiniInvitesNextOffset] = useState<number | null>(null);
   const [leaveEnrollmentId, setLeaveEnrollmentId] = useState<string | null>(null);
   const [highlightInviteId, setHighlightInviteId] = useState<string | null>(null);
   const [highlightChallengeId, setHighlightChallengeId] = useState<string | null>(null);
@@ -514,6 +518,7 @@ export default function CompeteScreen() {
   const pendingLeagueForceLoadRef = useRef(false);
   const lastInvitesLoadAtRef = useRef(0);
   const lastLeagueLoadAtRef = useRef(0);
+  const invitesLoadMoreInFlightRef = useRef(false);
   const groupInvitesRef = useRef<ChallengeInviteRow[]>([]);
   const liveMiniInvitesRef = useRef<LiveMiniInviteForMe[]>([]);
   const invitePulse = useRef(new Animated.Value(0)).current;
@@ -531,7 +536,10 @@ export default function CompeteScreen() {
     setInviteCardMeta({});
     setInviteRequesterLabels({});
     setInviteBusy(null);
-    setInvitesLoading(Boolean(userId && isSupabaseConfigured()));
+    setInvitesLoading(false);
+    setInvitesLoadingMore(false);
+    setGroupInvitesNextOffset(null);
+    setLiveMiniInvitesNextOffset(null);
     setLeagueRows([]);
     setLeagueLoading(false);
     setLeagueLoadingMore(false);
@@ -539,6 +547,7 @@ export default function CompeteScreen() {
     setLeagueError(userId ? null : "Sign in to view Weekly Ranks.");
     setLeaguePlayerDrawer(null);
     invitesLoadInFlightRef.current = false;
+    invitesLoadMoreInFlightRef.current = false;
     leagueLoadInFlightRef.current = false;
     pendingInvitesForceLoadRef.current = false;
     pendingLeagueForceLoadRef.current = false;
@@ -593,6 +602,8 @@ export default function CompeteScreen() {
       setLiveMiniInvites([]);
       setInviteCardMeta({});
       setInviteRequesterLabels({});
+      setGroupInvitesNextOffset(null);
+      setLiveMiniInvitesNextOffset(null);
       syncInviteBadgeCount(0);
       return;
     }
@@ -608,14 +619,22 @@ export default function CompeteScreen() {
       setInvitesLoading(true);
     }
     try {
-      const [rows, liveRows] = await traceAsync(
+      const [groupPage, livePage] = await traceAsync(
         "compete.invites.loadLists",
-        () => Promise.all([listInvitesForMe(), listLiveMiniInvitesForMe()]),
+        () =>
+          Promise.all([
+            listInvitesForMePage({ offset: 0, limit: COMPETE_INVITES_PAGE_SIZE }),
+            listLiveMiniInvitesForMePage({ offset: 0, limit: COMPETE_INVITES_PAGE_SIZE }),
+          ]),
         { slowMs: 900 },
       );
       if (userIdRef.current !== requestedUserId) return;
+      const rows = groupPage.items;
+      const liveRows = livePage.items;
       setGroupInvites(rows);
       setLiveMiniInvites(liveRows);
+      setGroupInvitesNextOffset(groupPage.nextOffset);
+      setLiveMiniInvitesNextOffset(livePage.nextOffset);
       syncInviteBadgeCount(
         rows.filter((i) => i.status === "pending").length +
           liveRows.filter((i) => i.participant.status === "invited").length,
@@ -656,6 +675,84 @@ export default function CompeteScreen() {
       }
     }
   }, [syncInviteBadgeCount, userId]);
+
+  const loadMoreInvites = useCallback(async () => {
+    if (
+      invitesLoading ||
+      invitesLoadingMore ||
+      invitesLoadMoreInFlightRef.current ||
+      (groupInvitesNextOffset == null && liveMiniInvitesNextOffset == null)
+    ) {
+      return;
+    }
+    const requestedUserId = userId;
+    if (!isSupabaseConfigured() || !requestedUserId) return;
+
+    invitesLoadMoreInFlightRef.current = true;
+    setInvitesLoadingMore(true);
+    try {
+      const [groupPage, livePage] = await traceAsync(
+        "compete.invites.loadMore",
+        () =>
+          Promise.all([
+            groupInvitesNextOffset == null
+              ? Promise.resolve(null)
+              : listInvitesForMePage({ offset: groupInvitesNextOffset, limit: COMPETE_INVITES_PAGE_SIZE }),
+            liveMiniInvitesNextOffset == null
+              ? Promise.resolve(null)
+              : listLiveMiniInvitesForMePage({
+                  offset: liveMiniInvitesNextOffset,
+                  limit: COMPETE_INVITES_PAGE_SIZE,
+                }),
+          ]),
+        { slowMs: 900 },
+      );
+      if (userIdRef.current !== requestedUserId) return;
+
+      if (groupPage) {
+        setGroupInvites((prev) => {
+          const seen = new Set(prev.map((invite) => invite.id));
+          return [...prev, ...groupPage.items.filter((invite) => !seen.has(invite.id))];
+        });
+        setGroupInvitesNextOffset(groupPage.nextOffset);
+      }
+      if (livePage) {
+        setLiveMiniInvites((prev) => {
+          const seen = new Set(prev.map((invite) => invite.participant.id));
+          return [...prev, ...livePage.items.filter((invite) => !seen.has(invite.participant.id))];
+        });
+        setLiveMiniInvitesNextOffset(livePage.nextOffset);
+      }
+
+      const rows = groupPage?.items ?? [];
+      if (rows.length > 0) {
+        const meta: Record<string, InviteCardMeta> = {};
+        const [groups, labels] = await Promise.all([
+          getChallengeGroupsByIds(rows.map((inv) => inv.challenge_id)),
+          getProfileLabelsForIds(rows.map((inv) => inv.inviter_id)),
+        ]);
+        if (userIdRef.current !== requestedUserId) return;
+        const byId = new Map(groups.map((group) => [group.id, group]));
+        for (const inv of rows) {
+          const group = byId.get(inv.challenge_id);
+          if (group) meta[inv.id] = parseInviteCardMeta(group);
+        }
+        setInviteCardMeta((prev) => ({ ...prev, ...meta }));
+        setInviteRequesterLabels((prev) => ({ ...prev, ...labels }));
+      }
+    } catch (e: unknown) {
+      console.warn("[habitPro] loadMoreInvites", e);
+    } finally {
+      invitesLoadMoreInFlightRef.current = false;
+      if (userIdRef.current === requestedUserId) setInvitesLoadingMore(false);
+    }
+  }, [
+    groupInvitesNextOffset,
+    invitesLoading,
+    invitesLoadingMore,
+    liveMiniInvitesNextOffset,
+    userId,
+  ]);
 
   const loadLeague = useCallback(async (options?: { force?: boolean }) => {
     const requestedUserId = userId;
@@ -742,11 +839,13 @@ export default function CompeteScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      void loadInvites();
+      if (segment === "challenges" && challengesSubTab === "invites") {
+        void loadInvites();
+      }
       if (segment === "leaderboard") {
         void loadLeague();
       }
-    }, [loadInvites, loadLeague, segment]),
+    }, [challengesSubTab, loadInvites, loadLeague, segment]),
   );
 
   useFocusEffect(
@@ -762,6 +861,12 @@ export default function CompeteScreen() {
       void loadLeague();
     }
   }, [loadLeague, segment]);
+
+  useEffect(() => {
+    if (segment === "challenges" && challengesSubTab === "invites") {
+      void loadInvites();
+    }
+  }, [challengesSubTab, loadInvites, segment]);
 
   useEffect(() => {
     if (segment !== "leaderboard") return undefined;
@@ -995,6 +1100,25 @@ export default function CompeteScreen() {
       liveMiniInvites.filter((i) => i.participant.status === "invited").length,
     [groupInvites, liveMiniInvites],
   );
+  const invitesHasMore = groupInvitesNextOffset != null || liveMiniInvitesNextOffset != null;
+  const handleContentScroll = useCallback(
+    (event: {
+      nativeEvent: {
+        contentOffset: { y: number };
+        contentSize: { height: number };
+        layoutMeasurement: { height: number };
+      };
+    }) => {
+      if (segment !== "challenges" || challengesSubTab !== "invites") return;
+      if (!invitesHasMore || invitesLoadingMore) return;
+      const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+      const distanceFromBottom = contentSize.height - (contentOffset.y + layoutMeasurement.height);
+      if (distanceFromBottom < 260) {
+        void loadMoreInvites();
+      }
+    },
+    [challengesSubTab, invitesHasMore, invitesLoadingMore, loadMoreInvites, segment],
+  );
   const tier = useMemo(() => weeklyTierLabel(weeklyScore), [weeklyScore]);
   const activeIds = new Set(enrollments.map((e) => e.templateId));
   const catalog = useMemo(
@@ -1142,6 +1266,8 @@ export default function CompeteScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: bottomPad }}
         keyboardShouldPersistTaps="handled"
+        onScroll={handleContentScroll}
+        scrollEventThrottle={16}
       >
         {segment === "leaderboard" ? (
           <>
@@ -1677,6 +1803,30 @@ export default function CompeteScreen() {
                   </View>
                 );
                 })}
+                {invitesHasMore ? (
+                  <TouchableOpacity
+                    onPress={() => void loadMoreInvites()}
+                    disabled={invitesLoadingMore}
+                    activeOpacity={0.85}
+                    style={[
+                      styles.loadMoreLeague,
+                      {
+                        backgroundColor: isDark ? "rgba(148, 163, 184, 0.08)" : theme.colors.surfaceElevated,
+                        borderColor: theme.colors.border,
+                        borderWidth: 1,
+                        opacity: invitesLoadingMore ? 0.72 : 1,
+                      },
+                    ]}
+                  >
+                    {invitesLoadingMore ? (
+                      <ActivityIndicator size="small" color={theme.colors.cyan[400]} />
+                    ) : (
+                      <Text style={[styles.loadMoreLeagueText, { color: theme.colors.textSecondary }]}>
+                        Load older invites
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+                ) : null}
               </>
             )}
           </>
