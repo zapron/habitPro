@@ -378,11 +378,42 @@ function miniToRow(sessionUserId: string, m: MiniMission) {
   };
 }
 
-export async function pullFromSupabase(userId: string): Promise<RemoteSnapshot> {
+export async function pullCohortPeerHabitsFromSupabase(userId: string): Promise<Habit[]> {
+  const supabase = getSupabase();
+  if (!supabase) return [];
+
+  const { data: memberRows } = await supabase
+    .from("challenge_members")
+    .select("challenge_id")
+    .eq("user_id", userId);
+
+  const groupIds = [...new Set((memberRows ?? []).map((m) => m.challenge_id))];
+  if (groupIds.length === 0) return [];
+
+  const { data: peerRows, error: peerErr } = await supabase
+    .from("habits")
+    .select("*")
+    .in("challenge_group_id", groupIds)
+    .neq("user_id", userId);
+  if (peerErr) throw peerErr;
+
+  const cohortPeerHabits = (peerRows ?? []).map((r) => habitFromRow(r));
+  const alignGroupIds = cohortPeerHabits
+    .map((h) => h.challengeGroupId)
+    .filter((id): id is string => Boolean(id));
+  const groupMeta = await fetchChallengeGroupAlignmentMeta(supabase, alignGroupIds);
+  return alignHabitsToChallengeGroups(cohortPeerHabits, groupMeta);
+}
+
+export async function pullFromSupabase(
+  userId: string,
+  options?: { includeCohortPeerHabits?: boolean },
+): Promise<RemoteSnapshot> {
   const supabase = getSupabase();
   if (!supabase) {
     return { habits: [], miniMissions: [], xp: 0, username: null, cohortPeerHabits: [] };
   }
+  const includeCohortPeerHabits = options?.includeCohortPeerHabits ?? true;
 
   const [habitsRes, miniRes, profileRes, repairsRes] = await Promise.all([
     supabase.from("habits").select("*").eq("user_id", userId),
@@ -421,32 +452,17 @@ export async function pullFromSupabase(userId: string): Promise<RemoteSnapshot> 
       ? rawUser.username.trim().toLowerCase()
       : null;
 
-  const { data: memberRows } = await supabase
-    .from("challenge_members")
-    .select("challenge_id")
-    .eq("user_id", userId);
-
-  const groupIds = [...new Set((memberRows ?? []).map((m) => m.challenge_id))];
-  let cohortPeerHabits: Habit[] = [];
-  if (groupIds.length > 0) {
-    const { data: peerRows, error: peerErr } = await supabase
-      .from("habits")
-      .select("*")
-      .in("challenge_group_id", groupIds)
-      .neq("user_id", userId);
-    if (peerErr) throw peerErr;
-    cohortPeerHabits = (peerRows ?? []).map((r) => habitFromRow(r));
-  }
+  const cohortPeerHabits = includeCohortPeerHabits
+    ? await pullCohortPeerHabitsFromSupabase(userId)
+    : [];
 
   const alignGroupIds = [
     ...habits.map((h) => h.challengeGroupId).filter((id): id is string => Boolean(id)),
-    ...cohortPeerHabits.map((h) => h.challengeGroupId).filter((id): id is string => Boolean(id)),
   ];
   const groupMeta = await fetchChallengeGroupAlignmentMeta(supabase, alignGroupIds);
   const alignedHabits = alignHabitsToChallengeGroups(habits, groupMeta);
-  const alignedPeers = alignHabitsToChallengeGroups(cohortPeerHabits, groupMeta);
 
-  return { habits: alignedHabits, miniMissions, xp, username, cohortPeerHabits: alignedPeers };
+  return { habits: alignedHabits, miniMissions, xp, username, cohortPeerHabits };
 }
 
 export async function pushFullState(

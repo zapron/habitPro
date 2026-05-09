@@ -92,9 +92,13 @@ export function useRemoteStoreRefreshOnFocus(enabled = true) {
       if (!options?.force && now - lastRefreshAt < REMOTE_FOCUS_REFRESH_TTL_MS) {
         return;
       }
-      const remote = await pullFromSupabase(userId);
       const local = useHabitStore.getState();
-      const { snapshot, preserved } = preserveLocalMiniProgress(remote, local);
+      const remote = await pullFromSupabase(userId, { includeCohortPeerHabits: false });
+      const remoteWithLocalPeers = {
+        ...remote,
+        cohortPeerHabits: local.cohortPeerHabits,
+      };
+      const { snapshot, preserved } = preserveLocalMiniProgress(remoteWithLocalPeers, local);
       void saveAccountSnapshotBackup(userId, local, "pre-focus-refresh");
       useHabitStore.setState(snapshot);
       void saveAccountSnapshotBackup(userId, snapshot, "focus-refresh");

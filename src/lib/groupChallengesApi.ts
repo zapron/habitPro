@@ -10,7 +10,7 @@ import type {
 } from "../types/groupChallenge";
 import type { PageRequest, PageResult } from "../types/paging";
 import { useHabitStore } from "../store/habitStore";
-import { pullFromSupabase } from "./sync";
+import { pullCohortPeerHabitsFromSupabase } from "./sync";
 import { getRemoteSyncUserId } from "./syncQueue";
 import { getSupabase } from "./supabase";
 
@@ -648,8 +648,8 @@ export async function markAllNotificationsRead(): Promise<void> {
 export async function refreshCohortPeerHabits(): Promise<void> {
   const uid = getRemoteSyncUserId();
   if (!uid) return;
-  const snap = await pullFromSupabase(uid);
-  useHabitStore.getState().setCohortPeerHabits(snap.cohortPeerHabits);
+  const cohortPeerHabits = await pullCohortPeerHabitsFromSupabase(uid);
+  useHabitStore.getState().setCohortPeerHabits(cohortPeerHabits);
 }
 
 export {
