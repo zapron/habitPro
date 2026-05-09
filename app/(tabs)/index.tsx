@@ -125,6 +125,10 @@ function MiniMissionLiveGradientLabel({ count, reduceMotion }: { count: number; 
 const SECTION_GAP = 12;
 const HEADER_BOTTOM_GAP = 6;
 
+type HomeSpark =
+  | { kind: "lead" | "chase"; title: string; body: string; challengeId: string }
+  | { kind: "mini" | "xp" | "reports"; title: string; body: string };
+
 function MainMissionLegend({
   theme,
   isDark,
@@ -261,6 +265,7 @@ export default function Home() {
   const { session, syncReady, syncError, retryHydrate } = useAuth();
   const reduceMotion = useReducedMotion();
   const habits = useHabitStore((state) => state.habits);
+  const cohortPeerHabits = useHabitStore((state) => state.cohortPeerHabits);
   const miniMissions = useHabitStore((state) => state.miniMissions);
   const xp = useHabitStore((state) => state.xp);
   const [activeTab, setActiveTab] = useState<"missions" | "reports">(
@@ -417,6 +422,88 @@ export default function Home() {
       ? miniMissionStats.live
       : miniMissionStats.waiting;
 
+  const homeSpark = useMemo<HomeSpark | null>(() => {
+    const groupHabits = habits.filter(
+      (h) =>
+        h.challengeGroupId &&
+        !h.missionReport &&
+        isMainMissionPlayableOnHome(h, missionNow),
+    );
+
+    let bestLead: HomeSpark | null = null;
+    let bestLeadGap = 0;
+    let bestChase: HomeSpark | null = null;
+    let bestChaseGap = 0;
+    for (const habit of groupHabits) {
+      const peers = cohortPeerHabits.filter((p) => p.challengeGroupId === habit.challengeGroupId);
+      if (peers.length === 0 || !habit.challengeGroupId) continue;
+      const peerMaxStreak = Math.max(...peers.map((p) => p.streak ?? 0));
+      const leadBy = habit.streak - peerMaxStreak;
+      const behindBy = peerMaxStreak - habit.streak;
+      if (leadBy > bestLeadGap) {
+        bestLeadGap = leadBy;
+        bestLead = {
+          kind: "lead",
+          title: "You are leading the squad",
+          body: `Hold ${habit.title} today to keep a ${leadBy}d gap.`,
+          challengeId: habit.challengeGroupId,
+        };
+      }
+      if (behindBy > bestChaseGap) {
+        bestChaseGap = behindBy;
+        bestChase = {
+          kind: "chase",
+          title: "A squadmate moved ahead",
+          body: `${behindBy}d gap in ${habit.title}. One check-in keeps you close.`,
+          challengeId: habit.challengeGroupId,
+        };
+      }
+    }
+    if (bestLead) return bestLead;
+    if (bestChase) return bestChase;
+
+    if (miniMissionStats.live > 0) {
+      return {
+        kind: "mini",
+        title: miniMissionStats.live === 1 ? "One mini mission is live" : `${miniMissionStats.live} mini missions are live`,
+        body: "Finish before the timer cools off.",
+      };
+    }
+
+    const xpLeft = Math.max(0, XP_PER_LEVEL - xpInLevel);
+    if (xpLeft > 0 && xpLeft <= 50) {
+      return {
+        kind: "xp",
+        title: `${xpLeft} XP from Level ${level + 1}`,
+        body: "A check-in or quick mini can push you closer.",
+      };
+    }
+
+    if (stats.pending > 0) {
+      return {
+        kind: "reports",
+        title: stats.pending === 1 ? "One mission needs review" : `${stats.pending} missions need review`,
+        body: "Lock the outcome from Reports when you are ready.",
+      };
+    }
+
+    return null;
+  }, [cohortPeerHabits, habits, level, miniMissionStats.live, missionNow, stats.pending, xpInLevel]);
+
+  const onHomeSparkPress = useCallback(() => {
+    if (!homeSpark) return;
+    if (homeSpark.kind === "lead" || homeSpark.kind === "chase") {
+      router.push(`/challenge/${homeSpark.challengeId}`);
+      return;
+    }
+    if (homeSpark.kind === "reports") {
+      setActiveTab("reports");
+      setReportsSegment("pending");
+      return;
+    }
+    router.push("/mini");
+  }, [homeSpark, router]);
+
   const greetingText = useMemo(() => getGreeting(), []);
 
   const headerOpacity = useRef(new Animated.Value(0)).current;
@@ -501,6 +588,21 @@ export default function Home() {
       colors={[theme.colors.indigo[400]]}
     />
   );
+
+  const SparkIcon = homeSpark?.kind === "lead"
+    ? Trophy
+    : homeSpark?.kind === "mini"
+      ? Bolt
+      : homeSpark?.kind === "xp"
+        ? Zap
+        : Target;
+  const sparkAccent = homeSpark?.kind === "lead"
+    ? theme.colors.yellow[400]
+    : homeSpark?.kind === "chase"
+      ? theme.colors.indigo[400]
+      : homeSpark?.kind === "mini"
+        ? theme.colors.amber[500]
+        : theme.colors.cyan[400];
 
   const readyForCoachMarks = storeHydrated && !waitingForFirstSync;
   useCoachMark(
@@ -690,6 +792,24 @@ export default function Home() {
               ]}
             />
           </View>
+          {homeSpark ? (
+            <TouchableOpacity
+              style={styles.sparkInlineRow}
+              activeOpacity={0.86}
+              onPress={onHomeSparkPress}
+              accessibilityRole="button"
+            >
+              <SparkIcon size={13} color={sparkAccent} strokeWidth={2.4} />
+              <Text style={[styles.sparkInlineText, { color: theme.colors.textSecondary }]} numberOfLines={1}>
+                <Text style={[styles.sparkInlineTitle, { color: theme.colors.textPrimary }]}>
+                  {homeSpark.title}
+                </Text>
+                {"  "}
+                {homeSpark.body}
+              </Text>
+              <ChevronRight size={14} color={theme.colors.textMuted} />
+            </TouchableOpacity>
+          ) : null}
         </View>
 
         <CoachMarkTarget id="home_mini_missions">
@@ -1221,6 +1341,22 @@ const styles = StyleSheet.create({
   xpValue: { fontSize: 11, fontWeight: "600" },
   xpTrack: { height: 6, borderRadius: 3, overflow: "hidden" },
   xpFill: { height: "100%", borderRadius: 3 },
+  sparkInlineRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 7,
+    paddingTop: 6,
+    minHeight: 22,
+  },
+  sparkInlineText: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: "700",
+  },
+  sparkInlineTitle: { fontWeight: "900" },
 });
 
 const skeletonStyles = StyleSheet.create({
