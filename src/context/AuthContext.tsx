@@ -50,7 +50,10 @@ type AuthContextValue = {
   passwordRecoveryPending: boolean;
   clearPasswordRecovery: () => void;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
-  signUp: (email: string, password: string) => Promise<{ error: Error | null }>;
+  signUp: (
+    email: string,
+    password: string,
+  ) => Promise<{ error: Error | null; needsEmailConfirmation: boolean }>;
   /** Google OAuth (PKCE + system browser). Configure provider + redirect URLs in Supabase. */
   signInWithGoogle: () => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
@@ -241,7 +244,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signUp = useCallback(async (email: string, password: string) => {
     const supabase = getSupabase();
     if (!supabase) {
-      return { error: new Error("Supabase is not configured.") };
+      return { error: new Error("Supabase is not configured."), needsEmailConfirmation: false };
     }
     const emailRedirectTo = getSignupConfirmationRedirectUrl();
     const { data, error } = await supabase.auth.signUp({
@@ -250,7 +253,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       options: { emailRedirectTo },
     });
     if (data.session) setSession(data.session);
-    return { error: error ?? null };
+    return { error: error ?? null, needsEmailConfirmation: !data.session };
   }, []);
 
   const signInWithGoogle = useCallback(async () => {

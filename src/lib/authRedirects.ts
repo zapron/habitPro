@@ -1,14 +1,11 @@
 import * as Linking from "expo-linking";
 import { Platform } from "react-native";
+import { getHabitProWebUrl } from "./env";
 
 /**
- * Email signup confirmation must **not** use `https://auth.expo.io/...` — that proxy is OAuth-only.
- * We use the same deep link as Google PKCE (`/auth/callback`) so `exchangeCodeForSession` applies.
- *
- * Supabase dashboard: set **Site URL** to `habitpro://auth/callback` (or `habitpro://`), **not** auth.expo.io.
- * See `docs/email-auth-supabase.md`.
+ * Email signup confirmation lands on the public website. The domain can move later:
+ * set EXPO_PUBLIC_HABITPRO_WEB_URL / EXPO_PUBLIC_SITE_URL and allow-list that URL in Supabase.
  */
-const DEFAULT_WEB_ORIGIN = "https://YOUR-PRODUCTION-SITE.example";
 const LOCAL_WEB_ORIGIN_PATTERN = /^(https?:\/\/)(localhost|127\.0\.0\.1|0\.0\.0\.0)(:\d+)?$/i;
 
 const normalizeOrigin = (origin: string | null | undefined) => {
@@ -17,7 +14,9 @@ const normalizeOrigin = (origin: string | null | undefined) => {
 };
 
 const getConfiguredWebOrigin = () =>
-  normalizeOrigin(process.env.EXPO_PUBLIC_SITE_URL) ?? DEFAULT_WEB_ORIGIN;
+  normalizeOrigin(process.env.EXPO_PUBLIC_SITE_URL) ??
+  normalizeOrigin(process.env.EXPO_PUBLIC_HABITPRO_WEB_URL) ??
+  getHabitProWebUrl();
 
 const getRuntimeWebOrigin = () => {
   if (Platform.OS !== "web" || typeof window === "undefined") return null;
@@ -35,9 +34,8 @@ const buildWebAuthUrl = (path: string) => {
   return `${getRuntimeWebOrigin() ?? getConfiguredWebOrigin()}${normalizedPath}`;
 };
 
-/** Email confirmation + OAuth PKCE return — must be in Supabase Redirect URLs (e.g. `habitpro://auth/callback`). */
-export const getSignupConfirmationRedirectUrl = () =>
-  Platform.OS === "web" ? buildWebAuthUrl("/auth/callback") : Linking.createURL("/auth/callback");
+/** Email confirmation landing page. The app clears password fields and asks the user to sign in after verifying. */
+export const getSignupConfirmationRedirectUrl = () => buildWebAuthUrl("/auth/verified");
 
 /** For `resetPasswordForEmail` when you add a forgot-password screen (same as v2). */
 export const getPasswordResetRedirectUrl = () =>

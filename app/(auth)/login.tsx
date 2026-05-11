@@ -13,7 +13,7 @@ import {
   StatusBar,
 } from "react-native";
 import { useRouter } from "expo-router";
-import { Eye, EyeOff } from "lucide-react-native";
+import { Eye, EyeOff, MailCheck } from "lucide-react-native";
 import { Screen } from "../../src/components/Screen";
 import { useTheme } from "../../src/context/ThemeContext";
 import { useAuth } from "../../src/context/AuthContext";
@@ -42,9 +42,11 @@ export default function LoginScreen() {
   const [focused, setFocused] = useState<FocusKey>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [pendingSignupEmail, setPendingSignupEmail] = useState<string | null>(null);
 
   useEffect(() => {
     if (supabaseConfigured && session) {
+      setPendingSignupEmail(null);
       router.replace("/");
     }
   }, [supabaseConfigured, session, router]);
@@ -62,7 +64,8 @@ export default function LoginScreen() {
   };
 
   const onSubmit = async () => {
-    if (!email.trim()) {
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail) {
       Alert.alert("Missing email", "Enter your email.");
       return;
     }
@@ -77,17 +80,28 @@ export default function LoginScreen() {
       }
     }
     setLoading(true);
-    const { error } = isSignUp ? await signUp(email, password) : await signIn(email, password);
-    setLoading(false);
-    if (error) {
-      Alert.alert(isSignUp ? "Sign up failed" : "Sign in failed", error.message);
+    if (isSignUp) {
+      const { error, needsEmailConfirmation } = await signUp(trimmedEmail, password);
+      setLoading(false);
+      if (error) {
+        Alert.alert("Sign up failed", error.message);
+        return;
+      }
+      setEmail(trimmedEmail);
+      setPassword("");
+      setConfirmPassword("");
+      setShowPassword(false);
+      setShowConfirmPassword(false);
+      if (needsEmailConfirmation) {
+        setPendingSignupEmail(trimmedEmail);
+      }
       return;
     }
-    if (isSignUp) {
-      Alert.alert(
-        "Check your inbox",
-        "If email confirmation is enabled in Supabase, confirm your email before signing in.",
-      );
+    const { error } = await signIn(trimmedEmail, password);
+    setLoading(false);
+    if (error) {
+      Alert.alert("Sign in failed", error.message);
+      return;
     }
   };
 
@@ -134,7 +148,58 @@ export default function LoginScreen() {
             </View>
           )}
 
-          {supabaseConfigured && (
+          {supabaseConfigured && pendingSignupEmail ? (
+            <View
+              style={[
+                styles.confirmCard,
+                {
+                  backgroundColor: theme.colors.surface,
+                  borderColor: theme.colors.border,
+                },
+              ]}
+            >
+              <View
+                style={[
+                  styles.confirmIcon,
+                  { backgroundColor: isDark ? "rgba(34, 211, 238, 0.14)" : "#e6fbff" },
+                ]}
+              >
+                <MailCheck size={30} color={theme.colors.cyan[500]} />
+              </View>
+              <Text style={[styles.confirmTitle, { color: theme.colors.textPrimary }]}>
+                Check your email
+              </Text>
+              <Text style={[styles.confirmBody, { color: theme.colors.textSecondary }]}>
+                We sent a verification link to{" "}
+                <Text style={{ color: theme.colors.textPrimary, fontWeight: "900" }}>
+                  {pendingSignupEmail}
+                </Text>
+                . After verifying, come back and sign in with your password.
+              </Text>
+              <Button
+                title="I verified, sign in"
+                onPress={() => {
+                  setPendingSignupEmail(null);
+                  setIsSignUp(false);
+                }}
+                style={{ marginTop: 8 }}
+              />
+              <TouchableOpacity
+                style={styles.confirmSecondary}
+                onPress={() => {
+                  setPendingSignupEmail(null);
+                  setIsSignUp(true);
+                  setEmail("");
+                }}
+                activeOpacity={0.8}
+                accessibilityRole="button"
+              >
+                <Text style={[styles.confirmSecondaryText, { color: theme.colors.indigo[500] }]}>
+                  Use another email
+                </Text>
+              </TouchableOpacity>
+            </View>
+          ) : supabaseConfigured && (
             <>
               <Text style={[styles.label, { color: theme.colors.textSecondary }]}>Email</Text>
               <TextInput
@@ -362,6 +427,40 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   bannerText: { fontSize: 13, lineHeight: 19, textAlign: "center" },
+  confirmCard: {
+    alignItems: "center",
+    borderRadius: 18,
+    borderWidth: 1,
+    gap: 12,
+    padding: 20,
+    width: "100%",
+  },
+  confirmIcon: {
+    alignItems: "center",
+    borderRadius: 999,
+    height: 62,
+    justifyContent: "center",
+    width: 62,
+  },
+  confirmTitle: {
+    fontSize: 24,
+    fontWeight: "900",
+    textAlign: "center",
+  },
+  confirmBody: {
+    fontSize: 14,
+    fontWeight: "600",
+    lineHeight: 21,
+    textAlign: "center",
+  },
+  confirmSecondary: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  confirmSecondaryText: {
+    fontSize: 14,
+    fontWeight: "800",
+  },
   googleBtn: {
     borderWidth: 1,
     borderRadius: 14,
