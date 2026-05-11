@@ -52,6 +52,8 @@ export interface Habit {
   challengeGroupId?: string | null;
   /** IANA timezone of the challenge creator; used for which calendar day counts. */
   challengeCreatorTimezone?: string | null;
+  /** IANA timezone captured when this mission was created; enables calendar-day reset. */
+  missionTimezone?: string | null;
   /** Calendar dates repaired via Streak Repair (treated like completed for streak computation). */
   repairedDates?: string[];
 
@@ -108,6 +110,8 @@ export type AddHabitInput = {
   startDate?: string;
   /** Manual mode: fixed mission end (from group template). */
   endDate?: string;
+  /** IANA timezone for calendar-day missions; defaults to device timezone. */
+  missionTimezone?: string | null;
 };
 
 export type HabitStore = {

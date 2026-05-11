@@ -1,5 +1,5 @@
 import type { Habit } from "../types/habit";
-import { getActiveMissionDaySlot } from "./missionDaySlots";
+import { getActiveMissionDaySlot, getHabitActiveMissionDaySlot, usesCalendarDayMission } from "./missionDaySlots";
 
 /**
  * True when the mission timer/window has ended but the grid is not fully complete.
@@ -8,6 +8,9 @@ import { getActiveMissionDaySlot } from "./missionDaySlots";
 export function isHabitMissionWindowClosed(habit: Habit, nowMs: number): boolean {
   if (habit.isCompleted) return false;
   const totalDays = Math.max(1, habit.totalDays ?? 21);
+  if (usesCalendarDayMission(habit)) {
+    return getHabitActiveMissionDaySlot(habit, nowMs) === null;
+  }
   if (
     habit.mode === "manual" &&
     habit.endDate &&

@@ -6,6 +6,7 @@ import { AnimatedFire } from './AnimatedFire';
 import { FireLottie } from "./FireLottie";
 import { SplitFlapTimeDisplay, type ProgressivePhase } from './SplitFlapTimeDisplay';
 import type { HabitMode } from '../types/habit';
+import { calendarDayEndUtcMsForTimestamp } from '../utils/missionCalendarKeys';
 
 const FIRE_LOTTIE_URI = "https://fonts.gstatic.com/s/e/notoemoji/latest/1f525/lottie.json";
 
@@ -13,6 +14,7 @@ interface TimerProps {
     startDate: string;
     mode?: HabitMode;
     endDate?: string;
+    missionTimezone?: string | null;
 }
 
 const LEGEND_BY_PHASE: Record<ProgressivePhase, readonly string[]> = {
@@ -36,9 +38,10 @@ function fallbackDisplay(phase: ProgressivePhase): string {
     }
 }
 
-export function Timer({ startDate, mode = 'autopilot', endDate }: TimerProps) {
+export function Timer({ startDate, mode = 'autopilot', endDate, missionTimezone }: TimerProps) {
     const { theme } = useTheme();
-    const isCountdown = mode === 'manual';
+    const useCalendarDay = typeof missionTimezone === 'string' && missionTimezone.trim().length > 0;
+    const isCountdown = useCalendarDay || mode === 'manual';
 
     const [display, setDisplay] = useState(() => (isCountdown ? '00:00:00:00' : '00'));
     const [phase, setPhase] = useState<ProgressivePhase>(() => (isCountdown ? 'ddhhmmss' : 'ss'));
@@ -47,6 +50,29 @@ export function Timer({ startDate, mode = 'autopilot', endDate }: TimerProps) {
     useEffect(() => {
         const updateTimer = () => {
             const now = Date.now();
+
+            if (useCalendarDay) {
+                const end = calendarDayEndUtcMsForTimestamp(now, missionTimezone.trim());
+                const diff = end - now;
+
+                if (diff <= 0) {
+                    setDisplay('00:00:00');
+                    setPhase('hhmmss');
+                    setIsExpired(true);
+                    return;
+                }
+                setIsExpired(false);
+                setPhase('hhmmss');
+
+                const hours = Math.floor(diff / (1000 * 60 * 60));
+                const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+                const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+
+                setDisplay(
+                    `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`,
+                );
+                return;
+            }
 
             if (mode === 'manual' && endDate) {
                 const end = new Date(endDate).getTime();
@@ -123,7 +149,7 @@ export function Timer({ startDate, mode = 'autopilot', endDate }: TimerProps) {
         updateTimer();
 
         return () => clearInterval(interval);
-    }, [startDate, mode, endDate]);
+    }, [startDate, mode, endDate, missionTimezone, useCalendarDay]);
 
     const safeDisplay = display || fallbackDisplay(phase);
     const legendLabels = LEGEND_BY_PHASE[phase];
@@ -150,7 +176,7 @@ export function Timer({ startDate, mode = 'autopilot', endDate }: TimerProps) {
             </View>
             <View style={styles.contentContainer}>
                 <Text style={[styles.label, { color: theme.colors.textSecondary }]}>
-                    {isExpired ? "TIME'S UP" : isCountdown ? 'COUNTDOWN' : 'MISSION ACTIVE'}
+                    {isExpired ? "TIME'S UP" : useCalendarDay ? 'DAY ENDS IN' : isCountdown ? 'COUNTDOWN' : 'MISSION ACTIVE'}
                 </Text>
                 <SplitFlapTimeDisplay
                     display={safeDisplay}

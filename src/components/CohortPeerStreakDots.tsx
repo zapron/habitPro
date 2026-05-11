@@ -14,7 +14,7 @@ import { X } from "lucide-react-native";
 import { useTheme } from "../context/ThemeContext";
 import type { AppTheme } from "../styles/theme";
 import type { Habit, StreakMemory } from "../types/habit";
-import { calendarDateForMissionDayIndex, getActiveMissionDaySlot } from "../utils/missionDaySlots";
+import { calendarDateForHabitMissionDayIndex, getHabitActiveMissionDaySlot } from "../utils/missionDaySlots";
 
 /** Dot timeline key: Completed / Today / Upcoming — use once beside the cohort participants heading. */
 export function CohortParticipantTimelineLegend({
@@ -88,7 +88,7 @@ export function CohortPeerStreakDots({
   const { theme, isDark } = useTheme();
   const total = Math.max(1, habit.totalDays ?? 21);
   const nowMs = Date.now();
-  const activeSlot = getActiveMissionDaySlot(habit.startDate, nowMs, total);
+  const activeSlot = getHabitActiveMissionDaySlot(habit, nowMs);
 
   const days = useMemo(() => {
     const out: {
@@ -98,13 +98,13 @@ export function CohortPeerStreakDots({
       memory: StreakMemory | undefined;
     }[] = [];
     for (let i = 0; i < total; i++) {
-      const dateStr = calendarDateForMissionDayIndex(habit.startDate, i);
+      const dateStr = calendarDateForHabitMissionDayIndex(habit, i, nowMs);
       const completed = habit.completedDates.includes(dateStr);
       const memory = habit.streakMemories?.[dateStr];
       out.push({ dayNum: i + 1, dateStr, completed, memory });
     }
     return out;
-  }, [habit.startDate, habit.completedDates, habit.streakMemories, total]);
+  }, [habit, nowMs, total]);
 
   const [open, setOpen] = useState<{ dateStr: string; memory: StreakMemory } | null>(null);
   const viewerUri = open?.memory?.imageUrl || open?.memory?.imageUri;

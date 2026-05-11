@@ -111,7 +111,7 @@ export async function createGroupChallengeFromHabit(
     };
   }
 
-  const canonicalStartIso = canonicalGroupMissionHabitStartIso(startDate);
+  const canonicalStartIso = canonicalGroupMissionHabitStartIso(startDate, creatorTz);
   const td = Math.max(1, habit.totalDays ?? 21);
   const nextEndDate =
     habit.mode === "manual"
@@ -125,6 +125,7 @@ export async function createGroupChallengeFromHabit(
     .update({
       challenge_group_id: group.id,
       challenge_creator_timezone: creatorTz,
+      mission_timezone: creatorTz,
       start_date: canonicalStartIso,
       end_date: nextEndDate,
     })

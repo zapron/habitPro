@@ -1,9 +1,20 @@
 import type { Habit } from "../types/habit";
-import { MS_PER_MISSION_DAY, calendarDateForMissionDayIndex } from "./missionCalendarKeys";
+import {
+  MS_PER_MISSION_DAY,
+  addCalendarDaysToDateKey,
+  calendarDateForMissionDayIndex,
+  calendarDateKeyForTimestamp,
+  calendarDayEndUtcMsForDateKey,
+  calendarDaysBetween,
+  getMissionCalendarTimeZone,
+} from "./missionCalendarKeys";
 
 export {
   MS_PER_MISSION_DAY,
+  addCalendarDaysToDateKey,
   calendarDateForMissionDayIndex,
+  calendarDateKeyForTimestamp,
+  calendarDayEndUtcMsForDateKey,
   getMissionCalendarTimeZone,
   missionDayDateKey,
 } from "./missionCalendarKeys";
@@ -21,11 +32,103 @@ export function getActiveMissionDaySlot(startIso: string, nowMs: number, totalDa
   return Math.max(1, rawSlot);
 }
 
+export function usesCalendarDayMission(habit: Habit): boolean {
+  return typeof habit.missionTimezone === "string" && habit.missionTimezone.trim().length > 0;
+}
+
+export function getHabitMissionTimeZone(habit: Habit): string {
+  const missionTz = habit.missionTimezone?.trim();
+  if (missionTz) return missionTz;
+  const groupTz = habit.challengeCreatorTimezone?.trim();
+  if (groupTz) return groupTz;
+  return getMissionCalendarTimeZone();
+}
+
+function creationDateKey(habit: Habit, timeZone: string): string {
+  return calendarDateForMissionDayIndex(habit.startDate, 0, timeZone);
+}
+
+function creationDayCompleted(habit: Habit, creationKey: string): boolean {
+  return (habit.completedDates ?? []).includes(creationKey);
+}
+
+export function isHabitCreationGraceDay(habit: Habit, nowMs: number): boolean {
+  if (!usesCalendarDayMission(habit)) return false;
+  const tz = getHabitMissionTimeZone(habit);
+  const createdKey = creationDateKey(habit, tz);
+  const todayKey = calendarDateKeyForTimestamp(nowMs, tz);
+  return todayKey === createdKey && !creationDayCompleted(habit, createdKey);
+}
+
+export function getHabitActiveMissionDaySlot(habit: Habit, nowMs: number): number | null {
+  const totalDays = Math.max(1, habit.totalDays ?? 21);
+  if (!usesCalendarDayMission(habit)) {
+    return getActiveMissionDaySlot(habit.startDate, nowMs, totalDays);
+  }
+
+  const tz = getHabitMissionTimeZone(habit);
+  const createdKey = creationDateKey(habit, tz);
+  const todayKey = calendarDateKeyForTimestamp(nowMs, tz);
+  if (todayKey < createdKey) return null;
+
+  const createdCompleted = creationDayCompleted(habit, createdKey);
+  let slot: number;
+  if (createdCompleted) {
+    slot = calendarDaysBetween(createdKey, todayKey) + 1;
+  } else if (todayKey === createdKey) {
+    slot = 1;
+  } else {
+    const firstRequiredKey = addCalendarDaysToDateKey(createdKey, 1);
+    slot = calendarDaysBetween(firstRequiredKey, todayKey) + 1;
+  }
+
+  if (slot > totalDays) return null;
+  return Math.max(1, slot);
+}
+
+export function calendarDateForHabitMissionDayIndex(
+  habit: Habit,
+  dayIndexZeroBased: number,
+  nowMs: number = Date.now(),
+): string {
+  if (!usesCalendarDayMission(habit)) {
+    return calendarDateForMissionDayIndex(habit.startDate, dayIndexZeroBased);
+  }
+
+  const tz = getHabitMissionTimeZone(habit);
+  const createdKey = creationDateKey(habit, tz);
+  const todayKey = calendarDateKeyForTimestamp(nowMs, tz);
+  const createdCompleted = creationDayCompleted(habit, createdKey);
+  const creationDayIsCurrentGrace = todayKey === createdKey && !createdCompleted;
+  const offset =
+    createdCompleted || creationDayIsCurrentGrace
+      ? dayIndexZeroBased
+      : dayIndexZeroBased + 1;
+  return addCalendarDaysToDateKey(createdKey, offset);
+}
+
+export function getHabitActiveMissionDateKey(habit: Habit, nowMs: number): string | null {
+  const slot = getHabitActiveMissionDaySlot(habit, nowMs);
+  if (slot == null) return null;
+  return calendarDateForHabitMissionDayIndex(habit, slot - 1, nowMs);
+}
+
+export function getHabitActiveMissionDayEndMs(habit: Habit, nowMs: number): number | null {
+  if (!usesCalendarDayMission(habit)) {
+    const slot = getActiveMissionDaySlot(habit.startDate, nowMs, habit.totalDays ?? 21);
+    if (slot == null) return null;
+    return new Date(habit.startDate).getTime() + slot * MS_PER_MISSION_DAY;
+  }
+  const dateKey = getHabitActiveMissionDateKey(habit, nowMs);
+  if (!dateKey) return null;
+  return calendarDayEndUtcMsForDateKey(dateKey, getHabitMissionTimeZone(habit));
+}
+
 /** Map a stored calendar date to mission day number (1-based), or null if not in this mission. */
-export function missionDayNumberForCalendarDate(habit: Habit, dateStr: string): number | null {
+export function missionDayNumberForCalendarDate(habit: Habit, dateStr: string, nowMs: number = Date.now()): number | null {
   const td = Math.max(1, habit.totalDays ?? 21);
   for (let i = 0; i < td; i++) {
-    if (calendarDateForMissionDayIndex(habit.startDate, i) === dateStr) {
+    if (calendarDateForHabitMissionDayIndex(habit, i, nowMs) === dateStr) {
       return i + 1;
     }
   }
@@ -34,16 +137,22 @@ export function missionDayNumberForCalendarDate(habit: Habit, dateStr: string): 
 
 /** Whether this calendar date may be toggled (only the current 24h slot). */
 export function isHabitCalendarDateToggleable(habit: Habit, dateStr: string, nowMs: number): boolean {
-  if (
-    habit.mode === "manual" &&
-    habit.endDate &&
-    nowMs >= new Date(habit.endDate).getTime()
-  ) {
-    return false;
+  if (!usesCalendarDayMission(habit)) {
+    if (
+      habit.mode === "manual" &&
+      habit.endDate &&
+      nowMs >= new Date(habit.endDate).getTime()
+    ) {
+      return false;
+    }
+    const day = missionDayNumberForCalendarDate(habit, dateStr, nowMs);
+    if (day == null) return false;
+    const slot = getActiveMissionDaySlot(habit.startDate, nowMs, habit.totalDays ?? 21);
+    if (slot == null) return false;
+    return day === slot;
   }
-  const day = missionDayNumberForCalendarDate(habit, dateStr);
-  if (day == null) return false;
-  const slot = getActiveMissionDaySlot(habit.startDate, nowMs, habit.totalDays ?? 21);
+
+  const slot = getHabitActiveMissionDaySlot(habit, nowMs);
   if (slot == null) return false;
-  return day === slot;
+  return calendarDateForHabitMissionDayIndex(habit, slot - 1, nowMs) === dateStr;
 }

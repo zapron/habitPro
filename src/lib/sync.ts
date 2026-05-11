@@ -133,6 +133,7 @@ function habitFromRow(row: {
   streak_memories?: unknown;
   challenge_group_id?: string | null;
   challenge_creator_timezone?: string | null;
+  mission_timezone?: string | null;
   mission_report?: string | null;
   mission_report_at?: string | null;
   reminder_enabled?: boolean | null;
@@ -147,7 +148,8 @@ function habitFromRow(row: {
   const rawCompleted = Array.isArray(row.completed_dates)
     ? row.completed_dates.filter((x): x is string => typeof x === "string")
     : [];
-  const completedDatesMigrated = canonicalizeMissionDateKeys(row.start_date, rawCompleted, tdRow);
+  const stableTimeZone = row.mission_timezone ?? row.challenge_creator_timezone ?? undefined;
+  const completedDatesMigrated = canonicalizeMissionDateKeys(row.start_date, rawCompleted, tdRow, stableTimeZone);
   const repairedDates: string[] =
     (row as unknown as { repairedDates?: string[] }).repairedDates ?? [];
 
@@ -182,7 +184,7 @@ function habitFromRow(row: {
     rawMem && typeof rawMem === "object" && !Array.isArray(rawMem)
       ? (rawMem as Record<string, unknown>)
       : undefined;
-  const streakMemoriesMigrated = canonicalizeStreakMemoryKeys(row.start_date, streakMemoriesRaw, tdRow);
+  const streakMemoriesMigrated = canonicalizeStreakMemoryKeys(row.start_date, streakMemoriesRaw, tdRow, stableTimeZone);
   const streakMemories =
     streakMemoriesMigrated === undefined ? undefined : (streakMemoriesMigrated as Habit["streakMemories"]);
   return {
@@ -208,6 +210,7 @@ function habitFromRow(row: {
     reminderLocked: row.reminder_locked ?? false,
     challengeGroupId: row.challenge_group_id ?? null,
     challengeCreatorTimezone: row.challenge_creator_timezone ?? null,
+    missionTimezone: row.mission_timezone ?? null,
   };
 }
 
@@ -229,6 +232,7 @@ function habitToRow(sessionUserId: string, h: Habit) {
     streak_memories: h.streakMemories ?? {},
     challenge_group_id: h.challengeGroupId ?? null,
     challenge_creator_timezone: h.challengeCreatorTimezone ?? null,
+    mission_timezone: h.missionTimezone ?? null,
     mission_report: h.missionReport ?? null,
     mission_report_at: h.missionReportAt ?? null,
     reminder_enabled: h.reminderEnabled ?? false,

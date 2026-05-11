@@ -23,6 +23,7 @@ import { isHabitCalendarDateToggleable } from "../utils/missionDaySlots";
 import { isHabitMissionWindowClosed } from "../utils/habitMissionWindow";
 import { mergeRepairIntoStreakMemory } from "../utils/repairStreakMemoryMerge";
 import { alignGroupHabitToChallengeStart } from "../utils/groupMissionClock";
+import { getMissionCalendarTimeZone } from "../utils/missionCalendarKeys";
 import type { ChallengeGroupRow } from "../types/groupChallenge";
 
 /** Calculate endDate by adding `totalDays` to a start ISO string. */
@@ -53,6 +54,10 @@ const migrateHabit = (h: any): Habit => {
         : undefined,
     challengeGroupId: h.challengeGroupId ?? null,
     challengeCreatorTimezone: h.challengeCreatorTimezone ?? null,
+    missionTimezone:
+      typeof h.missionTimezone === "string" || h.missionTimezone === null
+        ? h.missionTimezone
+        : null,
     reminderEnabled: typeof h.reminderEnabled === "boolean" ? h.reminderEnabled : false,
     reminderTimeLocal:
       typeof h.reminderTimeLocal === "string" || h.reminderTimeLocal === null
@@ -84,6 +89,7 @@ export const useHabitStore = create<HabitStore>()(
                   ...h,
                   challengeGroupId: meta.challengeGroupId,
                   challengeCreatorTimezone: meta.challengeCreatorTimezone,
+                  missionTimezone: meta.challengeCreatorTimezone ?? h.missionTimezone ?? null,
                 }
               : h,
           ),
@@ -98,6 +104,7 @@ export const useHabitStore = create<HabitStore>()(
               ...h,
               challengeGroupId: group.id,
               challengeCreatorTimezone: group.creator_timezone,
+              missionTimezone: group.creator_timezone ?? h.missionTimezone ?? getMissionCalendarTimeZone(),
             };
             return alignGroupHabitToChallengeStart(
               withMeta,
@@ -120,12 +127,19 @@ export const useHabitStore = create<HabitStore>()(
         challengeCreatorTimezone,
         startDate: startDateOverride,
         endDate: endDateOverride,
+        missionTimezone: missionTimezoneOverride,
       }) => {
         const now = startDateOverride ?? new Date().toISOString();
         const totalDays =
           mode === "manual" ? Math.max(1, Math.min(365, customDays ?? 21)) : 21;
         const vis: MissionVisibility =
           visibility === "public" || visibility === "solo" ? visibility : "solo";
+        const missionTimezone =
+          typeof missionTimezoneOverride === "string" && missionTimezoneOverride.trim().length > 0
+            ? missionTimezoneOverride.trim()
+            : typeof challengeCreatorTimezone === "string" && challengeCreatorTimezone.trim().length > 0
+              ? challengeCreatorTimezone.trim()
+              : getMissionCalendarTimeZone();
 
         const newHabit: Habit = {
           ownerUserId: getRemoteSyncUserId() ?? undefined,
@@ -144,6 +158,7 @@ export const useHabitStore = create<HabitStore>()(
           totalDays,
           isCompleted: false,
           status: "active",
+          missionTimezone,
           ...(challengeGroupId
             ? {
                 challengeGroupId,

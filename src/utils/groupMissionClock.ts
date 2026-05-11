@@ -98,8 +98,9 @@ export function alignGroupHabitToChallengeStart(
 ): Habit {
   if (!habit.challengeGroupId) return habit;
 
-  const canonical = canonicalGroupMissionHabitStartIso(groupStartDateYmd);
-  const tz = habit.challengeCreatorTimezone || getMissionCalendarTimeZone();
+  const anchorTimeZone = habit.missionTimezone || null;
+  const canonical = canonicalGroupMissionHabitStartIso(groupStartDateYmd, anchorTimeZone);
+  const tz = habit.missionTimezone || habit.challengeCreatorTimezone || getMissionCalendarTimeZone();
   const td = Math.max(1, habit.totalDays ?? 21);
   const repairedSet = new Set(habit.repairedDates ?? []);
   const mergedCompleted = habit.completedDates;

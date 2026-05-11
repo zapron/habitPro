@@ -964,7 +964,7 @@ export default function CompeteScreen() {
       const description = typeof tpl.description === "string" ? tpl.description : undefined;
       const tplEnd =
         typeof tpl.endDate === "string" && tpl.endDate.trim().length > 0 ? tpl.endDate.trim() : undefined;
-      const startIso = inviteeHabitStartIsoFromGroupStartDate(group.start_date);
+      const startIso = inviteeHabitStartIsoFromGroupStartDate(group.start_date, group.creator_timezone);
 
       const existingHabit = useHabitStore.getState().habits.find((h) => h.challengeGroupId === group.id);
       const newHabitId =
@@ -976,6 +976,7 @@ export default function CompeteScreen() {
           totalDays: mode === "manual" ? totalDays : undefined,
           challengeGroupId: group.id,
           challengeCreatorTimezone: group.creator_timezone,
+          missionTimezone: group.creator_timezone,
           startDate: startIso,
           endDate: mode === "manual" ? tplEnd : undefined,
         });

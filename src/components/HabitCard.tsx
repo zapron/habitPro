@@ -15,7 +15,7 @@ import { needsMainMissionOutcome } from '../utils/mainMissionUi';
 import { ProgressRing } from './ProgressRing';
 import * as Haptics from 'expo-haptics';
 import { getEligibleStreakRepair } from "../utils/streakRepairEligibility";
-import { calendarDateForMissionDayIndex, getActiveMissionDaySlot } from "../utils/missionDaySlots";
+import { calendarDateForHabitMissionDayIndex, getHabitActiveMissionDaySlot } from "../utils/missionDaySlots";
 import { useReducedMotion } from "../hooks/useReducedMotion";
 import Svg, { Circle, G } from "react-native-svg";
 
@@ -28,8 +28,8 @@ function RingBoundaryDots({
   strokeWidth,
   totalDays,
   slot,
-  completedDates,
-  startDate,
+  habit,
+  nowMs,
   doneColor,
   missedColor,
   futureColor,
@@ -39,8 +39,8 @@ function RingBoundaryDots({
   strokeWidth: number;
   totalDays: number;
   slot: number | null;
-  completedDates: string[];
-  startDate: string;
+  habit: Habit;
+  nowMs: number;
   doneColor: string;
   missedColor: string;
   futureColor: string;
@@ -61,8 +61,8 @@ function RingBoundaryDots({
     const x = cx + radius * Math.cos(theta) - dotD / 2;
     const y = cy + radius * Math.sin(theta) - dotD / 2;
 
-    const dateStr = calendarDateForMissionDayIndex(startDate, day - 1);
-    const done = Boolean(dateStr && completedDates.includes(dateStr));
+    const dateStr = calendarDateForHabitMissionDayIndex(habit, day - 1, nowMs);
+    const done = Boolean(dateStr && habit.completedDates.includes(dateStr));
 
     let bg = futureColor;
     if (day < current) bg = done ? doneColor : missedColor;
@@ -92,8 +92,8 @@ function RingDayArcs({
   strokeWidth,
   totalDays,
   slot,
-  completedDates,
-  startDate,
+  habit,
+  nowMs,
   doneColor,
   missedColor,
   futureColor,
@@ -103,8 +103,8 @@ function RingDayArcs({
   strokeWidth: number;
   totalDays: number;
   slot: number | null;
-  completedDates: string[];
-  startDate: string;
+  habit: Habit;
+  nowMs: number;
   doneColor: string;
   missedColor: string;
   futureColor: string;
@@ -125,8 +125,8 @@ function RingDayArcs({
 
   const arcs = [];
   for (let day = 1; day <= days; day++) {
-    const dateStr = calendarDateForMissionDayIndex(startDate, day - 1);
-    const done = Boolean(dateStr && completedDates.includes(dateStr));
+    const dateStr = calendarDateForHabitMissionDayIndex(habit, day - 1, nowMs);
+    const done = Boolean(dateStr && habit.completedDates.includes(dateStr));
 
     let color = futureColor;
     if (day < current) color = done ? doneColor : missedColor;
@@ -187,9 +187,9 @@ export const HabitCard = memo(({ item }: HabitCardProps) => {
       if (missionWon || needsReport) return false;
       if (item.status !== "active" || item.isCompleted) return false;
       if (isManual && item.endDate && nowMs >= new Date(item.endDate).getTime()) return false;
-      const slot = getActiveMissionDaySlot(item.startDate, nowMs, totalDays);
+      const slot = getHabitActiveMissionDaySlot(item, nowMs);
       if (slot == null) return false;
-      const dateStr = calendarDateForMissionDayIndex(item.startDate, slot - 1);
+      const dateStr = calendarDateForHabitMissionDayIndex(item, slot - 1, nowMs);
       if (!dateStr) return false;
       return !item.completedDates.includes(dateStr);
     }, [missionWon, needsReport, item, nowMs, totalDays, isManual]);
@@ -364,7 +364,7 @@ export const HabitCard = memo(({ item }: HabitCardProps) => {
             {(() => {
               const ringSize = 56;
               const strokeWidth = 4;
-              const slot = getActiveMissionDaySlot(item.startDate, nowMs, totalDays);
+              const slot = getHabitActiveMissionDaySlot(item, nowMs);
 
               return (
                 <View style={[styles.ringWrap, { width: ringSize, height: ringSize }]}>
@@ -374,8 +374,8 @@ export const HabitCard = memo(({ item }: HabitCardProps) => {
                       strokeWidth={strokeWidth}
                       totalDays={totalDays}
                       slot={slot}
-                      completedDates={item.completedDates ?? []}
-                      startDate={item.startDate}
+                      habit={item}
+                      nowMs={nowMs}
                       // Use brand color for "done", and a calmer neutral for "missed".
                       doneColor={theme.colors.indigo[400]}
                       missedColor={isDark ? "rgba(148, 163, 184, 0.55)" : "rgba(100, 116, 139, 0.55)"}

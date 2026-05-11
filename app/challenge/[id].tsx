@@ -75,7 +75,7 @@ import type {
 import type { Habit } from "../../src/types/habit";
 import { isHabitMissionWindowClosed } from "../../src/utils/habitMissionWindow";
 import {
-  getActiveMissionDaySlot,
+  getHabitActiveMissionDaySlot,
 } from "../../src/utils/missionDaySlots";
 import { levelFromTotalXp } from "../../src/utils/xpLevel";
 
@@ -722,8 +722,8 @@ export default function ChallengeDetailScreen() {
 
   const viewerMissionSlot = useMemo(() => {
     if (!myHabit || myHabit.isCompleted) return null;
-    return getActiveMissionDaySlot(myHabit.startDate, cohortNow, missionTotalDays);
-  }, [myHabit, cohortNow, missionTotalDays]);
+    return getHabitActiveMissionDaySlot(myHabit, cohortNow);
+  }, [myHabit, cohortNow]);
 
   const scrollRef = useRef<ScrollView>(null);
   const squadSectionOffsetY = useRef(0);

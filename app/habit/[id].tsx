@@ -40,8 +40,8 @@ import type { MissionVisibility } from '../../src/types/habit';
 import { ConfettiBurst } from '../../src/components/ConfettiBurst';
 import { StreakBanner } from '../../src/components/StreakBanner';
 import {
-  calendarDateForMissionDayIndex,
-  getActiveMissionDaySlot,
+  calendarDateForHabitMissionDayIndex,
+  getHabitActiveMissionDaySlot,
   isHabitCalendarDateToggleable,
   missionDayNumberForCalendarDate,
 } from '../../src/utils/missionDaySlots';
@@ -828,10 +828,10 @@ export default function HabitDetail() {
 
     const days = Array.from({ length: totalDays }, (_, i) => i + 1);
 
-    const getDayDate = (dayIndex: number) => calendarDateForMissionDayIndex(habit.startDate, dayIndex);
+    const getDayDate = (dayIndex: number) => calendarDateForHabitMissionDayIndex(habit, dayIndex, now);
 
     const isManual = mode === 'manual';
-    const activeMissionDaySlot = getActiveMissionDaySlot(habit.startDate, now, totalDays);
+    const activeMissionDaySlot = getHabitActiveMissionDaySlot(habit, now);
 
     const handleDayPress = (dayIndex: number, day: number) => {
         const dateStr = getDayDate(dayIndex);
@@ -1076,7 +1076,12 @@ export default function HabitDetail() {
                         )}
                     </View>
                 ) : (
-                    <Timer startDate={habit.startDate} mode={mode} endDate={habit.endDate} />
+                    <Timer
+                        startDate={habit.startDate}
+                        mode={mode}
+                        endDate={habit.endDate}
+                        missionTimezone={habit.missionTimezone ?? null}
+                    />
                 )}
 
                 <View style={[styles.visibilityRow, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, borderRadius: theme.radius.md }]}>

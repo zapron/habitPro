@@ -1,10 +1,10 @@
 /// <reference path="../deno-ambient.d.ts" />
 /**
- * Scheduled Edge Function: mission streak reminders (rolling 24h from `start_date`, same as
- * `src/utils/missionCalendarKeys.ts`). From **mission day 2 onward** only:
- * - **slot_open:** first hour after the current mission day starts — “window is open”
- * - **slot_closing:** last hour before that day ends — “almost an hour left”
- * Mission day 1 is skipped (user just created the mission).
+ * Scheduled Edge Function: mission streak reminders.
+ * New calendar-day missions (`habits.mission_timezone`) reset at local midnight with a grace creation day.
+ * Legacy missions without `mission_timezone` keep the rolling 24h window.
+ *
+ * No new "window opened" reminders are emitted. Only user custom reminders and last-hour safety reminders run.
  *
  * `profiles.timezone` aligns `YYYY-MM-DD` keys with the client grid.
  *
@@ -14,7 +14,13 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
 // @ts-expect-error Deno resolves https:// imports; workspace TypeScript does not.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
-import { missionDayDateKey } from "../_shared/missionCalendarKeys.ts";
+import {
+  addCalendarDaysToDateKey,
+  calendarDateKeyForTimestamp,
+  calendarDayEndUtcMsForDateKey,
+  calendarDaysBetween,
+  missionDayDateKey,
+} from "../_shared/missionCalendarKeys.ts";
 
 type Supabase = ReturnType<typeof createClient>;
 
@@ -37,11 +43,21 @@ type HabitRow = {
   start_date: string;
   total_days: number;
   completed_dates: string[] | null;
+  challenge_group_id?: string | null;
+  challenge_creator_timezone?: string | null;
+  mission_timezone?: string | null;
   reminder_enabled?: boolean | null;
   reminder_time_local?: string | null;
 };
 
-type ReminderKind = "slot_open" | "slot_closing" | "custom_time" | "debug_10m";
+type ReminderKind = "slot_closing" | "custom_time" | "debug_10m";
+
+type ActiveMissionDay = {
+  slot: number;
+  dateKey: string;
+  slotEndMs: number;
+  creationGrace: boolean;
+};
 
 function parseTimeHHMM(v: unknown): { hh: number; mm: number } | null {
   if (typeof v !== "string") return null;
@@ -90,14 +106,85 @@ function isTimeInNextWindow(
   return targetMin >= nowMin || targetMin < endWrapped;
 }
 
-/** Same slot index as `getActiveMissionDaySlot` in `src/utils/missionDaySlots.ts` */
-function getActiveMissionDaySlot(startIso: string, nowMs: number, totalDays: number): number | null {
+function getRollingActiveMissionDaySlot(startIso: string, nowMs: number, totalDays: number): number | null {
   const td = Math.max(1, totalDays);
   const startMs = new Date(startIso).getTime();
+  if (!Number.isFinite(startMs)) return null;
   const elapsed = Math.max(0, nowMs - startMs);
   const rawSlot = Math.floor(elapsed / MS_PER_MISSION_DAY) + 1;
   if (rawSlot > td) return null;
   return Math.max(1, rawSlot);
+}
+
+function hasCalendarDayModel(h: HabitRow): boolean {
+  return typeof h.mission_timezone === "string" && h.mission_timezone.trim().length > 0;
+}
+
+function reminderTimeZoneForHabit(h: HabitRow, profileTz: string | null | undefined): string {
+  const missionTz = h.mission_timezone?.trim();
+  if (missionTz) return missionTz;
+  const groupTz = h.challenge_creator_timezone?.trim();
+  if (groupTz) return groupTz;
+  return profileTz || "UTC";
+}
+
+function getCalendarActiveMissionDay(
+  h: HabitRow,
+  nowMs: number,
+  totalDays: number,
+  timeZone: string,
+  dates: string[],
+): ActiveMissionDay | null {
+  const createdKey = missionDayDateKey(h.start_date, 0, timeZone);
+  if (!createdKey) return null;
+  const todayKey = calendarDateKeyForTimestamp(nowMs, timeZone);
+  if (todayKey < createdKey) return null;
+
+  const creationCompleted = dates.includes(createdKey);
+  let slot: number;
+  let dateKey: string;
+  let creationGrace = false;
+
+  if (creationCompleted) {
+    slot = calendarDaysBetween(createdKey, todayKey) + 1;
+    dateKey = todayKey;
+  } else if (todayKey === createdKey) {
+    slot = 1;
+    dateKey = createdKey;
+    creationGrace = true;
+  } else {
+    const firstRequiredKey = addCalendarDaysToDateKey(createdKey, 1);
+    slot = calendarDaysBetween(firstRequiredKey, todayKey) + 1;
+    dateKey = todayKey;
+  }
+
+  if (slot > totalDays) return null;
+  return {
+    slot: Math.max(1, slot),
+    dateKey,
+    slotEndMs: calendarDayEndUtcMsForDateKey(dateKey, timeZone),
+    creationGrace,
+  };
+}
+
+function getRollingActiveMissionDay(
+  h: HabitRow,
+  nowMs: number,
+  totalDays: number,
+  timeZone: string,
+): ActiveMissionDay | null {
+  const slot = getRollingActiveMissionDaySlot(h.start_date, nowMs, totalDays);
+  if (slot == null) return null;
+  const startMs = new Date(h.start_date).getTime();
+  if (!Number.isFinite(startMs)) return null;
+  const dateKey = missionDayDateKey(h.start_date, slot - 1, timeZone);
+  if (!dateKey) return null;
+  return {
+    slot,
+    dateKey,
+    slotEndMs: startMs + slot * MS_PER_MISSION_DAY,
+    creationGrace: false,
+  };
 }
 
 function debugBucketKey(nowMs: number): string {
@@ -182,7 +269,7 @@ Deno.serve(async (req) => {
 
   const { data: habits, error: hErr } = await supabase
     .from("habits")
-    .select("id, user_id, title, start_date, total_days, completed_dates, reminder_enabled, reminder_time_local")
+    .select("id, user_id, title, start_date, total_days, completed_dates, challenge_group_id, challenge_creator_timezone, mission_timezone, reminder_enabled, reminder_time_local")
     .eq("status", "active")
     .eq("is_completed", false);
 
@@ -220,23 +307,17 @@ Deno.serve(async (req) => {
   let inserted = 0;
 
   for (const h of habits as HabitRow[]) {
-    const tz = tzByUser.get(h.user_id) ?? "UTC";
+    const tz = reminderTimeZoneForHabit(h, tzByUser.get(h.user_id));
     const totalDays = Math.max(1, h.total_days ?? 21);
-
-    const slot = getActiveMissionDaySlot(h.start_date, nowMs, totalDays);
-    if (slot == null) continue;
-
-    const startMs = new Date(h.start_date).getTime();
-    const slotStartMs = startMs + (slot - 1) * MS_PER_MISSION_DAY;
-    const slotEndMs = startMs + slot * MS_PER_MISSION_DAY;
-
-    const expectedDateKey = missionDayDateKey(h.start_date, slot - 1, tz);
-    if (!expectedDateKey) continue;
-
     const raw = h.completed_dates;
     const dates = Array.isArray(raw)
       ? raw.filter((x): x is string => typeof x === "string")
       : [];
+    const activeDay = hasCalendarDayModel(h)
+      ? getCalendarActiveMissionDay(h, nowMs, totalDays, tz, dates)
+      : getRollingActiveMissionDay(h, nowMs, totalDays, tz);
+    if (!activeDay) continue;
+    const { dateKey: expectedDateKey, slotEndMs, creationGrace } = activeDay;
 
     // Debug mode: user-scoped frequent reminders every 10 minutes while the slot is open
     // (and the day is not yet completed). This is ONLY for profiles.debug_streak_reminders = true.
@@ -260,11 +341,10 @@ Deno.serve(async (req) => {
     }
 
     // Normal mode:
-    // If reminder_enabled=true with reminder_time_local, send:
-    // - custom_time at chosen time (slot 1+), plus closing in the last hour.
-    // Else fallback:
-    // - Day 1: only closing
-    // - Day 2+: open + closing
+    // If reminder_enabled=true with reminder_time_local, send custom_time at the chosen time.
+    // All required days also get a last-hour safety reminder.
+    // Calendar-day creation grace gets custom reminder only if the chosen time is still ahead,
+    // and never gets the last-hour reminder.
 
     const reminderEnabled = (h as { reminder_enabled?: boolean | null }).reminder_enabled === true;
     const reminderTime = parseTimeHHMM((h as { reminder_time_local?: string | null }).reminder_time_local);
@@ -289,7 +369,7 @@ Deno.serve(async (req) => {
         if (ok) inserted++;
       }
 
-      if (nowMs >= slotEndMs - MS_REMINDER_WINDOW && nowMs < slotEndMs) {
+      if (!creationGrace && nowMs >= slotEndMs - MS_REMINDER_WINDOW && nowMs < slotEndMs) {
         const ok = await insertStreakReminderIfEligible(
           supabase,
           h,
@@ -305,39 +385,7 @@ Deno.serve(async (req) => {
       continue;
     }
 
-    // Default behavior (no custom time enabled)
-    if (slot === 1) {
-      if (nowMs >= slotEndMs - MS_REMINDER_WINDOW && nowMs < slotEndMs) {
-        const ok = await insertStreakReminderIfEligible(
-          supabase,
-          h,
-          expectedDateKey,
-          expectedDateKey,
-          dates,
-          "slot_closing",
-          "closing",
-          { minutes_left: minutesLeft(nowMs, slotEndMs) },
-        );
-        if (ok) inserted++;
-      }
-      continue;
-    }
-
-    if (slot >= 2 && nowMs >= slotStartMs && nowMs < slotStartMs + MS_REMINDER_WINDOW) {
-      const ok = await insertStreakReminderIfEligible(
-        supabase,
-        h,
-        expectedDateKey,
-        expectedDateKey,
-        dates,
-        "slot_open",
-        "open",
-        { minutes_left: minutesLeft(nowMs, slotEndMs) },
-      );
-      if (ok) inserted++;
-    }
-
-    if (slot >= 2 && nowMs >= slotEndMs - MS_REMINDER_WINDOW && nowMs < slotEndMs) {
+    if (!creationGrace && nowMs >= slotEndMs - MS_REMINDER_WINDOW && nowMs < slotEndMs) {
       const ok = await insertStreakReminderIfEligible(
         supabase,
         h,

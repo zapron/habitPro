@@ -1,6 +1,13 @@
 import type { Habit } from "../types/habit";
 import { getStreakRepairXpCost, STREAK_REPAIR_WINDOW_HOURS } from "../constants/streakRepair";
-import { MS_PER_MISSION_DAY, calendarDateForMissionDayIndex, getActiveMissionDaySlot } from "./missionDaySlots";
+import {
+  MS_PER_MISSION_DAY,
+  calendarDateForHabitMissionDayIndex,
+  calendarDayEndUtcMsForDateKey,
+  getHabitActiveMissionDaySlot,
+  getHabitMissionTimeZone,
+  usesCalendarDayMission,
+} from "./missionDaySlots";
 
 export type EligibleStreakRepair = {
   dateStr: string;
@@ -17,20 +24,19 @@ export function getEligibleStreakRepair(habit: Habit, nowMs: number): EligibleSt
   if (habit.missionReport != null) return null;
   if (!habit.startDate) return null;
 
-  const totalDays = habit.totalDays ?? 21;
-  const slot = getActiveMissionDaySlot(habit.startDate, nowMs, totalDays);
+  const slot = getHabitActiveMissionDaySlot(habit, nowMs);
   if (slot == null) return null;
   if (slot < 2) return null;
 
   const prevMissionDayNumber = slot - 1; // 1-based
   const prevIndex = prevMissionDayNumber - 1; // 0-based
-  const dateStr = calendarDateForMissionDayIndex(habit.startDate, prevIndex);
+  const dateStr = calendarDateForHabitMissionDayIndex(habit, prevIndex, nowMs);
   if (!dateStr) return null;
   if ((habit.completedDates ?? []).includes(dateStr)) return null;
 
-  // Previous slot ended when the current slot began: start + (slot-1) days.
-  const startMs = new Date(habit.startDate).getTime();
-  const prevEndMs = startMs + (slot - 1) * MS_PER_MISSION_DAY;
+  const prevEndMs = usesCalendarDayMission(habit)
+    ? calendarDayEndUtcMsForDateKey(dateStr, getHabitMissionTimeZone(habit))
+    : new Date(habit.startDate).getTime() + (slot - 1) * MS_PER_MISSION_DAY;
   const windowMs = STREAK_REPAIR_WINDOW_HOURS * 60 * 60 * 1000;
   if (nowMs > prevEndMs + windowMs) return null;
 
