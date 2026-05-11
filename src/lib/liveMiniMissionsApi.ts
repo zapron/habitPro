@@ -10,7 +10,7 @@ import { getSupabase } from "./supabase";
 
 export type LiveMiniActionResult =
   | { ok: true }
-  | { ok: false; error: string; reason?: "auth_required" | "premium_required" };
+  | { ok: false; error: string; reason?: "auth_required" | "premium_required" | "expired" };
 
 export type LiveMiniInviteForMe = {
   participant: LiveMiniParticipantRow;
@@ -32,8 +32,19 @@ function actionError(error: unknown): Extract<LiveMiniActionResult, { ok: false 
   return {
     ok: false,
     error: message,
-    reason: lower.includes("premium_required") ? "premium_required" : undefined,
+    reason: lower.includes("premium_required")
+      ? "premium_required"
+      : lower.includes("expired")
+        ? "expired"
+        : undefined,
   };
+}
+
+export function isLiveMiniInviteActionable(participant: LiveMiniParticipantRow, nowMs = Date.now()): boolean {
+  if (participant.status !== "invited") return false;
+  if (!participant.invite_expires_at) return true;
+  const expiresMs = new Date(participant.invite_expires_at).getTime();
+  return !Number.isFinite(expiresMs) || expiresMs > nowMs;
 }
 
 export async function createLiveMiniSquad(input: {
@@ -42,7 +53,7 @@ export async function createLiveMiniSquad(input: {
   objective?: string | null;
   plannedMinutes: number;
   startedAt?: string | null;
-}): Promise<{ ok: true; squadId: string } | { ok: false; error: string; reason?: "auth_required" | "premium_required" }> {
+}): Promise<{ ok: true; squadId: string } | Extract<LiveMiniActionResult, { ok: false }>> {
   const supabase = getSupabase();
   if (!supabase) return { ok: false, error: "Supabase not configured" };
   const {
@@ -103,6 +114,14 @@ export async function declineLiveMiniInvite(squadId: string): Promise<LiveMiniAc
   return { ok: true };
 }
 
+export async function refreshLiveMiniExpiredInvites(squadId?: string | null): Promise<void> {
+  const supabase = getSupabase();
+  if (!supabase) return;
+  await supabase.rpc("rpc_refresh_live_mini_expired_invites", {
+    p_squad_id: squadId ?? null,
+  });
+}
+
 export async function syncLiveMiniMissionProgress(input: {
   squadId: string;
   localMiniMissionId: string;
@@ -139,7 +158,10 @@ export async function fetchLiveMiniSquad(squadId: string): Promise<LiveMiniSquad
   const supabase = getSupabase();
   if (!supabase) return null;
 
-  await refreshLiveMiniMissed(squadId).catch(() => {});
+  await Promise.all([
+    refreshLiveMiniMissed(squadId).catch(() => {}),
+    refreshLiveMiniExpiredInvites(squadId).catch(() => {}),
+  ]);
 
   const [squadRes, participantsRes] = await Promise.all([
     supabase.from("live_mini_squads").select("*").eq("id", squadId).maybeSingle(),
@@ -174,6 +196,7 @@ export async function listLiveMiniInvitesForMe(limit = 40): Promise<LiveMiniInvi
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return [];
+  await refreshLiveMiniExpiredInvites().catch(() => {});
 
   const { data, error } = await supabase
     .from("live_mini_participants")
@@ -206,8 +229,8 @@ export async function listLiveMiniInvitesForMe(limit = 40): Promise<LiveMiniInvi
       creator: creators[row.squad.creator_id],
     }))
     .sort((a, b) => {
-      const ap = a.participant.status === "invited" ? 0 : 1;
-      const bp = b.participant.status === "invited" ? 0 : 1;
+      const ap = isLiveMiniInviteActionable(a.participant) ? 0 : 1;
+      const bp = isLiveMiniInviteActionable(b.participant) ? 0 : 1;
       if (ap !== bp) return ap - bp;
       return new Date(b.participant.created_at).getTime() - new Date(a.participant.created_at).getTime();
     });
@@ -222,6 +245,7 @@ export async function listLiveMiniInvitesForMePage(
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { items: [], hasMore: false, nextOffset: null };
+  await refreshLiveMiniExpiredInvites().catch(() => {});
 
   const offset = Math.max(0, Math.floor(request.offset));
   const limit = Math.max(1, Math.floor(request.limit));
@@ -260,8 +284,8 @@ export async function listLiveMiniInvitesForMePage(
         creator: creators[row.squad.creator_id],
       }))
       .sort((a, b) => {
-        const ap = a.participant.status === "invited" ? 0 : 1;
-        const bp = b.participant.status === "invited" ? 0 : 1;
+        const ap = isLiveMiniInviteActionable(a.participant) ? 0 : 1;
+        const bp = isLiveMiniInviteActionable(b.participant) ? 0 : 1;
         if (ap !== bp) return ap - bp;
         return new Date(b.participant.created_at).getTime() - new Date(a.participant.created_at).getTime();
       }),
@@ -277,12 +301,14 @@ export async function countPendingLiveMiniInvitesForMe(): Promise<number> {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return 0;
+  await refreshLiveMiniExpiredInvites().catch(() => {});
   const { count, error } = await supabase
     .from("live_mini_participants")
     .select("id", { count: "exact", head: true })
     .eq("user_id", user.id)
     .eq("role", "member")
-    .eq("status", "invited");
+    .eq("status", "invited")
+    .gt("invite_expires_at", new Date().toISOString());
   if (error) throw error;
   return count ?? 0;
 }
@@ -292,6 +318,7 @@ export async function listLiveMiniParticipantStatuses(
 ): Promise<Record<string, LiveMiniParticipantStatus>> {
   const supabase = getSupabase();
   if (!supabase) return {};
+  await refreshLiveMiniExpiredInvites(squadId).catch(() => {});
   const { data, error } = await supabase
     .from("live_mini_participants")
     .select("user_id,status")

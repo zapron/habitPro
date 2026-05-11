@@ -4,6 +4,7 @@ export type LiveMiniParticipantRole = "creator" | "member";
 
 export type LiveMiniParticipantStatus =
   | "invited"
+  | "expired"
   | "declined"
   | "joined"
   | "in_progress"
@@ -28,6 +29,7 @@ export type LiveMiniParticipantRow = {
   user_id: string;
   role: LiveMiniParticipantRole;
   status: LiveMiniParticipantStatus;
+  invite_expires_at: string | null;
   local_mini_mission_id: string | null;
   planned_minutes: number | null;
   reserve_minutes: number;

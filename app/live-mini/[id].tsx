@@ -34,6 +34,7 @@ import {
   declineLiveMiniInvite,
   fetchLiveMiniSquad,
   formatLiveMiniElapsed,
+  isLiveMiniInviteActionable,
   subscribeLiveMiniSquad,
 } from "../../src/lib/liveMiniMissionsApi";
 import { syncLiveMiniFromLocalMission } from "../../src/lib/liveMiniMissionProgress";
@@ -126,10 +127,25 @@ function formatShortDateTime(iso?: string | null): string {
   }
 }
 
+function formatInviteExpiry(expiresAt: string | null | undefined): string | null {
+  if (!expiresAt) return null;
+  const ms = new Date(expiresAt).getTime() - Date.now();
+  if (!Number.isFinite(ms)) return null;
+  if (ms <= 0) return "Invite expired";
+  const minutes = Math.ceil(ms / 60_000);
+  if (minutes < 60) return `Invite expires in ${minutes}m`;
+  const hours = Math.ceil(minutes / 60);
+  if (hours < 24) return `Invite expires in ${hours}h`;
+  const days = Math.ceil(hours / 24);
+  return `Invite expires in ${days}d`;
+}
+
 function statusCopy(status: LiveMiniParticipantStatus): string {
   switch (status) {
     case "invited":
       return "Invited";
+    case "expired":
+      return "Expired";
     case "declined":
       return "Declined";
     case "joined":
@@ -152,6 +168,9 @@ function statusTone(status: LiveMiniParticipantStatus, theme: ReturnType<typeof 
   if (status === "in_progress") {
     return { fg: theme.colors.cyan[400], bg: isDark ? "rgba(34,211,238,0.13)" : "rgba(8,145,178,0.1)" };
   }
+  if (status === "expired") {
+    return { fg: theme.colors.textMuted, bg: isDark ? "rgba(148,163,184,0.12)" : "rgba(100,116,139,0.08)" };
+  }
   if (status === "missed" || status === "cancelled" || status === "declined") {
     return { fg: theme.colors.red[500], bg: isDark ? "rgba(239,68,68,0.12)" : "rgba(220,38,38,0.08)" };
   }
@@ -159,7 +178,7 @@ function statusTone(status: LiveMiniParticipantStatus, theme: ReturnType<typeof 
 }
 
 function isTerminalLiveMiniStatus(status: LiveMiniParticipantStatus): boolean {
-  return status === "completed" || status === "missed" || status === "cancelled" || status === "declined";
+  return status === "completed" || status === "missed" || status === "cancelled" || status === "declined" || status === "expired";
 }
 
 function participantSortValue(row: LiveMiniParticipantRow): number {
@@ -202,8 +221,9 @@ function LiveSquadDetailsSheet({
   const completed = participants.filter((p) => p.status === "completed").length;
   const onMission = participants.filter((p) => p.status === "in_progress").length;
   const waiting = participants.filter((p) => p.status === "invited" || p.status === "joined").length;
+  const expired = participants.filter((p) => p.status === "expired").length;
   const inactive = participants.filter((p) =>
-    p.status === "declined" || p.status === "cancelled" || p.status === "missed",
+    p.status === "declined" || p.status === "cancelled" || p.status === "missed" || p.status === "expired",
   ).length;
   const statusLabel =
     squad.status === "active" ? "Active" : squad.status === "ended" ? "Ended" : "Cancelled";
@@ -297,8 +317,13 @@ function LiveSquadDetailsSheet({
               <>
                 <Text style={[styles.detailsSectionLabel, { color: theme.colors.textMuted }]}>Closed slots</Text>
                 <Text style={[styles.detailsLine, { color: theme.colors.textPrimary }]}>
-                  {inactive} declined, missed, or cancelled
+                  {inactive} declined, missed, cancelled, or expired
                 </Text>
+                {expired > 0 ? (
+                  <Text style={[styles.detailsSubLine, { color: theme.colors.textSecondary }]}>
+                    {expired} invite{expired === 1 ? "" : "s"} expired without action.
+                  </Text>
+                ) : null}
               </>
             ) : null}
 
@@ -1022,7 +1047,9 @@ export default function LiveMiniSquadScreen() {
     };
   }, []);
 
-  const acceptDisabled = busy !== null || !myParticipant || myParticipant.status !== "invited";
+  const inviteActionable = myParticipant ? isLiveMiniInviteActionable(myParticipant) : false;
+  const acceptDisabled = busy !== null || !myParticipant || !inviteActionable;
+  const inviteExpiryLabel = inviteActionable ? formatInviteExpiry(myParticipant?.invite_expires_at) : null;
 
   const handleAccept = async () => {
     if (!squad || !myParticipant || !squadId || acceptDisabled) return;
@@ -1070,7 +1097,7 @@ export default function LiveMiniSquadScreen() {
   };
 
   const handleDecline = async () => {
-    if (!squadId || !myParticipant || myParticipant.status !== "invited" || busy) return;
+    if (!squadId || !myParticipant || !inviteActionable || busy) return;
     setBusy("decline");
     try {
       const res = await traceAsync("liveMini.decline", () => declineLiveMiniInvite(squadId), {
@@ -1094,13 +1121,15 @@ export default function LiveMiniSquadScreen() {
   };
 
   const bottomText =
-    myParticipant?.status === "invited"
+    inviteActionable
       ? "Choose your timer. Accept starts it immediately."
-      : myParticipant?.status === "completed"
-        ? "Your result is locked on the squad board."
-        : myParticipant?.status === "in_progress"
-          ? "Finish before your timer runs out to rank."
-          : "Squad results update as people finish.";
+      : myParticipant?.status === "expired"
+        ? "This invite expired. You can still view the board."
+        : myParticipant?.status === "completed"
+          ? "Your result is locked on the squad board."
+          : myParticipant?.status === "in_progress"
+            ? "Finish before your timer runs out to rank."
+            : "Squad results update as people finish.";
 
   return (
     <Screen>
@@ -1252,11 +1281,12 @@ export default function LiveMiniSquadScreen() {
             </TouchableOpacity>
           ) : null}
 
-          {myParticipant?.status === "invited" ? (
+          {inviteActionable ? (
             <View style={[styles.acceptCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, ...theme.shadow.card }]}>
               <Text style={[styles.acceptTitle, { color: theme.colors.textPrimary }]}>Pick your timer</Text>
               <Text style={[styles.acceptBody, { color: theme.colors.textSecondary }]}>
                 Your timer starts as soon as you accept. Max duration is 8 hours.
+                {inviteExpiryLabel ? ` ${inviteExpiryLabel}.` : ""}
               </Text>
               <FuelQuickMinutesStrip
                 presets={QUICK_MINUTES}

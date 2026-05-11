@@ -46,6 +46,8 @@ function statusLabel(status: LiveMiniParticipantStatus | undefined): string | nu
   switch (status) {
     case "invited":
       return "Pending";
+    case "expired":
+      return "Expired";
     case "declined":
       return "Declined";
     case "joined":
@@ -64,7 +66,7 @@ function statusLabel(status: LiveMiniParticipantStatus | undefined): string | nu
 }
 
 function isTerminalLiveMiniStatus(status: LiveMiniParticipantStatus): boolean {
-  return status === "completed" || status === "missed" || status === "cancelled" || status === "declined";
+  return status === "completed" || status === "missed" || status === "cancelled" || status === "declined" || status === "expired";
 }
 
 export function LiveMiniInviteSheet({ visible, mission, onClose }: Props) {

@@ -72,6 +72,7 @@ import {
 import {
   declineLiveMiniInvite,
   formatLiveMiniElapsed,
+  isLiveMiniInviteActionable,
   listLiveMiniInvitesForMePage,
   type LiveMiniInviteForMe,
 } from "../../src/lib/liveMiniMissionsApi";
@@ -195,7 +196,7 @@ function InviteStatusPill({
   label,
   theme,
 }: {
-  variant: "pending" | "accepted" | "declined";
+  variant: "pending" | "accepted" | "declined" | "neutral";
   label: string;
   theme: ReturnType<typeof useTheme>["theme"];
 }) {
@@ -212,6 +213,12 @@ function InviteStatusPill({
             border: "rgba(239, 68, 68, 0.45)",
             text: theme.colors.red[500],
           }
+        : variant === "neutral"
+          ? {
+              bg: "rgba(148, 163, 184, 0.12)",
+              border: "rgba(148, 163, 184, 0.32)",
+              text: theme.colors.textMuted,
+            }
         : {
             bg: "rgba(245, 158, 11, 0.14)",
             border: "rgba(245, 158, 11, 0.45)",
@@ -228,6 +235,8 @@ function liveMiniStatusLabel(status: LiveMiniInviteForMe["participant"]["status"
   switch (status) {
     case "invited":
       return "Action needed";
+    case "expired":
+      return "Expired";
     case "joined":
       return "Joined";
     case "in_progress":
@@ -263,9 +272,10 @@ function sortMixedInvites(a: MixedInviteItem, b: MixedInviteItem): number {
   return b.createdAtMs - a.createdAtMs;
 }
 
-function liveMiniStatusVariant(status: LiveMiniInviteForMe["participant"]["status"]): "pending" | "accepted" | "declined" {
+function liveMiniStatusVariant(status: LiveMiniInviteForMe["participant"]["status"]): "pending" | "accepted" | "declined" | "neutral" {
   if (status === "invited" || status === "joined") return "pending";
   if (status === "in_progress" || status === "completed") return "accepted";
+  if (status === "expired") return "neutral";
   return "declined";
 }
 
@@ -303,6 +313,18 @@ function formatEndsIn(endsAtMs: number): string {
   if (ms <= 0) return "Ends today";
   const d = Math.ceil(ms / (24 * 60 * 60 * 1000));
   return d === 1 ? "1 day left" : `${d} days left`;
+}
+
+function formatInviteExpiry(expiresAt: string | null | undefined): string {
+  if (!expiresAt) return "24h invite";
+  const ms = new Date(expiresAt).getTime() - Date.now();
+  if (!Number.isFinite(ms) || ms <= 0) return "Expired";
+  const minutes = Math.ceil(ms / 60_000);
+  if (minutes < 60) return `${minutes}m left`;
+  const hours = Math.ceil(minutes / 60);
+  if (hours < 24) return `${hours}h left`;
+  const days = Math.ceil(hours / 24);
+  return `${days}d left`;
 }
 
 function ActiveChallengeCard({
@@ -548,7 +570,7 @@ export default function CompeteScreen() {
   const invitePulse = useRef(new Animated.Value(0)).current;
   const hasAwaitingInvite =
     groupInvites.some((i) => i.status === "pending") ||
-    liveMiniInvites.some((i) => i.participant.status === "invited");
+    liveMiniInvites.some((i) => isLiveMiniInviteActionable(i.participant));
 
   groupInvitesRef.current = groupInvites;
   liveMiniInvitesRef.current = liveMiniInvites;
@@ -661,7 +683,7 @@ export default function CompeteScreen() {
       setLiveMiniInvitesNextOffset(livePage.nextOffset);
       syncInviteBadgeCount(
         rows.filter((i) => i.status === "pending").length +
-          liveRows.filter((i) => i.participant.status === "invited").length,
+          liveRows.filter((i) => isLiveMiniInviteActionable(i.participant)).length,
       );
       const meta: Record<string, InviteCardMeta> = {};
       let requesterLabels: Record<string, ProfileLabel> = {};
@@ -1138,7 +1160,7 @@ export default function CompeteScreen() {
   const pendingInviteCount = useMemo(
     () =>
       groupInvites.filter((i) => i.status === "pending").length +
-      liveMiniInvites.filter((i) => i.participant.status === "invited").length,
+      liveMiniInvites.filter((i) => isLiveMiniInviteActionable(i.participant)).length,
     [groupInvites, liveMiniInvites],
   );
   const invitesHasMore = groupInvitesNextOffset != null || liveMiniInvitesNextOffset != null;
@@ -1179,7 +1201,9 @@ export default function CompeteScreen() {
   const renderLiveMiniInviteCard = (liveInvite: LiveMiniInviteForMe) => {
     const participant = liveInvite.participant;
     const squad = liveInvite.squad;
-    const pending = participant.status === "invited";
+    const pending = isLiveMiniInviteActionable(participant);
+    const effectiveStatus = !pending && participant.status === "invited" ? "expired" : participant.status;
+    const expired = effectiveStatus === "expired";
     const busyKey = `live:${participant.id}`;
     const localMission = miniMissionByLiveSquadId.get(squad.id);
     const localMissionId = localMission?.id ?? participant.local_mini_mission_id;
@@ -1190,7 +1214,9 @@ export default function CompeteScreen() {
     const totalMinutes =
       plannedMinutes == null ? null : plannedMinutes + (participant.reserve_minutes ?? 0);
     const timerLabel =
-      participant.status === "completed" && participant.final_elapsed_seconds != null
+      pending
+        ? formatInviteExpiry(participant.invite_expires_at)
+        : participant.status === "completed" && participant.final_elapsed_seconds != null
         ? `Done in ${formatLiveMiniElapsed(participant.final_elapsed_seconds)}`
         : formatLiveMiniMinutes(totalMinutes);
     const liveMeta: InviteCardMeta = {
@@ -1228,11 +1254,11 @@ export default function CompeteScreen() {
         <InviteRequesterLine username={liveInvite.creator?.username} theme={theme} />
         <View style={styles.inviteStatusRow}>
           <InviteStatusPill
-            variant={liveMiniStatusVariant(participant.status)}
-            label={liveMiniStatusLabel(participant.status)}
+            variant={liveMiniStatusVariant(effectiveStatus)}
+            label={liveMiniStatusLabel(effectiveStatus)}
             theme={theme}
           />
-          {participant.status !== "declined" ? (
+          {participant.status !== "declined" && !expired ? (
             <View
               style={[
                 styles.liveInviteTimerPill,
@@ -1252,13 +1278,15 @@ export default function CompeteScreen() {
         <Text style={[styles.inviteHint, { color: theme.colors.textSecondary }]}>
           {pending
             ? "Open this invite to choose your timer. Joining Live Mini Missions is free for invitees."
-            : participant.status === "in_progress"
+            : effectiveStatus === "in_progress"
               ? "Your timer is running. Finish before the deadline to rank on the board."
-              : participant.status === "completed"
+              : effectiveStatus === "completed"
                 ? "Your result is saved on the Live Squad board."
-                : participant.status === "declined"
+                : effectiveStatus === "declined"
                   ? "You declined this Live Squad invite."
-                  : participant.status === "missed"
+                  : effectiveStatus === "expired"
+                    ? "This Live Squad invite expired."
+                  : effectiveStatus === "missed"
                     ? "This Live Mini timer expired."
                     : "Open the board to see the squad status."}
         </Text>
