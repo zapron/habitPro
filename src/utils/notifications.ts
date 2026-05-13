@@ -18,13 +18,6 @@ function shouldSkipNotificationsModule(): boolean {
 type NotificationsModule = typeof import("expo-notifications");
 
 let cached: NotificationsModule | null | undefined;
-let activeMiniMissionContext: {
-  missionId: string | null;
-  screenVisible: boolean;
-} = {
-  missionId: null,
-  screenVisible: false,
-};
 
 const foregroundDisplay = {
   shouldPlaySound: true,
@@ -39,13 +32,6 @@ const foregroundSuppress = {
   shouldShowBanner: false,
   shouldShowList: false,
 };
-
-export function setActiveMiniMissionNotificationContext(next: {
-  missionId: string | null;
-  screenVisible: boolean;
-}) {
-  activeMiniMissionContext = next;
-}
 
 function getMiniMissionEndMs(missionId: string): number | null {
   const mission = useHabitStore.getState().miniMissions.find((m) => m.id === missionId);
@@ -77,10 +63,7 @@ function shouldSuppressForegroundNotification(data: Record<string, unknown> | un
   if (kind === "mini_warn" && expectedEndMs <= Date.now()) return true;
   if (kind === "mini_fail" && expectedEndMs + 5 * 60_000 < Date.now()) return true;
 
-  return (
-    activeMiniMissionContext.screenVisible &&
-    activeMiniMissionContext.missionId === missionId
-  );
+  return false;
 }
 
 async function getNotifications(): Promise<NotificationsModule | null> {

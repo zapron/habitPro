@@ -64,7 +64,11 @@ function numberFromNotificationData(value: unknown): number | null {
   return null;
 }
 
-async function scanAndCancelMiniMissionNotifications(missionId: string) {
+async function scanAndCancelMiniMissionNotifications(
+  missionId: string,
+  kinds: MiniMissionNotifKind[] = ["mini_warn", "mini_fail"],
+) {
+  const kindSet = new Set(kinds);
   const scheduled = await listScheduledNotifications();
   await Promise.all(
     scheduled
@@ -73,7 +77,8 @@ async function scanAndCancelMiniMissionNotifications(missionId: string) {
         return (
           data?.type === "mini_mission" &&
           data?.missionId === missionId &&
-          isMiniMissionNotifKind(data?.kind)
+          isMiniMissionNotifKind(data?.kind) &&
+          kindSet.has(data.kind)
         );
       })
       .map((n) => cancelNotification(n.identifier)),
@@ -282,6 +287,13 @@ async function syncMiniMissionNotificationsNow(missions: MiniMission[]) {
     failIdByMission.set(mission.id, newFailId);
     lastEndMsByMission.set(mission.id, endMs);
   }
+}
+
+/** Cancel the pre-end warning while leaving the deadline alert intact. */
+export async function clearMiniMissionWarningNotification(missionId: string) {
+  await cancelNotification(warnIdByMission.get(missionId) ?? null);
+  await scanAndCancelMiniMissionNotifications(missionId, ["mini_warn"]);
+  warnIdByMission.delete(missionId);
 }
 
 /** Cancel scheduled warn + fail for one mission (e.g. timer fired in foreground). */

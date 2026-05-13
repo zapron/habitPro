@@ -10,6 +10,7 @@ import { useTheme } from "../../src/context/ThemeContext";
 import { FuelTimePresetButton } from "../../src/components/fuel/FuelTimePresetButton";
 import { FuelQuickMinutesStrip } from "../../src/components/fuel/FuelQuickMinutesStrip";
 import { backOrReplace } from "../../src/lib/navigation";
+import { useNotificationGate } from "../../src/context/NotificationGateContext";
 
 type StartMode = "now" | "later";
 
@@ -41,17 +42,20 @@ export default function CreateMiniMission() {
   const router = useRouter();
   const { theme, isDark } = useTheme();
   const addMiniMission = useHabitStore((state) => state.addMiniMission);
+  const { softAskNotifications } = useNotificationGate();
 
   const [title, setTitle] = useState("");
   const [objective, setObjective] = useState("");
   const [totalMinutes, setTotalMinutes] = useState(15);
   const [startMode, setStartMode] = useState<StartMode>("now");
   const [focused, setFocused] = useState<"title" | "objective" | "minutes" | null>(null);
+  const [creating, setCreating] = useState(false);
 
   const displayHours = Math.floor(totalMinutes / 60);
   const displayMins = totalMinutes % 60;
 
   const handleCreate = () => {
+    if (creating) return;
     if (!title.trim()) {
       Alert.alert("Error", "Please enter the mini mission.");
       return;
@@ -62,18 +66,30 @@ export default function CreateMiniMission() {
       return;
     }
 
-    const id = addMiniMission({
-      title: title.trim(),
-      objective: objective.trim(),
-      estimatedMinutes: minutes,
-      startMode,
-    });
+    setCreating(true);
+    void (async () => {
+      try {
+        if (startMode === "now") {
+          const notificationResult = await softAskNotifications("mini_timer");
+          if (notificationResult === "settings") return;
+        }
 
-    if (startMode === "now") {
-      router.replace(`/mini/${id}`);
-      return;
-    }
-    router.replace("/mini");
+        const id = addMiniMission({
+          title: title.trim(),
+          objective: objective.trim(),
+          estimatedMinutes: minutes,
+          startMode,
+        });
+
+        if (startMode === "now") {
+          router.replace(`/mini/${id}`);
+          return;
+        }
+        router.replace("/mini");
+      } finally {
+        setCreating(false);
+      }
+    })();
   };
 
   return (
@@ -263,7 +279,12 @@ export default function CreateMiniMission() {
           </TouchableOpacity>
         </View>
 
-        <Button title="Create Mini Mission" onPress={handleCreate} style={styles.cta} />
+        <Button
+          title={creating ? "Creating..." : "Create Mini Mission"}
+          onPress={handleCreate}
+          disabled={creating}
+          style={styles.cta}
+        />
       </ScrollView>
     </Screen>
   );

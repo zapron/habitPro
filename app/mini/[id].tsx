@@ -44,9 +44,8 @@ import {
   Users,
 } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
-import { setActiveMiniMissionNotificationContext } from "../../src/utils/notifications";
 import {
-  clearMiniMissionNotifications,
+  clearMiniMissionWarningNotification,
   syncMiniMissionNotifications,
 } from "../../src/utils/miniMissionNotifications";
 import { Screen } from "../../src/components/Screen";
@@ -1164,21 +1163,6 @@ export default function MiniMissionDetail() {
     }
   }, [focusModeOpen, mission?.status]);
 
-  useEffect(() => {
-    const screenVisible =
-      isFocused && mission?.status === "in_progress";
-    setActiveMiniMissionNotificationContext({
-      missionId: screenVisible && mission ? mission.id : null,
-      screenVisible,
-    });
-    return () => {
-      setActiveMiniMissionNotificationContext({
-        missionId: null,
-        screenVisible: false,
-      });
-    };
-  }, [isFocused, mission?.id, mission?.status]);
-
   const flightProgressive = useMemo(
     () => remainingMsToProgressiveCountdown(countdown),
     [countdown],
@@ -1216,7 +1200,7 @@ export default function MiniMissionDetail() {
     return Math.min(1, Math.max(0, elapsedMs / totalMs));
   }, [mission, now, totalMinutes, completeSheetOpen, timerFrozenAtMs]);
 
-  // Timer expiry while this screen is open: haptics + cancel OS schedule (avoid duplicate).
+  // Timer expiry while this screen is open: haptics + keep the deadline alert deliverable.
   // Dedupe by mission id + planned end (module map) so leaving and reopening the card does not spam.
   useEffect(() => {
     if (!isTimerUp || !mission?.startedAt) return;
@@ -1228,7 +1212,7 @@ export default function MiniMissionDetail() {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     Vibration.vibrate([0, 400, 200, 400, 200, 400]);
     void (async () => {
-      await clearMiniMissionNotifications(mission.id);
+      await clearMiniMissionWarningNotification(mission.id);
       await syncLiveMiniFromLocalMission(mission, { now: endMs });
     })();
   }, [isTimerUp, mission]);

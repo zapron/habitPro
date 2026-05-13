@@ -818,7 +818,7 @@ export default function LiveMiniSquadScreen() {
   const { theme, isDark } = useTheme();
   const { showToast } = useToast();
   const { session } = useAuth();
-  const { suggestNotifications } = useNotificationGate();
+  const { softAskNotifications } = useNotificationGate();
   const userId = session?.user?.id ?? null;
   const addMiniMission = useHabitStore((s) => s.addMiniMission);
   const miniMissions = useHabitStore((s) => s.miniMissions);
@@ -1053,11 +1053,14 @@ export default function LiveMiniSquadScreen() {
 
   const handleAccept = async () => {
     if (!squad || !myParticipant || !squadId || acceptDisabled) return;
-    const minutes = clampMinutes(selectedMinutes);
-    const localId = createMiniMissionId();
-    const startedAt = new Date().toISOString();
     setBusy("accept");
     try {
+      const notificationResult = await softAskNotifications("mini_timer");
+      if (notificationResult === "settings") return;
+
+      const minutes = clampMinutes(selectedMinutes);
+      const localId = createMiniMissionId();
+      const startedAt = new Date().toISOString();
       const res = await traceAsync(
         "liveMini.acceptStart",
         () =>
@@ -1086,9 +1089,6 @@ export default function LiveMiniSquadScreen() {
       });
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       showToast("Joined Live Squad. Timer started.", "success");
-      setTimeout(() => {
-        void suggestNotifications("invite_accept");
-      }, 350);
       void load(true, { force: true });
       router.push(`/mini/${localId}`);
     } finally {
