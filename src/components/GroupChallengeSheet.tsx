@@ -1,12 +1,11 @@
 import { Text } from "./AppText";
-import {
-  useCallback,
-  useEffect,
-  useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   StyleSheet,
   TextInput,
   TouchableOpacity,
@@ -100,12 +99,14 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
     if (!visible) {
       setQuery("");
       setResults([]);
+      setSearching(false);
       return;
     }
     let cancelled = false;
     const q = query.trim();
     if (q.length < 3) {
       setResults([]);
+      setSearching(false);
       return;
     }
     setSearching(true);
@@ -217,8 +218,13 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
     <>
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <BlurView intensity={30} tint={theme.colors.background === '#ffffff' ? "light" : "dark"} style={StyleSheet.absoluteFill} />
-      <View style={[styles.backdrop, { backgroundColor: theme.colors.background === '#ffffff' ? 'rgba(0,0,0,0.2)' : 'rgba(0,0,0,0.4)' }]}>
-        <View style={[styles.sheet, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={0}
+        style={styles.keyboardAvoider}
+      >
+        <View style={[styles.backdrop, { backgroundColor: theme.colors.background === '#ffffff' ? 'rgba(0,0,0,0.2)' : 'rgba(0,0,0,0.4)' }]}>
+          <View style={[styles.sheet, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
           <View style={styles.sheetHead}>
             <View style={styles.titleRow}>
               <Text style={[styles.sheetTitle, { color: theme.colors.textPrimary }]}>Group mission</Text>
@@ -330,8 +336,9 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
               ) : null}
             </>
           )}
+          </View>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
 
     <ConfirmDialog
@@ -356,6 +363,9 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
 }
 
 const styles = StyleSheet.create({
+  keyboardAvoider: {
+    flex: 1,
+  },
   backdrop: {
     flex: 1,
     justifyContent: "flex-end",

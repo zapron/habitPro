@@ -2,7 +2,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   StyleSheet,
   TextInput,
   TouchableOpacity,
@@ -132,11 +134,13 @@ export function LiveMiniInviteSheet({ visible, mission, onClose }: Props) {
     if (!visible) {
       setQuery("");
       setResults([]);
+      setSearching(false);
       return;
     }
     const q = query.trim();
     if (!squadId || q.length < 3) {
       setResults([]);
+      setSearching(false);
       return;
     }
     let cancelled = false;
@@ -285,13 +289,18 @@ export function LiveMiniInviteSheet({ visible, mission, onClose }: Props) {
         tint={isDark ? "dark" : "light"}
         style={StyleSheet.absoluteFill}
       />
-      <View
-        style={[
-          styles.backdrop,
-          { backgroundColor: isDark ? "rgba(0,0,0,0.42)" : "rgba(15,23,42,0.22)" },
-        ]}
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={0}
+        style={styles.keyboardAvoider}
       >
-        <View style={[styles.sheet, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
+        <View
+          style={[
+            styles.backdrop,
+            { backgroundColor: isDark ? "rgba(0,0,0,0.42)" : "rgba(15,23,42,0.22)" },
+          ]}
+        >
+          <View style={[styles.sheet, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
           <View style={styles.sheetHead}>
             <View style={styles.titleCluster}>
               <View style={styles.titleRow}>
@@ -448,13 +457,15 @@ export function LiveMiniInviteSheet({ visible, mission, onClose }: Props) {
               )}
             </>
           )}
+          </View>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
+  keyboardAvoider: { flex: 1 },
   backdrop: { flex: 1, justifyContent: "flex-end", padding: 16 },
   sheet: {
     width: "100%",
