@@ -59,6 +59,7 @@ import {
   xpInCurrentLevel,
   xpProgressInCurrentLevel,
 } from "../../src/utils/xpLevel";
+import { AiCoachHomeCard, isAiCoachEnabled } from "../../src/features/aiCoach";
 
 function getGreeting(): string {
   const hour = new Date().getHours();
@@ -286,6 +287,7 @@ export default function Home() {
   // Show skeleton until first Supabase hydrate finishes to avoid a confusing empty flash.
   const waitingForFirstSync = Boolean(showAccount && session?.user && !syncReady && !syncError);
   const cloudSyncBlocked = Boolean(showAccount && session?.user && syncError);
+  const aiCoachEnabled = isAiCoachEnabled();
 
   const bellScale = useRef(new Animated.Value(1)).current;
   const bellBuzz = useRef(new Animated.Value(0)).current;
@@ -503,6 +505,11 @@ export default function Home() {
     }
     router.push("/mini");
   }, [homeSpark, router]);
+
+  const openPendingReports = useCallback(() => {
+    setActiveTab("reports");
+    setReportsSegment("pending");
+  }, []);
 
   const greetingText = useMemo(() => getGreeting(), []);
 
@@ -811,6 +818,17 @@ export default function Home() {
             </TouchableOpacity>
           ) : null}
         </View>
+
+        {aiCoachEnabled ? (
+          <AiCoachHomeCard
+            habits={habits}
+            miniMissions={miniMissions}
+            xp={xp}
+            level={level}
+            signedIn={Boolean(session?.user)}
+            onOpenReports={openPendingReports}
+          />
+        ) : null}
 
         <CoachMarkTarget id="home_mini_missions">
           <TouchableOpacity

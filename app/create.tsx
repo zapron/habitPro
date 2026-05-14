@@ -9,7 +9,7 @@ import {
   TouchableOpacity,
   StatusBar,
 } from "react-native";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 
 import {
   ArrowLeft,
@@ -32,9 +32,12 @@ import { usePlusUpsell } from "../src/context/PlusUpsellContext";
 import { backOrReplace } from "../src/lib/navigation";
 import { useNotificationGate } from "../src/context/NotificationGateContext";
 import { useRefreshPremiumAccess } from "../src/hooks/useRefreshPremiumAccess";
+import { isAiCoachEnabled, readAiCoachCreatePrefill } from "../src/features/aiCoach";
 
 export default function CreateHabit() {
   const router = useRouter();
+  const params = useLocalSearchParams<Record<string, string | string[]>>();
+  const aiPrefill = isAiCoachEnabled() ? readAiCoachCreatePrefill(params) : null;
   const { theme, isDark } = useTheme();
   const addHabit = useHabitStore((state) => state.addHabit);
   const { isPremium, loading: premiumLoading } = usePremium();
@@ -43,10 +46,10 @@ export default function CreateHabit() {
   const { suggestNotifications } = useNotificationGate();
   const plusOk = isPremium && !premiumLoading;
 
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [mode, setMode] = useState<HabitMode>("autopilot");
-  const [totalDays, setTotalDays] = useState(30);
+  const [title, setTitle] = useState(aiPrefill?.title ?? "");
+  const [description, setDescription] = useState(aiPrefill?.description ?? "");
+  const [mode, setMode] = useState<HabitMode>(aiPrefill?.mode ?? "autopilot");
+  const [totalDays, setTotalDays] = useState(aiPrefill?.totalDays ?? 30);
   const [visibility, setVisibility] = useState<MissionVisibility>("solo");
   const [focused, setFocused] = useState<"title" | "desc" | null>(null);
 
