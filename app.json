@@ -4,7 +4,7 @@
     "owner": "raktim24",
     "slug": "habitPro",
     "scheme": "habitpro",
-    "version": "1.1.15",
+    "version": "1.1.16",
     "platforms": [
       "ios",
       "android"
@@ -23,7 +23,7 @@
     },
     "android": {
       "package": "com.rakti.habitpro",
-      "versionCode": 16,
+      "versionCode": 17,
       "adaptiveIcon": {
         "foregroundImage": "./assets/swirling-gradient-flame-logo.png",
         "backgroundColor": "#000000"
