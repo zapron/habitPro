@@ -251,7 +251,7 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
               <Button title="Open group mission" onPress={openChallenge} />
               <Text style={[styles.sectionLabel, { color: theme.colors.textMuted }]}>Invite someone</Text>
               <TextInput
-                editable={plusOk}
+                editable
                 value={query}
                 onChangeText={setQuery}
                 placeholder="Search by username"

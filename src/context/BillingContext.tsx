@@ -401,7 +401,9 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
     if (isExpoGo) return;
     Purchases.setLogHandler((level, message) => {
       appendRevenueCatLog(level, message);
-      console.log("[habitPro][RevenueCat]", level, message);
+      if (__DEV__) {
+        console.log("[habitPro][RevenueCat]", level, message);
+      }
     });
     void Purchases.setLogLevel(__DEV__ ? LOG_LEVEL.DEBUG : LOG_LEVEL.WARN);
   }, [appendRevenueCatLog, isExpoGo]);
@@ -646,4 +648,3 @@ export function useBilling(): BillingContextValue {
   if (!v) throw new Error("useBilling must be used within BillingProvider");
   return v;
 }
-

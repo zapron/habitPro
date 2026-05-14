@@ -380,7 +380,7 @@ export function LiveMiniInviteSheet({ visible, mission, onClose }: Props) {
                 <>
                   <Text style={[styles.sectionLabel, { color: theme.colors.textMuted }]}>INVITE BY USERNAME</Text>
                   <TextInput
-                    editable={plusOk}
+                    editable
                     value={query}
                     onChangeText={setQuery}
                     placeholder="Search username"
