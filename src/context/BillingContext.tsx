@@ -403,7 +403,7 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
       appendRevenueCatLog(level, message);
       console.log("[habitPro][RevenueCat]", level, message);
     });
-    void Purchases.setLogLevel(LOG_LEVEL.DEBUG);
+    void Purchases.setLogLevel(__DEV__ ? LOG_LEVEL.DEBUG : LOG_LEVEL.WARN);
   }, [appendRevenueCatLog, isExpoGo]);
 
   useEffect(() => {

@@ -5,7 +5,7 @@ import React, {
   useMemo,
   useState,
 } from "react";
-import { Linking, Modal, Pressable, ScrollView, Share, StyleSheet, View } from "react-native";
+import { Linking, Modal, Platform, Pressable, ScrollView, Share, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Text } from "../components/AppText";
 import { Button } from "../components/Button";
@@ -206,6 +206,11 @@ function BillingUpsellModal({
 
   if (!visible) return null;
 
+  const storeName = Platform.OS === "ios" ? "App Store" : "Google Play";
+  const storeInstallHint =
+    Platform.OS === "ios"
+      ? "Purchase could not start. Make sure this app was installed from TestFlight or the App Store with a tester account."
+      : "Purchase could not start. Make sure this app was installed from Google Play with a tester account.";
   const canBuy = configured && ready && busy === null;
   const showBillingDebug = __DEV__ && Boolean(purchaseError || billingDebug);
   const debugLines = showBillingDebug && billingDebug ? billingDebugLines(billingDebug) : [];
@@ -265,7 +270,7 @@ function BillingUpsellModal({
         setPurchaseError(
           msg && msg.length <= 180
             ? `${prefix}${msg}`
-            : "Purchase could not start. Make sure this app was installed from Google Play with a tester account.",
+            : storeInstallHint,
         );
         showToast("Purchase did not complete.", "error");
       }
@@ -274,7 +279,7 @@ function BillingUpsellModal({
       setPurchaseError(
         msg.length <= 180
           ? msg
-          : "Purchase could not start. Make sure this app was installed from Google Play with a tester account.",
+          : storeInstallHint,
       );
       showToast(msg.length > 120 ? "Purchase failed to start." : msg, "error");
     } finally {
@@ -371,8 +376,7 @@ function BillingUpsellModal({
         </View>
 
         <Text style={[styles.disclaimer, { color: theme.colors.textMuted }]}>
-          Monthly and yearly plans are shown by Google Play before purchase.
-          Cancel anytime in Google Play.
+          Monthly and yearly plans are shown by {storeName} before purchase. Cancel anytime in {storeName}.
         </Text>
 
         {!configured ? (
@@ -386,7 +390,7 @@ function BillingUpsellModal({
           <Text
             style={[styles.disclaimerHint, { color: theme.colors.textMuted }]}
           >
-            Billing is available in a dev build / Play install (not Expo Go).
+            Billing is available in a dev build or store install (not Expo Go).
           </Text>
         ) : null}
 
@@ -451,7 +455,7 @@ function BillingUpsellModal({
 
         <Button
           title={
-            busy === "monthly" ? "Opening Google Play..." : "Subscribe monthly"
+            busy === "monthly" ? `Opening ${storeName}…` : "Subscribe monthly"
           }
           onPress={() => void run("monthly")}
           disabled={!canBuy}
@@ -459,7 +463,7 @@ function BillingUpsellModal({
         />
         <Button
           title={
-            busy === "yearly" ? "Opening Google Play..." : "Subscribe yearly"
+            busy === "yearly" ? `Opening ${storeName}…` : "Subscribe yearly"
           }
           onPress={() => void run("yearly")}
           disabled={!canBuy}
