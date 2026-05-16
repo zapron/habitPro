@@ -1,4 +1,5 @@
 import React, {
+  memo,
   useCallback,
   useEffect,
   useMemo,
@@ -34,6 +35,7 @@ import {
   Gamepad2,
   Globe,
   Swords,
+  Flame,
 } from "lucide-react-native";
 import { useHabitStore } from "../../src/store/habitStore";
 import { useAuth } from "../../src/context/AuthContext";
@@ -53,6 +55,7 @@ import {
   isMainMissionPlayableOnHome,
   needsMainMissionOutcome,
 } from "../../src/utils/mainMissionUi";
+import { getHabitActiveMissionDateKey } from "../../src/utils/missionDaySlots";
 import {
   XP_PER_LEVEL,
   levelFromTotalXp,
@@ -129,7 +132,7 @@ type HomeSpark =
   | { kind: "lead" | "chase"; title: string; body: string; challengeId: string }
   | { kind: "mini" | "xp" | "reports"; title: string; body: string };
 
-function MainMissionLegend({
+const MainMissionLegend = memo(function MainMissionLegend({
   theme,
   isDark,
 }: {
@@ -169,9 +172,9 @@ function MainMissionLegend({
       ))}
     </View>
   );
-}
+});
 
-function ShimmerTile({
+const ShimmerTile = memo(function ShimmerTile({
   theme,
   isDark,
   reduceMotion,
@@ -238,7 +241,7 @@ function ShimmerTile({
       </Animated.View>
     </View>
   );
-}
+});
 
 function ListSkeleton({
   theme,
@@ -281,6 +284,7 @@ export default function Home() {
   const [notifRefreshBusy, setNotifRefreshBusy] = useState(false);
   const [miniNow, setMiniNow] = useState(() => Date.now());
   const [missionNow, setMissionNow] = useState(() => Date.now());
+  const [xpTrackWidth, setXpTrackWidth] = useState(0);
   const showAccount = isSupabaseConfigured();
   // On new devices, zustand can hydrate an "empty" store before Supabase hydrate completes.
   // Show skeleton until first Supabase hydrate finishes to avoid a confusing empty flash.
@@ -423,6 +427,11 @@ export default function Home() {
       : miniMissionStats.waiting;
 
   const homeSpark = useMemo<HomeSpark | null>(() => {
+    // Deterministic daily seed so the card rotates across missions each day
+    // without being random on every render.
+    const todaySeed = new Date(missionNow).toISOString().slice(0, 10)
+      .split("").reduce((acc, c) => acc + c.charCodeAt(0), 0);
+
     const groupHabits = habits.filter(
       (h) =>
         h.challengeGroupId &&
@@ -430,37 +439,35 @@ export default function Home() {
         isMainMissionPlayableOnHome(h, missionNow),
     );
 
-    let bestLead: HomeSpark | null = null;
-    let bestLeadGap = 0;
-    let bestChase: HomeSpark | null = null;
-    let bestChaseGap = 0;
+    const squadSparks: HomeSpark[] = [];
     for (const habit of groupHabits) {
+      // Skip habits the user already checked in for today — nothing left to ask.
+      const todayKey = getHabitActiveMissionDateKey(habit, missionNow);
+      if (todayKey != null && habit.completedDates.includes(todayKey)) continue;
+
       const peers = cohortPeerHabits.filter((p) => p.challengeGroupId === habit.challengeGroupId);
       if (peers.length === 0 || !habit.challengeGroupId) continue;
-      const peerMaxStreak = Math.max(...peers.map((p) => p.streak ?? 0));
+      const peerMaxStreak = peers.reduce((m, p) => Math.max(m, p.streak ?? 0), 0);
       const leadBy = habit.streak - peerMaxStreak;
       const behindBy = peerMaxStreak - habit.streak;
-      if (leadBy > bestLeadGap) {
-        bestLeadGap = leadBy;
-        bestLead = {
+      if (leadBy > 0) {
+        squadSparks.push({
           kind: "lead",
           title: "You are leading the squad",
           body: `Hold ${habit.title} today to keep a ${leadBy}d gap.`,
           challengeId: habit.challengeGroupId,
-        };
-      }
-      if (behindBy > bestChaseGap) {
-        bestChaseGap = behindBy;
-        bestChase = {
+        });
+      } else if (behindBy > 0) {
+        squadSparks.push({
           kind: "chase",
           title: "A squadmate moved ahead",
           body: `${behindBy}d gap in ${habit.title}. One check-in keeps you close.`,
           challengeId: habit.challengeGroupId,
-        };
+        });
       }
     }
-    if (bestLead) return bestLead;
-    if (bestChase) return bestChase;
+    // Rotate daily through all actionable squad sparks so no single mission monopolises the card.
+    if (squadSparks.length > 0) return squadSparks[todaySeed % squadSparks.length];
 
     if (miniMissionStats.live > 0) {
       return {
@@ -508,6 +515,8 @@ export default function Home() {
 
   const headerOpacity = useRef(new Animated.Value(0)).current;
   const headerSlide = useRef(new Animated.Value(-15)).current;
+  const animXpFill = useRef(new Animated.Value(xpProgress)).current;
+  const prevXpProgressRef = useRef(xpProgress);
 
   useEffect(() => {
     if (reduceMotion) {
@@ -529,6 +538,21 @@ export default function Home() {
       }),
     ]).start();
   }, [headerOpacity, headerSlide, reduceMotion]);
+
+  useEffect(() => {
+    if (prevXpProgressRef.current === xpProgress) return;
+    prevXpProgressRef.current = xpProgress;
+    if (reduceMotion) {
+      animXpFill.setValue(xpProgress);
+      return;
+    }
+    Animated.spring(animXpFill, {
+      toValue: xpProgress,
+      tension: 60,
+      friction: 8,
+      useNativeDriver: true,
+    }).start();
+  }, [animXpFill, reduceMotion, xpProgress]);
 
   useEffect(() => {
     const unsub = useHabitStore.persist.onFinishHydration(() =>
@@ -589,20 +613,23 @@ export default function Home() {
     />
   );
 
-  const SparkIcon = homeSpark?.kind === "lead"
-    ? Trophy
-    : homeSpark?.kind === "mini"
-      ? Bolt
-      : homeSpark?.kind === "xp"
-        ? Zap
-        : Target;
-  const sparkAccent = homeSpark?.kind === "lead"
-    ? theme.colors.yellow[400]
-    : homeSpark?.kind === "chase"
-      ? theme.colors.indigo[400]
-      : homeSpark?.kind === "mini"
-        ? theme.colors.amber[500]
-        : theme.colors.cyan[400];
+  const SparkIcon =
+    homeSpark?.kind === "lead"   ? Trophy :
+    homeSpark?.kind === "chase"  ? Flame  :
+    homeSpark?.kind === "mini"   ? Bolt   :
+    homeSpark?.kind === "xp"     ? Zap    :
+    Target;
+  const sparkAccent =
+    homeSpark?.kind === "lead"   ? theme.colors.yellow[400] :
+    homeSpark?.kind === "chase"  ? theme.colors.red[400]    :
+    homeSpark?.kind === "mini"   ? theme.colors.amber[500]  :
+    theme.colors.cyan[400];
+  const sparkTint =
+    homeSpark?.kind === "lead"   ? (isDark ? "rgba(234,179,8,0.08)"   : "rgba(234,179,8,0.07)")   :
+    homeSpark?.kind === "chase"  ? (isDark ? "rgba(239,68,68,0.09)"   : "rgba(239,68,68,0.07)")   :
+    homeSpark?.kind === "mini"   ? (isDark ? "rgba(245,158,11,0.09)"  : "rgba(245,158,11,0.07)")  :
+    homeSpark?.kind === "xp"     ? (isDark ? "rgba(34,211,238,0.08)"  : "rgba(34,211,238,0.06)")  :
+    "transparent";
 
   const readyForCoachMarks = storeHydrated && !waitingForFirstSync;
   useCoachMark(
@@ -779,22 +806,39 @@ export default function Home() {
                   : "rgba(0,0,0,0.06)",
               },
             ]}
+            onLayout={(e) => setXpTrackWidth(e.nativeEvent.layout.width)}
           >
-            <LinearGradient
-              colors={["#f97316", "#fde047"]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
+            <Animated.View
               style={[
-                styles.xpFill,
+                StyleSheet.absoluteFillObject,
                 {
-                  width: `${Math.max(xpProgress * 100, 2)}%`,
+                  transform: [
+                    {
+                      translateX: animXpFill.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [-(xpTrackWidth / 2), 0],
+                        extrapolate: "clamp",
+                      }),
+                    },
+                    { scaleX: animXpFill },
+                  ],
                 },
               ]}
-            />
+            >
+              <LinearGradient
+                colors={["#f97316", "#fde047"]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={{ flex: 1, borderRadius: 3 }}
+              />
+            </Animated.View>
           </View>
           {homeSpark ? (
             <TouchableOpacity
-              style={styles.sparkInlineRow}
+              style={[
+                styles.sparkInlineRow,
+                { backgroundColor: sparkTint, borderRadius: theme.radius.sm },
+              ]}
               activeOpacity={0.86}
               onPress={onHomeSparkPress}
               accessibilityRole="button"
@@ -809,6 +853,10 @@ export default function Home() {
               </Text>
               <ChevronRight size={14} color={theme.colors.textMuted} />
             </TouchableOpacity>
+          ) : stats.missionsCount > 0 ? (
+            <Text style={[styles.sparkInlineText, { color: theme.colors.textMuted, marginTop: 7, paddingTop: 6 }]} numberOfLines={1}>
+              All missions on track — keep the streak alive.
+            </Text>
           ) : null}
         </View>
 

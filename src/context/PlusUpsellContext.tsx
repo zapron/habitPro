@@ -455,17 +455,18 @@ function BillingUpsellModal({
 
         <Button
           title={
-            busy === "monthly" ? `Opening ${storeName}…` : "Subscribe monthly"
+            busy === "yearly" ? `Opening ${storeName}…` : "Subscribe yearly"
           }
-          onPress={() => void run("monthly")}
+          onPress={() => void run("yearly")}
           disabled={!canBuy}
           style={{ marginTop: 8, opacity: canBuy ? 1 : 0.65 }}
         />
         <Button
           title={
-            busy === "yearly" ? `Opening ${storeName}…` : "Subscribe yearly"
+            busy === "monthly" ? `Opening ${storeName}…` : "Subscribe monthly"
           }
-          onPress={() => void run("yearly")}
+          variant="secondary"
+          onPress={() => void run("monthly")}
           disabled={!canBuy}
           style={{ marginTop: 10, opacity: canBuy ? 1 : 0.65 }}
         />
