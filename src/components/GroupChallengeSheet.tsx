@@ -1,5 +1,5 @@
 import { Text } from "./AppText";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -54,6 +54,8 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
   const myUsername = useHabitStore((s) => s.username);
 
   const [creating, setCreating] = useState(false);
+  const creatingRef = useRef(false);
+  const inviteInFlightRef = useRef(new Set<string>());
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<ProfileSearchRow[]>([]);
   const [searching, setSearching] = useState(false);
@@ -136,7 +138,8 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
   }, [query, visible, session?.user?.id, showToast]);
 
   const handleCreateGroup = useCallback(async () => {
-    if (!configured || !signedIn || creating) return;
+    if (!configured || !signedIn || creating || creatingRef.current || habit.challengeGroupId) return;
+    creatingRef.current = true;
     setCreating(true);
     try {
       const freshPremium = await refreshPremiumAccess({ force: true, cachedAccessOk: true });
@@ -161,13 +164,25 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
       useHabitStore.getState().synchronizeHabitWithChallengeGroup(habit.id, group);
       showToast("Group mission ready. Invite your squad.", "success");
     } finally {
+      creatingRef.current = false;
       setCreating(false);
     }
   }, [configured, creating, signedIn, habit, showToast, openUpsell, requireUsername, refreshPremiumAccess, handleServerPremiumRequired]);
 
   const handleInvite = useCallback(
     async (userId: string) => {
-      if (invitingId || inviteeStatusById[userId]) return;
+      const gid = habit.challengeGroupId;
+      const inviteKey = gid ? `${gid}:${userId}` : userId;
+      const currentStatus = inviteeStatusById[userId];
+      if (
+        invitingId ||
+        currentStatus === "pending" ||
+        currentStatus === "accepted" ||
+        inviteInFlightRef.current.has(inviteKey)
+      ) {
+        return;
+      }
+      inviteInFlightRef.current.add(inviteKey);
       setInvitingId(userId);
       try {
         const freshPremium = await refreshPremiumAccess({ force: true, cachedAccessOk: true });
@@ -175,7 +190,6 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
           openUpsell("group_mission");
           return;
         }
-        const gid = habit.challengeGroupId;
         if (!gid) {
           showToast("Start a group mission from this habit, then invite friends.", "info");
           return;
@@ -201,6 +215,7 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
         showToast("Invite sent. They’ll see it under Compete and in notifications.", "success");
         void listChallengeInviteeStatusesForChallenge(gid).then(setInviteeStatusById).catch(() => undefined);
       } finally {
+        inviteInFlightRef.current.delete(inviteKey);
         setInvitingId(null);
       }
     },
@@ -282,12 +297,12 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
                   }
                   renderItem={({ item }) => {
                     const st = inviteeStatusById[item.id];
-                    const blocked = Boolean(st);
+                    const blocked = st === "pending" || st === "accepted";
                     const statusLabel =
                       st === "pending"
-                        ? "Pending"
+                        ? "Already invited"
                         : st === "declined"
-                          ? "Declined"
+                          ? "Invite again"
                           : st === "accepted"
                             ? "Joined"
                             : null;
@@ -305,10 +320,17 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
                             <Text style={{ color: theme.colors.textMuted, fontSize: 12 }}>{item.display_name}</Text>
                           ) : null}
                         </View>
-                        {statusLabel ? (
-                          <Text style={{ color: theme.colors.textMuted, fontWeight: "700" }}>{statusLabel}</Text>
-                        ) : invitingId === item.id ? (
+                        {invitingId === item.id ? (
                           <ActivityIndicator size="small" color={theme.colors.indigo[400]} />
+                        ) : statusLabel ? (
+                          <Text
+                            style={{
+                              color: st === "declined" ? theme.colors.cyan[400] : theme.colors.textMuted,
+                              fontWeight: "700",
+                            }}
+                          >
+                            {statusLabel}
+                          </Text>
                         ) : (
                           <Text style={{ color: theme.colors.cyan[400], fontWeight: "700" }}>Invite</Text>
                         )}

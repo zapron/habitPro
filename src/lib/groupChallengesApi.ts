@@ -271,11 +271,6 @@ export async function sendChallengeInvite(
       ),
     };
   }
-  if (st === "declined") {
-    return {
-      error: new Error("This person already declined this group mission."),
-    };
-  }
   if (st === "accepted") {
     return {
       error: new Error("This person already joined this group mission."),

@@ -394,14 +394,44 @@ export async function pullCohortPeerHabitsFromSupabase(userId: string): Promise<
   const groupIds = [...new Set((memberRows ?? []).map((m) => m.challenge_id))];
   if (groupIds.length === 0) return [];
 
+  // Use challenge_members as the join source so we find peer habits even when
+  // habits.challenge_group_id was never written, or was raced into a different
+  // group by an older double-create edge case.
+  const { data: peerMemberRows, error: peerMemberErr } = await supabase
+    .from("challenge_members")
+    .select("habit_id, challenge_id, user_id")
+    .in("challenge_id", groupIds)
+    .neq("user_id", userId);
+  if (peerMemberErr) throw peerMemberErr;
+
+  const peerLinks = (peerMemberRows ?? []).filter(
+    (row): row is { habit_id: string; challenge_id: string; user_id: string } =>
+      typeof row.habit_id === "string" &&
+      row.habit_id.length > 0 &&
+      typeof row.challenge_id === "string" &&
+      typeof row.user_id === "string",
+  );
+  const habitIds = [...new Set(peerLinks.map((row) => row.habit_id))];
+  if (habitIds.length === 0) return [];
+
   const { data: peerRows, error: peerErr } = await supabase
     .from("habits")
     .select("*")
-    .in("challenge_group_id", groupIds)
-    .neq("user_id", userId);
+    .in("id", habitIds);
   if (peerErr) throw peerErr;
 
-  const cohortPeerHabits = (peerRows ?? []).map((r) => habitFromRow(r));
+  const rowByOwnerHabit = new Map<string, NonNullable<typeof peerRows>[number]>();
+  for (const row of peerRows ?? []) {
+    rowByOwnerHabit.set(`${row.user_id}:${row.id}`, row);
+  }
+
+  const cohortPeerHabits = peerLinks
+    .map((link) => {
+      const row = rowByOwnerHabit.get(`${link.user_id}:${link.habit_id}`);
+      return row ? habitFromRow({ ...row, challenge_group_id: link.challenge_id }) : null;
+    })
+    .filter((h): h is Habit => Boolean(h));
+
   const alignGroupIds = cohortPeerHabits
     .map((h) => h.challengeGroupId)
     .filter((id): id is string => Boolean(id));
