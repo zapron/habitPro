@@ -1,12 +1,11 @@
 import { Text } from "./AppText";
-import { Fragment, useEffect, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
+import { Animated, StyleSheet, TouchableOpacity, View } from "react-native";
 import { useTheme } from '../context/ThemeContext';
 import { AnimatedFire } from './AnimatedFire';
 import { FireLottie } from "./FireLottie";
 import { SplitFlapTimeDisplay, type ProgressivePhase } from './SplitFlapTimeDisplay';
 import type { HabitMode } from '../types/habit';
-import { calendarDayEndUtcMsForTimestamp } from '../utils/missionCalendarKeys';
 
 const FIRE_LOTTIE_URI = "https://fonts.gstatic.com/s/e/notoemoji/latest/1f525/lottie.json";
 
@@ -15,6 +14,8 @@ interface TimerProps {
     mode?: HabitMode;
     endDate?: string;
     missionTimezone?: string | null;
+    /** UTC ms of mission's final calendar-day midnight — enables the TIME LEFT toggle. */
+    missionEndMs?: number;
 }
 
 const LEGEND_BY_PHASE: Record<ProgressivePhase, readonly string[]> = {
@@ -26,133 +27,99 @@ const LEGEND_BY_PHASE: Record<ProgressivePhase, readonly string[]> = {
 
 function fallbackDisplay(phase: ProgressivePhase): string {
     switch (phase) {
-        case 'ss':
-            return '00';
-        case 'mmss':
-            return '00:00';
-        case 'hhmmss':
-            return '00:00:00';
+        case 'ss': return '00';
+        case 'mmss': return '00:00';
+        case 'hhmmss': return '00:00:00';
         case 'ddhhmmss':
-        default:
-            return '00:00:00:00';
+        default: return '00:00:00:00';
     }
 }
 
-export function Timer({ startDate, mode = 'autopilot', endDate, missionTimezone }: TimerProps) {
-    const { theme } = useTheme();
-    const useCalendarDay = typeof missionTimezone === 'string' && missionTimezone.trim().length > 0;
-    const isCountdown = useCalendarDay || mode === 'manual';
+function msToParts(ms: number) {
+    const totalSec = Math.floor(ms / 1000);
+    const days = Math.floor(totalSec / 86400);
+    const hours = Math.floor((totalSec % 86400) / 3600);
+    const minutes = Math.floor((totalSec % 3600) / 60);
+    const seconds = totalSec % 60;
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return { days, hours, minutes, seconds, totalSec, pad };
+}
 
-    const [display, setDisplay] = useState(() => (isCountdown ? '00:00:00:00' : '00'));
-    const [phase, setPhase] = useState<ProgressivePhase>(() => (isCountdown ? 'ddhhmmss' : 'ss'));
+export function Timer({ startDate, mode = 'autopilot', endDate, missionTimezone, missionEndMs }: TimerProps) {
+    const { theme } = useTheme();
+    const isManual = mode === 'manual';
+
+    // Effective end timestamp — manual uses endDate, others use missionEndMs
+    const effectiveEndMs = isManual && endDate
+        ? new Date(endDate).getTime()
+        : (missionEndMs ?? null);
+
+    const canToggle = effectiveEndMs !== null;
+    const [showRemaining, setShowRemaining] = useState(false);
+    const fadeAnim = useRef(new Animated.Value(1)).current;
+
+    // Elapsed display
+    const [elapsedDisplay, setElapsedDisplay] = useState('00');
+    const [elapsedPhase, setElapsedPhase] = useState<ProgressivePhase>('ss');
+
+    // Remaining display
+    const [remainingDisplay, setRemainingDisplay] = useState('00:00:00:00');
+    const [remainingPhase] = useState<ProgressivePhase>('ddhhmmss');
     const [isExpired, setIsExpired] = useState(false);
 
     useEffect(() => {
-        const updateTimer = () => {
+        const update = () => {
             const now = Date.now();
-
-            if (useCalendarDay) {
-                const end = calendarDayEndUtcMsForTimestamp(now, missionTimezone.trim());
-                const diff = end - now;
-
-                if (diff <= 0) {
-                    setDisplay('00:00:00');
-                    setPhase('hhmmss');
-                    setIsExpired(true);
-                    return;
-                }
-                setIsExpired(false);
-                setPhase('hhmmss');
-
-                const hours = Math.floor(diff / (1000 * 60 * 60));
-                const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-                const seconds = Math.floor((diff % (1000 * 60)) / 1000);
-
-                setDisplay(
-                    `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`,
-                );
-                return;
-            }
-
-            if (mode === 'manual' && endDate) {
-                const end = new Date(endDate).getTime();
-                const diff = end - now;
-
-                if (diff <= 0) {
-                    setDisplay('00:00:00:00');
-                    setPhase('ddhhmmss');
-                    setIsExpired(true);
-                    return;
-                }
-                setIsExpired(false);
-                setPhase('ddhhmmss');
-
-                const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-                const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-                const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-                const seconds = Math.floor((diff % (1000 * 60)) / 1000);
-
-                setDisplay(
-                    `${days.toString().padStart(2, '0')}:${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`,
-                );
-                return;
-            }
-
-            // Autopilot: count up from start — progressive units (sec → min → hr → days)
             const start = new Date(startDate).getTime();
-            const diff = now - start;
 
-            if (diff < 0) {
-                setPhase('ss');
-                setDisplay('00');
-                return;
-            }
-
-            const totalSec = Math.floor(diff / 1000);
+            // --- Elapsed (count-up) ---
+            const elapsed = Math.max(0, now - start);
+            const { days, hours, minutes, seconds, totalSec, pad } = msToParts(elapsed);
 
             if (totalSec < 60) {
-                setPhase('ss');
-                setDisplay(String(totalSec % 60).padStart(2, '0'));
-                return;
+                setElapsedPhase('ss');
+                setElapsedDisplay(pad(seconds));
+            } else if (totalSec < 3600) {
+                setElapsedPhase('mmss');
+                setElapsedDisplay(`${pad(minutes)}:${pad(seconds)}`);
+            } else if (totalSec < 86400) {
+                setElapsedPhase('hhmmss');
+                setElapsedDisplay(`${pad(hours)}:${pad(minutes)}:${pad(seconds)}`);
+            } else {
+                setElapsedPhase('ddhhmmss');
+                setElapsedDisplay(`${pad(days)}:${pad(hours)}:${pad(minutes)}:${pad(seconds)}`);
             }
 
-            if (totalSec < 3600) {
-                setPhase('mmss');
-                const m = Math.floor(totalSec / 60);
-                const s = totalSec % 60;
-                setDisplay(`${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`);
-                return;
+            // --- Remaining (countdown) ---
+            if (effectiveEndMs) {
+                const diff = effectiveEndMs - now;
+                if (diff <= 0) {
+                    setIsExpired(true);
+                    setRemainingDisplay('00:00:00:00');
+                    return;
+                }
+                setIsExpired(false);
+                const r = msToParts(diff);
+                setRemainingDisplay(`${r.pad(r.days)}:${r.pad(r.hours)}:${r.pad(r.minutes)}:${r.pad(r.seconds)}`);
             }
-
-            if (totalSec < 86400) {
-                setPhase('hhmmss');
-                const h = Math.floor(totalSec / 3600);
-                const m = Math.floor((totalSec % 3600) / 60);
-                const s = totalSec % 60;
-                setDisplay(
-                    `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`,
-                );
-                return;
-            }
-
-            setPhase('ddhhmmss');
-            const days = Math.floor(totalSec / 86400);
-            const hours = Math.floor((totalSec % 86400) / 3600);
-            const minutes = Math.floor((totalSec % 3600) / 60);
-            const seconds = totalSec % 60;
-            setDisplay(
-                `${days.toString().padStart(2, '0')}:${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`,
-            );
         };
 
-        const interval = setInterval(updateTimer, 1000);
-        updateTimer();
-
+        const interval = setInterval(update, 1000);
+        update();
         return () => clearInterval(interval);
-    }, [startDate, mode, endDate, missionTimezone, useCalendarDay]);
+    }, [startDate, effectiveEndMs]);
 
-    const safeDisplay = display || fallbackDisplay(phase);
-    const legendLabels = LEGEND_BY_PHASE[phase];
+    const handleToggle = useCallback(() => {
+        Animated.sequence([
+            Animated.timing(fadeAnim, { toValue: 0, duration: 110, useNativeDriver: true }),
+            Animated.timing(fadeAnim, { toValue: 1, duration: 110, useNativeDriver: true }),
+        ]).start();
+        setTimeout(() => setShowRemaining((prev) => !prev), 110);
+    }, [fadeAnim]);
+
+    const activeDisplay = showRemaining ? remainingDisplay : elapsedDisplay;
+    const activePhase = showRemaining ? remainingPhase : elapsedPhase;
+    const label = isExpired ? "TIME'S UP" : showRemaining ? 'TIME LEFT' : 'MISSION ACTIVE';
 
     return (
         <View
@@ -161,7 +128,7 @@ export function Timer({ startDate, mode = 'autopilot', endDate, missionTimezone 
                 {
                     backgroundColor: theme.colors.surface,
                     borderRadius: theme.radius.lg,
-                    borderColor: isCountdown ? 'rgba(245, 158, 11, 0.35)' : theme.colors.border,
+                    borderColor: isManual ? 'rgba(245, 158, 11, 0.35)' : theme.colors.border,
                     ...theme.shadow.card,
                 },
             ]}
@@ -169,43 +136,54 @@ export function Timer({ startDate, mode = 'autopilot', endDate, missionTimezone 
             <View
                 style={[
                     styles.iconContainer,
-                    isCountdown && { backgroundColor: 'rgba(245, 158, 11, 0.15)', borderColor: 'rgba(245, 158, 11, 0.4)' },
+                    isManual && { backgroundColor: 'rgba(245, 158, 11, 0.15)', borderColor: 'rgba(245, 158, 11, 0.4)' },
                 ]}
             >
                 <FireLottie source={{ uri: FIRE_LOTTIE_URI }} size={56} />
             </View>
             <View style={styles.contentContainer}>
-                <Text style={[styles.label, { color: theme.colors.textSecondary }]}>
-                    {isExpired ? "TIME'S UP" : useCalendarDay ? 'DAY ENDS IN' : isCountdown ? 'COUNTDOWN' : 'MISSION ACTIVE'}
-                </Text>
-                <SplitFlapTimeDisplay
-                    display={safeDisplay}
-                    phase={phase}
-                    timeColor={isExpired ? theme.colors.red[500] : theme.colors.textPrimary}
-                    digitTextShadow={
-                        isExpired
-                            ? {
-                                  textShadowColor: 'rgba(239, 68, 68, 0.45)',
-                                  textShadowOffset: { width: 0, height: 1 },
-                                  textShadowRadius: 6,
-                              }
-                            : {
-                                  textShadowColor: 'rgba(99, 102, 241, 0.45)',
-                                  textShadowOffset: { width: 0, height: 1 },
-                                  textShadowRadius: 6,
-                              }
-                    }
-                />
-                <View style={styles.legendContainer}>
-                    {legendLabels.map((label, i) => (
-                        <Fragment key={label}>
-                            {i > 0 ? <View style={styles.legendGap} /> : null}
-                            <View style={styles.legendCol}>
-                                <Text style={[styles.legendText, { color: theme.colors.textMuted }]}>{label}</Text>
-                            </View>
-                        </Fragment>
-                    ))}
+                <View style={styles.labelRow}>
+                    <Text style={[styles.label, { color: theme.colors.textSecondary }]}>{label}</Text>
+                    {canToggle ? (
+                        <TouchableOpacity
+                            onPress={handleToggle}
+                            hitSlop={10}
+                            style={[
+                                styles.togglePill,
+                                {
+                                    borderColor: theme.colors.indigo[500],
+                                    backgroundColor: `${theme.colors.indigo[500]}22`,
+                                },
+                            ]}
+                        >
+                            <Text style={[styles.toggleText, { color: theme.colors.indigo[400] }]}>
+                                {showRemaining ? '↑ elapsed' : '↓ left'}
+                            </Text>
+                        </TouchableOpacity>
+                    ) : null}
                 </View>
+                <Animated.View style={{ opacity: fadeAnim }}>
+                    <SplitFlapTimeDisplay
+                        display={activeDisplay || fallbackDisplay(activePhase)}
+                        phase={activePhase}
+                        timeColor={isExpired ? theme.colors.red[500] : theme.colors.textPrimary}
+                        digitTextShadow={
+                            isExpired
+                                ? { textShadowColor: 'rgba(239, 68, 68, 0.45)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 6 }
+                                : { textShadowColor: 'rgba(99, 102, 241, 0.45)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 6 }
+                        }
+                    />
+                    <View style={styles.legendContainer}>
+                        {LEGEND_BY_PHASE[activePhase].map((legendLabel, i) => (
+                            <Fragment key={legendLabel}>
+                                {i > 0 ? <View style={styles.legendGap} /> : null}
+                                <View style={styles.legendCol}>
+                                    <Text style={[styles.legendText, { color: theme.colors.textMuted }]}>{legendLabel}</Text>
+                                </View>
+                            </Fragment>
+                        ))}
+                    </View>
+                </Animated.View>
             </View>
         </View>
     );
@@ -230,12 +208,28 @@ const styles = StyleSheet.create({
     contentContainer: {
         flex: 1,
     },
+    labelRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: 4,
+    },
     label: {
         fontSize: 12,
         fontWeight: 'bold',
         letterSpacing: 1.5,
-        marginBottom: 4,
         textTransform: 'uppercase',
+    },
+    togglePill: {
+        paddingHorizontal: 8,
+        paddingVertical: 3,
+        borderRadius: 999,
+        borderWidth: 1,
+    },
+    toggleText: {
+        fontSize: 10,
+        fontWeight: '700',
+        letterSpacing: 0.5,
     },
     legendContainer: {
         flexDirection: 'row',

@@ -169,14 +169,15 @@ async function syncMiniMissionNotificationsNow(missions: MiniMission[]) {
       continue;
     }
 
-    const needsWarn = shouldScheduleWarn(mission, secondsUntilEnd);
-
-    if (n.kind === "mini_warn" && !needsWarn) {
-      await cancelNotification(n.id);
-      continue;
-    }
-
     if (n.kind === "mini_warn") {
+      // Only cancel if the warn fire time has already passed — not just because we're
+      // inside the WARN_MIN_BUFFER_SECONDS window. A correctly-scheduled warn must not
+      // be wiped by a sync that happens in the final 2m15s of the mission.
+      const warnFiresAtMs = expectedEndMs - WARN_LEAD_SECONDS * 1000;
+      if (warnFiresAtMs <= nowMs) {
+        await cancelNotification(n.id);
+        continue;
+      }
       const existing = keptWarnIdByMission.get(missionId);
       if (existing) {
         await cancelNotification(n.id);
@@ -199,8 +200,23 @@ async function syncMiniMissionNotificationsNow(missions: MiniMission[]) {
 
   for (const missionId of [...lastEndMsByMission.keys()]) {
     if (!activeIds.has(missionId)) {
+      const endMs = lastEndMsByMission.get(missionId) ?? 0;
+      const mission = missions.find((m) => m.id === missionId);
+
+      // Always cancel the warn — no point showing "ending soon" after mission is done.
       await cancelNotification(warnIdByMission.get(missionId) ?? null);
-      await cancelNotification(failIdByMission.get(missionId) ?? null);
+
+      // Only cancel the fail notification if the mission was explicitly ended before its
+      // natural deadline (completed or cancelled). If the mission expired on its own
+      // (endMs is near or past), let the OS deliver the fail notification — cancelling
+      // it here would race with delivery and cause silent drops.
+      const explicitlyEnded =
+        mission?.status === "completed" || mission?.status === "cancelled";
+      const endIsFarFuture = endMs > nowMs + 60_000;
+      if (explicitlyEnded || endIsFarFuture) {
+        await cancelNotification(failIdByMission.get(missionId) ?? null);
+      }
+
       lastEndMsByMission.delete(missionId);
       warnIdByMission.delete(missionId);
       failIdByMission.delete(missionId);
@@ -241,7 +257,12 @@ async function syncMiniMissionNotificationsNow(missions: MiniMission[]) {
     const warnId = warnIdByMission.get(mission.id);
     const failId = failIdByMission.get(mission.id);
     if (prevEnd === endMs && failId) {
-      const warnOk = needsWarn === !!warnId;
+      // A pending warn (fire time in the future + warnId exists) is correct — don't
+      // touch it. Only treat warn as wrong if it's missing when it should exist, or
+      // present when its fire time has already passed.
+      const warnFiresAtMs = endMs - WARN_LEAD_SECONDS * 1000;
+      const warnPending = warnFiresAtMs > nowMs;
+      const warnOk = warnPending ? !!warnId : !warnId;
       if (warnOk) continue;
     }
 

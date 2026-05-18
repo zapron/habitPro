@@ -41,9 +41,13 @@ import { ConfettiBurst } from '../../src/components/ConfettiBurst';
 import { StreakBanner } from '../../src/components/StreakBanner';
 import {
   calendarDateForHabitMissionDayIndex,
+  calendarDayEndUtcMsForDateKey,
   getHabitActiveMissionDaySlot,
+  getHabitMissionTimeZone,
   isHabitCalendarDateToggleable,
+  MS_PER_MISSION_DAY,
   missionDayNumberForCalendarDate,
+  usesCalendarDayMission,
 } from '../../src/utils/missionDaySlots';
 import { isMissionGridFull } from '../../src/utils/habitDerived';
 import { shouldShowMainMissionTimer } from '../../src/utils/mainMissionUi';
@@ -387,6 +391,18 @@ export default function HabitDetail() {
     const mode = habit?.mode ?? 'autopilot';
     const totalDays = habit?.totalDays ?? 21;
     const milestones = useMemo(() => getMilestones(totalDays, mode), [totalDays, mode]);
+
+    const missionEndMs = useMemo(() => {
+        if (!habit) return undefined;
+        if (mode === 'manual' && habit.endDate) return undefined; // Timer handles endDate itself
+        if (usesCalendarDayMission(habit)) {
+            const tz = getHabitMissionTimeZone(habit);
+            const lastDayKey = calendarDateForHabitMissionDayIndex(habit, totalDays - 1, Date.now());
+            return calendarDayEndUtcMsForDateKey(lastDayKey, tz);
+        }
+        // autopilot: fixed-length from startDate
+        return new Date(habit.startDate).getTime() + totalDays * MS_PER_MISSION_DAY;
+    }, [habit, mode, totalDays]);
 
     const [confetti, setConfetti] = useState<{ active: boolean; milestone: boolean; x: number; y: number }>({ active: false, milestone: false, x: 0, y: 0 });
     const gridRef = useRef<View>(null);
@@ -1079,6 +1095,7 @@ export default function HabitDetail() {
                         mode={mode}
                         endDate={habit.endDate}
                         missionTimezone={habit.missionTimezone ?? null}
+                        missionEndMs={missionEndMs}
                     />
                 )}
 

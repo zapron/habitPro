@@ -58,7 +58,19 @@ function shouldSuppressForegroundNotification(data: Record<string, unknown> | un
   const expectedEndMs = getMiniMissionEndMs(missionId);
   const notificationEndMs = numberFromNotificationData(data.endMs);
 
-  if (expectedEndMs == null || notificationEndMs == null) return true;
+  // Mission is no longer in_progress (expired, completed, etc.).
+  if (expectedEndMs == null) {
+    // Always suppress warn — no point showing "ending soon" after mission is done.
+    if (kind === "mini_warn") return true;
+    // Allow fail notification if it fired within the last 5 minutes — the OS may have
+    // delayed delivery slightly, or the status change raced with delivery.
+    if (kind === "mini_fail" && notificationEndMs != null && notificationEndMs >= Date.now() - 5 * 60_000) {
+      return false;
+    }
+    return true;
+  }
+
+  if (notificationEndMs == null) return true;
   if (expectedEndMs !== notificationEndMs) return true;
   if (kind === "mini_warn" && expectedEndMs <= Date.now()) return true;
   if (kind === "mini_fail" && expectedEndMs + 5 * 60_000 < Date.now()) return true;
