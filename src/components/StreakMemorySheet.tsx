@@ -19,7 +19,9 @@ import {
   Easing,
   Alert,
   ActivityIndicator,
+  InteractionManager,
   Switch,
+  TouchableOpacity,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as ImagePicker from "expo-image-picker";
@@ -105,6 +107,21 @@ export function StreakMemorySheet({
   const [imageUri, setImageUri] = useState<string | undefined>();
   const [publishToCommunity, setPublishToCommunity] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const photoPickerOpeningRef = useRef(false);
+  const [optimisticSquadPublic, setOptimisticSquadPublic] = useState(
+    (squadShare?.visibility ?? "solo") === "public",
+  );
+
+  useEffect(() => {
+    if (!visible || isView) return;
+    setOptimisticSquadPublic((squadShare?.visibility ?? "solo") === "public");
+  }, [visible, isView, squadShare?.visibility]);
+
+  useEffect(() => {
+    if (!visible) {
+      photoPickerOpeningRef.current = false;
+    }
+  }, [visible]);
 
   useEffect(() => {
     if (!imageUri && publishToCommunity) {
@@ -181,16 +198,55 @@ export function StreakMemorySheet({
   }, [applyPickedUri]);
 
   const choosePhotoSource = useCallback(() => {
-    Alert.alert(
-      "Add a photo",
-      "Take a new picture or choose one from your gallery.",
-      [
-        { text: "Cancel", style: "cancel" },
-        { text: "Take photo", onPress: () => void pickFromCamera() },
-        { text: "Photo library", onPress: () => void pickFromLibrary() },
-      ],
-    );
-  }, [pickFromCamera, pickFromLibrary]);
+    if (submitting || photoPickerOpeningRef.current) return;
+    photoPickerOpeningRef.current = true;
+    const releasePickerLock = () => {
+      photoPickerOpeningRef.current = false;
+    };
+    const openPickerChoice = () => {
+      if (!visible) {
+        releasePickerLock();
+        return;
+      }
+      Alert.alert(
+        "Add a photo",
+        "Take a new picture or choose one from your gallery.",
+        [
+          { text: "Cancel", style: "cancel", onPress: releasePickerLock },
+          {
+            text: "Take photo",
+            onPress: () => {
+              releasePickerLock();
+              void pickFromCamera();
+            },
+          },
+          {
+            text: "Photo library",
+            onPress: () => {
+              releasePickerLock();
+              void pickFromLibrary();
+            },
+          },
+        ],
+        { cancelable: true, onDismiss: releasePickerLock },
+      );
+    };
+    requestAnimationFrame(() => {
+      InteractionManager.runAfterInteractions(openPickerChoice);
+    });
+  }, [pickFromCamera, pickFromLibrary, submitting, visible]);
+
+  const handleSquadShareChange = useCallback(
+    (nextPublic: boolean) => {
+      if (!squadShare || submitting) return;
+      const previous = optimisticSquadPublic;
+      setOptimisticSquadPublic(nextPublic);
+      void Promise.resolve(squadShare.onToggle(nextPublic)).catch(() => {
+        setOptimisticSquadPublic(previous);
+      });
+    },
+    [optimisticSquadPublic, squadShare, submitting],
+  );
 
   /** Backdrop, X, Android back — does not check in (create) or only closes (view). */
   const handleDismiss = useCallback(() => {
@@ -564,7 +620,7 @@ export function StreakMemorySheet({
                       styles.createScrollContent,
                       isMemoryCreate && styles.createScrollContentMemory,
                     ]}
-                    keyboardShouldPersistTaps="handled"
+                    keyboardShouldPersistTaps="always"
                     keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
                     showsVerticalScrollIndicator
                     nestedScrollEnabled
@@ -631,13 +687,16 @@ export function StreakMemorySheet({
                     </View>
 
                     <View style={[styles.photoSlotWrap, styles.photoSlotWrapMemory]}>
-                      <Pressable
+                      <TouchableOpacity
                         onPress={choosePhotoSource}
+                        activeOpacity={0.78}
+                        disabled={submitting}
                         style={[
                           styles.photoSlotMemory,
                           {
                             borderColor: imageUri ? theme.colors.indigo[500] : theme.colors.border,
                             backgroundColor: isDark ? "rgba(255,255,255,0.04)" : theme.colors.surface,
+                            opacity: submitting ? 0.72 : 1,
                           },
                         ]}
                       >
@@ -653,7 +712,7 @@ export function StreakMemorySheet({
                             </Text>
                           </View>
                         )}
-                      </Pressable>
+                      </TouchableOpacity>
                     </View>
 
                     <TextInput
@@ -742,7 +801,7 @@ export function StreakMemorySheet({
                               Share streaks with squad
                             </Text>
                             <Text style={[styles.communityPublishHint, { color: theme.colors.textMuted }]}>
-                              {(squadShare.visibility ?? "solo") === "public"
+                              {optimisticSquadPublic
                                 ? "On — visible to your squad."
                                 : "Off — only you can see this mission."}{" "}
                               <Text style={{ color: theme.colors.textMuted }}>
@@ -751,8 +810,8 @@ export function StreakMemorySheet({
                             </Text>
                           </View>
                           <Switch
-                            value={(squadShare.visibility ?? "solo") === "public"}
-                            onValueChange={(v) => void squadShare.onToggle(Boolean(v))}
+                            value={optimisticSquadPublic}
+                            onValueChange={handleSquadShareChange}
                             disabled={submitting}
                             trackColor={{
                               false: theme.colors.border,

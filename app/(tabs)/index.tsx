@@ -38,6 +38,7 @@ import {
   Flame,
 } from "lucide-react-native";
 import { useHabitStore } from "../../src/store/habitStore";
+import { useShallow } from "zustand/react/shallow";
 import { useAuth } from "../../src/context/AuthContext";
 import { isSupabaseConfigured } from "../../src/lib/env";
 import { countUnreadNotifications } from "../../src/lib/groupChallengesApi";
@@ -267,10 +268,10 @@ export default function Home() {
   const { theme, isDark } = useTheme();
   const { session, syncReady, syncError, retryHydrate } = useAuth();
   const reduceMotion = useReducedMotion();
-  const habits = useHabitStore((state) => state.habits);
-  const cohortPeerHabits = useHabitStore((state) => state.cohortPeerHabits);
-  const miniMissions = useHabitStore((state) => state.miniMissions);
-  const xp = useHabitStore((state) => state.xp);
+  const { habits, cohortPeerHabits, miniMissions } = useHabitStore(
+    useShallow((s) => ({ habits: s.habits, cohortPeerHabits: s.cohortPeerHabits, miniMissions: s.miniMissions })),
+  );
+  const xp = useHabitStore((s) => s.xp);
   const [activeTab, setActiveTab] = useState<"missions" | "reports">(
     "missions",
   );
@@ -345,6 +346,7 @@ export default function Home() {
   }, [reduceMotion, emptyIconScale]);
 
   const listBottomPad = Math.max(insets.bottom, 12) + 48;
+  const renderHabitCard = useCallback(({ item }: { item: (typeof filteredHabits)[0] }) => <HabitCard item={item} />, []);
 
   const level = levelFromTotalXp(xp);
   const xpInLevel = xpInCurrentLevel(xp);
@@ -1122,7 +1124,7 @@ export default function Home() {
           ) : (
             <FlashList
               data={filteredHabits}
-              renderItem={({ item }) => <HabitCard item={item} />}
+              renderItem={renderHabitCard}
               contentContainerStyle={[
                 styles.listContent,
                 { paddingBottom: listBottomPad },

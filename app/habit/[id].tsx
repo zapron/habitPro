@@ -917,21 +917,19 @@ export default function HabitDetail() {
                 squadShare={{
                     show: showSquadShare,
                     visibility: habit.visibility ?? 'solo',
-                    onToggle: (nextPublic) => {
-                        void (async () => {
-                            const next = nextPublic ? 'public' : 'solo';
-                            const prev = habit.visibility ?? 'solo';
-                            if (prev === next) return;
-                            if (next === 'public') {
-                                const freshPremium = await refreshPremiumAccess({ force: true, serverOnly: true });
-                                if (freshPremium !== true) {
-                                    openUpsell('visibility');
-                                    return;
-                                }
+                    onToggle: async (nextPublic) => {
+                        const next = nextPublic ? 'public' : 'solo';
+                        const prev = habit.visibility ?? 'solo';
+                        if (prev === next) return;
+                        if (next === 'public' && socialLocked) {
+                            const freshPremium = await refreshPremiumAccess({ force: true, serverOnly: true });
+                            if (freshPremium !== true) {
+                                openUpsell('visibility');
+                                throw new Error('HabitPro Community is required for squad visibility.');
                             }
-                            lastVisibilityRef.current = { id: habit.id, prev };
-                            setHabitVisibility(habit.id, next);
-                        })();
+                        }
+                        lastVisibilityRef.current = { id: habit.id, prev };
+                        setHabitVisibility(habit.id, next);
                     },
                 }}
                 habitViewCommunity={

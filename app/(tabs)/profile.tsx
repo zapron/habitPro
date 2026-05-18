@@ -1,5 +1,6 @@
 import { Text } from "../../src/components/AppText";
 import {
+  memo,
   useCallback,
   useMemo,
   useState } from "react";
@@ -113,7 +114,7 @@ function backupSummary(backup: AccountBackupSnapshot): string {
   return `${backup.habits.length} habits - ${backup.miniMissions.length} minis - Level ${level}`;
 }
 
-function VisibilityHabitColumn({
+const VisibilityHabitColumn = memo(function VisibilityHabitColumn({
   theme,
   isDark,
   title,
@@ -187,9 +188,9 @@ function VisibilityHabitColumn({
     );
   }
   return <View style={colStyle}>{inner}</View>;
-}
+});
 
-function VisibilityMiniColumn({
+const VisibilityMiniColumn = memo(function VisibilityMiniColumn({
   theme,
   isDark,
   title,
@@ -263,7 +264,7 @@ function VisibilityMiniColumn({
     );
   }
   return <View style={colStyle}>{inner}</View>;
-}
+});
 
 const hubVisStyles = StyleSheet.create({
   visCol: {
@@ -544,6 +545,19 @@ export default function ProfileScreen() {
     }
     return null;
   }, [hubSheet, habits, miniMissions]);
+
+  const onHabitsPublicPress = useCallback(() => setHubSheet({ mode: "habits-filter", visibility: "public" }), []);
+  const onHabitsPublicActivePress = useCallback(() => setHubSheet({ mode: "habits-filter", visibility: "public", status: "active" }), []);
+  const onHabitsPublicDonePress = useCallback(() => setHubSheet({ mode: "habits-filter", visibility: "public", status: "done" }), []);
+  const onHabitsSoloPress = useCallback(() => setHubSheet({ mode: "habits-filter", visibility: "solo" }), []);
+  const onHabitsSoloActivePress = useCallback(() => setHubSheet({ mode: "habits-filter", visibility: "solo", status: "active" }), []);
+  const onHabitsSoloDonePress = useCallback(() => setHubSheet({ mode: "habits-filter", visibility: "solo", status: "done" }), []);
+  const onMinisPublicPress = useCallback(() => setHubSheet({ mode: "minis-filter", visibility: "public" }), []);
+  const onMinisPublicActivePress = useCallback(() => setHubSheet({ mode: "minis-filter", visibility: "public", status: "live" }), []);
+  const onMinisPublicDonePress = useCallback(() => setHubSheet({ mode: "minis-filter", visibility: "public", status: "done" }), []);
+  const onMinisSoloPress = useCallback(() => setHubSheet({ mode: "minis-filter", visibility: "solo" }), []);
+  const onMinisSoloActivePress = useCallback(() => setHubSheet({ mode: "minis-filter", visibility: "solo", status: "live" }), []);
+  const onMinisSoloDonePress = useCallback(() => setHubSheet({ mode: "minis-filter", visibility: "solo", status: "done" }), []);
 
   const bottomPad = Math.max(insets.bottom, 16) + 8;
   const appVersion = useAppVersion();
@@ -840,9 +854,9 @@ export default function ProfileScreen() {
                 accent={theme.colors.cyan[400]}
                 active={missionStats.pub.habitsActive}
                 done={missionStats.pub.habitsDone}
-                onPressColumn={() => setHubSheet({ mode: "habits-filter", visibility: "public" })}
-                onPressActive={() => setHubSheet({ mode: "habits-filter", visibility: "public", status: "active" })}
-                onPressDone={() => setHubSheet({ mode: "habits-filter", visibility: "public", status: "done" })}
+                onPressColumn={onHabitsPublicPress}
+                onPressActive={onHabitsPublicActivePress}
+                onPressDone={onHabitsPublicDonePress}
               />
               <VisibilityHabitColumn
                 theme={theme}
@@ -852,9 +866,9 @@ export default function ProfileScreen() {
                 accent={theme.colors.indigo[400]}
                 active={missionStats.solo.habitsActive}
                 done={missionStats.solo.habitsDone}
-                onPressColumn={() => setHubSheet({ mode: "habits-filter", visibility: "solo" })}
-                onPressActive={() => setHubSheet({ mode: "habits-filter", visibility: "solo", status: "active" })}
-                onPressDone={() => setHubSheet({ mode: "habits-filter", visibility: "solo", status: "done" })}
+                onPressColumn={onHabitsSoloPress}
+                onPressActive={onHabitsSoloActivePress}
+                onPressDone={onHabitsSoloDonePress}
               />
             </View>
           </View>
@@ -902,9 +916,9 @@ export default function ProfileScreen() {
                 accent={theme.colors.cyan[400]}
                 live={missionStats.pub.miniLive}
                 completed={missionStats.pub.miniDone}
-                onPressColumn={() => setHubSheet({ mode: "minis-filter", visibility: "public" })}
-                onPressActive={() => setHubSheet({ mode: "minis-filter", visibility: "public", status: "live" })}
-                onPressDone={() => setHubSheet({ mode: "minis-filter", visibility: "public", status: "done" })}
+                onPressColumn={onMinisPublicPress}
+                onPressActive={onMinisPublicActivePress}
+                onPressDone={onMinisPublicDonePress}
               />
               <VisibilityMiniColumn
                 theme={theme}
@@ -914,9 +928,9 @@ export default function ProfileScreen() {
                 accent={theme.colors.indigo[400]}
                 live={missionStats.solo.miniLive}
                 completed={missionStats.solo.miniDone}
-                onPressColumn={() => setHubSheet({ mode: "minis-filter", visibility: "solo" })}
-                onPressActive={() => setHubSheet({ mode: "minis-filter", visibility: "solo", status: "live" })}
-                onPressDone={() => setHubSheet({ mode: "minis-filter", visibility: "solo", status: "done" })}
+                onPressColumn={onMinisSoloPress}
+                onPressActive={onMinisSoloActivePress}
+                onPressDone={onMinisSoloDonePress}
               />
             </View>
           </View>

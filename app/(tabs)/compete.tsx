@@ -1,5 +1,6 @@
 import { Text } from "../../src/components/AppText";
 import {
+  memo,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -436,7 +437,7 @@ function lifetimeLeagueForLevel(
   };
 }
 
-function LeagueRow({
+const LeagueRow = memo(function LeagueRow({
   entry,
   theme,
   isDark,
@@ -445,7 +446,7 @@ function LeagueRow({
   entry: WeeklyLeaderboardEntry;
   theme: ReturnType<typeof useTheme>["theme"];
   isDark: boolean;
-  onPress: () => void;
+  onPress: (entry: WeeklyLeaderboardEntry) => void;
 }) {
   const accent = leaderboardAccent(entry.rankPosition, theme);
   const xpInLevel = xpInCurrentLevel(entry.xp);
@@ -454,7 +455,7 @@ function LeagueRow({
   const playerLeague = lifetimeLeagueForLevel(entry.level, theme, isDark);
   return (
     <TouchableOpacity
-      onPress={onPress}
+      onPress={() => onPress(entry)}
       activeOpacity={0.82}
       accessibilityRole="button"
       accessibilityLabel={`Open ${displayName} player stats`}
@@ -512,7 +513,7 @@ function LeagueRow({
       </View>
     </TouchableOpacity>
   );
-}
+});
 
 export default function CompeteScreen() {
   const { theme, isDark } = useTheme();
@@ -565,8 +566,10 @@ export default function CompeteScreen() {
   const lastInvitesLoadAtRef = useRef(0);
   const lastLeagueLoadAtRef = useRef(0);
   const invitesLoadMoreInFlightRef = useRef(false);
+  const inviteActionInFlightRef = useRef(new Set<string>());
   const groupInvitesRef = useRef<ChallengeInviteRow[]>([]);
   const liveMiniInvitesRef = useRef<LiveMiniInviteForMe[]>([]);
+  const mountedRef = useRef(true);
   const invitePulse = useRef(new Animated.Value(0)).current;
   const hasAwaitingInvite =
     groupInvites.some((i) => i.status === "pending") ||
@@ -638,7 +641,13 @@ export default function CompeteScreen() {
   const reconcile = useChallengeStore((s) => s.reconcile);
 
   useEffect(() => {
-    reconcile(habits, miniMissions);
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
+
+  useEffect(() => {
+    const t = setTimeout(() => reconcile(habits, miniMissions), 200);
+    return () => clearTimeout(t);
   }, [habits, miniMissions, reconcile]);
 
   const loadInvites = useCallback(async (options?: { force?: boolean }) => {
@@ -957,10 +966,13 @@ export default function CompeteScreen() {
     return () => clearTimeout(t);
   }, [highlightInviteId, highlightChallengeId]);
 
-  const handleAcceptGroupInvite = async (invite: ChallengeInviteRow) => {
-    if (inviteBusy) return;
+  const handleAcceptGroupInvite = useCallback(async (invite: ChallengeInviteRow) => {
+    const key = invite.id;
+    if (inviteActionInFlightRef.current.has(key)) return;
+    inviteActionInFlightRef.current.add(key);
     if (!userId) {
       showToast("Sign in to accept this invite.", "error");
+      inviteActionInFlightRef.current.delete(key);
       return;
     }
     setInviteBusy(invite.id);
@@ -1036,7 +1048,7 @@ export default function CompeteScreen() {
       void loadInvites({ force: true });
       showToast("Joined the group mission", "success");
       setTimeout(() => {
-        void suggestNotifications("invite_accept");
+        if (mountedRef.current) void suggestNotifications("invite_accept");
       }, 450);
     } catch (e: unknown) {
       const msg =
@@ -1047,11 +1059,15 @@ export default function CompeteScreen() {
             : String(e);
       showToast(msg, "error");
     } finally {
+      inviteActionInFlightRef.current.delete(key);
       setInviteBusy(null);
     }
-  };
+  }, [userId, showToast, refreshPremiumAccess, openUpsell, addHabit, loadInvites, suggestNotifications]);
 
-  const handleDeclineGroupInvite = async (invite: ChallengeInviteRow) => {
+  const handleDeclineGroupInvite = useCallback(async (invite: ChallengeInviteRow) => {
+    const key = invite.id;
+    if (inviteActionInFlightRef.current.has(key)) return;
+    inviteActionInFlightRef.current.add(key);
     setInviteBusy(invite.id);
     try {
       const { error } = await declineInvite(invite.id);
@@ -1062,12 +1078,15 @@ export default function CompeteScreen() {
       showToast("Invite declined", "success");
       void loadInvites({ force: true });
     } finally {
+      inviteActionInFlightRef.current.delete(key);
       setInviteBusy(null);
     }
-  };
+  }, [showToast, loadInvites]);
 
-  const handleDeclineLiveMiniInvite = async (invite: LiveMiniInviteForMe) => {
+  const handleDeclineLiveMiniInvite = useCallback(async (invite: LiveMiniInviteForMe) => {
     const busyKey = `live:${invite.participant.id}`;
+    if (inviteActionInFlightRef.current.has(busyKey)) return;
+    inviteActionInFlightRef.current.add(busyKey);
     setInviteBusy(busyKey);
     try {
       const res = await declineLiveMiniInvite(invite.squad.id);
@@ -1078,9 +1097,26 @@ export default function CompeteScreen() {
       showToast("Live Squad invite declined", "success");
       void loadInvites({ force: true });
     } finally {
+      inviteActionInFlightRef.current.delete(busyKey);
       setInviteBusy(null);
     }
-  };
+  }, [showToast, loadInvites]);
+
+  const handleLeagueRowPress = useCallback((entry: WeeklyLeaderboardEntry) => {
+    setLeaguePlayerDrawer({
+      userId: entry.userId,
+      username: entry.username,
+      displayName: entry.displayName,
+      xp: entry.xp,
+      weekly: {
+        rankPosition: entry.rankPosition,
+        points: entry.points,
+        habitCheckIns: entry.habitCheckIns,
+        miniCompletions: entry.miniCompletions,
+        isMe: entry.isMe,
+      },
+    });
+  }, []);
 
   const level = levelFromTotalXp(xp);
   const xpInLevel = xpInCurrentLevel(xp);
@@ -1739,21 +1775,7 @@ export default function CompeteScreen() {
                     entry={entry}
                     theme={theme}
                     isDark={isDark}
-                    onPress={() =>
-                      setLeaguePlayerDrawer({
-                        userId: entry.userId,
-                        username: entry.username,
-                        displayName: entry.displayName,
-                        xp: entry.xp,
-                        weekly: {
-                          rankPosition: entry.rankPosition,
-                          points: entry.points,
-                          habitCheckIns: entry.habitCheckIns,
-                          miniCompletions: entry.miniCompletions,
-                          isMe: entry.isMe,
-                        },
-                      })
-                    }
+                    onPress={handleLeagueRowPress}
                   />
                 ))}
                 {leagueHasMore ? (

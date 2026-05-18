@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  FlatList,
   KeyboardAvoidingView,
   Modal,
-  Platform,
+  ScrollView,
   StyleSheet,
   TextInput,
   TouchableOpacity,
@@ -290,7 +289,7 @@ export function LiveMiniInviteSheet({ visible, mission, onClose }: Props) {
         style={StyleSheet.absoluteFill}
       />
       <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        behavior="padding"
         keyboardVerticalOffset={0}
         style={styles.keyboardAvoider}
       >
@@ -399,22 +398,22 @@ export function LiveMiniInviteSheet({ visible, mission, onClose }: Props) {
                   {searching ? (
                     <ActivityIndicator color={theme.colors.indigo[400]} style={{ marginVertical: 10 }} />
                   ) : (
-                    <FlatList
-                      data={results}
-                      keyExtractor={(item) => item.id}
-                      keyboardShouldPersistTaps="handled"
+                    <ScrollView
                       style={styles.resultsList}
-                      ListEmptyComponent={
-                        query.trim().length >= 3 ? (
-                          <Text style={[styles.emptySearch, { color: theme.colors.textMuted }]}>No matches</Text>
-                        ) : null
-                      }
-                      renderItem={({ item }) => {
+                      keyboardShouldPersistTaps="handled"
+                      showsVerticalScrollIndicator={false}
+                      bounces={false}
+                    >
+                      {results.length === 0 && query.trim().length >= 3 ? (
+                        <Text style={[styles.emptySearch, { color: theme.colors.textMuted }]}>No matches</Text>
+                      ) : null}
+                      {results.map((item) => {
                         const st = statusByUserId[item.id];
                         const label = statusLabel(st);
                         const blocked = Boolean(st);
                         return (
                           <TouchableOpacity
+                            key={item.id}
                             style={[styles.resultRow, { borderColor: theme.colors.border, opacity: blocked ? 0.72 : 1 }]}
                             onPress={() => void handleInvite(item.id)}
                             disabled={blocked || invitingId === item.id}
@@ -442,8 +441,8 @@ export function LiveMiniInviteSheet({ visible, mission, onClose }: Props) {
                             )}
                           </TouchableOpacity>
                         );
-                      }}
-                    />
+                      })}
+                    </ScrollView>
                   )}
                 </>
               ) : squadSettled ? (

@@ -2,10 +2,9 @@ import { Text } from "./AppText";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  FlatList,
   KeyboardAvoidingView,
   Modal,
-  Platform,
+  ScrollView,
   StyleSheet,
   TextInput,
   TouchableOpacity,
@@ -234,7 +233,7 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <BlurView intensity={30} tint={theme.colors.background === '#ffffff' ? "light" : "dark"} style={StyleSheet.absoluteFill} />
       <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        behavior="padding"
         keyboardVerticalOffset={0}
         style={styles.keyboardAvoider}
       >
@@ -285,17 +284,16 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
               {searching ? (
                 <ActivityIndicator color={theme.colors.indigo[400]} style={{ marginVertical: 8 }} />
               ) : (
-                <FlatList
-                  data={results}
-                  keyExtractor={(item) => item.id}
+                <ScrollView
                   style={{ maxHeight: 200 }}
                   keyboardShouldPersistTaps="handled"
-                  ListEmptyComponent={
-                    query.trim().length >= 3 ? (
-                      <Text style={{ color: theme.colors.textMuted, fontSize: 13, marginTop: 8 }}>No matches</Text>
-                    ) : null
-                  }
-                  renderItem={({ item }) => {
+                  showsVerticalScrollIndicator={false}
+                  bounces={false}
+                >
+                  {results.length === 0 && query.trim().length >= 3 ? (
+                    <Text style={{ color: theme.colors.textMuted, fontSize: 13, marginTop: 8 }}>No matches</Text>
+                  ) : null}
+                  {results.map((item) => {
                     const st = inviteeStatusById[item.id];
                     const blocked = st === "pending" || st === "accepted";
                     const statusLabel =
@@ -308,6 +306,7 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
                             : null;
                     return (
                       <TouchableOpacity
+                        key={item.id}
                         style={[styles.row, { borderColor: theme.colors.border, opacity: blocked ? 0.75 : 1 }]}
                         onPress={() => void handleInvite(item.id)}
                         disabled={invitingId === item.id || blocked}
@@ -336,8 +335,8 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
                         )}
                       </TouchableOpacity>
                     );
-                  }}
-                />
+                  })}
+                </ScrollView>
               )}
             </>
           ) : (
