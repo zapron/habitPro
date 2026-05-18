@@ -1396,7 +1396,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 6,
     marginTop: 7,
-    paddingTop: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
     minHeight: 22,
   },
   sparkInlineText: {
