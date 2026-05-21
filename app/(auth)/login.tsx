@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   ScrollView,
   StatusBar,
+  Image,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { Eye, EyeOff, MailCheck } from "lucide-react-native";
@@ -124,10 +125,28 @@ export default function LoginScreen() {
       >
         <View style={[styles.form, { maxWidth: FORM_MAX_WIDTH }]}>
           <View style={styles.header}>
-            <Text style={styles.titleWordmark}>
-              <Text style={{ color: isDark ? SPLASH_WORDMARK_HABIT_COLOR : "#000000" }}>habit</Text>
-              <Text style={{ color: SPLASH_WORDMARK_PRO_COLOR }}>Pro</Text>
-            </Text>
+            <View style={styles.brandRow}>
+              <View
+                style={[
+                  styles.logoWrapper,
+                  {
+                    backgroundColor: isDark ? "rgba(255, 255, 255, 0.03)" : "rgba(108, 114, 255, 0.05)",
+                    borderColor: isDark ? "rgba(255, 255, 255, 0.08)" : "rgba(108, 114, 255, 0.12)",
+                  },
+                ]}
+              >
+                <Image
+                  source={require("../../assets/habitpro-logo-transparent-v3.png")}
+                  style={styles.brandLogo}
+                  resizeMode="contain"
+                  accessibilityLabel="habitPro brand logo"
+                />
+              </View>
+              <Text style={styles.titleWordmark}>
+                <Text style={{ color: isDark ? SPLASH_WORDMARK_HABIT_COLOR : "#000000", fontWeight: "900" }}>habit</Text>
+                <Text style={{ color: SPLASH_WORDMARK_PRO_COLOR, fontWeight: "900" }}>Pro</Text>
+              </Text>
+            </View>
             <Text style={[styles.subtitle, { color: theme.colors.textSecondary }]}>
               Sign in to sync missions, streaks, and XP across devices.
             </Text>
@@ -406,11 +425,34 @@ const styles = StyleSheet.create({
     marginBottom: 28,
     alignItems: "center",
   },
+  brandRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 12,
+    marginBottom: 10,
+  },
+  logoWrapper: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#6c72ff",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    elevation: 4,
+  },
+  brandLogo: {
+    width: 36,
+    height: 36,
+  },
   titleWordmark: {
     fontSize: 40,
-    fontWeight: "800",
+    fontWeight: "900",
     letterSpacing: -0.5,
-    marginBottom: 10,
     textAlign: "center",
   },
   subtitle: {

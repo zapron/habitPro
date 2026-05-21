@@ -18,6 +18,7 @@ import {
   SPLASH_WORDMARK_HABIT_COLOR,
   SPLASH_WORDMARK_PRO_COLOR,
 } from "../constants/splash";
+import { useTheme } from "../context/ThemeContext";
 
 /** Slightly larger so full-bleed icons read clearly with splash `contain`. */
 const LOGO_SIZE = 168;
@@ -30,6 +31,7 @@ type Props = {
 };
 
 export function AnimatedSplashOverlay({ onFirstLayout, dismiss, onDismissed }: Props) {
+  const { theme, isDark } = useTheme();
   const layoutReported = useRef(false);
   const spinProgress = useRef(new Animated.Value(0)).current;
   const overlayOpacity = useRef(new Animated.Value(1)).current;
@@ -81,19 +83,28 @@ export function AnimatedSplashOverlay({ onFirstLayout, dismiss, onDismissed }: P
   };
 
   return (
-    <Animated.View style={[styles.root, { opacity: overlayOpacity }]} onLayout={handleLayout}>
+    <Animated.View
+      style={[
+        styles.root,
+        {
+          opacity: overlayOpacity,
+          backgroundColor: theme.colors.background,
+        },
+      ]}
+      onLayout={handleLayout}
+    >
       <View style={styles.center}>
         <Animated.View style={[styles.logoWrap, { transform: [{ rotate }] }]}>
           <Image
-            source={require("../../assets/habit-pro-icon.png")}
+            source={require("../../assets/habitpro-logo-transparent-v3.png")}
             style={styles.logo}
             resizeMode="contain"
             accessibilityIgnoresInvertColors
           />
         </Animated.View>
         <Text style={styles.wordmark} accessibilityRole="text">
-          <Text style={styles.wordmarkHabit}>habit</Text>
-          <Text style={styles.wordmarkPro}>Pro</Text>
+          <Text style={[styles.wordmarkHabit, { color: isDark ? "#FFFFFF" : "#000000" }]}>habit</Text>
+          <Text style={[styles.wordmarkPro, { color: SPLASH_WORDMARK_PRO_COLOR }]}>Pro</Text>
         </Text>
       </View>
     </Animated.View>

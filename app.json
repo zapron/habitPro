@@ -10,13 +10,13 @@
       "android"
     ],
     "orientation": "portrait",
-    "icon": "./assets/swirling-gradient-flame-logo.png",
+    "icon": "./assets/habitpro-logo-transparent-v3.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/habit-pro-icon.png",
+      "image": "./assets/habitpro-logo-transparent-v3.png",
       "resizeMode": "contain",
-      "backgroundColor": "#000000"
+      "backgroundColor": "#ffffff"
     },
     "ios": {
       "supportsTablet": true
@@ -25,8 +25,8 @@
       "package": "com.rakti.habitpro",
       "versionCode": 21,
       "adaptiveIcon": {
-        "foregroundImage": "./assets/swirling-gradient-flame-logo.png",
-        "backgroundColor": "#000000"
+        "foregroundImage": "./assets/habitpro-logo-transparent-v3.png",
+        "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
       "permissions": [
