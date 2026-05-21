@@ -6,7 +6,7 @@ import { useAuth } from "../context/AuthContext";
 import { isSupabaseConfigured } from "../lib/env";
 import { AnimatedSplashOverlay } from "./AnimatedSplashOverlay";
 
-const MIN_DISPLAY_MS = 2000;
+const MIN_DISPLAY_MS = 800; // Snappier, visually instantaneous startup
 
 type Props = { children: React.ReactNode };
 

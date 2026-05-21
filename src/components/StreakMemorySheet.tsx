@@ -265,16 +265,22 @@ export function StreakMemorySheet({
         }
       : undefined;
     setSubmitting(true);
-    void (async () => {
-      try {
-        await Promise.resolve(onCommit?.(null, meta));
-        onClose();
-      } catch {
-        // onCommit may alert; keep sheet open for retry
-      } finally {
-        setSubmitting(false);
-      }
-    })();
+    
+    // Start sliding down/closing the sheet IMMEDIATELY
+    onClose();
+
+    // Run the state commit in the next frame
+    InteractionManager.runAfterInteractions(() => {
+        void (async () => {
+          try {
+            await Promise.resolve(onCommit?.(null, meta));
+          } catch (e) {
+            console.error("Optimistic commit failed:", e);
+          } finally {
+            setSubmitting(false);
+          }
+        })();
+    });
   }, [
     isView,
     submitting,
@@ -308,14 +314,22 @@ export function StreakMemorySheet({
       publishToCommunity && canPublishCommunity && Boolean(imageUri);
     const meta = enableCommunityMeta ? { publishToCommunity: true } : undefined;
     setSubmitting(true);
-    try {
-      await Promise.resolve(onCommit?.(memory, meta));
-      onClose();
-    } catch {
-      // onCommit may alert; keep sheet open for retry
-    } finally {
-      setSubmitting(false);
-    }
+    
+    // Slide out sheet immediately
+    onClose();
+
+    // Execute background operations without blocking the modal slide-out animation
+    InteractionManager.runAfterInteractions(() => {
+        void (async () => {
+            try {
+              await Promise.resolve(onCommit?.(memory, meta));
+            } catch (e) {
+              console.error("Optimistic memory save failed:", e);
+            } finally {
+              setSubmitting(false);
+            }
+        })();
+    });
   }, [
     isView,
     isMini,

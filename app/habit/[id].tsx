@@ -1,5 +1,5 @@
 import { Text } from "../../src/components/AppText";
-import {
+import React, {
   useCallback,
   useEffect,
   useMemo,
@@ -215,8 +215,9 @@ function HabitGridBrandRing({
     );
 }
 
-function AnimatedDayCell({
+const AnimatedDayCell = React.memo(function AnimatedDayCell({
     day,
+    dayIndex,
     isCompleted,
     isMilestone,
     isCurrentMissionDay,
@@ -229,6 +230,7 @@ function AnimatedDayCell({
     onPress,
 }: {
     day: number;
+    dayIndex: number;
     isCompleted: boolean;
     isMilestone: boolean;
     /** Current 24h mission slot — highlight + pulse when not yet completed */
@@ -243,7 +245,7 @@ function AnimatedDayCell({
     /** This day was restored via Streak Repair. */
     repaired: boolean;
     repairSource?: "squad" | "solo";
-    onPress: () => void;
+    onPress: (dayIndex: number, day: number) => void;
 }) {
     const { theme, isDark } = useTheme();
     const reduceMotion = useReducedMotion();
@@ -280,8 +282,12 @@ function AnimatedDayCell({
             Animated.spring(scale, { toValue: 0.82, tension: 250, friction: 6, useNativeDriver: true }),
             Animated.spring(scale, { toValue: 1, tension: 200, friction: 5, useNativeDriver: true }),
         ]).start();
-        onPress();
-    }, [onPress, scale]);
+        
+        // Instantly play light touch haptic
+        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        
+        onPress(dayIndex, day);
+    }, [onPress, scale, dayIndex, day]);
 
     const shimmerOpacity = shimmer.interpolate({ inputRange: [0, 1], outputRange: [0.7, 1] });
 
@@ -333,7 +339,7 @@ function AnimatedDayCell({
             </TouchableOpacity>
         </Animated.View>
     );
-}
+});
 
 function isValidHHMM(v: string): boolean {
   return /^([01]\d|2[0-3]):([0-5]\d)$/.test(v.trim());
@@ -810,7 +816,16 @@ export default function HabitDetail() {
                 ) : (
                     <View style={styles.notFoundContainer}>
                         <Text style={[styles.notFoundText, { color: theme.colors.textPrimary, fontSize: theme.typography.body }]}>Mission not found</Text>
-                        <Button title='Go Back' onPress={() => backOrReplace(router, "/")} style={styles.notFoundButton} />
+                        <Button
+                            title='Go Back'
+                            onPress={() => {
+                                void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                requestAnimationFrame(() => {
+                                    backOrReplace(router, "/");
+                                });
+                            }}
+                            style={styles.notFoundButton}
+                        />
                     </View>
                 )}
             </Screen>
@@ -844,12 +859,12 @@ export default function HabitDetail() {
 
     const days = Array.from({ length: totalDays }, (_, i) => i + 1);
 
-    const getDayDate = (dayIndex: number) => calendarDateForHabitMissionDayIndex(habit, dayIndex, now);
+    const getDayDate = useCallback((dayIndex: number) => calendarDateForHabitMissionDayIndex(habit, dayIndex, now), [habit, now]);
 
     const isManual = mode === 'manual';
     const activeMissionDaySlot = getHabitActiveMissionDaySlot(habit, now);
 
-    const handleDayPress = (dayIndex: number, day: number) => {
+    const handleDayPress = useCallback((dayIndex: number, day: number) => {
         const dateStr = getDayDate(dayIndex);
         const wasCompleted = habit.completedDates.includes(dateStr);
         const canInteract = activeMissionDaySlot !== null && day === activeMissionDaySlot;
@@ -880,15 +895,23 @@ export default function HabitDetail() {
             showToast(LOCKED_CHECKIN_MSG, 'info', 5000);
             return;
         }
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    };
+        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }, [habit, activeMissionDaySlot, toggleCompletion, showToast, getDayDate]);
 
     return (
         <Screen>
             <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={theme.colors.background} />
 
             <View style={styles.header}>
-                <TouchableOpacity style={[styles.iconButton, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]} onPress={() => backOrReplace(router, "/")}>
+                <TouchableOpacity
+                    style={[styles.iconButton, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}
+                    onPress={() => {
+                        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        requestAnimationFrame(() => {
+                            backOrReplace(router, "/");
+                        });
+                    }}
+                >
                     <ArrowLeft size={theme.icon.xl} color={theme.colors.textPrimary} />
                 </TouchableOpacity>
                 <View style={styles.headerActions}>
@@ -1398,6 +1421,7 @@ export default function HabitDetail() {
                             <AnimatedDayCell
                                 key={day}
                                 day={day}
+                                dayIndex={index} // Stable index
                                 isCompleted={isCompleted}
                                 isMilestone={isMilestone}
                                 isCurrentMissionDay={isCurrentMissionDay}
@@ -1407,7 +1431,7 @@ export default function HabitDetail() {
                                 hasMomentMedia={hasMomentMedia}
                                 repaired={repaired}
                                 repairSource={repairSource}
-                                onPress={() => handleDayPress(index, day)}
+                                onPress={handleDayPress} // Stable callback reference
                             />
                         );
                     })}
@@ -1465,7 +1489,9 @@ export default function HabitDetail() {
                                         if (resetHabit(habit.id)) {
                                             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                                             showToast('Mission reset', 'success');
-                                            backOrReplace(router, "/");
+                                            requestAnimationFrame(() => {
+                                                backOrReplace(router, "/");
+                                            });
                                         }
                                     },
                                 },
@@ -1484,7 +1510,9 @@ export default function HabitDetail() {
                                               deleteHabit(habit.id);
                                               Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                                               showToast('Mission deleted', 'success');
-                                              backOrReplace(router, "/");
+                                              requestAnimationFrame(() => {
+                                                  backOrReplace(router, "/");
+                                              });
                                           })();
                                       },
                                   },
@@ -1511,7 +1539,9 @@ export default function HabitDetail() {
                                                 await refreshCohortPeerHabits().catch(() => {});
                                                 Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
                                                 showToast('Left group mission', 'success');
-                                                backOrReplace(router, "/");
+                                                requestAnimationFrame(() => {
+                                                    backOrReplace(router, "/");
+                                                });
                                             })();
                                         },
                                     },
