@@ -255,7 +255,7 @@ export function StreakMemorySheet({
   }, [onClose, submitting]);
 
   /** Explicit: check in for this day without saving a photo/note. */
-  const handleJustMarkDone = useCallback(() => {
+  const handleJustMarkDone = useCallback(async () => {
     if (isView || submitting) return;
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     const meta = isMini
@@ -266,21 +266,14 @@ export function StreakMemorySheet({
       : undefined;
     setSubmitting(true);
     
-    // Start sliding down/closing the sheet IMMEDIATELY
-    onClose();
-
-    // Run the state commit in the next frame
-    InteractionManager.runAfterInteractions(() => {
-        void (async () => {
-          try {
-            await Promise.resolve(onCommit?.(null, meta));
-          } catch (e) {
-            console.error("Optimistic commit failed:", e);
-          } finally {
-            setSubmitting(false);
-          }
-        })();
-    });
+    try {
+      await Promise.resolve(onCommit?.(null, meta));
+      onClose();
+    } catch (e) {
+      console.error("Just mark done commit failed:", e);
+    } finally {
+      setSubmitting(false);
+    }
   }, [
     isView,
     submitting,
@@ -315,21 +308,14 @@ export function StreakMemorySheet({
     const meta = enableCommunityMeta ? { publishToCommunity: true } : undefined;
     setSubmitting(true);
     
-    // Slide out sheet immediately
-    onClose();
-
-    // Execute background operations without blocking the modal slide-out animation
-    InteractionManager.runAfterInteractions(() => {
-        void (async () => {
-            try {
-              await Promise.resolve(onCommit?.(memory, meta));
-            } catch (e) {
-              console.error("Optimistic memory save failed:", e);
-            } finally {
-              setSubmitting(false);
-            }
-        })();
-    });
+    try {
+      await Promise.resolve(onCommit?.(memory, meta));
+      onClose();
+    } catch (e) {
+      console.error("Memory save failed:", e);
+    } finally {
+      setSubmitting(false);
+    }
   }, [
     isView,
     isMini,
@@ -339,7 +325,6 @@ export function StreakMemorySheet({
     onClose,
     publishToCommunity,
     canPublishCommunity,
-    submitting,
   ]);
 
   const maxSheetView = Math.min(windowH * 0.88, 560);
