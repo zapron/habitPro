@@ -30,17 +30,26 @@ type RepairRow = {
   date_str: string;
 };
 
+let cachedSessionUserId: string | null = null;
+
+export function updateCachedAuthSession(uid: string | null) {
+  cachedSessionUserId = uid;
+}
+
 async function hasMatchingAuthSession(
   supabase: SupabaseClient,
   sessionUserId: string,
 ): Promise<boolean> {
   if (!sessionUserId) return false;
+  if (cachedSessionUserId === sessionUserId) return true;
   const { data, error } = await supabase.auth.getSession();
   if (error) {
     if (__DEV__) console.warn("[habitPro] sync auth guard failed", error.message);
     return false;
   }
-  return data.session?.user?.id === sessionUserId;
+  const uid = data.session?.user?.id ?? null;
+  cachedSessionUserId = uid;
+  return uid === sessionUserId;
 }
 
 function isHttpImageUri(uri: string | undefined): boolean {
@@ -501,60 +510,58 @@ export async function pullFromSupabase(
 
 export async function pushFullState(
   sessionUserId: string,
-  state: Pick<HabitStore, "habits" | "miniMissions" | "xp" | "username">,
+  state: Pick<HabitStore, "habits" | "miniMissions" | "xp" | "username" | "dirtyHabitIds" | "dirtyMiniMissionIds">,
 ): Promise<void> {
   const supabase = getSupabase();
   if (!supabase) return;
   if (!(await hasMatchingAuthSession(supabase, sessionUserId))) return;
 
+  // Filter local habits/minis: only those belonging to user
   const localHabitsForUser = state.habits.filter(
-    (h) =>
-      h.ownerUserId == null || h.ownerUserId === sessionUserId,
+    (h) => h.ownerUserId == null || h.ownerUserId === sessionUserId,
   );
   const localMinisForUser = state.miniMissions.filter(
-    (m) =>
-      m.ownerUserId == null || m.ownerUserId === sessionUserId,
+    (m) => m.ownerUserId == null || m.ownerUserId === sessionUserId,
   );
 
-  const habitsForUser = await Promise.all(localHabitsForUser.map(habitForRemote));
-  const minisForUser = await Promise.all(localMinisForUser.map(miniMissionForRemote));
+  // Incremental Filter: only push what is dirty (or all if dirty tracking is empty/undefined)
+  const dirtyHabits = state.dirtyHabitIds
+    ? localHabitsForUser.filter((h) => state.dirtyHabitIds!.includes(h.id))
+    : localHabitsForUser;
+  const dirtyMinis = state.dirtyMiniMissionIds
+    ? localMinisForUser.filter((m) => state.dirtyMiniMissionIds!.includes(m.id))
+    : localMinisForUser;
+
+  // If there are no dirty items and XP/Username hasn't changed, we can skip network write entirely!
+  // However, we still do a quick sync push if it is a manual force or initial sync.
+  if (state.dirtyHabitIds && state.dirtyMiniMissionIds && dirtyHabits.length === 0 && dirtyMinis.length === 0) {
+    // Only skip if XP and Username have nothing new to write to DB
+    const { data: existingProfile } = await supabase
+      .from("profiles")
+      .select("xp")
+      .eq("id", sessionUserId)
+      .maybeSingle();
+    if (existingProfile && existingProfile.xp >= state.xp) {
+      return; // Skip completely! Zero roundtrips!
+    }
+  }
+
+  const habitsForRemote = await Promise.all(dirtyHabits.map(habitForRemote));
+  const minisForRemote = await Promise.all(dirtyMinis.map(miniMissionForRemote));
   if (!(await hasMatchingAuthSession(supabase, sessionUserId))) return;
 
-  const habitRows = habitsForUser.map((h) => habitToRow(sessionUserId, h));
-  const miniRows = minisForUser.map((m) => miniToRow(sessionUserId, m));
+  const habitRows = habitsForRemote.map((h) => habitToRow(sessionUserId, h));
+  const miniRows = minisForRemote.map((m) => miniToRow(sessionUserId, m));
 
-  if (habitRows.length > 0) {
-    const { error } = await supabase.from("habits").upsert(habitRows, {
-      onConflict: "user_id,id",
-    });
-    if (error) throw error;
-  }
+  // Single-Roundtrip Transactional RPC Sync
+  const { error } = await supabase.rpc("rpc_sync_dirty_state", {
+    p_dirty_habits: habitRows,
+    p_dirty_minis: miniRows,
+    p_local_xp: state.xp,
+    p_username: state.username ?? null,
+  });
 
-  if (miniRows.length > 0) {
-    const { error } = await supabase.from("mini_missions").upsert(miniRows, {
-      onConflict: "user_id,id",
-    });
-    if (error) throw error;
-  }
-
-  const username = typeof state.username === "string" && state.username.trim().length > 0
-    ? state.username.trim().toLowerCase()
-    : undefined;
-  const { data: existingProfile, error: existingProfileErr } = await supabase
-    .from("profiles")
-    .select("xp")
-    .eq("id", sessionUserId)
-    .maybeSingle();
-  if (existingProfileErr) throw existingProfileErr;
-  const existingXp =
-    typeof existingProfile?.xp === "number" && Number.isFinite(existingProfile.xp)
-      ? existingProfile.xp
-      : 0;
-  const { error: profileErr } = await supabase.from("profiles").upsert(
-    { id: sessionUserId, xp: Math.max(existingXp, state.xp), ...(username ? { username } : {}) },
-    { onConflict: "id" },
-  );
-  if (profileErr) throw profileErr;
+  if (error) throw error;
 }
 
 export async function deleteRemoteHabit(sessionUserId: string, habitId: string): Promise<void> {

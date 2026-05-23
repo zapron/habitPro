@@ -23,7 +23,7 @@ import { getSignupConfirmationRedirectUrl } from "../lib/authRedirects";
 import { isPasswordRecoverySession } from "../lib/passwordRecovery";
 import { clearSupabaseAuthStorage, getSupabase } from "../lib/supabase";
 import { saveAccountSnapshotBackup } from "../lib/accountBackup";
-import { hydrateStoreAfterAuth } from "../lib/sync";
+import { hydrateStoreAfterAuth, updateCachedAuthSession } from "../lib/sync";
 import { disableAndCancelRemoteSync } from "../lib/syncQueue";
 import {
   clearPushTokenForCurrentUser,
@@ -95,6 +95,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const uid = session?.user?.id ?? null;
     activeAuthUserIdRef.current = uid;
     setActivePushUserId(uid);
+    updateCachedAuthSession(uid);
   }, [session?.user?.id]);
 
   useEffect(() => {

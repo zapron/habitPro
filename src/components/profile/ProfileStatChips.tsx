@@ -1,3 +1,4 @@
+import React, { memo } from "react";
 import { Text } from "../AppText";
 import {
   View,
@@ -14,7 +15,7 @@ type Props = {
   lifetimeCheckIns: number;
 };
 
-export function ProfileStatChips({ theme, isDark, maxStreak, activeHabits, lifetimeCheckIns }: Props) {
+export const ProfileStatChips = memo(function ProfileStatChips({ theme, isDark, maxStreak, activeHabits, lifetimeCheckIns }: Props) {
   const chipBg = isDark ? "rgba(255,255,255,0.05)" : "rgba(15,23,42,0.04)";
   const border = theme.colors.border;
 
@@ -57,7 +58,7 @@ export function ProfileStatChips({ theme, isDark, maxStreak, activeHabits, lifet
       ))}
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   row: {

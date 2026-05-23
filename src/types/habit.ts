@@ -118,6 +118,8 @@ export type HabitStore = {
   habits: Habit[];
   miniMissions: MiniMission[];
   xp: number;
+  dirtyHabitIds?: string[];
+  dirtyMiniMissionIds?: string[];
   /** Lowercase public handle for challenges; synced to `profiles.username`. */
   username: string | null;
   setUsername: (username: string | null) => void;
@@ -190,4 +192,5 @@ export type HabitStore = {
     habitId: string,
     group: import("./groupChallenge").ChallengeGroupRow,
   ) => void;
+  clearDirtyState: (habitIds?: string[], miniIds?: string[]) => void;
 };

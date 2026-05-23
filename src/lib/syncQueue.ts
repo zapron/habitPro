@@ -1,8 +1,12 @@
 import type { HabitStore } from "../types/habit";
+import { useHabitStore } from "../store/habitStore";
 import { saveAccountSnapshotBackup } from "./accountBackup";
 import { deleteRemoteHabit, deleteRemoteMiniMission, pushFullState } from "./sync";
 
-type Snapshot = Pick<HabitStore, "habits" | "miniMissions" | "xp" | "username">;
+type Snapshot = Pick<
+  HabitStore,
+  "habits" | "miniMissions" | "xp" | "username" | "dirtyHabitIds" | "dirtyMiniMissionIds"
+>;
 
 let userId: string | null = null;
 let syncEnabled = false;
@@ -101,6 +105,8 @@ function flush() {
   inFlightPushes += 1;
   void pushFullState(userId!, snap)
     .then(() => {
+      // Clear the dirty flags in the store on successful sync
+      useHabitStore.getState().clearDirtyState(snap.dirtyHabitIds, snap.dirtyMiniMissionIds);
       notifySyncSuccess();
     })
     .catch((e) => {

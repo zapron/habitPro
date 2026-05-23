@@ -26,6 +26,17 @@ import { alignGroupHabitToChallengeStart } from "../utils/groupMissionClock";
 import { getMissionCalendarTimeZone } from "../utils/missionCalendarKeys";
 import type { ChallengeGroupRow } from "../types/groupChallenge";
 
+const throttledStorage = {
+  getItem: (name: string) => AsyncStorage.getItem(name),
+  setItem: (name: string, value: string) => {
+    return new Promise<void>((resolve) => {
+      requestAnimationFrame(() => {
+        AsyncStorage.setItem(name, value).then(resolve);
+      });
+    });
+  },
+  removeItem: (name: string) => AsyncStorage.removeItem(name),
+};
 /** Calculate endDate by adding `totalDays` to a start ISO string. */
 const calculateEndDate = (startIso: string, totalDays: number): string => {
   const d = new Date(startIso);
@@ -73,14 +84,62 @@ const migrateHabit = (h: any): Habit => {
 
 export const useHabitStore = create<HabitStore>()(
   persist(
-    (set, get) => ({
-      habits: [],
-      miniMissions: [],
-      xp: 0,
-      username: null,
-      setUsername: (username) => set({ username }),
-      cohortPeerHabits: [],
-      setCohortPeerHabits: (cohortPeerHabits) => set({ cohortPeerHabits }),
+    (rawSet, get) => {
+      const set: typeof rawSet = (nextStateOrFn, replace) => {
+        rawSet((state) => {
+          const next =
+            typeof nextStateOrFn === "function"
+              ? (nextStateOrFn as any)(state)
+              : nextStateOrFn;
+          const updates = { ...next };
+
+          if (next.habits && next.habits !== state.habits) {
+            const dirty = [...(state.dirtyHabitIds ?? [])];
+            next.habits.forEach((h: any) => {
+              const prev = state.habits.find((ph) => ph.id === h.id);
+              if (!prev || JSON.stringify(prev) !== JSON.stringify(h)) {
+                if (!dirty.includes(h.id)) dirty.push(h.id);
+              }
+            });
+            updates.dirtyHabitIds = dirty;
+          }
+
+          if (next.miniMissions && next.miniMissions !== state.miniMissions) {
+            const dirty = [...(state.dirtyMiniMissionIds ?? [])];
+            next.miniMissions.forEach((m: any) => {
+              const prev = state.miniMissions.find((pm) => pm.id === m.id);
+              if (!prev || JSON.stringify(prev) !== JSON.stringify(m)) {
+                if (!dirty.includes(m.id)) dirty.push(m.id);
+              }
+            });
+            updates.dirtyMiniMissionIds = dirty;
+          }
+
+          return updates;
+        }, replace);
+      };
+
+      return {
+        habits: [],
+        miniMissions: [],
+        xp: 0,
+        dirtyHabitIds: [],
+        dirtyMiniMissionIds: [],
+        clearDirtyState: (habitIds, miniIds) => {
+          rawSet((state) => {
+            const nextHabits = habitIds
+              ? (state.dirtyHabitIds ?? []).filter((id) => !habitIds.includes(id))
+              : state.dirtyHabitIds ?? [];
+            const nextMinis = miniIds
+              ? (state.dirtyMiniMissionIds ?? []).filter((id) => !miniIds.includes(id))
+              : state.dirtyMiniMissionIds ?? [];
+            return { dirtyHabitIds: nextHabits, dirtyMiniMissionIds: nextMinis };
+          });
+        },
+        username: null,
+        setUsername: (username) => set({ username }),
+        cohortPeerHabits: [],
+        setCohortPeerHabits: (cohortPeerHabits) => set({ cohortPeerHabits }),
       setHabitChallengeMeta: (id, meta) => {
         set((state) => ({
           habits: state.habits.map((h) =>
@@ -613,10 +672,11 @@ export const useHabitStore = create<HabitStore>()(
       addXp: (amount) => {
         set((state) => ({ xp: state.xp + amount }));
       },
-    }),
+    };
+  },
     {
       name: "habit-storage",
-      storage: createJSONStorage(() => AsyncStorage),
+      storage: createJSONStorage(() => throttledStorage),
       // Migrate legacy habits on rehydration
       onRehydrateStorage: () => (state) => {
         if (state) {
@@ -694,5 +754,12 @@ export const useHabitStore = create<HabitStore>()(
 
 registerSyncSnapshotGetter(() => {
   const s = useHabitStore.getState();
-  return { habits: s.habits, miniMissions: s.miniMissions, xp: s.xp, username: s.username };
+  return {
+    habits: s.habits,
+    miniMissions: s.miniMissions,
+    xp: s.xp,
+    username: s.username,
+    dirtyHabitIds: s.dirtyHabitIds ?? [],
+    dirtyMiniMissionIds: s.dirtyMiniMissionIds ?? [],
+  };
 });

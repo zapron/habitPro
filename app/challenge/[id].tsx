@@ -1,5 +1,6 @@
 import { Text } from "../../src/components/AppText";
-import {
+import React, {
+  memo,
   useCallback,
   useEffect,
   useMemo,
@@ -25,6 +26,7 @@ import { CohortNudgeChips } from "../../src/components/CohortNudgeChips";
 import { CustomNudgeModal } from "../../src/components/CustomNudgeModal";
 import { Screen } from "../../src/components/Screen";
 import { ConfirmDialog } from "../../src/components/ConfirmDialog";
+import { LazyMount } from "../../src/components/LazyMount";
 import {
   CohortParticipantTimelineLegend,
   CohortPeerStreakDots,
@@ -39,6 +41,7 @@ import { useAuth } from "../../src/context/AuthContext";
 import { usePremium } from "../../src/context/PremiumContext";
 import { usePlusUpsell } from "../../src/context/PlusUpsellContext";
 import { useHabitStore } from "../../src/store/habitStore";
+import { useShallow } from "zustand/react/shallow";
 import {
   listChallengeActivityPage,
   listRecentNudgesPage,
@@ -109,6 +112,120 @@ function participantDisplayName(label: ProfileLabel | undefined): string {
 const CHALLENGE_ACTIVITY_PAGE_SIZE = 20;
 const CHALLENGE_REPAIR_PAGE_SIZE = 20;
 
+type ParticipantCardProps = {
+  memberId: string;
+  label: ProfileLabel | undefined;
+  habit: Habit | undefined;
+  myXp: number;
+  myUserId: string | null;
+  squadNudgeActionsEnabled: boolean;
+  nudgeBusyKey: string | null;
+  socialLocked: boolean;
+  customNoteSentToday: boolean;
+  onSendNudge: (toUserId: string, kind: PresetChallengeNudgeKind) => Promise<void>;
+  openUpsell: (reason: any) => void;
+  onOpenCustomNote: (toUserId: string) => void;
+  themedStyles: any;
+  theme: any;
+  isDark: boolean;
+};
+
+const ParticipantCard = memo(function ParticipantCard({
+  memberId,
+  label,
+  habit,
+  myXp,
+  myUserId,
+  squadNudgeActionsEnabled,
+  nudgeBusyKey,
+  socialLocked,
+  customNoteSentToday,
+  onSendNudge,
+  openUpsell,
+  onOpenCustomNote,
+  themedStyles,
+  theme,
+  isDark,
+}: ParticipantCardProps) {
+  const nameOnCard = participantDisplayName(label);
+  const xpForLevel = label?.xp != null ? label.xp : myUserId === memberId ? myXp : null;
+  const memberLevel = xpForLevel != null ? levelFromTotalXp(xpForLevel) : null;
+
+  const handleNudgePress = useCallback((kind: PresetChallengeNudgeKind) => {
+    void onSendNudge(memberId, kind);
+  }, [onSendNudge, memberId]);
+
+  const handlePlusLocked = useCallback(() => {
+    openUpsell("squad_nudge");
+  }, [openUpsell]);
+
+  const handleCustomNotePress = useCallback(() => {
+    onOpenCustomNote(memberId);
+  }, [onOpenCustomNote, memberId]);
+
+  return (
+    <View style={[styles.participantCard, themedStyles.card]}>
+      <View style={styles.participantHeaderRow}>
+        <View style={styles.participantNameLevelCluster}>
+          <Text
+            style={[
+              styles.participantName,
+              styles.participantNameInline,
+              { color: theme.colors.textPrimary },
+            ]}
+            numberOfLines={2}
+          >
+            {nameOnCard}
+          </Text>
+          {memberLevel != null ? (
+            <View style={[styles.levelPill, themedStyles.levelPill]}>
+              <Text style={[styles.levelPillText, { color: theme.colors.yellow[400] }]}>
+                Lv {memberLevel}
+              </Text>
+            </View>
+          ) : null}
+        </View>
+        <View style={styles.participantHeaderSpacer} />
+        <View style={styles.participantHeaderStreakWrap}>
+          {habit ? (
+            <CohortStreakPill streak={habit.streak} isDark={isDark} />
+          ) : (
+            <Text style={[styles.streakPlaceholder, { color: theme.colors.textMuted }]}>-</Text>
+          )}
+        </View>
+      </View>
+
+      {habit ? (
+        <CohortPeerStreakDots
+          habit={habit}
+          peerUsername={label?.username ?? null}
+          showIdentityRow={false}
+        />
+      ) : (
+        <Text style={[styles.noSyncHint, { color: theme.colors.textMuted }]}>
+          Mission progress will show here once it syncs.
+        </Text>
+      )}
+
+      {squadNudgeActionsEnabled && myUserId && memberId !== myUserId ? (
+        <CohortNudgeChips
+          theme={theme}
+          isDark={isDark}
+          memberId={memberId}
+          nudgeBusyKey={nudgeBusyKey}
+          onPress={handleNudgePress}
+          plusLocked={socialLocked}
+          onPlusLocked={handlePlusLocked}
+          customNoteSentToday={customNoteSentToday}
+          onCustomNotePress={handleCustomNotePress}
+        />
+      ) : null}
+    </View>
+  );
+});
+
+ParticipantCard.displayName = "ParticipantCard";
+
 export default function ChallengeDetailScreen() {
   const { id } = useLocalSearchParams<{ id?: string | string[] }>();
   const challengeId = Array.isArray(id) ? id[0] : id;
@@ -122,8 +239,20 @@ export default function ChallengeDetailScreen() {
   const socialLocked = !isPremium || premiumLoading;
   const myUserId = session?.user?.id ?? null;
 
-  const habits = useHabitStore((s) => s.habits);
-  const cohortPeerHabits = useHabitStore((s) => s.cohortPeerHabits);
+  const myHabit = useHabitStore(
+    useCallback(
+      (s) => s.habits.find((h) => h.challengeGroupId === challengeId),
+      [challengeId]
+    )
+  );
+  const peers = useHabitStore(
+    useShallow(
+      useCallback(
+        (s) => s.cohortPeerHabits.filter((h) => h.challengeGroupId === challengeId),
+        [challengeId]
+      )
+    )
+  );
   const myXp = useHabitStore((s) => s.xp);
   const deleteHabit = useHabitStore((s) => s.deleteHabit);
 
@@ -154,6 +283,30 @@ export default function ChallengeDetailScreen() {
     vote: "approve" | "decline";
   } | null>(null);
   const [missionDetailsOpen, setMissionDetailsOpen] = useState(false);
+
+  const themedStyles = useMemo(() => {
+    return {
+      card: {
+        backgroundColor: theme.colors.surface,
+        borderColor: theme.colors.border,
+        ...theme.shadow.card,
+      },
+      levelPill: {
+        borderColor: theme.colors.border,
+        backgroundColor: isDark ? "rgba(251, 191, 36, 0.12)" : "rgba(234, 179, 8, 0.12)",
+      },
+      recoveryCard: {
+        backgroundColor: theme.colors.surface,
+        borderColor: theme.colors.border,
+        ...theme.shadow.card,
+      },
+      repairCard: {
+        backgroundColor: theme.colors.surface,
+        borderColor: theme.colors.border,
+        ...theme.shadow.card,
+      },
+    };
+  }, [theme, isDark]);
 
   const focusOnceRef = useRef(false);
   const secondaryLoadInFlightRef = useRef(false);
@@ -415,11 +568,10 @@ export default function ChallengeDetailScreen() {
         openUpsell("squad_nudge");
         return;
       }
-      const viewerHabit = habits.find((h) => h.challengeGroupId === challengeId);
       if (
-        viewerHabit &&
-        !viewerHabit.isCompleted &&
-        isHabitMissionWindowClosed(viewerHabit, Date.now())
+        myHabit &&
+        !myHabit.isCompleted &&
+        isHabitMissionWindowClosed(myHabit, Date.now())
       ) {
         return;
       }
@@ -440,7 +592,7 @@ export default function ChallengeDetailScreen() {
         setNudgeBusyKey(null);
       }
     },
-    [challengeId, myUserId, load, habits, showToast, openUpsell, refreshPremiumAccess, handleServerPremiumRequired],
+    [challengeId, myUserId, load, myHabit, showToast, openUpsell, refreshPremiumAccess, handleServerPremiumRequired],
   );
 
   const onCongrats = useCallback(
@@ -451,11 +603,10 @@ export default function ChallengeDetailScreen() {
         openUpsell("squad_nudge");
         return;
       }
-      const viewerHabit = habits.find((h) => h.challengeGroupId === challengeId);
       if (
-        viewerHabit &&
-        !viewerHabit.isCompleted &&
-        isHabitMissionWindowClosed(viewerHabit, Date.now())
+        myHabit &&
+        !myHabit.isCompleted &&
+        isHabitMissionWindowClosed(myHabit, Date.now())
       ) {
         return;
       }
@@ -476,7 +627,7 @@ export default function ChallengeDetailScreen() {
         setNudgeBusyKey(null);
       }
     },
-    [challengeId, myUserId, load, habits, showToast, openUpsell, refreshPremiumAccess, handleServerPremiumRequired],
+    [challengeId, myUserId, load, myHabit, showToast, openUpsell, refreshPremiumAccess, handleServerPremiumRequired],
   );
 
   const congratsSentActivityIds = useMemo(() => {
@@ -566,11 +717,6 @@ export default function ChallengeDetailScreen() {
     ],
   );
 
-  const myHabit = useMemo(
-    () => habits.find((h) => h.challengeGroupId === challengeId),
-    [habits, challengeId],
-  );
-
   const canLeaveMission = Boolean(
     challengeId && myHabit?.id && session && isSupabaseConfigured(),
   );
@@ -606,7 +752,7 @@ export default function ChallengeDetailScreen() {
 
   useEffect(() => {
     if (!myHabit || myHabit.isCompleted) return;
-    const t = setInterval(() => setCohortNow(Date.now()), 30_000);
+    const t = setInterval(() => setCohortNow(Date.now()), 300_000); // 5 minutes
     return () => clearInterval(t);
   }, [myHabit?.id, myHabit?.isCompleted]);
 
@@ -615,11 +761,6 @@ export default function ChallengeDetailScreen() {
     if (myHabit.isCompleted) return true;
     return !isHabitMissionWindowClosed(myHabit, cohortNow);
   }, [myHabit, cohortNow]);
-
-  const peers = useMemo(
-    () => cohortPeerHabits.filter((h) => h.challengeGroupId === challengeId),
-    [cohortPeerHabits, challengeId],
-  );
 
   const { title: missionTitle, description: missionDescription } = useMemo(
     () => parseGroupMissionDisplay(group),
@@ -767,11 +908,10 @@ export default function ChallengeDetailScreen() {
         openUpsell("squad_nudge");
         return;
       }
-      const viewerHabit = habits.find((h) => h.challengeGroupId === challengeId);
       if (
-        viewerHabit &&
-        !viewerHabit.isCompleted &&
-        isHabitMissionWindowClosed(viewerHabit, Date.now())
+        myHabit &&
+        !myHabit.isCompleted &&
+        isHabitMissionWindowClosed(myHabit, Date.now())
       ) {
         showToast("Mission window ended. Nudges are disabled.", "info");
         return;
@@ -793,7 +933,7 @@ export default function ChallengeDetailScreen() {
         setNudgeBusyKey(null);
       }
     },
-    [challengeId, customNoteToUserId, myUserId, habits, showToast, load, openUpsell, refreshPremiumAccess, handleServerPremiumRequired],
+    [challengeId, customNoteToUserId, myUserId, myHabit, showToast, load, openUpsell, refreshPremiumAccess, handleServerPremiumRequired],
   );
 
   const pendingRepairRows = useMemo(
@@ -1341,92 +1481,26 @@ export default function ChallengeDetailScreen() {
           {memberIdsOrdered.length === 0 ? (
             <Text style={{ color: theme.colors.textSecondary }}>No members loaded yet.</Text>
           ) : (
-            sortedMemberIds.map((memberId) => {
-              const label = profileLabels[memberId];
-              const habit = habitForMember(memberId);
-              const nameOnCard = participantDisplayName(label);
-              const xpForLevel =
-                label?.xp != null ? label.xp : myUserId === memberId ? myXp : null;
-              const memberLevel = xpForLevel != null ? levelFromTotalXp(xpForLevel) : null;
-
-              return (
-                <View
-                  key={memberId}
-                  style={[
-                    styles.participantCard,
-                    {
-                      backgroundColor: theme.colors.surface,
-                      borderColor: theme.colors.border,
-                      ...theme.shadow.card,
-                    },
-                  ]}
-                >
-                  <View style={styles.participantHeaderRow}>
-                    <View style={styles.participantNameLevelCluster}>
-                      <Text
-                        style={[
-                          styles.participantName,
-                          styles.participantNameInline,
-                          { color: theme.colors.textPrimary },
-                        ]}
-                        numberOfLines={2}
-                      >
-                        {nameOnCard}
-                      </Text>
-                      {memberLevel != null ? (
-                        <View
-                          style={[
-                            styles.levelPill,
-                            {
-                              borderColor: theme.colors.border,
-                              backgroundColor: isDark ? "rgba(251, 191, 36, 0.12)" : "rgba(234, 179, 8, 0.12)",
-                            },
-                          ]}
-                        >
-                          <Text style={[styles.levelPillText, { color: theme.colors.yellow[400] }]}>
-                            Lv {memberLevel}
-                          </Text>
-                        </View>
-                      ) : null}
-                    </View>
-                    <View style={styles.participantHeaderSpacer} />
-                    <View style={styles.participantHeaderStreakWrap}>
-                      {habit ? (
-                        <CohortStreakPill streak={habit.streak} isDark={isDark} />
-                      ) : (
-                        <Text style={[styles.streakPlaceholder, { color: theme.colors.textMuted }]}>-</Text>
-                      )}
-                    </View>
-                  </View>
-
-                  {habit ? (
-                    <CohortPeerStreakDots
-                      habit={habit}
-                      peerUsername={label?.username ?? null}
-                      showIdentityRow={false}
-                    />
-                  ) : (
-                    <Text style={[styles.noSyncHint, { color: theme.colors.textMuted }]}>
-                      Mission progress will show here once it syncs.
-                    </Text>
-                  )}
-
-                  {squadNudgeActionsEnabled && myUserId && memberId !== myUserId ? (
-                    <CohortNudgeChips
-                      theme={theme}
-                      isDark={isDark}
-                      memberId={memberId}
-                      nudgeBusyKey={nudgeBusyKey}
-                      onPress={(kind) => void onSendNudge(memberId, kind)}
-                      plusLocked={socialLocked}
-                      onPlusLocked={() => openUpsell("squad_nudge")}
-                      customNoteSentToday={customNoteSentTodayToUserIds.has(memberId)}
-                      onCustomNotePress={() => onOpenCustomNote(memberId)}
-                    />
-                  ) : null}
-                </View>
-              );
-            })
+            sortedMemberIds.map((memberId) => (
+              <ParticipantCard
+                key={memberId}
+                memberId={memberId}
+                label={profileLabels[memberId]}
+                habit={habitForMember(memberId)}
+                myXp={myXp}
+                myUserId={myUserId}
+                squadNudgeActionsEnabled={squadNudgeActionsEnabled}
+                nudgeBusyKey={nudgeBusyKey}
+                socialLocked={socialLocked}
+                customNoteSentToday={customNoteSentTodayToUserIds.has(memberId)}
+                onSendNudge={onSendNudge}
+                openUpsell={openUpsell}
+                onOpenCustomNote={onOpenCustomNote}
+                themedStyles={themedStyles}
+                theme={theme}
+                isDark={isDark}
+              />
+            ))
           )}
 
           <View
@@ -1462,38 +1536,44 @@ export default function ChallengeDetailScreen() {
         </ScrollView>
       )}
 
-      <CustomNudgeModal
-        visible={customNoteToUserId !== null}
-        onRequestClose={() => setCustomNoteToUserId(null)}
-        recipientLabel={participantDisplayName(profileLabels[customNoteToUserId ?? ""])}
-        busy={customNoteToUserId !== null && nudgeBusyKey === `${customNoteToUserId}-custom_note`}
-        onSend={(t) => void onSubmitCustomNote(t)}
-      />
-
-      <ConfirmDialog
-        visible={leaveDialogOpen}
-        onRequestClose={() => setLeaveDialogOpen(false)}
-        title="Leave group mission?"
-        message="You’ll be removed from the squad and this mission will disappear from your list. This can’t be undone."
-        actions={[
-          { label: "Cancel", variant: "secondary", onPress: () => setLeaveDialogOpen(false) },
-          { label: "Leave", variant: "danger", onPress: confirmLeaveMission },
-        ]}
-      />
-
-      {group ? (
-        <MissionDetailsSheet
-          variant="group"
-          visible={missionDetailsOpen}
-          onClose={() => setMissionDetailsOpen(false)}
-          title={missionTitle}
-          description={missionDescription ?? null}
-          mode={groupMissionMode}
-          totalDays={missionTotalDays}
-          startDate={group.start_date}
-          endDate={groupTemplateEndDate}
+      <LazyMount visible={customNoteToUserId !== null}>
+        <CustomNudgeModal
+          visible={customNoteToUserId !== null}
+          onRequestClose={() => setCustomNoteToUserId(null)}
+          recipientLabel={participantDisplayName(profileLabels[customNoteToUserId ?? ""])}
+          busy={customNoteToUserId !== null && nudgeBusyKey === `${customNoteToUserId}-custom_note`}
+          onSend={(t) => void onSubmitCustomNote(t)}
         />
-      ) : null}
+      </LazyMount>
+
+      <LazyMount visible={leaveDialogOpen}>
+        <ConfirmDialog
+          visible={leaveDialogOpen}
+          onRequestClose={() => setLeaveDialogOpen(false)}
+          title="Leave group mission?"
+          message="You’ll be removed from the squad and this mission will disappear from your list. This can’t be undone."
+          actions={[
+            { label: "Cancel", variant: "secondary", onPress: () => setLeaveDialogOpen(false) },
+            { label: "Leave", variant: "danger", onPress: confirmLeaveMission },
+          ]}
+        />
+      </LazyMount>
+
+      <LazyMount visible={missionDetailsOpen}>
+        {group ? (
+          <MissionDetailsSheet
+            variant="group"
+            visible={missionDetailsOpen}
+            onClose={() => setMissionDetailsOpen(false)}
+            title={missionTitle}
+            description={missionDescription ?? null}
+            mode={groupMissionMode}
+            totalDays={missionTotalDays}
+            startDate={group.start_date}
+            endDate={groupTemplateEndDate}
+          />
+        ) : null}
+      </LazyMount>
     </Screen>
   );
 }

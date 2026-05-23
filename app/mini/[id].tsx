@@ -74,6 +74,7 @@ import { useNotificationGate } from "../../src/context/NotificationGateContext";
 import { isSupabaseConfigured } from "../../src/lib/env";
 import { MiniVisibilityRow } from "../../src/components/MiniVisibilityRow";
 import { LiveMiniInviteSheet } from "../../src/components/LiveMiniInviteSheet";
+import { LazyMount } from "../../src/components/LazyMount";
 import {
   deleteCommunityWin,
   postCommunityWin,
@@ -660,13 +661,14 @@ type FocusMissionControlModalProps = {
   visible: boolean;
   title: string;
   liveSquadId?: string | null;
-  countdownMs: number;
+  startedAt: string | null;
   totalMinutes: number;
   baseMissionSeconds: number;
-  reserveSlotsAvailable: number;
   reserveUsed: number;
   reserveFull: boolean;
-  isTimerUp: boolean;
+  completeSheetOpen: boolean;
+  timerFrozenAtMs: number | null;
+  status: string;
   onClose: () => void;
   onOpenLiveSquad?: () => void;
   onReserveFuel: () => void;
@@ -677,13 +679,14 @@ function FocusMissionControlModal({
   visible,
   title,
   liveSquadId,
-  countdownMs,
+  startedAt,
   totalMinutes,
   baseMissionSeconds,
-  reserveSlotsAvailable,
   reserveUsed,
   reserveFull,
-  isTimerUp,
+  completeSheetOpen,
+  timerFrozenAtMs,
+  status,
   onClose,
   onOpenLiveSquad,
   onReserveFuel,
@@ -693,7 +696,65 @@ function FocusMissionControlModal({
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const isWide = width > height && width >= 680;
+
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    if (!visible || status !== "in_progress" || completeSheetOpen) return;
+    let cancelled = false;
+    let timeout: ReturnType<typeof setTimeout> | null = null;
+    const plannedEndMs = startedAt
+      ? new Date(startedAt).getTime() + totalMinutes * 60 * 1000
+      : Date.now() + totalMinutes * 60 * 1000;
+
+    const tick = () => {
+      if (cancelled) return;
+      const current = Date.now();
+      setNow(current);
+
+      const remaining = Math.max(0, plannedEndMs - current);
+      if (remaining <= 0) return;
+
+      const untilDisplayedSecondChanges = remaining % 1000 || 1000;
+      timeout = setTimeout(
+        tick,
+        Math.max(16, untilDisplayedSecondChanges),
+      );
+    };
+
+    tick();
+    return () => {
+      cancelled = true;
+      if (timeout) clearTimeout(timeout);
+    };
+  }, [visible, startedAt, totalMinutes, status, completeSheetOpen]);
+
+  const countdown = useMemo(() => {
+    if (!startedAt) return totalMinutes * 60 * 1000;
+    const startMs = new Date(startedAt).getTime();
+    const endMs = startMs + totalMinutes * 60 * 1000;
+    const nowAnchor =
+      status === "completed"
+        ? endMs
+        : completeSheetOpen && timerFrozenAtMs !== null
+          ? timerFrozenAtMs
+          : now;
+    return Math.max(0, endMs - nowAnchor);
+  }, [startedAt, now, totalMinutes, completeSheetOpen, timerFrozenAtMs, status]);
+
+  const isTimerUp = status === "in_progress" && countdown === 0;
   const actionDisabled = isTimerUp;
+
+  const reserveSlotsAvailable = useMemo(() => {
+    if (status !== "in_progress" || !startedAt) return 0;
+    const elapsedMs = Math.max(0, now - new Date(startedAt).getTime());
+    const earnedSlots = Math.min(
+      MAX_RESERVE_FUEL_MINUTES,
+      Math.floor(elapsedMs / 60_000),
+    );
+    return Math.max(0, earnedSlots - reserveUsed);
+  }, [status, startedAt, now, reserveUsed]);
+
   const focusColors = isDark
     ? {
         bg: "#07111a",
@@ -882,7 +943,7 @@ function FocusMissionControlModal({
 
           <View style={[focusStyles.rail, isWide && focusStyles.railWide]}>
             <FocusSecondsMatrix
-              countdownMs={countdownMs}
+              countdownMs={countdown}
               totalMissionSeconds={Math.max(1, totalMinutes * 60)}
               baseMissionSeconds={baseMissionSeconds}
               totalMinutes={totalMinutes}
@@ -896,6 +957,131 @@ function FocusMissionControlModal({
     </Modal>
   );
 }
+
+const IsolatedFlightCountdown = memo(({
+  startedAt,
+  totalMinutes,
+  status,
+  completeSheetOpen,
+  timerFrozenAtMs,
+  onTimerExpired,
+}: {
+  startedAt: string;
+  totalMinutes: number;
+  status: string;
+  completeSheetOpen: boolean;
+  timerFrozenAtMs: number | null;
+  onTimerExpired: () => void;
+}) => {
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    if (status !== "in_progress" || completeSheetOpen) return;
+    let cancelled = false;
+    let timeout: ReturnType<typeof setTimeout> | null = null;
+    const plannedEndMs = new Date(startedAt).getTime() + totalMinutes * 60 * 1000;
+
+    const tick = () => {
+      if (cancelled) return;
+      const current = Date.now();
+      setNow(current);
+
+      const remaining = Math.max(0, plannedEndMs - current);
+      if (remaining <= 0) {
+        onTimerExpired();
+        return;
+      }
+
+      const untilDisplayedSecondChanges = remaining % 1000 || 1000;
+      timeout = setTimeout(
+        tick,
+        Math.max(16, untilDisplayedSecondChanges),
+      );
+    };
+
+    tick();
+    return () => {
+      cancelled = true;
+      if (timeout) clearTimeout(timeout);
+    };
+  }, [startedAt, totalMinutes, status, completeSheetOpen, onTimerExpired]);
+
+  const countdown = Math.max(0, new Date(startedAt).getTime() + totalMinutes * 60 * 1000 - (completeSheetOpen && timerFrozenAtMs !== null ? timerFrozenAtMs : now));
+  const isTimerUp = status === "in_progress" && countdown === 0;
+
+  const flightProgressive = remainingMsToProgressiveCountdown(countdown);
+  const flightTone = isTimerUp ? "danger" as const : "countdown" as const;
+
+  if (isTimerUp) return null;
+
+  return (
+    <MiniMissionFlightCountdown
+      display={flightProgressive.display}
+      phase={flightProgressive.phase}
+      tone={flightTone}
+    />
+  );
+});
+
+const IsolatedProgressBar = memo(({
+  startedAt,
+  totalMinutes,
+  status,
+  completeSheetOpen,
+  timerFrozenAtMs,
+  isDark,
+}: {
+  startedAt: string;
+  totalMinutes: number;
+  status: string;
+  completeSheetOpen: boolean;
+  timerFrozenAtMs: number | null;
+  isDark: boolean;
+}) => {
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    if (status !== "in_progress" || completeSheetOpen) return;
+    let cancelled = false;
+    let timeout: ReturnType<typeof setTimeout> | null = null;
+    const plannedEndMs = new Date(startedAt).getTime() + totalMinutes * 60 * 1000;
+
+    const tick = () => {
+      if (cancelled) return;
+      const current = Date.now();
+      setNow(current);
+
+      const remaining = Math.max(0, plannedEndMs - current);
+      if (remaining <= 0) return;
+
+      timeout = setTimeout(tick, 1000);
+    };
+
+    tick();
+    return () => {
+      cancelled = true;
+      if (timeout) clearTimeout(timeout);
+    };
+  }, [startedAt, totalMinutes, status, completeSheetOpen]);
+
+  const countdown = Math.max(0, new Date(startedAt).getTime() + totalMinutes * 60 * 1000 - (completeSheetOpen && timerFrozenAtMs !== null ? timerFrozenAtMs : now));
+  const isTimerUp = status === "in_progress" && countdown === 0;
+
+  const missionFuelProgress = useMemo(() => {
+    const totalMs = totalMinutes * 60 * 1000;
+    const tickTime = completeSheetOpen && timerFrozenAtMs !== null ? timerFrozenAtMs : now;
+    const elapsedMs = tickTime - new Date(startedAt).getTime();
+    return Math.min(1, Math.max(0, elapsedMs / totalMs));
+  }, [startedAt, now, totalMinutes, completeSheetOpen, timerFrozenAtMs]);
+
+  return (
+    <MiniMissionFireProgressBar
+      progress={isTimerUp ? 1 : missionFuelProgress}
+      isDark={isDark}
+      showCompleteEffect={isTimerUp}
+    />
+  );
+});
 
 export default function MiniMissionDetail() {
   const { id } = useLocalSearchParams<{ id?: string | string[] }>();
@@ -917,22 +1103,7 @@ export default function MiniMissionDetail() {
   const mission = useHabitStore((state) =>
     missionId ? state.getMiniMission(missionId) : undefined,
   );
-  const startMiniMission = useHabitStore((state) => state.startMiniMission);
-  const completeMiniMission = useHabitStore(
-    (state) => state.completeMiniMission,
-  );
-  const extendMiniMission = useHabitStore((state) => state.extendMiniMission);
-  const cancelMiniMission = useHabitStore((state) => state.cancelMiniMission);
-  const retryFailedMiniMission = useHabitStore(
-    (state) => state.retryFailedMiniMission,
-  );
-  const deleteMiniMission = useHabitStore((state) => state.deleteMiniMission);
-  const setMiniMissionVisibility = useHabitStore(
-    (state) => state.setMiniMissionVisibility,
-  );
-  const setMiniMissionCommunityFeedRevoked = useHabitStore(
-    (state) => state.setMiniMissionCommunityFeedRevoked,
-  );
+
 
   const lastVisibilityRef = useRef<{
     id: string;
@@ -966,7 +1137,7 @@ export default function MiniMissionDetail() {
     const unsubFail = subscribeSyncFailure(() => {
       const p = lastVisibilityRef.current;
       if (!p || !missionId || p.id !== missionId) return;
-      setMiniMissionVisibility(p.id, p.prev);
+      useHabitStore.getState().setMiniMissionVisibility(p.id, p.prev);
       lastVisibilityRef.current = null;
     });
     const unsubOk = subscribeSyncSuccess(() => {
@@ -976,7 +1147,7 @@ export default function MiniMissionDetail() {
       unsubFail();
       unsubOk();
     };
-  }, [missionId, setMiniMissionVisibility]);
+  }, [missionId]);
 
   useEffect(() => {
     return () => {
@@ -1004,10 +1175,47 @@ export default function MiniMissionDetail() {
     }, []),
   );
 
-  const [now, setNow] = useState(Date.now());
   const totalMinutes = mission
     ? mission.estimatedMinutes + (mission.extendedMinutes ?? 0)
     : 0;
+
+  const getIsTimerExpired = useCallback(() => {
+    if (!mission || mission.status !== "in_progress" || !mission.startedAt) return false;
+    const plannedEndMs = new Date(mission.startedAt).getTime() + totalMinutes * 60 * 1000;
+    return Date.now() >= plannedEndMs;
+  }, [mission, totalMinutes]);
+
+  const [isTimerUpState, setIsTimerUpState] = useState(getIsTimerExpired);
+
+  // Sync state if mission status or totalMinutes changes:
+  useEffect(() => {
+    setIsTimerUpState(getIsTimerExpired());
+  }, [mission?.status, totalMinutes, getIsTimerExpired]);
+
+  // Single one-shot timeout to handle timer expiry in parent:
+  useEffect(() => {
+    if (!mission || mission.status !== "in_progress" || !mission.startedAt) return;
+    const plannedEndMs = new Date(mission.startedAt).getTime() + totalMinutes * 60 * 1000;
+    const delay = plannedEndMs - Date.now();
+    
+    if (delay <= 0) {
+      setIsTimerUpState(true);
+      return;
+    }
+    
+    const timeout = setTimeout(() => {
+      setIsTimerUpState(true);
+      // Play haptics, vibration, warning notifications, sync:
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
+      Vibration.vibrate([0, 400, 200, 400, 200, 400]);
+      void (async () => {
+        await clearMiniMissionWarningNotification(mission.id);
+        await syncLiveMiniFromLocalMission(mission, { now: plannedEndMs });
+      })();
+    }, delay);
+    
+    return () => clearTimeout(timeout);
+  }, [mission?.id, mission?.status, mission?.startedAt, totalMinutes]);
 
   // Motivational quotes
   const [quoteIdx, setQuoteIdx] = useState(() =>
@@ -1044,57 +1252,6 @@ export default function MiniMissionDetail() {
     }, 5000);
     return () => clearInterval(interval);
   }, [mission?.status, completeSheetOpen, animateQuoteChange]);
-
-  useEffect(() => {
-    if (mission?.status !== "in_progress" || completeSheetOpen) return;
-    let cancelled = false;
-    let timeout: ReturnType<typeof setTimeout> | null = null;
-    const plannedEndMs = mission.startedAt
-      ? new Date(mission.startedAt).getTime() + totalMinutes * 60 * 1000
-      : Date.now() + totalMinutes * 60 * 1000;
-
-    const tick = () => {
-      if (cancelled) return;
-      const current = Date.now();
-      setNow(current);
-
-      const remaining = Math.max(0, plannedEndMs - current);
-      if (remaining <= 0) return;
-
-      const untilDisplayedSecondChanges = remaining % 1000 || 1000;
-      timeout = setTimeout(
-        tick,
-        Math.max(16, untilDisplayedSecondChanges),
-      );
-    };
-
-    tick();
-    return () => {
-      cancelled = true;
-      if (timeout) clearTimeout(timeout);
-    };
-  }, [
-    mission?.id,
-    mission?.status,
-    mission?.startedAt,
-    totalMinutes,
-    completeSheetOpen,
-  ]);
-
-  const countdown = useMemo(() => {
-    if (!mission?.startedAt) return totalMinutes * 60 * 1000;
-    const startMs = new Date(mission.startedAt).getTime();
-    const endMs = startMs + totalMinutes * 60 * 1000;
-    const nowAnchor =
-      mission.status === "completed" && mission.completedAt
-        ? new Date(mission.completedAt).getTime()
-        : completeSheetOpen && timerFrozenAtMs !== null
-          ? timerFrozenAtMs
-          : now;
-    return Math.max(0, endMs - nowAnchor);
-  }, [mission, now, totalMinutes, completeSheetOpen, timerFrozenAtMs]);
-
-  const isTimerUp = mission?.status === "in_progress" && countdown === 0;
   const isLiveMiniMission = Boolean(mission?.liveSquadId);
   const isLiveMiniCreator = mission?.liveSquadRole === "creator";
 
@@ -1127,7 +1284,7 @@ export default function MiniMissionDetail() {
       isFocused &&
       keepScreenOn &&
       mission?.status === "in_progress" &&
-      !isTimerUp;
+      !isTimerUpState;
 
     (async () => {
       await deactivateKeepAwake(MINI_MISSION_DETAIL_KEEP_AWAKE_TAG);
@@ -1139,12 +1296,12 @@ export default function MiniMissionDetail() {
       cancelled = true;
       void deactivateKeepAwake(MINI_MISSION_DETAIL_KEEP_AWAKE_TAG);
     };
-  }, [isFocused, keepScreenOn, mission?.status, isTimerUp]);
+  }, [isFocused, keepScreenOn, mission?.status, isTimerUpState]);
 
   useEffect(() => {
     const focusKeepAwakeTag = `${MINI_MISSION_DETAIL_KEEP_AWAKE_TAG}:focus`;
     const shouldKeepAwake =
-      focusModeOpen && mission?.status === "in_progress" && !isTimerUp;
+      focusModeOpen && mission?.status === "in_progress" && !isTimerUpState;
 
     if (!shouldKeepAwake) {
       void deactivateKeepAwake(focusKeepAwakeTag);
@@ -1155,67 +1312,13 @@ export default function MiniMissionDetail() {
     return () => {
       void deactivateKeepAwake(focusKeepAwakeTag);
     };
-  }, [focusModeOpen, mission?.status, isTimerUp]);
+  }, [focusModeOpen, mission?.status, isTimerUpState]);
 
   useEffect(() => {
     if (focusModeOpen && mission?.status !== "in_progress") {
       setFocusModeOpen(false);
     }
   }, [focusModeOpen, mission?.status]);
-
-  const flightProgressive = useMemo(
-    () => remainingMsToProgressiveCountdown(countdown),
-    [countdown],
-  );
-
-  const flightTone = useMemo(() => {
-    if (!mission) {
-      return "muted" as const;
-    }
-    if (completeSheetOpen) {
-      return "countdown" as const;
-    }
-    if (isTimerUp) {
-      return "danger" as const;
-    }
-    if (mission.status === "completed") {
-      return "muted" as const;
-    }
-    if (mission.status === "cancelled") {
-      return "muted" as const;
-    }
-    if (mission.status === "in_progress") {
-      return "countdown" as const;
-    }
-    return "countdown" as const;
-  }, [mission, completeSheetOpen, isTimerUp]);
-
-  const missionFuelProgress = useMemo(() => {
-    if (!mission || mission.status !== "in_progress" || !mission.startedAt)
-      return 0;
-    const totalMs = totalMinutes * 60 * 1000;
-    const tick =
-      completeSheetOpen && timerFrozenAtMs !== null ? timerFrozenAtMs : now;
-    const elapsedMs = tick - new Date(mission.startedAt).getTime();
-    return Math.min(1, Math.max(0, elapsedMs / totalMs));
-  }, [mission, now, totalMinutes, completeSheetOpen, timerFrozenAtMs]);
-
-  // Timer expiry while this screen is open: haptics + keep the deadline alert deliverable.
-  // Dedupe by mission id + planned end (module map) so leaving and reopening the card does not spam.
-  useEffect(() => {
-    if (!isTimerUp || !mission?.startedAt) return;
-    const endMs = getPlannedEndMs(mission);
-    if (foregroundExpiryNotifiedEndMsByMissionId.get(mission.id) === endMs)
-      return;
-    foregroundExpiryNotifiedEndMsByMissionId.set(mission.id, endMs);
-
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-    Vibration.vibrate([0, 400, 200, 400, 200, 400]);
-    void (async () => {
-      await clearMiniMissionWarningNotification(mission.id);
-      await syncLiveMiniFromLocalMission(mission, { now: endMs });
-    })();
-  }, [isTimerUp, mission]);
 
   const earlyFinishMs = useMemo(() => {
     if (!mission || mission.status !== "completed") return 0;
@@ -1238,10 +1341,10 @@ export default function MiniMissionDetail() {
     setPendingExitAfterRemove(true);
     void (async () => {
       await deleteCommunityWin(id);
-      deleteMiniMission(id);
+      useHabitStore.getState().deleteMiniMission(id);
       router.replace("/mini");
     })();
-  }, [mission, router, deleteMiniMission]);
+  }, [mission, router]);
 
   useCoachMark(
     "mini_start_timer",
@@ -1265,7 +1368,7 @@ export default function MiniMissionDetail() {
       body: "Mark complete while the timer is still alive to save the win.",
       placement: "above",
     },
-    Boolean(mission?.status === "in_progress" && !isTimerUp && !completeSheetOpen),
+    Boolean(mission?.status === "in_progress" && !isTimerUpState && !completeSheetOpen),
     900,
   );
 
@@ -1296,7 +1399,7 @@ export default function MiniMissionDetail() {
         const notificationResult = await softAskNotifications("mini_timer");
         if (notificationResult === "settings") return;
 
-        startMiniMission(mission.id);
+        useHabitStore.getState().startMiniMission(mission.id);
         const nextMission = useHabitStore.getState().getMiniMission(mission.id);
         void syncLiveMiniFromLocalMission(nextMission);
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -1375,7 +1478,7 @@ export default function MiniMissionDetail() {
     /** Solo at completion (or can’t publish) locks Community; successful publish sets public afterward. */
     const lockCommunity = !canPublish;
 
-    completeMiniMission(mission.id, memoryToSave, {
+    useHabitStore.getState().completeMiniMission(mission.id, memoryToSave, {
       visibility: "solo",
       communityFeedRevoked: lockCommunity,
       completedAt,
@@ -1402,8 +1505,8 @@ export default function MiniMissionDetail() {
         liveSquadId: mission.liveSquadId ?? null,
       });
       if (res.ok === true) {
-        setMiniMissionVisibility(mission.id, "public");
-        setMiniMissionCommunityFeedRevoked(mission.id, false);
+        useHabitStore.getState().setMiniMissionVisibility(mission.id, "public");
+        useHabitStore.getState().setMiniMissionCommunityFeedRevoked(mission.id, false);
       } else {
         if (res.reason === "premium_required") {
           await refreshPremiumAccess({ force: true, serverOnly: true });
@@ -1438,130 +1541,130 @@ export default function MiniMissionDetail() {
                   Alert.alert("Couldn’t remove", del.error, [{ text: "OK" }]);
                   return;
                 }
-                setMiniMissionVisibility(mission.id, "solo");
-                setMiniMissionCommunityFeedRevoked(mission.id, true);
-              })();
+                  useHabitStore.getState().setMiniMissionVisibility(mission.id, "solo");
+                  useHabitStore.getState().setMiniMissionCommunityFeedRevoked(mission.id, true);
+                })();
+              },
             },
-          },
-        ],
-      );
-      return;
-    }
-
-    if (prev === "solo" && next === "public") {
-      if (mission.communityFeedRevoked) {
-        Alert.alert(
-          "Can’t publish to Community",
-          "This mission stays private. Community sharing was turned off when you completed it, or you removed it from the feed.",
-          [{ text: "OK" }],
+          ],
         );
         return;
       }
-      if (!isSupabaseConfigured() || !session?.user) {
-        Alert.alert(
-          "Sign in required",
-          "Sign in to publish to Community wins.",
-          [{ text: "OK" }],
-        );
-        return;
-      }
-      const completionMem = mission.completionMemory;
-      const hasCompletionPhoto = Boolean(completionMem?.imageUrl || completionMem?.imageUri);
-      if (!hasCompletionPhoto) {
-        Alert.alert(
-          "Photo required",
-          "Community posts need a photo. Add one to your completion memory first.",
-          [{ text: "OK" }],
-        );
-        return;
-      }
-      void (async () => {
-        const freshPremium = await refreshPremiumAccess({ force: true, cachedAccessOk: true });
-        if (freshPremium !== true) {
-          openUpsell("community_publish");
+  
+      if (prev === "solo" && next === "public") {
+        if (mission.communityFeedRevoked) {
+          Alert.alert(
+            "Can’t publish to Community",
+            "This mission stays private. Community sharing was turned off when you completed it, or you removed it from the feed.",
+            [{ text: "OK" }],
+          );
           return;
         }
-        lastVisibilityRef.current = { id: mission.id, prev };
-        const ok = await requireUsername("community_post");
-        if (!ok) {
-          Alert.alert("Username required", "Choose a username to publish to Community.", [{ text: "OK" }]);
-          lastVisibilityRef.current = null;
+        if (!isSupabaseConfigured() || !session?.user) {
+          Alert.alert(
+            "Sign in required",
+            "Sign in to publish to Community wins.",
+            [{ text: "OK" }],
+          );
           return;
         }
-        const res = await postCommunityWin({
-          miniMissionId: mission.id,
-          title: mission.title,
-          completedAt: mission.completedAt ?? new Date().toISOString(),
-          memoryNote: mission.completionMemory?.note ?? null,
-          memoryImageUrl: mission.completionMemory?.imageUrl ?? null,
-          liveSquadId: mission.liveSquadId ?? null,
-        });
-        if (res.ok === false) {
-          if (res.reason === "premium_required") {
-            await refreshPremiumAccess({ force: true, serverOnly: true });
+        const completionMem = mission.completionMemory;
+        const hasCompletionPhoto = Boolean(completionMem?.imageUrl || completionMem?.imageUri);
+        if (!hasCompletionPhoto) {
+          Alert.alert(
+            "Photo required",
+            "Community posts need a photo. Add one to your completion memory first.",
+            [{ text: "OK" }],
+          );
+          return;
+        }
+        void (async () => {
+          const freshPremium = await refreshPremiumAccess({ force: true, cachedAccessOk: true });
+          if (freshPremium !== true) {
             openUpsell("community_publish");
+            return;
+          }
+          lastVisibilityRef.current = { id: mission.id, prev };
+          const ok = await requireUsername("community_post");
+          if (!ok) {
+            Alert.alert("Username required", "Choose a username to publish to Community.", [{ text: "OK" }]);
             lastVisibilityRef.current = null;
             return;
           }
-          Alert.alert("Couldn’t publish", res.error, [{ text: "OK" }]);
+          const res = await postCommunityWin({
+            miniMissionId: mission.id,
+            title: mission.title,
+            completedAt: mission.completedAt ?? new Date().toISOString(),
+            memoryNote: mission.completionMemory?.note ?? null,
+            memoryImageUrl: mission.completionMemory?.imageUrl ?? null,
+            liveSquadId: mission.liveSquadId ?? null,
+          });
+          if (res.ok === false) {
+            if (res.reason === "premium_required") {
+              await refreshPremiumAccess({ force: true, serverOnly: true });
+              openUpsell("community_publish");
+              lastVisibilityRef.current = null;
+              return;
+            }
+            Alert.alert("Couldn’t publish", res.error, [{ text: "OK" }]);
+            lastVisibilityRef.current = null;
+            return;
+          }
+          useHabitStore.getState().setMiniMissionVisibility(mission.id, "public");
           lastVisibilityRef.current = null;
-          return;
-        }
-        setMiniMissionVisibility(mission.id, "public");
-        lastVisibilityRef.current = null;
-      })();
-    }
-  };
-
-  const reserveUsed = mission.extendedMinutes ?? 0;
-  const reserveFull = reserveUsed >= MAX_RESERVE_FUEL_MINUTES;
-  const reserveSlotsAvailable = (() => {
-    if (mission.status !== "in_progress" || !mission.startedAt) return 0;
-    const elapsedMs = Math.max(0, now - new Date(mission.startedAt).getTime());
-    const earnedSlots = Math.min(
-      MAX_RESERVE_FUEL_MINUTES,
-      Math.floor(elapsedMs / 60_000),
-    );
-    return Math.max(0, earnedSlots - reserveUsed);
-  })();
-  const reserveCanAdd =
-    reserveSlotsAvailable > 0 && !reserveFull && !isTimerUp;
-
-  const handleReserveFuel = () => {
-    if (reserveFull) {
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-      Alert.alert(
-        "Reserve fuel maxed",
-        `You can add at most ${MAX_RESERVE_FUEL_MINUTES} minutes of reserve fuel for this mission. Mark complete or risk running out of time.`,
+        })();
+      }
+    };
+  
+    const reserveUsed = mission.extendedMinutes ?? 0;
+    const reserveFull = reserveUsed >= MAX_RESERVE_FUEL_MINUTES;
+    const reserveSlotsAvailable = (() => {
+      if (mission.status !== "in_progress" || !mission.startedAt) return 0;
+      const elapsedMs = Math.max(0, Date.now() - new Date(mission.startedAt).getTime());
+      const earnedSlots = Math.min(
+        MAX_RESERVE_FUEL_MINUTES,
+        Math.floor(elapsedMs / 60_000),
       );
-      return;
-    }
-    if (!reserveCanAdd) {
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-      return;
-    }
-    extendMiniMission(mission.id, 1);
-    const nextMission = useHabitStore.getState().getMiniMission(mission.id);
-    void syncLiveMiniFromLocalMission(nextMission);
-    void syncMiniMissionNotifications(useHabitStore.getState().miniMissions);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-  };
-
-  const handleCancel = () => {
-    cancelMiniMission(mission.id);
-    const nextMission = useHabitStore.getState().getMiniMission(mission.id);
-    void syncLiveMiniFromLocalMission(nextMission);
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-  };
-
-  const handleRetryFailed = () => {
-    if (mission.liveSquadId) {
-      Alert.alert("Live Squad mission", "Live mini missions cannot be retried. Start a fresh mini mission when you want another run.");
-      return;
-    }
-    retryFailedMiniMission(mission.id);
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-  };
+      return Math.max(0, earnedSlots - reserveUsed);
+    })();
+    const reserveCanAdd =
+      reserveSlotsAvailable > 0 && !reserveFull && !isTimerUpState;
+  
+    const handleReserveFuel = () => {
+      if (reserveFull) {
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        Alert.alert(
+          "Reserve fuel maxed",
+          `You can add at most ${MAX_RESERVE_FUEL_MINUTES} minutes of reserve fuel for this mission. Mark complete or risk running out of time.`,
+        );
+        return;
+      }
+      if (!reserveCanAdd) {
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        return;
+      }
+      useHabitStore.getState().extendMiniMission(mission.id, 1);
+      const nextMission = useHabitStore.getState().getMiniMission(mission.id);
+      void syncLiveMiniFromLocalMission(nextMission);
+      void syncMiniMissionNotifications(useHabitStore.getState().miniMissions);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    };
+  
+    const handleCancel = () => {
+      useHabitStore.getState().cancelMiniMission(mission.id);
+      const nextMission = useHabitStore.getState().getMiniMission(mission.id);
+      void syncLiveMiniFromLocalMission(nextMission);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    };
+  
+    const handleRetryFailed = () => {
+      if (mission.liveSquadId) {
+        Alert.alert("Live Squad mission", "Live mini missions cannot be retried. Start a fresh mini mission when you want another run.");
+        return;
+      }
+      useHabitStore.getState().retryFailedMiniMission(mission.id);
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    };
 
   return (
     <Screen>
@@ -1575,48 +1678,60 @@ export default function MiniMissionDetail() {
           { label: "Delete", variant: "danger", onPress: confirmDeleteMiniMission },
         ]}
       />
-      <MissionDetailsSheet
-        variant="mini"
-        visible={missionDetailsOpen}
-        onClose={() => setMissionDetailsOpen(false)}
-        mission={mission}
-      />
-      <LiveMiniInviteSheet
-        visible={liveMiniSheetOpen}
-        mission={mission}
-        onClose={() => setLiveMiniSheetOpen(false)}
-      />
-      <StreakMemorySheet
-        visible={completeSheetOpen}
-        variant="mini"
-        mode="create"
-        missionTitle={mission.title}
-        dayLabel="1"
-        onClose={() => {
-          setCompleteSheetOpen(false);
-          setTimerFrozenAtMs(null);
-        }}
-        onCommit={handleCompleteCommit}
-        miniPublishAvailable={isSupabaseConfigured() && !!session?.user}
-        miniSquadShare={isLiveMiniMission}
-        plusCommunityOk={!socialLocked}
-      />
-      <FocusMissionControlModal
-        visible={focusModeOpen}
-        title={mission.title}
-        liveSquadId={mission.liveSquadId}
-        countdownMs={countdown}
-        totalMinutes={totalMinutes}
-        baseMissionSeconds={Math.max(1, mission.estimatedMinutes * 60)}
-        reserveSlotsAvailable={reserveSlotsAvailable}
-        reserveUsed={reserveUsed}
-        reserveFull={reserveFull}
-        isTimerUp={isTimerUp}
-        onClose={() => setFocusModeOpen(false)}
-        onOpenLiveSquad={openLiveSquadBoard}
-        onReserveFuel={handleReserveFuel}
-        onMarkComplete={handleMarkComplete}
-      />
+      <LazyMount visible={missionDetailsOpen}>
+        <MissionDetailsSheet
+          variant="mini"
+          visible={missionDetailsOpen}
+          onClose={() => setMissionDetailsOpen(false)}
+          mission={mission}
+        />
+      </LazyMount>
+
+      <LazyMount visible={liveMiniSheetOpen}>
+        <LiveMiniInviteSheet
+          visible={liveMiniSheetOpen}
+          mission={mission}
+          onClose={() => setLiveMiniSheetOpen(false)}
+        />
+      </LazyMount>
+
+      <LazyMount visible={completeSheetOpen}>
+        <StreakMemorySheet
+          visible={completeSheetOpen}
+          variant="mini"
+          mode="create"
+          missionTitle={mission.title}
+          dayLabel="1"
+          onClose={() => {
+            setCompleteSheetOpen(false);
+            setTimerFrozenAtMs(null);
+          }}
+          onCommit={handleCompleteCommit}
+          miniPublishAvailable={isSupabaseConfigured() && !!session?.user}
+          miniSquadShare={isLiveMiniMission}
+          plusCommunityOk={!socialLocked}
+        />
+      </LazyMount>
+
+      <LazyMount visible={focusModeOpen}>
+        <FocusMissionControlModal
+          visible={focusModeOpen}
+          title={mission.title}
+          liveSquadId={mission.liveSquadId}
+          startedAt={mission.startedAt}
+          totalMinutes={totalMinutes}
+          baseMissionSeconds={Math.max(1, mission.estimatedMinutes * 60)}
+          reserveUsed={reserveUsed}
+          reserveFull={reserveFull}
+          completeSheetOpen={completeSheetOpen}
+          timerFrozenAtMs={timerFrozenAtMs}
+          status={mission.status}
+          onClose={() => setFocusModeOpen(false)}
+          onOpenLiveSquad={openLiveSquadBoard}
+          onReserveFuel={handleReserveFuel}
+          onMarkComplete={handleMarkComplete}
+        />
+      </LazyMount>
       <StatusBar
         barStyle={isDark ? "light-content" : "dark-content"}
         backgroundColor={theme.colors.background}
@@ -1691,11 +1806,14 @@ export default function MiniMissionDetail() {
           </TouchableOpacity>
         </View>
 
-        {mission.status === "in_progress" && !isTimerUp ? (
-          <MiniMissionFlightCountdown
-            display={flightProgressive.display}
-            phase={flightProgressive.phase}
-            tone={flightTone}
+        {mission.status === "in_progress" ? (
+          <IsolatedFlightCountdown
+            startedAt={mission.startedAt || ""}
+            totalMinutes={totalMinutes}
+            status={mission.status}
+            completeSheetOpen={completeSheetOpen}
+            timerFrozenAtMs={timerFrozenAtMs}
+            onTimerExpired={() => setIsTimerUpState(true)}
           />
         ) : null}
         <View style={styles.topPillsRow}>
@@ -1748,7 +1866,7 @@ export default function MiniMissionDetail() {
           >
             <Clock3 size={14} color={theme.colors.cyan[400]} />
             <Text style={[styles.metaText, { color: theme.colors.textPrimary }]}>
-              {mission.status === "in_progress" && !isTimerUp
+              {mission.status === "in_progress" && !isTimerUpState
                 ? `${totalMinutes} min total · reserve ${reserveUsed}/${MAX_RESERVE_FUEL_MINUTES} min`
                 : `${totalMinutes} minutes ${
                     (mission.extendedMinutes ?? 0) > 0
@@ -1761,7 +1879,7 @@ export default function MiniMissionDetail() {
 
         {mission.status !== "completed" ? (
           <Text style={[styles.timerHint, { color: theme.colors.textSecondary }]}>
-            {isTimerUp
+            {isTimerUpState
               ? "Timer depleted. No reserve fuel after zero. Cancel this mission or go back."
               : mission.status === "in_progress"
                 ? completeSheetOpen
@@ -1773,15 +1891,18 @@ export default function MiniMissionDetail() {
 
         {mission.status === "in_progress" && (
           <View style={styles.progressBarWrap}>
-            <MiniMissionFireProgressBar
-              progress={isTimerUp ? 1 : missionFuelProgress}
+            <IsolatedProgressBar
+              startedAt={mission.startedAt || ""}
+              totalMinutes={totalMinutes}
+              status={mission.status}
+              completeSheetOpen={completeSheetOpen}
+              timerFrozenAtMs={timerFrozenAtMs}
               isDark={isDark}
-              showCompleteEffect={isTimerUp}
             />
           </View>
         )}
 
-        {mission.status === "in_progress" && !isTimerUp ? (
+        {mission.status === "in_progress" && !isTimerUpState ? (
           <TouchableOpacity
             style={[
               styles.focusLauncher,
@@ -1888,7 +2009,7 @@ export default function MiniMissionDetail() {
               </CoachMarkTarget>
             )}
 
-          {mission.status === "in_progress" && !isTimerUp && (
+          {mission.status === "in_progress" && !isTimerUpState && (
             <>
               <CoachMarkTarget id="mini_mark_complete">
                 <Button
@@ -1940,7 +2061,7 @@ export default function MiniMissionDetail() {
             </>
           )}
 
-          {isTimerUp && (
+          {isTimerUpState && (
             <>
               <View style={styles.failedRow}>
                 <CircleX size={22} color={theme.colors.red[500]} />
@@ -2079,7 +2200,7 @@ export default function MiniMissionDetail() {
         </View>
 
         {/* Motivational quotes — glass card at the bottom, only while timer is running */}
-        {mission.status === "in_progress" && !isTimerUp && !completeSheetOpen && (
+        {mission.status === "in_progress" && !isTimerUpState && !completeSheetOpen && (
           <TouchableOpacity
             activeOpacity={0.8}
             onPress={() => animateQuoteChange((quoteIdx + 1) % QUOTES.length)}

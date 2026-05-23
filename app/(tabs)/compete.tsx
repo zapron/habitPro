@@ -19,6 +19,8 @@ import {
   Easing,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { FlashList } from "@shopify/flash-list";
+const DynamicFlashList = FlashList as any;
 import { useFocusEffect } from "@react-navigation/native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { ChevronRight, Crown, Eye, Medal, Radio, RefreshCw, Swords, Trophy, Clock, X, Zap } from "lucide-react-native";
@@ -1630,334 +1632,346 @@ export default function CompeteScreen() {
         </View>
       ) : null}
 
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: bottomPad }}
-        keyboardShouldPersistTaps="handled"
-        onScroll={handleContentScroll}
-        scrollEventThrottle={16}
-      >
-        {segment === "leaderboard" ? (
-          <>
-            <View
-              style={[
-                styles.leagueHero,
-                {
-                  backgroundColor: theme.colors.surface,
-                  borderColor: theme.colors.border,
-                  ...theme.shadow.card,
-                },
-              ]}
-            >
-              <View style={styles.leagueHeroTop}>
-                <View style={styles.leagueHeroText}>
-                  <Text style={[styles.leagueTitle, { color: theme.colors.textPrimary }]}>Weekly Ranks</Text>
-                  <Text style={[styles.leagueBody, { color: theme.colors.textSecondary }]}>
-                    Ranked by habit check-ins and mini missions completed this week.
-                  </Text>
-                  <View style={styles.leagueHeroPills}>
-                    <View style={[styles.leagueHeroPill, { borderColor: theme.colors.border }]}>
-                      <Trophy size={13} color={theme.colors.amber[500]} />
-                      <Text style={[styles.leagueHeroPillText, { color: theme.colors.textSecondary }]}>
-                        {myWeeklyRank ? `Rank #${myWeeklyRank.rankPosition}` : "Enter with a username"}
-                      </Text>
-                    </View>
-                    <View style={[styles.leagueHeroPill, { borderColor: theme.colors.border }]}>
-                      <Medal size={13} color={theme.colors.indigo[400]} />
-                      <Text style={[styles.leagueHeroPillText, { color: theme.colors.textSecondary }]}>
-                        {tier.label} this week
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-                <LevelXpRing level={level} xpInLevel={xpInLevel} size={92} strokeWidth={5}>
-                  <View style={[styles.leagueHeroOrb, { borderColor: theme.colors.border }]}>
-                    <Text style={[styles.leagueHeroLevel, { color: theme.colors.textPrimary }]}>{level}</Text>
-                    <Text style={[styles.leagueHeroLevelLabel, { color: theme.colors.textMuted }]}>LVL</Text>
-                  </View>
-                </LevelXpRing>
-              </View>
-
-              <View style={[styles.leagueStatsBand, { borderColor: theme.colors.border }]}>
-                <View style={styles.leagueStatMini}>
-                  <Text style={[styles.leagueStatValue, { color: theme.colors.indigo[400] }]}>{weeklyScore}</Text>
-                  <Text style={[styles.leagueStatLabel, { color: theme.colors.textMuted }]}>week pts</Text>
-                </View>
-                <View style={[styles.leagueStatDivider, { backgroundColor: theme.colors.border }]} />
-                <View style={styles.leagueStatMini}>
-                  <Text style={[styles.leagueStatValue, { color: theme.colors.cyan[400] }]}>{habitCheckInsWeek}</Text>
-                  <Text style={[styles.leagueStatLabel, { color: theme.colors.textMuted }]}>check-ins</Text>
-                </View>
-                <View style={[styles.leagueStatDivider, { backgroundColor: theme.colors.border }]} />
-                <View style={styles.leagueStatMini}>
-                  <Text style={[styles.leagueStatValue, { color: theme.colors.amber[500] }]}>{minisWeek}</Text>
-                  <Text style={[styles.leagueStatLabel, { color: theme.colors.textMuted }]}>minis/week</Text>
-                </View>
-              </View>
-            </View>
-
-            <View style={styles.leagueToolbar}>
-              <Text style={[styles.sectionLabel, { color: theme.colors.textMuted, marginBottom: 0 }]}>
-                THIS WEEK
-              </Text>
-              <TouchableOpacity
-                onPress={() => void loadLeague({ force: true })}
-                disabled={leagueLoading || leagueLoadingMore}
-                activeOpacity={0.85}
+      {segment === "leaderboard" ? (
+        <DynamicFlashList
+          data={leagueRows}
+          estimatedItemSize={82}
+          keyExtractor={(item) => item.userId}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: bottomPad }}
+          ListHeaderComponent={
+            <>
+              <View
                 style={[
-                  styles.leagueRefresh,
+                  styles.leagueHero,
                   {
-                    borderColor: theme.colors.border,
                     backgroundColor: theme.colors.surface,
-                    opacity: leagueLoading || leagueLoadingMore ? 0.72 : 1,
+                    borderColor: theme.colors.border,
+                    ...theme.shadow.card,
                   },
                 ]}
               >
-                {leagueLoading ? (
-                  <ActivityIndicator size="small" color={theme.colors.indigo[400]} />
-                ) : (
-                  <RefreshCw size={15} color={theme.colors.textSecondary} />
-                )}
-              </TouchableOpacity>
-            </View>
-
-            {leagueLoading && leagueRows.length === 0 ? (
-              <View style={{ gap: 10 }}>
-                {Array.from({ length: 6 }, (_, i) => (
-                  <View
-                    key={i}
-                    style={[
-                      styles.leagueRow,
-                      {
-                        backgroundColor: theme.colors.surface,
-                        borderColor: theme.colors.border,
-                        ...theme.shadow.card,
-                      },
-                    ]}
-                  >
-                    <ShimmerBlock isDark={isDark} height={22} radius={11} style={{ width: 34 }} />
-                    <ShimmerBlock isDark={isDark} height={50} radius={25} style={{ width: 50 }} />
-                    <View style={{ flex: 1, gap: 8 }}>
-                      <ShimmerBlock isDark={isDark} height={15} radius={8} style={{ width: i % 2 === 0 ? "64%" : "48%" }} />
-                      <ShimmerBlock isDark={isDark} height={11} radius={6} style={{ width: "38%" }} />
-                    </View>
-                    <ShimmerBlock isDark={isDark} height={18} radius={9} style={{ width: 52 }} />
-                  </View>
-                ))}
-              </View>
-            ) : leagueError ? (
-              <View
-                style={[
-                  styles.card,
-                  { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, ...theme.shadow.card },
-                ]}
-              >
-                <Text style={[styles.emptyTitle, { color: theme.colors.textPrimary }]}>Weekly Ranks unavailable</Text>
-                <Text style={[styles.emptyBody, { color: theme.colors.textSecondary }]}>{leagueError}</Text>
-              </View>
-            ) : leagueRows.length === 0 ? (
-              <View
-                style={[
-                  styles.card,
-                  { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, ...theme.shadow.card },
-                ]}
-              >
-                <Text style={[styles.emptyTitle, { color: theme.colors.textPrimary }]}>No weekly scores yet</Text>
-                <Text style={[styles.emptyBody, { color: theme.colors.textSecondary }]}>
-                  Create a username from Profile and complete habits or minis this week.
-                </Text>
-              </View>
-            ) : (
-              <View style={styles.leagueList}>
-                {leagueRows.map((entry) => (
-                  <LeagueRow
-                    key={entry.userId}
-                    entry={entry}
-                    theme={theme}
-                    isDark={isDark}
-                    onPress={handleLeagueRowPress}
-                  />
-                ))}
-                {leagueHasMore ? (
-                  <TouchableOpacity
-                    onPress={() => void loadMoreLeague()}
-                    disabled={leagueLoadingMore}
-                    activeOpacity={0.85}
-                    style={[
-                      styles.loadMoreLeague,
-                      {
-                        backgroundColor: theme.colors.surface,
-                        opacity: leagueLoadingMore ? 0.72 : 1,
-                      },
-                    ]}
-                  >
-                    {leagueLoadingMore ? (
-                      <ActivityIndicator size="small" color={theme.colors.indigo[400]} />
-                    ) : (
-                      <Text style={[styles.loadMoreLeagueText, { color: theme.colors.textSecondary }]}>
-                        Load more
-                      </Text>
-                    )}
-                  </TouchableOpacity>
-                ) : null}
-              </View>
-            )}
-            <CommunityPlayerDrawer
-              visible={leaguePlayerDrawer !== null}
-              player={leaguePlayerDrawer}
-              onClose={() => setLeaguePlayerDrawer(null)}
-            />
-          </>
-        ) : challengesSubTab === "invites" ? (
-          <>
-            {invitesLoading ? (
-              <View style={{ gap: 12 }}>
-                {Array.from({ length: 3 }, (_, i) => (
-                  <View
-                    key={i}
-                    style={[
-                      styles.card,
-                      {
-                        backgroundColor: theme.colors.surface,
-                        borderColor: theme.colors.border,
-                        ...theme.shadow.card,
-                      },
-                    ]}
-                  >
-                    <View style={{ gap: 10 }}>
-                      <ShimmerBlock
-                        isDark={isDark}
-                        height={18}
-                        radius={9}
-                        style={{ width: i % 2 === 0 ? "70%" : "58%" }}
-                      />
-                      <ShimmerBlock isDark={isDark} height={12} radius={6} style={{ width: "86%" }} />
-                      <ShimmerBlock isDark={isDark} height={12} radius={6} style={{ width: "62%" }} />
-                      <View style={{ flexDirection: "row", gap: 10, marginTop: 6 }}>
-                        <ShimmerBlock isDark={isDark} height={38} radius={12} style={{ flex: 1 }} />
-                        <ShimmerBlock isDark={isDark} height={38} radius={12} style={{ flex: 1 }} />
+                <View style={styles.leagueHeroTop}>
+                  <View style={styles.leagueHeroText}>
+                    <Text style={[styles.leagueTitle, { color: theme.colors.textPrimary }]}>Weekly Ranks</Text>
+                    <Text style={[styles.leagueBody, { color: theme.colors.textSecondary }]}>
+                      Ranked by habit check-ins and mini missions completed this week.
+                    </Text>
+                    <View style={styles.leagueHeroPills}>
+                      <View style={[styles.leagueHeroPill, { borderColor: theme.colors.border }]}>
+                        <Trophy size={13} color={theme.colors.amber[500]} />
+                        <Text style={[styles.leagueHeroPillText, { color: theme.colors.textSecondary }]}>
+                          {myWeeklyRank ? `Rank #${myWeeklyRank.rankPosition}` : "Enter with a username"}
+                        </Text>
+                      </View>
+                      <View style={[styles.leagueHeroPill, { borderColor: theme.colors.border }]}>
+                        <Medal size={13} color={theme.colors.indigo[400]} />
+                        <Text style={[styles.leagueHeroPillText, { color: theme.colors.textSecondary }]}>
+                          {tier.label} this week
+                        </Text>
                       </View>
                     </View>
                   </View>
-                ))}
-              </View>
-            ) : mixedInvites.length === 0 ? (
-              <View
-                style={[styles.card, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, ...theme.shadow.card }]}
-              >
-                <Text style={[styles.emptyTitle, { color: theme.colors.textPrimary }]}>No invites yet</Text>
-                <Text style={[styles.emptyBody, { color: theme.colors.textSecondary }]}>
-                  When someone invites you to a group mission or Live Mini Mission, it will show up here.
-                </Text>
-              </View>
-            ) : (
-              <>
-                {mixedInvites.map((entry) =>
-                  entry.kind === "live"
-                    ? renderLiveMiniInviteCard(entry.invite)
-                    : renderGroupInviteCard(entry.invite),
-                )}
-                {invitesHasMore ? (
-                  <TouchableOpacity
-                    onPress={() => void loadMoreInvites()}
-                    disabled={invitesLoadingMore}
-                    activeOpacity={0.85}
-                    style={[
-                      styles.loadMoreLeague,
-                      {
-                        backgroundColor: isDark ? "rgba(148, 163, 184, 0.08)" : theme.colors.surfaceElevated,
-                        borderColor: theme.colors.border,
-                        borderWidth: 1,
-                        opacity: invitesLoadingMore ? 0.72 : 1,
-                      },
-                    ]}
-                  >
-                    {invitesLoadingMore ? (
-                      <ActivityIndicator size="small" color={theme.colors.cyan[400]} />
-                    ) : (
-                      <Text style={[styles.loadMoreLeagueText, { color: theme.colors.textSecondary }]}>
-                        Load older invites
-                      </Text>
-                    )}
-                  </TouchableOpacity>
-                ) : null}
-              </>
-            )}
-          </>
-        ) : (
-          <>
-            <Text style={[styles.sectionLabel, { color: theme.colors.textMuted }]}>ACTIVE</Text>
-            {enrollments.length === 0 ? (
-              <View
-                style={[styles.card, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, ...theme.shadow.card }]}
-              >
-                <Text style={[styles.emptyTitle, { color: theme.colors.textPrimary }]}>No active challenges</Text>
-                <Text style={[styles.emptyBody, { color: theme.colors.textSecondary }]}>
-                  Pick a challenge below. Up to two at a time. Progress uses your habit + mini mission data on this device.
-                </Text>
-              </View>
-            ) : (
-              enrollments.map((e) => (
-                <ActiveChallengeCard
-                  key={e.id}
-                  enrollment={e}
-                  habits={habits}
-                  miniMissions={miniMissions}
-                  theme={theme}
-                  isDark={isDark}
-                  onRequestAbandon={() => setLeaveEnrollmentId(e.id)}
-                />
-              ))
-            )}
-
-            <Text style={[styles.sectionLabel, { color: theme.colors.textMuted, marginTop: 14 }]}>BROWSE</Text>
-            {catalog.map((t) => (
-              <TouchableOpacity
-                key={t.id}
-                style={[styles.catalogCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}
-                onPress={() => handleJoin(t.id)}
-                activeOpacity={0.88}
-              >
-                <Text style={[styles.catalogTitle, { color: theme.colors.textPrimary }]}>{t.title}</Text>
-                <Text style={[styles.catalogSub, { color: theme.colors.textSecondary }]}>{t.subtitle}</Text>
-                <Text style={[styles.catalogGoal, { color: theme.colors.textMuted }]}>{t.goalLine}</Text>
-                <Text style={[styles.catalogMeta, { color: theme.colors.textMuted }]}>
-                  {t.durationDays} days - {t.target} {t.metric === "min_streak" ? "goal" : "target"}
-                </Text>
-                <View style={[styles.joinCta, { backgroundColor: theme.colors.indigo[600], ...theme.shadow.glow }]}>
-                  <Text style={styles.joinCtaText}>Join</Text>
+                  <LevelXpRing level={level} xpInLevel={xpInLevel} size={92} strokeWidth={5}>
+                    <View style={[styles.leagueHeroOrb, { borderColor: theme.colors.border }]}>
+                      <Text style={[styles.leagueHeroLevel, { color: theme.colors.textPrimary }]}>{level}</Text>
+                      <Text style={[styles.leagueHeroLevelLabel, { color: theme.colors.textMuted }]}>LVL</Text>
+                    </View>
+                  </LevelXpRing>
                 </View>
-              </TouchableOpacity>
-            ))}
 
-            {completed.length > 0 ? (
-              <>
-                <Text style={[styles.sectionLabel, { color: theme.colors.textMuted, marginTop: 14 }]}>RECENT WINS</Text>
+                <View style={[styles.leagueStatsBand, { borderColor: theme.colors.border }]}>
+                  <View style={styles.leagueStatMini}>
+                    <Text style={[styles.leagueStatValue, { color: theme.colors.indigo[400] }]}>{weeklyScore}</Text>
+                    <Text style={[styles.leagueStatLabel, { color: theme.colors.textMuted }]}>week pts</Text>
+                  </View>
+                  <View style={[styles.leagueStatDivider, { backgroundColor: theme.colors.border }]} />
+                  <View style={styles.leagueStatMini}>
+                    <Text style={[styles.leagueStatValue, { color: theme.colors.cyan[400] }]}>{habitCheckInsWeek}</Text>
+                    <Text style={[styles.leagueStatLabel, { color: theme.colors.textMuted }]}>check-ins</Text>
+                  </View>
+                  <View style={[styles.leagueStatDivider, { backgroundColor: theme.colors.border }]} />
+                  <View style={styles.leagueStatMini}>
+                    <Text style={[styles.leagueStatValue, { color: theme.colors.amber[500] }]}>{minisWeek}</Text>
+                    <Text style={[styles.leagueStatLabel, { color: theme.colors.textMuted }]}>minis/week</Text>
+                  </View>
+                </View>
+              </View>
+
+              <View style={styles.leagueToolbar}>
+                <Text style={[styles.sectionLabel, { color: theme.colors.textMuted, marginBottom: 0 }]}>
+                  THIS WEEK
+                </Text>
+                <TouchableOpacity
+                  onPress={() => void loadLeague({ force: true })}
+                  disabled={leagueLoading || leagueLoadingMore}
+                  activeOpacity={0.85}
+                  style={[
+                    styles.leagueRefresh,
+                    {
+                      borderColor: theme.colors.border,
+                      backgroundColor: theme.colors.surface,
+                      opacity: leagueLoading || leagueLoadingMore ? 0.72 : 1,
+                    },
+                  ]}
+                >
+                  {leagueLoading ? (
+                    <ActivityIndicator size="small" color={theme.colors.indigo[400]} />
+                  ) : (
+                    <RefreshCw size={15} color={theme.colors.textSecondary} />
+                  )}
+                </TouchableOpacity>
+              </View>
+
+              {leagueLoading && leagueRows.length === 0 ? (
+                <View style={{ gap: 10, marginBottom: 10 }}>
+                  {Array.from({ length: 6 }, (_, i) => (
+                    <View
+                      key={i}
+                      style={[
+                        styles.leagueRow,
+                        {
+                          backgroundColor: theme.colors.surface,
+                          borderColor: theme.colors.border,
+                          ...theme.shadow.card,
+                        },
+                      ]}
+                    >
+                      <ShimmerBlock isDark={isDark} height={22} radius={11} style={{ width: 34 }} />
+                      <ShimmerBlock isDark={isDark} height={50} radius={25} style={{ width: 50 }} />
+                      <View style={{ flex: 1, gap: 8 }}>
+                        <ShimmerBlock isDark={isDark} height={15} radius={8} style={{ width: i % 2 === 0 ? "64%" : "48%" }} />
+                        <ShimmerBlock isDark={isDark} height={11} radius={6} style={{ width: "38%" }} />
+                      </View>
+                      <ShimmerBlock isDark={isDark} height={18} radius={9} style={{ width: 52 }} />
+                    </View>
+                  ))}
+                </View>
+              ) : leagueError ? (
+                <View
+                  style={[
+                    styles.card,
+                    { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, ...theme.shadow.card, marginBottom: 10 },
+                  ]}
+                >
+                  <Text style={[styles.emptyTitle, { color: theme.colors.textPrimary }]}>Weekly Ranks unavailable</Text>
+                  <Text style={[styles.emptyBody, { color: theme.colors.textSecondary }]}>{leagueError}</Text>
+                </View>
+              ) : leagueRows.length === 0 ? (
+                <View
+                  style={[
+                    styles.card,
+                    { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, ...theme.shadow.card, marginBottom: 10 },
+                  ]}
+                >
+                  <Text style={[styles.emptyTitle, { color: theme.colors.textPrimary }]}>No weekly scores yet</Text>
+                  <Text style={[styles.emptyBody, { color: theme.colors.textSecondary }]}>
+                    Create a username from Profile and complete habits or minis this week.
+                  </Text>
+                </View>
+              ) : null}
+            </>
+          }
+          renderItem={({ item }) => (
+            <LeagueRow
+              entry={item}
+              theme={theme}
+              isDark={isDark}
+              onPress={handleLeagueRowPress}
+            />
+          )}
+          ListFooterComponent={
+            <>
+              {leagueHasMore && leagueRows.length > 0 ? (
+                <TouchableOpacity
+                  onPress={() => void loadMoreLeague()}
+                  disabled={leagueLoadingMore}
+                  activeOpacity={0.85}
+                  style={[
+                    styles.loadMoreLeague,
+                    {
+                      backgroundColor: theme.colors.surface,
+                      opacity: leagueLoadingMore ? 0.72 : 1,
+                      marginTop: 10,
+                    },
+                  ]}
+                >
+                  {leagueLoadingMore ? (
+                    <ActivityIndicator size="small" color={theme.colors.indigo[400]} />
+                  ) : (
+                    <Text style={[styles.loadMoreLeagueText, { color: theme.colors.textSecondary }]}>
+                      Load more
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              ) : null}
+              <CommunityPlayerDrawer
+                visible={leaguePlayerDrawer !== null}
+                player={leaguePlayerDrawer}
+                onClose={() => setLeaguePlayerDrawer(null)}
+              />
+            </>
+          }
+        />
+      ) : (
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: bottomPad }}
+          keyboardShouldPersistTaps="handled"
+          onScroll={handleContentScroll}
+          scrollEventThrottle={16}
+        >
+          {challengesSubTab === "invites" ? (
+            <>
+              {invitesLoading ? (
+                <View style={{ gap: 12 }}>
+                  {Array.from({ length: 3 }, (_, i) => (
+                    <View
+                      key={i}
+                      style={[
+                        styles.card,
+                        {
+                          backgroundColor: theme.colors.surface,
+                          borderColor: theme.colors.border,
+                          ...theme.shadow.card,
+                        },
+                      ]}
+                    >
+                      <View style={{ gap: 10 }}>
+                        <ShimmerBlock
+                          isDark={isDark}
+                          height={18}
+                          radius={9}
+                          style={{ width: i % 2 === 0 ? "70%" : "58%" }}
+                        />
+                        <ShimmerBlock isDark={isDark} height={12} radius={6} style={{ width: "86%" }} />
+                        <ShimmerBlock isDark={isDark} height={12} radius={6} style={{ width: "62%" }} />
+                        <View style={{ flexDirection: "row", gap: 10, marginTop: 6 }}>
+                          <ShimmerBlock isDark={isDark} height={38} radius={12} style={{ flex: 1 }} />
+                          <ShimmerBlock isDark={isDark} height={38} radius={12} style={{ flex: 1 }} />
+                        </View>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              ) : mixedInvites.length === 0 ? (
                 <View
                   style={[styles.card, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, ...theme.shadow.card }]}
                 >
-                  {completed.slice(0, 6).map((c, i) => {
-                    const tpl = getChallengeTemplate(c.templateId);
-                    const d = new Date(c.completedAt);
-                    return (
-                      <View
-                        key={`${c.templateId}-${c.completedAt}-${i}`}
-                        style={[styles.winRow, i > 0 && { borderTopColor: theme.colors.border, borderTopWidth: StyleSheet.hairlineWidth }]}
-                      >
-                        <Medal size={16} color={theme.colors.amber[500]} />
-                        <Text style={[styles.winTitle, { color: theme.colors.textPrimary }]}>{tpl?.title ?? c.templateId}</Text>
-                        <Text style={[styles.winDate, { color: theme.colors.textMuted }]}>
-                          {d.toLocaleDateString(undefined, { month: "short", day: "numeric" })}
-                        </Text>
-                      </View>
-                    );
-                  })}
+                  <Text style={[styles.emptyTitle, { color: theme.colors.textPrimary }]}>No invites yet</Text>
+                  <Text style={[styles.emptyBody, { color: theme.colors.textSecondary }]}>
+                    When someone invites you to a group mission or Live Mini Mission, it will show up here.
+                  </Text>
                 </View>
-              </>
-            ) : null}
-          </>
-        )}
+              ) : (
+                <>
+                  {mixedInvites.map((entry) =>
+                    entry.kind === "live"
+                      ? renderLiveMiniInviteCard(entry.invite)
+                      : renderGroupInviteCard(entry.invite),
+                  )}
+                  {invitesHasMore ? (
+                    <TouchableOpacity
+                      onPress={() => void loadMoreInvites()}
+                      disabled={invitesLoadingMore}
+                      activeOpacity={0.85}
+                      style={[
+                        styles.loadMoreLeague,
+                        {
+                          backgroundColor: isDark ? "rgba(148, 163, 184, 0.08)" : theme.colors.surfaceElevated,
+                          borderColor: theme.colors.border,
+                          borderWidth: 1,
+                          opacity: invitesLoadingMore ? 0.72 : 1,
+                        },
+                      ]}
+                    >
+                      {invitesLoadingMore ? (
+                        <ActivityIndicator size="small" color={theme.colors.cyan[400]} />
+                      ) : (
+                        <Text style={[styles.loadMoreLeagueText, { color: theme.colors.textSecondary }]}>
+                          Load older invites
+                        </Text>
+                      )}
+                    </TouchableOpacity>
+                  ) : null}
+                </>
+              )}
+            </>
+          ) : (
+            <>
+              <Text style={[styles.sectionLabel, { color: theme.colors.textMuted }]}>ACTIVE</Text>
+              {enrollments.length === 0 ? (
+                <View
+                  style={[styles.card, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, ...theme.shadow.card }]}
+                >
+                  <Text style={[styles.emptyTitle, { color: theme.colors.textPrimary }]}>No active challenges</Text>
+                  <Text style={[styles.emptyBody, { color: theme.colors.textSecondary }]}>
+                    Pick a challenge below. Up to two at a time. Progress uses your habit + mini mission data on this device.
+                  </Text>
+                </View>
+              ) : (
+                enrollments.map((e) => (
+                  <ActiveChallengeCard
+                    key={e.id}
+                    enrollment={e}
+                    habits={habits}
+                    miniMissions={miniMissions}
+                    theme={theme}
+                    isDark={isDark}
+                    onRequestAbandon={() => setLeaveEnrollmentId(e.id)}
+                  />
+                ))
+              )}
+
+              <Text style={[styles.sectionLabel, { color: theme.colors.textMuted, marginTop: 14 }]}>BROWSE</Text>
+              {catalog.map((t) => (
+                <TouchableOpacity
+                  key={t.id}
+                  style={[styles.catalogCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}
+                  onPress={() => handleJoin(t.id)}
+                  activeOpacity={0.88}
+                >
+                  <Text style={[styles.catalogTitle, { color: theme.colors.textPrimary }]}>{t.title}</Text>
+                  <Text style={[styles.catalogSub, { color: theme.colors.textSecondary }]}>{t.subtitle}</Text>
+                  <Text style={[styles.catalogGoal, { color: theme.colors.textMuted }]}>{t.goalLine}</Text>
+                  <Text style={[styles.catalogMeta, { color: theme.colors.textMuted }]}>
+                    {t.durationDays} days - {t.target} {t.metric === "min_streak" ? "goal" : "target"}
+                  </Text>
+                  <View style={[styles.joinCta, { backgroundColor: theme.colors.indigo[600], ...theme.shadow.glow }]}>
+                    <Text style={styles.joinCtaText}>Join</Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
+
+              {completed.length > 0 ? (
+                <>
+                  <Text style={[styles.sectionLabel, { color: theme.colors.textMuted, marginTop: 14 }]}>RECENT WINS</Text>
+                  <View
+                    style={[styles.card, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, ...theme.shadow.card }]}
+                  >
+                    {completed.slice(0, 6).map((c, i) => {
+                      const tpl = getChallengeTemplate(c.templateId);
+                      const d = new Date(c.completedAt);
+                      return (
+                        <View
+                          key={`${c.templateId}-${c.completedAt}-${i}`}
+                          style={[styles.winRow, i > 0 && { borderTopColor: theme.colors.border, borderTopWidth: StyleSheet.hairlineWidth }]}
+                        >
+                          <Medal size={16} color={theme.colors.amber[500]} />
+                          <Text style={[styles.winTitle, { color: theme.colors.textPrimary }]}>{tpl?.title ?? c.templateId}</Text>
+                          <Text style={[styles.winDate, { color: theme.colors.textMuted }]}>
+                            {d.toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                          </Text>
+                        </View>
+                      );
+                    })}
+                  </View>
+                </>
+              ) : null}
+            </>
+          )}
         </ScrollView>
+      )}
 
       <ConfirmDialog
         visible={leaveEnrollmentId !== null}

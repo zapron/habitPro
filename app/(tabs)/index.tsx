@@ -346,6 +346,10 @@ export default function Home() {
   }, [reduceMotion, emptyIconScale]);
 
   const listBottomPad = Math.max(insets.bottom, 12) + 48;
+  const listContentStyle = useMemo(() => [
+    styles.listContent,
+    { paddingBottom: listBottomPad },
+  ], [listBottomPad]);
   const renderHabitCard = useCallback(({ item }: { item: (typeof filteredHabits)[0] }) => <HabitCard item={item} />, []);
 
   const level = levelFromTotalXp(xp);
@@ -398,7 +402,7 @@ export default function Home() {
 
   useEffect(() => {
     if (!hasActiveMiniCountdown) return;
-    const t = setInterval(() => setMiniNow(Date.now()), 1000);
+    const t = setInterval(() => setMiniNow(Date.now()), 30_000);
     return () => clearInterval(t);
   }, [hasActiveMiniCountdown]);
 
@@ -606,14 +610,15 @@ export default function Home() {
     }, []),
   );
 
-  const notifRefreshControl = (
+  const refreshColors = useMemo(() => [theme.colors.indigo[400]], [theme.colors.indigo]);
+  const notifRefreshControl = useMemo(() => (
     <RefreshControl
       refreshing={notifRefreshBusy}
-      onRefresh={() => void refreshNotificationCount()}
+      onRefresh={refreshNotificationCount}
       tintColor={theme.colors.indigo[400]}
-      colors={[theme.colors.indigo[400]]}
+      colors={refreshColors}
     />
-  );
+  ), [notifRefreshBusy, refreshNotificationCount, theme.colors.indigo, refreshColors]);
 
   const SparkIcon =
     homeSpark?.kind === "lead"   ? Trophy :
@@ -1125,10 +1130,7 @@ export default function Home() {
             <FlashList
               data={filteredHabits}
               renderItem={renderHabitCard}
-              contentContainerStyle={[
-                styles.listContent,
-                { paddingBottom: listBottomPad },
-              ]}
+              contentContainerStyle={listContentStyle}
               showsVerticalScrollIndicator={false}
               keyExtractor={(item) => item.id}
               refreshControl={

@@ -1,3 +1,4 @@
+import React, { memo } from "react";
 import { Text } from "../AppText";
 import {
   View,
@@ -20,7 +21,7 @@ type Props = {
   accessibilityLabel: string;
 };
 
-export function ProfileMiniWeekTrend({ theme, isDark, buckets, accessibilityLabel }: Props) {
+export const ProfileMiniWeekTrend = memo(function ProfileMiniWeekTrend({ theme, isDark, buckets, accessibilityLabel }: Props) {
   const { width: winW } = useWindowDimensions();
   const chartWidth = Math.max(200, Math.min(320, winW - CHART_SIDE_RESERVE));
   const maxCount = Math.max(1, ...buckets.map((b) => b.count));
@@ -93,7 +94,7 @@ export function ProfileMiniWeekTrend({ theme, isDark, buckets, accessibilityLabe
       </View>
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   card: {

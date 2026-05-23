@@ -25,6 +25,7 @@ import { usePremium } from "../../src/context/PremiumContext";
 import { usePlusUpsell } from "../../src/context/PlusUpsellContext";
 import { useToast } from "../../src/context/ToastContext";
 import { useHabitStore } from "../../src/store/habitStore";
+import { useShallow } from "zustand/react/shallow";
 import { isSupabaseConfigured } from "../../src/lib/env";
 import { listAccountSnapshotBackups, type AccountBackupSnapshot } from "../../src/lib/accountBackup";
 import { requestRemoteSync } from "../../src/lib/syncQueue";
@@ -33,6 +34,7 @@ import { useRouter } from "expo-router";
 import { SettingsModal } from "../../src/components/SettingsModal";
 import { UsernameSetupFields } from "../../src/components/UsernameSetupFields";
 import { HubListModal } from "../../src/components/HubListModal";
+import { LazyMount } from "../../src/components/LazyMount";
 import { LevelXpRing } from "../../src/components/LevelXpRing";
 import type { AppTheme } from "../../src/styles/theme";
 import type { MissionVisibility, MiniMission } from "../../src/types/habit";
@@ -310,10 +312,14 @@ export default function ProfileScreen() {
   const [hubSheet, setHubSheet] = useState<HubSheetState>(null);
   const [backups, setBackups] = useState<AccountBackupSnapshot[]>([]);
   const [restoringBackupAt, setRestoringBackupAt] = useState<string | null>(null);
-  const rawXp = useHabitStore((s) => s.xp);
-  const rawUsername = useHabitStore((s) => s.username);
-  const rawHabits = useHabitStore((s) => s.habits);
-  const rawMiniMissions = useHabitStore((s) => s.miniMissions);
+  const { rawXp, rawUsername, rawHabits, rawMiniMissions } = useHabitStore(
+    useShallow((s) => ({
+      rawXp: s.xp,
+      rawUsername: s.username,
+      rawHabits: s.habits,
+      rawMiniMissions: s.miniMissions,
+    })),
+  );
   const showAccount = isSupabaseConfigured();
   const accountHydrating = Boolean(showAccount && session?.user && !syncReady && !syncError);
   const cloudSyncBlocked = Boolean(showAccount && session?.user && syncError);
@@ -950,27 +956,31 @@ export default function ProfileScreen() {
         </View>
       </ScrollView>
 
-      {hubModalContent && hubModalContent.variant === "habits" ? (
-        <HubListModal
-          visible={hubSheet !== null}
-          onClose={() => setHubSheet(null)}
-          title={hubModalContent.title}
-          emptyHint={hubModalContent.emptyHint}
-          variant="habits"
-          items={hubModalContent.items}
-        />
-      ) : hubModalContent && hubModalContent.variant === "minis" ? (
-        <HubListModal
-          visible={hubSheet !== null}
-          onClose={() => setHubSheet(null)}
-          title={hubModalContent.title}
-          emptyHint={hubModalContent.emptyHint}
-          variant="minis"
-          items={hubModalContent.items}
-        />
-      ) : null}
+      <LazyMount visible={hubSheet !== null}>
+        {hubModalContent && hubModalContent.variant === "habits" ? (
+          <HubListModal
+            visible={hubSheet !== null}
+            onClose={() => setHubSheet(null)}
+            title={hubModalContent.title}
+            emptyHint={hubModalContent.emptyHint}
+            variant="habits"
+            items={hubModalContent.items}
+          />
+        ) : hubModalContent && hubModalContent.variant === "minis" ? (
+          <HubListModal
+            visible={hubSheet !== null}
+            onClose={() => setHubSheet(null)}
+            title={hubModalContent.title}
+            emptyHint={hubModalContent.emptyHint}
+            variant="minis"
+            items={hubModalContent.items}
+          />
+        ) : null}
+      </LazyMount>
 
-      <SettingsModal visible={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <LazyMount visible={settingsOpen}>
+        <SettingsModal visible={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      </LazyMount>
     </Screen>
   );
 }

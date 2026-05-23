@@ -8,6 +8,8 @@ export type AccountBackupSnapshot = Pick<HabitStore, "habits" | "miniMissions" |
 
 const MAX_BACKUPS_PER_USER = 5;
 
+let cachedBackups: { [userId: string]: AccountBackupSnapshot[] } = {};
+
 function backupKey(userId: string): string {
   return `habitpro-account-backup:${userId}`;
 }
@@ -29,10 +31,15 @@ export async function listAccountSnapshotBackups(
   userId: string | null | undefined,
 ): Promise<AccountBackupSnapshot[]> {
   if (!userId) return [];
+  if (cachedBackups[userId]) {
+    return cachedBackups[userId];
+  }
   try {
     const raw = await AsyncStorage.getItem(backupKey(userId));
     const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? parsed.filter(isBackupSnapshot) : [];
+    const backups = Array.isArray(parsed) ? parsed.filter(isBackupSnapshot) : [];
+    cachedBackups[userId] = backups;
+    return backups;
   } catch (e) {
     if (__DEV__) console.warn("[habitPro] account backup read failed", e);
     return [];
@@ -61,6 +68,8 @@ export async function saveAccountSnapshotBackup(
     const previous = Array.isArray(parsed) ? parsed : [];
     const backups = [next, ...previous].slice(0, MAX_BACKUPS_PER_USER);
     await AsyncStorage.setItem(key, JSON.stringify(backups));
+    // Update the in-memory cache
+    cachedBackups[userId] = backups.filter(isBackupSnapshot);
   } catch (e) {
     if (__DEV__) console.warn("[habitPro] account backup failed", e);
   }

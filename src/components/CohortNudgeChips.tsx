@@ -1,3 +1,4 @@
+import React, { memo } from "react";
 import { Text } from "./AppText";
 import {
   ActivityIndicator,
@@ -60,7 +61,7 @@ type Props = {
   onCustomNotePress: () => void;
 };
 
-export function CohortNudgeChips({
+export const CohortNudgeChips = memo(function CohortNudgeChips({
   theme,
   isDark,
   memberId,
@@ -193,7 +194,9 @@ export function CohortNudgeChips({
       </Pressable>
     </ScrollView>
   );
-}
+});
+
+CohortNudgeChips.displayName = "CohortNudgeChips";
 
 const styles = StyleSheet.create({
   scroll: { marginHorizontal: -4, marginTop: 8 },

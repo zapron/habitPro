@@ -1,3 +1,4 @@
+import React, { memo } from "react";
 import { Text } from "../AppText";
 import {
   View,
@@ -21,7 +22,7 @@ type Props = {
   accessibilityLabel: string;
 };
 
-export function ProfileActivityChart({ theme, isDark, points, accessibilityLabel }: Props) {
+export const ProfileActivityChart = memo(function ProfileActivityChart({ theme, isDark, points, accessibilityLabel }: Props) {
   const { width: winW } = useWindowDimensions();
   const chartWidth = Math.max(200, Math.min(320, winW - CHART_SIDE_RESERVE));
   const maxCount = Math.max(1, ...points.map((p) => p.count));
@@ -93,7 +94,7 @@ export function ProfileActivityChart({ theme, isDark, points, accessibilityLabel
       </View>
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   card: {

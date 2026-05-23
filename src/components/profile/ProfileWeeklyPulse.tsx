@@ -1,3 +1,4 @@
+import React, { memo } from "react";
 import { Text } from "../AppText";
 import {
   View,
@@ -17,7 +18,7 @@ type Props = {
   miniCompletionsThisWeek: number;
 };
 
-export function ProfileWeeklyPulse({
+export const ProfileWeeklyPulse = memo(function ProfileWeeklyPulse({
   theme,
   isDark,
   weeklyScore,
@@ -76,7 +77,7 @@ export function ProfileWeeklyPulse({
       </View>
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   card: {

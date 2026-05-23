@@ -56,8 +56,9 @@ import { StreakMemorySheet } from '../../src/components/StreakMemorySheet';
 import { StreakMemoryGallery } from '../../src/components/StreakMemoryGallery';
 import { GroupChallengeSheet } from '../../src/components/GroupChallengeSheet';
 import { MissionDetailsSheet } from '../../src/components/MissionDetailsSheet';
-import { PlusBadge } from "../../src/components/PlusBadge";
 import { StreakRepairSheet } from "../../src/components/StreakRepairSheet";
+import { PlusBadge } from "../../src/components/PlusBadge";
+import { LazyMount } from '../../src/components/LazyMount';
 import type { StreakMemory } from '../../src/types/habit';
 import {
     canUseStreakMemoryUpload,
@@ -865,12 +866,16 @@ export default function HabitDetail() {
     const activeMissionDaySlot = getHabitActiveMissionDaySlot(habit, now);
 
     const handleDayPress = useCallback((dayIndex: number, day: number) => {
-        const dateStr = getDayDate(dayIndex);
-        const wasCompleted = habit.completedDates.includes(dateStr);
-        const canInteract = activeMissionDaySlot !== null && day === activeMissionDaySlot;
+        const currentHabit = useHabitStore.getState().getHabit(habitId);
+        if (!currentHabit) return;
+
+        const dateStr = calendarDateForHabitMissionDayIndex(currentHabit, dayIndex, Date.now());
+        const wasCompleted = currentHabit.completedDates.includes(dateStr);
+        const activeSlot = getHabitActiveMissionDaySlot(currentHabit, Date.now());
+        const canInteract = activeSlot !== null && day === activeSlot;
 
         if (!wasCompleted) {
-            if (!isHabitCalendarDateToggleable(habit, dateStr, Date.now())) {
+            if (!isHabitCalendarDateToggleable(currentHabit, dateStr, Date.now())) {
                 showToast(LOCKED_CHECKIN_MSG, 'info', 5000);
                 return;
             }
@@ -879,7 +884,7 @@ export default function HabitDetail() {
             return;
         }
 
-        const mem = habit.streakMemories?.[dateStr];
+        const mem = currentHabit.streakMemories?.[dateStr];
         if (mem) {
             setMemoryUi({ kind: 'view', memory: mem, dateStr, day });
             return;
@@ -890,13 +895,13 @@ export default function HabitDetail() {
             return;
         }
 
-        const changed = toggleCompletion(habit.id, dateStr);
+        const changed = toggleCompletion(currentHabit.id, dateStr);
         if (!changed) {
             showToast(LOCKED_CHECKIN_MSG, 'info', 5000);
             return;
         }
         void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }, [habit, activeMissionDaySlot, toggleCompletion, showToast, getDayDate]);
+    }, [habitId, toggleCompletion, showToast]);
 
     return (
         <Screen>
@@ -933,76 +938,83 @@ export default function HabitDetail() {
                 </View>
             </View>
 
-            <GroupChallengeSheet visible={groupSheetOpen} onClose={() => setGroupSheetOpen(false)} habit={habit} />
-            <MissionDetailsSheet
-                variant="habit"
-                visible={missionDetailsOpen}
-                onClose={() => setMissionDetailsOpen(false)}
-                habit={habit}
-            />
+            <LazyMount visible={groupSheetOpen}>
+                <GroupChallengeSheet visible={groupSheetOpen} onClose={() => setGroupSheetOpen(false)} habit={habit} />
+            </LazyMount>
 
-            <StreakMemorySheet
-                visible={memoryUi !== null}
-                mode={memoryUi?.kind === 'view' ? 'view' : 'create'}
-                viewMemory={
-                    memoryUi?.kind === 'view'
-                        ? (habit.streakMemories?.[memoryUi.dateStr] ?? memoryUi.memory)
-                        : undefined
-                }
-                missionTitle={habit.title}
-                dayLabel={memoryUi ? String(memoryUi.day) : '1'}
-                habitPublishAvailable={configured && session?.user != null}
-                plusCommunityOk={!socialLocked}
-                squadShare={{
-                    show: showSquadShare,
-                    visibility: habit.visibility ?? 'solo',
-                    onToggle: async (nextPublic) => {
-                        const next = nextPublic ? 'public' : 'solo';
-                        const prev = habit.visibility ?? 'solo';
-                        if (prev === next) return;
-                        if (next === 'public' && socialLocked) {
-                            const freshPremium = await refreshPremiumAccess({ force: true, serverOnly: true });
-                            if (freshPremium !== true) {
-                                openUpsell('visibility');
-                                throw new Error('HabitPro Community is required for squad visibility.');
+            <LazyMount visible={missionDetailsOpen}>
+                <MissionDetailsSheet
+                    variant="habit"
+                    visible={missionDetailsOpen}
+                    onClose={() => setMissionDetailsOpen(false)}
+                    habit={habit}
+                />
+            </LazyMount>
+
+            <LazyMount visible={memoryUi !== null}>
+                <StreakMemorySheet
+                    visible={memoryUi !== null}
+                    mode={memoryUi?.kind === 'view' ? 'view' : 'create'}
+                    viewMemory={
+                        memoryUi?.kind === 'view'
+                            ? (habit.streakMemories?.[memoryUi.dateStr] ?? memoryUi.memory)
+                            : undefined
+                    }
+                    missionTitle={habit.title}
+                    dayLabel={memoryUi ? String(memoryUi.day) : '1'}
+                    habitPublishAvailable={configured && session?.user != null}
+                    plusCommunityOk={!socialLocked}
+                    squadShare={{
+                        show: showSquadShare,
+                        visibility: habit.visibility ?? 'solo',
+                        onToggle: async (nextPublic) => {
+                            const next = nextPublic ? 'public' : 'solo';
+                            const prev = habit.visibility ?? 'solo';
+                            if (prev === next) return;
+                            if (next === 'public' && socialLocked) {
+                                const freshPremium = await refreshPremiumAccess({ force: true, serverOnly: true });
+                                if (freshPremium !== true) {
+                                    openUpsell('visibility');
+                                    throw new Error('HabitPro Community is required for squad visibility.');
+                                }
                             }
-                        }
-                        lastVisibilityRef.current = { id: habit.id, prev };
-                        setHabitVisibility(habit.id, next);
-                    },
-                }}
-                habitViewCommunity={
-                    memoryUi?.kind === 'view'
-                        ? (() => {
-                              const viewMem =
-                                  habit.streakMemories?.[memoryUi.dateStr] ?? memoryUi.memory;
-                              const hasMemoryImage = Boolean(viewMem?.imageUrl || viewMem?.imageUri);
-                              const cloudOk = configured && session?.user != null;
-                              const plusOk = !socialLocked;
-                              return {
-                                  posted:
-                                      (habit.streakMemories?.[memoryUi.dateStr]?.communityPosted ??
-                                          memoryUi.memory.communityPosted) === true,
-                                  revoked:
-                                      (habit.streakMemories?.[memoryUi.dateStr]?.communityFeedRevoked ??
-                                          memoryUi.memory.communityFeedRevoked) === true,
-                                  available: cloudOk && hasMemoryImage && plusOk,
-                                  needsPhotoForCommunity: cloudOk && !hasMemoryImage,
-                                  plusRequired: cloudOk && hasMemoryImage && !plusOk,
-                                  busy: habitCommunityBusy,
-                                  pendingPublish: habitCommunityPublishPending,
-                                  onChange: (v) =>
-                                      void handleHabitMemoryCommunityChange(v, memoryUi.dateStr, memoryUi.day),
-                              };
-                          })()
-                        : undefined
-                }
-                onClose={() => {
-                    pendingMemoryRef.current = null;
-                    setMemoryUi(null);
-                }}
-                onCommit={memoryUi?.kind !== 'view' ? handleMemoryCommit : undefined}
-            />
+                            lastVisibilityRef.current = { id: habit.id, prev };
+                            setHabitVisibility(habit.id, next);
+                        },
+                    }}
+                    habitViewCommunity={
+                        memoryUi?.kind === 'view'
+                            ? (() => {
+                                  const viewMem =
+                                      habit.streakMemories?.[memoryUi.dateStr] ?? memoryUi.memory;
+                                  const hasMemoryImage = Boolean(viewMem?.imageUrl || viewMem?.imageUri);
+                                  const cloudOk = configured && session?.user != null;
+                                  const plusOk = !socialLocked;
+                                  return {
+                                      posted:
+                                          (habit.streakMemories?.[memoryUi.dateStr]?.communityPosted ??
+                                              memoryUi.memory.communityPosted) === true,
+                                      revoked:
+                                          (habit.streakMemories?.[memoryUi.dateStr]?.communityFeedRevoked ??
+                                              memoryUi.memory.communityFeedRevoked) === true,
+                                      available: cloudOk && hasMemoryImage && plusOk,
+                                      needsPhotoForCommunity: cloudOk && !hasMemoryImage,
+                                      plusRequired: cloudOk && hasMemoryImage && !plusOk,
+                                      busy: habitCommunityBusy,
+                                      pendingPublish: habitCommunityPublishPending,
+                                      onChange: (v) =>
+                                          void handleHabitMemoryCommunityChange(v, memoryUi.dateStr, memoryUi.day),
+                                  };
+                              })()
+                            : undefined
+                    }
+                    onClose={() => {
+                        pendingMemoryRef.current = null;
+                        setMemoryUi(null);
+                    }}
+                    onCommit={memoryUi?.kind !== 'view' ? handleMemoryCommit : undefined}
+                />
+            </LazyMount>
 
             <ScrollView showsVerticalScrollIndicator={false}>
                 <View style={styles.modeRow}>
