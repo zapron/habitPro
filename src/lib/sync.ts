@@ -459,8 +459,8 @@ export async function pullFromSupabase(
   const includeCohortPeerHabits = options?.includeCohortPeerHabits ?? true;
 
   const [habitsRes, miniRes, profileRes, repairsRes] = await Promise.all([
-    supabase.from("habits").select("*").eq("user_id", userId),
-    supabase.from("mini_missions").select("*").eq("user_id", userId),
+    supabase.from("habits").select("user_id, id, title, description, mode, visibility, start_date, end_date, completed_dates, streak, total_days, is_completed, status, streak_memories, challenge_group_id, challenge_creator_timezone, mission_timezone, mission_report, mission_report_at, reminder_enabled, reminder_time_local, reminder_locked").eq("user_id", userId),
+    supabase.from("mini_missions").select("user_id, id, title, objective, visibility, community_feed_revoked, estimated_minutes, extended_minutes, status, created_at, scheduled_start_at, started_at, completed_at, completion_memory, live_squad_id, live_squad_role").eq("user_id", userId),
     supabase.from("profiles").select("xp, username").eq("id", userId).maybeSingle(),
     supabase.from("streak_repairs").select("habit_id, date_str").eq("user_id", userId).eq("status", "applied"),
   ]);

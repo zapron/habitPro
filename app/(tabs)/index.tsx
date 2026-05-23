@@ -268,10 +268,9 @@ export default function Home() {
   const { theme, isDark } = useTheme();
   const { session, syncReady, syncError, retryHydrate } = useAuth();
   const reduceMotion = useReducedMotion();
-  const { habits, cohortPeerHabits, miniMissions } = useHabitStore(
-    useShallow((s) => ({ habits: s.habits, cohortPeerHabits: s.cohortPeerHabits, miniMissions: s.miniMissions })),
+  const { habits, cohortPeerHabits, miniMissions, xp } = useHabitStore(
+    useShallow((s) => ({ habits: s.habits, cohortPeerHabits: s.cohortPeerHabits, miniMissions: s.miniMissions, xp: s.xp })),
   );
-  const xp = useHabitStore((s) => s.xp);
   const [activeTab, setActiveTab] = useState<"missions" | "reports">(
     "missions",
   );

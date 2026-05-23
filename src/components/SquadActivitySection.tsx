@@ -111,7 +111,7 @@ function NudgeActivityLine({
     case "custom_note": {
       const m = row.message?.trim() ?? "";
       return (
-        <Text style={[styles.nudgeLine, { color: base }]} numberOfLines={4} {...textProps}>
+        <Text style={[styles.nudgeLine, { color: base }]} {...textProps}>
           <Text style={{ color: base }}>{from} sent </Text>
           <Text style={{ color: theme.colors.indigo[400], fontWeight: accentWeight }}>a note</Text>
           <Text style={{ color: base }}> to {to}</Text>

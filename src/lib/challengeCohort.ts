@@ -66,13 +66,15 @@ export async function tryRecordChallengeMilestones(
     }
   }
 
-  for (const row of inserts) {
-    const { error } = await supabase.from("challenge_activity").insert({
-      challenge_id: challengeId,
-      actor_user_id: user.id,
-      kind: row.kind,
-      value: row.value,
-    });
+  if (inserts.length > 0) {
+    const { error } = await supabase.from("challenge_activity").insert(
+      inserts.map((row) => ({
+        challenge_id: challengeId,
+        actor_user_id: user.id,
+        kind: row.kind,
+        value: row.value,
+      })),
+    );
     if (error && !isDuplicateKeyError(error)) {
       if (__DEV__) console.warn("[challengeCohort] milestone insert", error.message);
     }

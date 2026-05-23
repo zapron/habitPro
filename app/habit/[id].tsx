@@ -26,6 +26,7 @@ import * as Haptics from 'expo-haptics';
 import { ArrowLeft, Trash2, Lock, RotateCcw, Sparkles, Star, Plane, Gamepad2, Globe, User, Users, Info, Bell } from 'lucide-react-native';
 import Svg, { Circle, G } from 'react-native-svg';
 import { useHabitStore } from '../../src/store/habitStore';
+import { useShallow } from 'zustand/react/shallow';
 import { Button } from '../../src/components/Button';
 import { Timer } from '../../src/components/Timer';
 import { QuoteCard } from '../../src/components/QuoteCard';
@@ -362,14 +363,18 @@ export default function HabitDetail() {
     const socialLocked = !isPremium || premiumLoading;
     const habitId = Array.isArray(id) ? id[0] : id;
 
-    const habit = useHabitStore((state) => (habitId ? state.getHabit(habitId) : undefined));
-    const toggleCompletion = useHabitStore((state) => state.toggleCompletion);
-    const setStreakMemory = useHabitStore((state) => state.setStreakMemory);
-    const patchStreakMemory = useHabitStore((state) => state.patchStreakMemory);
-    const resetHabit = useHabitStore((state) => state.resetHabit);
-    const deleteHabit = useHabitStore((state) => state.deleteHabit);
-    const setHabitVisibility = useHabitStore((state) => state.setHabitVisibility);
-    const setMissionReport = useHabitStore((state) => state.setMissionReport);
+    const { habit, toggleCompletion, setStreakMemory, patchStreakMemory, resetHabit, deleteHabit, setHabitVisibility, setMissionReport } = useHabitStore(
+      useShallow((state) => ({
+        habit: habitId ? state.getHabit(habitId) : undefined,
+        toggleCompletion: state.toggleCompletion,
+        setStreakMemory: state.setStreakMemory,
+        patchStreakMemory: state.patchStreakMemory,
+        resetHabit: state.resetHabit,
+        deleteHabit: state.deleteHabit,
+        setHabitVisibility: state.setHabitVisibility,
+        setMissionReport: state.setMissionReport,
+      })),
+    );
 
     const lastVisibilityRef = useRef<{ id: string; prev: MissionVisibility } | null>(null);
 
@@ -1016,7 +1021,7 @@ export default function HabitDetail() {
                 />
             </LazyMount>
 
-            <ScrollView showsVerticalScrollIndicator={false}>
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
                 <View style={styles.modeRow}>
                     <View style={[styles.modeBadge, isManual && styles.modeBadgeManual]}>
                         {isManual ? <Gamepad2 size={13} color={theme.colors.amber[500]} /> : <Plane size={13} color={theme.colors.cyan[400]} />}

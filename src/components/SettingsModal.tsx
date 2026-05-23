@@ -116,6 +116,7 @@ export function SettingsModal({ visible, onClose }: SettingsModalProps) {
                     <ScrollView
                         showsVerticalScrollIndicator={false}
                         contentContainerStyle={styles.contentScroll}
+                        keyboardShouldPersistTaps="handled"
                     >
 
                     {showAccount && session && (

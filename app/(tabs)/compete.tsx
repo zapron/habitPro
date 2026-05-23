@@ -31,6 +31,7 @@ import { useTheme } from "../../src/context/ThemeContext";
 import { useToast } from "../../src/context/ToastContext";
 import { useHabitStore } from "../../src/store/habitStore";
 import { useChallengeStore } from "../../src/store/challengeStore";
+import { useShallow } from "zustand/react/shallow";
 import { CHALLENGE_TEMPLATES, getChallengeTemplate } from "../../src/constants/challengeTemplates";
 import { computeChallengeProgress } from "../../src/utils/challengeProgress";
 import {
@@ -631,10 +632,9 @@ export default function CompeteScreen() {
     return () => loop.stop();
   }, [hasAwaitingInvite, invitePulse, reduceMotion]);
 
-  const xp = useHabitStore((s) => s.xp);
-  const habits = useHabitStore((s) => s.habits);
-  const miniMissions = useHabitStore((s) => s.miniMissions);
-  const addHabit = useHabitStore((s) => s.addHabit);
+  const { xp, habits, miniMissions, addHabit } = useHabitStore(
+    useShallow((s) => ({ xp: s.xp, habits: s.habits, miniMissions: s.miniMissions, addHabit: s.addHabit })),
+  );
 
   const enrollments = useChallengeStore((s) => s.enrollments);
   const completed = useChallengeStore((s) => s.completed);

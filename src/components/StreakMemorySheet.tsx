@@ -19,7 +19,6 @@ import {
   Easing,
   Alert,
   ActivityIndicator,
-  InteractionManager,
   Switch,
   TouchableOpacity,
 } from "react-native";
@@ -203,11 +202,11 @@ export function StreakMemorySheet({
     const releasePickerLock = () => {
       photoPickerOpeningRef.current = false;
     };
-    const openPickerChoice = () => {
-      if (!visible) {
-        releasePickerLock();
-        return;
-      }
+    if (!visible) {
+      releasePickerLock();
+      return;
+    }
+    requestAnimationFrame(() => {
       Alert.alert(
         "Add a photo",
         "Take a new picture or choose one from your gallery.",
@@ -230,9 +229,6 @@ export function StreakMemorySheet({
         ],
         { cancelable: true, onDismiss: releasePickerLock },
       );
-    };
-    requestAnimationFrame(() => {
-      InteractionManager.runAfterInteractions(openPickerChoice);
     });
   }, [pickFromCamera, pickFromLibrary, submitting, visible]);
 
