@@ -1,4 +1,4 @@
-import { forwardRef } from "react";
+import { forwardRef, useMemo } from "react";
 import {
   Text as RNText,
   type TextProps,
@@ -58,6 +58,6 @@ export function resolveAppTextStyle(style: StyleProp<TextStyle>): TextStyle {
  * App-wide `Text` — Plus Jakarta Sans with weight → face mapping (aligned with tryitfirst-mobile-v2).
  */
 export const Text = forwardRef<RNText, TextProps>(function Text({ style, ...props }, ref) {
-  const merged = resolveAppTextStyle(style);
+  const merged = useMemo(() => resolveAppTextStyle(style), [style]);
   return <RNText ref={ref} {...props} style={merged} />;
 });

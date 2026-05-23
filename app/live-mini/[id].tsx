@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Animated,
@@ -339,7 +339,7 @@ function LiveSquadDetailsSheet({
   );
 }
 
-function LiveSquadHero({
+const LiveSquadHero = memo(function LiveSquadHero({
   completedRows,
   participants,
   profiles,
@@ -536,7 +536,7 @@ function LiveSquadHero({
       )}
     </View>
   );
-}
+});
 
 function StatusLegend() {
   const { theme, isDark } = useTheme();
@@ -565,7 +565,7 @@ function StatusLegend() {
   );
 }
 
-function PulsingOnMissionDot({ color }: { color: string }) {
+const PulsingOnMissionDot = memo(function PulsingOnMissionDot({ color }: { color: string }) {
   const pulse = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -607,7 +607,7 @@ function PulsingOnMissionDot({ color }: { color: string }) {
       <View style={[styles.statusPulseCore, { backgroundColor: color }]} />
     </View>
   );
-}
+});
 
 function ParticipantCard({
   row,

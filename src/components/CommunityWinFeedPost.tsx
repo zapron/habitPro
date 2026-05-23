@@ -1,5 +1,6 @@
 import { Text } from "./AppText";
 import {
+  memo,
   useCallback,
   useEffect,
   useRef,
@@ -118,7 +119,7 @@ function CheerBurstOverlay({
   );
 }
 
-export function CommunityWinFeedPost({
+export const CommunityWinFeedPost = memo(function CommunityWinFeedPost({
   win,
   variant,
   isDark,
@@ -583,7 +584,7 @@ export function CommunityWinFeedPost({
       </View>
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   feedTile: {

@@ -13,12 +13,20 @@ export function PulsingBorder({ children, active, color }: PulsingBorderProps) {
     const borderColor = color ?? theme.colors.cyan[400];
     const pulse = useRef(new Animated.Value(1)).current;
 
+    const loopRef = useRef<Animated.CompositeAnimation | null>(null);
     useEffect(() => {
         if (!active) {
             pulse.setValue(1);
+            if (loopRef.current) {
+                loopRef.current.stop();
+                loopRef.current = null;
+            }
             return;
         }
 
+        if (loopRef.current) {
+            loopRef.current.stop();
+        }
         const loop = Animated.loop(
             Animated.sequence([
                 Animated.timing(pulse, {
@@ -35,8 +43,14 @@ export function PulsingBorder({ children, active, color }: PulsingBorderProps) {
                 }),
             ]),
         );
+        loopRef.current = loop;
         loop.start();
-        return () => loop.stop();
+        return () => {
+            if (loopRef.current) {
+                loopRef.current.stop();
+                loopRef.current = null;
+            }
+        };
     }, [active, pulse]);
 
     const opacity = pulse.interpolate({

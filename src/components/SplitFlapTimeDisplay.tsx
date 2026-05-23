@@ -219,13 +219,13 @@ export function SplitFlapTimeDisplay({
   const separatorFontSize = Math.round(fontSize * 0.82);
   const separatorWidth = Math.max(11, Math.round(fontSize * 0.5));
 
-  const digitProps = {
+  const digitProps = useMemo(() => ({
     fontSize,
     lineHeight,
     digitWidth,
     color: timeColor,
     textShadowStyle: digitTextShadow,
-  };
+  }), [fontSize, lineHeight, digitWidth, timeColor, digitTextShadow]);
 
   const compact = pairs.length === 1;
 

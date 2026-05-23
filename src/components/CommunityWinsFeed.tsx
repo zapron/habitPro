@@ -364,6 +364,8 @@ export function CommunityWinsFeed({
         data={listRows}
         keyExtractor={(row) => (row.kind === "skeleton" ? row.id : row.win.id)}
         renderItem={renderItem}
+        removeClippedSubviews={true}
+        maxToRenderPerBatch={10}
         contentContainerStyle={{ paddingBottom: contentPaddingBottom, flexGrow: 1 }}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.indigo[400]} />

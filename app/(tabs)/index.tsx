@@ -73,7 +73,7 @@ function getGreeting(): string {
   return "Night owl mode";
 }
 
-function MiniMissionLiveGradientLabel({ count, reduceMotion }: { count: number; reduceMotion: boolean }) {
+const MiniMissionLiveGradientLabel = memo(function MiniMissionLiveGradientLabel({ count, reduceMotion }: { count: number; reduceMotion: boolean }) {
   const fontSize = 17;
   const label = `${count} LIVE`;
   const w = Math.min(200, Math.max(44, Math.ceil(label.length * fontSize * 0.58)));
@@ -124,7 +124,7 @@ function MiniMissionLiveGradientLabel({ count, reduceMotion }: { count: number; 
       </Svg>
     </Animated.View>
   );
-}
+});
 
 const SECTION_GAP = 12;
 const HEADER_BOTTOM_GAP = 6;

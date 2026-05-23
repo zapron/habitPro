@@ -19,8 +19,11 @@ export function StreakBanner({ streak }: StreakBannerProps) {
     const opacity = useRef(new Animated.Value(0)).current;
     const glow = useRef(new Animated.Value(0)).current;
 
+    const lastStreakRef = useRef<number | null>(null);
     useEffect(() => {
         if (streak < 3) return;
+        if (lastStreakRef.current === streak) return;
+        lastStreakRef.current = streak;
         Animated.parallel([
             Animated.spring(slideIn, {
                 toValue: 0,
@@ -35,7 +38,7 @@ export function StreakBanner({ streak }: StreakBannerProps) {
             }),
         ]).start();
 
-        Animated.loop(
+        const glowLoop = Animated.loop(
             Animated.sequence([
                 Animated.timing(glow, {
                     toValue: 1,
@@ -50,7 +53,9 @@ export function StreakBanner({ streak }: StreakBannerProps) {
                     useNativeDriver: true,
                 }),
             ]),
-        ).start();
+        );
+        glowLoop.start();
+        return () => { glowLoop.stop(); };
     }, [streak, slideIn, opacity, glow]);
 
     if (streak < 3) return null;

@@ -23,7 +23,7 @@ function clamp(n: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, n));
 }
 
-function RingBoundaryDots({
+const RingBoundaryDots = memo(function RingBoundaryDots({
   ringSize,
   strokeWidth,
   totalDays,
@@ -85,9 +85,9 @@ function RingBoundaryDots({
   }
 
   return <View style={{ position: "absolute", left: 0, top: 0, width: ringSize, height: ringSize }}>{nodes}</View>;
-}
+});
 
-function RingDayArcs({
+const RingDayArcs = memo(function RingDayArcs({
   ringSize,
   strokeWidth,
   totalDays,
@@ -153,7 +153,7 @@ function RingDayArcs({
       <G transform={`rotate(-90 ${cx} ${cy})`}>{arcs}</G>
     </Svg>
   );
-}
+});
 
 // NOTE: Lottie tinting is not reliable across assets (many are not recolorable at runtime).
 // For a true bluish flame, we use the app's AnimatedFire with a cyan color.

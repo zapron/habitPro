@@ -1221,7 +1221,7 @@ export default function CompeteScreen() {
     [challengesSubTab, invitesHasMore, invitesLoadingMore, loadMoreInvites, segment],
   );
   const tier = useMemo(() => weeklyTierLabel(weeklyScore), [weeklyScore]);
-  const activeIds = new Set(enrollments.map((e) => e.templateId));
+  const activeIds = useMemo(() => new Set(enrollments.map((e) => e.templateId)), [enrollments]);
   const catalog = useMemo(
     () => CHALLENGE_TEMPLATES.filter((t) => !activeIds.has(t.id)),
     [activeIds],
@@ -1954,7 +1954,7 @@ export default function CompeteScreen() {
                       const d = new Date(c.completedAt);
                       return (
                         <View
-                          key={`${c.templateId}-${c.completedAt}-${i}`}
+                          key={`${c.templateId}-${c.completedAt}`}
                           style={[styles.winRow, i > 0 && { borderTopColor: theme.colors.border, borderTopWidth: StyleSheet.hairlineWidth }]}
                         >
                           <Medal size={16} color={theme.colors.amber[500]} />

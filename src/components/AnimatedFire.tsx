@@ -144,7 +144,7 @@ export function AnimatedFire({ size = 24, color }: AnimatedFireProps) {
             runningAnimations.forEach((anim) => anim.stop());
             timers.forEach((timer) => clearTimeout(timer));
         };
-    }, [reduceMotion, fireColor, embers, opacity1, opacity2, opacity3, scale1, scale2, scale3, size, translateY2]);
+    }, [reduceMotion, fireColor, size]);
 
     if (reduceMotion) {
         return (

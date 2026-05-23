@@ -1,4 +1,4 @@
-import React, { memo } from "react";
+import React, { memo, useMemo } from "react";
 import { Text } from "../AppText";
 import {
   View,
@@ -25,7 +25,7 @@ type Props = {
 export const ProfileActivityChart = memo(function ProfileActivityChart({ theme, isDark, points, accessibilityLabel }: Props) {
   const { width: winW } = useWindowDimensions();
   const chartWidth = Math.max(200, Math.min(320, winW - CHART_SIDE_RESERVE));
-  const maxCount = Math.max(1, ...points.map((p) => p.count));
+  const maxCount = useMemo(() => Math.max(1, ...points.map((p) => p.count)), [points]);
   const hasAny = points.some((p) => p.count > 0);
   const barColor = theme.colors.indigo[500];
   const mutedBar = isDark ? "rgba(255,255,255,0.12)" : "rgba(15,23,42,0.1)";
