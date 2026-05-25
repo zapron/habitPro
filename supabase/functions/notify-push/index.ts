@@ -19,6 +19,11 @@ type NotificationRow = {
   payload: Record<string, unknown>;
 };
 
+function textPayloadValue(payload: Record<string, unknown>, key: string): string | null {
+  const value = payload[key];
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
 function buildMessage(
   type: string | undefined | null,
   payload: Record<string, unknown>,
@@ -170,6 +175,15 @@ function buildMessage(
     case "streak_window_reminder": {
       const habitTitle =
         typeof payload.habit_title === "string" ? payload.habit_title : "Your mission";
+      const displayTitle = textPayloadValue(payload, "display_title");
+      const displayBody = textPayloadValue(payload, "display_body");
+      if (displayTitle && displayBody) {
+        return {
+          title: displayTitle,
+          body: displayBody,
+          data,
+        };
+      }
       const phase = payload.reminder_phase;
       const minsLeft = typeof payload.minutes_left === "number" ? payload.minutes_left : null;
       const hm =

@@ -53,12 +53,56 @@ function nudgeKindLabel(kind: unknown): string {
   return k.length > 0 ? k : "Nudge";
 }
 
+function textPayloadValue(payload: Record<string, unknown> | undefined, key: string): string | null {
+  const value = payload?.[key];
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+function formatReminderMinutesLeft(value: unknown): string | null {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return null;
+  const minutes = Math.max(1, Math.round(value));
+  const hh = Math.floor(minutes / 60);
+  const mm = minutes % 60;
+  if (hh > 0 && mm > 0) return `${hh}h ${mm}m`;
+  if (hh > 0) return `${hh}h`;
+  return `${mm}m`;
+}
+
+function streakReminderTitle(payload?: Record<string, unknown>): string {
+  const serverTitle = textPayloadValue(payload, "display_title");
+  if (serverTitle) return serverTitle;
+
+  const phase = payload?.reminder_phase;
+  if (phase === "open") return "Streak window is open";
+  if (phase === "custom") return "Streak check-in";
+  if (phase === "closing") return "Almost time's up";
+  return "Streak window closing";
+}
+
+function streakReminderSubtitle(payload: Record<string, unknown>): string {
+  const serverBody = textPayloadValue(payload, "display_body");
+  if (serverBody) return `${serverBody.replace(/\s*\.\s*$/, "")} · Tap to open`;
+
+  const title = typeof payload.habit_title === "string" ? payload.habit_title : "Mission";
+  const phase = payload.reminder_phase;
+  if (phase === "open") {
+    return `You have 24 hours to finish today's habit for "${title}" · Tap to open`;
+  }
+  if (phase === "custom") {
+    const left = formatReminderMinutesLeft(payload.minutes_left);
+    return left
+      ? `You have ${left} left to mark today for "${title}" · Tap to open`
+      : `Time to mark today for "${title}" · Tap to open`;
+  }
+  if (phase === "closing") {
+    return `You have almost an hour left. Complete your streak for "${title}" · Tap to open`;
+  }
+  return `About 1 hour left to mark today for "${title}" · Tap to open`;
+}
+
 function notificationTitle(type: string, payload?: Record<string, unknown>): string {
   if (type === "streak_window_reminder") {
-    const phase = payload?.reminder_phase;
-    if (phase === "open") return "Streak window is open";
-    if (phase === "closing") return "Almost time’s up";
-    return "Streak window closing";
+    return streakReminderTitle(payload);
   }
   switch (type) {
     case "challenge_invite":
@@ -155,15 +199,7 @@ function notificationSubtitle(n: NotificationRow): string | null {
       return `${who} cheered “${title}” · Tap for Community`;
     }
     case "streak_window_reminder": {
-      const title = typeof p.habit_title === "string" ? p.habit_title : "Mission";
-      const phase = p.reminder_phase;
-      if (phase === "open") {
-        return `You have 24 hours to finish today’s habit for “${title}” · Tap to open`;
-      }
-      if (phase === "closing") {
-        return `You have almost an hour left. Complete your streak for “${title}” · Tap to open`;
-      }
-      return `About 1 hour left to mark today for “${title}” · Tap to open`;
+      return streakReminderSubtitle(p);
     }
     case "streak_repair_request": {
       const dateStr = typeof p.date_str === "string" ? p.date_str : "a missed day";

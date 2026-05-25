@@ -89,6 +89,44 @@ function minutesLeft(nowMs: number, slotEndMs: number): number {
   return Math.max(0, Math.ceil((slotEndMs - nowMs) / 60_000));
 }
 
+function formatMinutesLeftLabel(value: unknown): string | null {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return null;
+  const minutes = Math.max(1, Math.round(value));
+  const hh = Math.floor(minutes / 60);
+  const mm = minutes % 60;
+  if (hh > 0 && mm > 0) return `${hh}h ${mm}m`;
+  if (hh > 0) return `${hh}h`;
+  return `${mm}m`;
+}
+
+function streakReminderDisplay(
+  habitTitle: string,
+  phase: "open" | "closing" | "custom",
+  payload: Record<string, unknown>,
+): { title: string; body: string } {
+  if (phase === "open") {
+    return {
+      title: "Streak window is open",
+      body: `You have 24 hours to finish today's habit for "${habitTitle}".`,
+    };
+  }
+
+  if (phase === "custom") {
+    const left = formatMinutesLeftLabel(payload.minutes_left);
+    return {
+      title: "Streak check-in",
+      body: left
+        ? `You have ${left} left to mark today for "${habitTitle}".`
+        : `Time to mark today for "${habitTitle}".`,
+    };
+  }
+
+  return {
+    title: "Almost time's up",
+    body: `You have almost an hour left. Complete your streak for "${habitTitle}".`,
+  };
+}
+
 function isTimeInNextWindow(
   now: { hh: number; mm: number },
   target: { hh: number; mm: number },
@@ -220,6 +258,9 @@ async function insertStreakReminderIfEligible(
     return false;
   }
 
+  const reminderPayload = extraPayload ?? {};
+  const display = streakReminderDisplay(h.title || "Your mission", reminderPhase, reminderPayload);
+
   const { error: nErr } = await supabase.from("notifications").insert({
     user_id: h.user_id,
     type: "streak_window_reminder",
@@ -230,7 +271,9 @@ async function insertStreakReminderIfEligible(
       habit_title: h.title,
       reminder_date: reminderDateKey,
       reminder_phase: reminderPhase,
-      ...(extraPayload ?? {}),
+      ...reminderPayload,
+      display_title: display.title,
+      display_body: display.body,
     },
   });
 
