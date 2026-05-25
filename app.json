@@ -4,7 +4,7 @@
     "owner": "raktim24",
     "slug": "habitPro",
     "scheme": "habitpro",
-    "version": "1.1.22",
+    "version": "1.1.23",
     "platforms": [
       "ios",
       "android"
@@ -23,7 +23,7 @@
     },
     "android": {
       "package": "com.rakti.habitpro",
-      "versionCode": 23,
+      "versionCode": 24,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon-v3-padded.png",
         "backgroundColor": "#ffffff"
