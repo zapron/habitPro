@@ -956,7 +956,7 @@ export default function ProfileScreen() {
         </View>
       </ScrollView>
 
-      <LazyMount visible={hubSheet !== null}>
+      <LazyMount visible={hubSheet !== null} unmountOnExit>
         {hubModalContent && hubModalContent.variant === "habits" ? (
           <HubListModal
             visible={hubSheet !== null}
@@ -978,7 +978,7 @@ export default function ProfileScreen() {
         ) : null}
       </LazyMount>
 
-      <LazyMount visible={settingsOpen}>
+      <LazyMount visible={settingsOpen} unmountOnExit>
         <SettingsModal visible={settingsOpen} onClose={() => setSettingsOpen(false)} />
       </LazyMount>
     </Screen>

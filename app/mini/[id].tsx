@@ -1678,7 +1678,7 @@ export default function MiniMissionDetail() {
           { label: "Delete", variant: "danger", onPress: confirmDeleteMiniMission },
         ]}
       />
-      <LazyMount visible={missionDetailsOpen}>
+      <LazyMount visible={missionDetailsOpen} unmountOnExit>
         <MissionDetailsSheet
           variant="mini"
           visible={missionDetailsOpen}
@@ -1687,7 +1687,7 @@ export default function MiniMissionDetail() {
         />
       </LazyMount>
 
-      <LazyMount visible={liveMiniSheetOpen}>
+      <LazyMount visible={liveMiniSheetOpen} unmountOnExit>
         <LiveMiniInviteSheet
           visible={liveMiniSheetOpen}
           mission={mission}
@@ -1695,7 +1695,7 @@ export default function MiniMissionDetail() {
         />
       </LazyMount>
 
-      <LazyMount visible={completeSheetOpen}>
+      <LazyMount visible={completeSheetOpen} unmountOnExit>
         <StreakMemorySheet
           visible={completeSheetOpen}
           variant="mini"
@@ -1713,7 +1713,7 @@ export default function MiniMissionDetail() {
         />
       </LazyMount>
 
-      <LazyMount visible={focusModeOpen}>
+      <LazyMount visible={focusModeOpen} unmountOnExit unmountDelayMs={220}>
         <FocusMissionControlModal
           visible={focusModeOpen}
           title={mission.title}

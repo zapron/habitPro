@@ -10,7 +10,6 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
-import { BlurView } from "expo-blur";
 import { CalendarCheck, Clock3, Flame, ThumbsUp, Trophy, X, Zap } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -137,7 +136,6 @@ export function CommunityPlayerDrawer({ visible, player, onClose }: Props) {
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <View style={styles.root}>
-        <BlurView intensity={30} tint={isDark ? "dark" : "light"} style={StyleSheet.absoluteFillObject} />
         <Pressable
           style={[
             StyleSheet.absoluteFillObject,

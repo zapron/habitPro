@@ -9,7 +9,6 @@ import {
   View,
   Pressable,
   StyleSheet,
-  Image,
   Dimensions,
   Animated,
   type StyleProp,
@@ -326,13 +325,6 @@ export const CommunityWinFeedPost = memo(function CommunityWinFeedPost({
       }
     >
       <View style={photoFrameStyle}>
-        <Image
-          source={{ uri: win.memory_image_url }}
-          style={styles.photoImageFill}
-          resizeMode="cover"
-          blurRadius={18}
-          accessibilityIgnoresInvertColors
-        />
         {!imageLoaded ? (
           <LinearGradient
             pointerEvents="none"

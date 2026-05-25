@@ -82,6 +82,26 @@ const migrateHabit = (h: any): Habit => {
   };
 };
 
+function mergeDirtyIdsByReference<T extends { id: string }>(
+  previousItems: T[],
+  nextItems: T[],
+  currentDirtyIds: string[] | undefined,
+): string[] {
+  const dirtyIds = currentDirtyIds ?? [];
+  if (previousItems === nextItems) return dirtyIds;
+
+  const previousById = new Map(previousItems.map((item) => [item.id, item]));
+  let nextDirtySet: Set<string> | null = null;
+
+  for (const item of nextItems) {
+    if (previousById.get(item.id) === item) continue;
+    nextDirtySet ??= new Set(dirtyIds);
+    nextDirtySet.add(item.id);
+  }
+
+  return nextDirtySet ? [...nextDirtySet] : dirtyIds;
+}
+
 export const useHabitStore = create<HabitStore>()(
   persist(
     (rawSet, get) => {
@@ -94,25 +114,19 @@ export const useHabitStore = create<HabitStore>()(
           const updates = { ...next };
 
           if (next.habits && next.habits !== state.habits) {
-            const dirty = [...(state.dirtyHabitIds ?? [])];
-            next.habits.forEach((h: any) => {
-              const prev = state.habits.find((ph) => ph.id === h.id);
-              if (!prev || JSON.stringify(prev) !== JSON.stringify(h)) {
-                if (!dirty.includes(h.id)) dirty.push(h.id);
-              }
-            });
-            updates.dirtyHabitIds = dirty;
+            updates.dirtyHabitIds = mergeDirtyIdsByReference(
+              state.habits,
+              next.habits,
+              state.dirtyHabitIds,
+            );
           }
 
           if (next.miniMissions && next.miniMissions !== state.miniMissions) {
-            const dirty = [...(state.dirtyMiniMissionIds ?? [])];
-            next.miniMissions.forEach((m: any) => {
-              const prev = state.miniMissions.find((pm) => pm.id === m.id);
-              if (!prev || JSON.stringify(prev) !== JSON.stringify(m)) {
-                if (!dirty.includes(m.id)) dirty.push(m.id);
-              }
-            });
-            updates.dirtyMiniMissionIds = dirty;
+            updates.dirtyMiniMissionIds = mergeDirtyIdsByReference(
+              state.miniMissions,
+              next.miniMissions,
+              state.dirtyMiniMissionIds,
+            );
           }
 
           return updates;
@@ -569,7 +583,18 @@ export const useHabitStore = create<HabitStore>()(
             ? opts.communityFeedRevoked
             : undefined;
 
+        let xpGain = 15;
+        if (mission?.startedAt) {
+          const elapsed =
+            new Date(completedAt).getTime() -
+            new Date(mission.startedAt).getTime();
+          const allocated =
+            (mission.estimatedMinutes + (mission.extendedMinutes ?? 0)) * 60_000;
+          if (elapsed < allocated) xpGain += 10; // early finish bonus
+        }
+
         set((state) => ({
+          xp: state.xp + xpGain,
           miniMissions: state.miniMissions.map((m) => {
             if (m.id !== id) return m;
             return {
@@ -586,17 +611,6 @@ export const useHabitStore = create<HabitStore>()(
           }),
         }));
 
-        // Award XP for mini mission completion
-        let xpGain = 15;
-        if (mission?.startedAt) {
-          const elapsed =
-            new Date(completedAt).getTime() -
-            new Date(mission.startedAt).getTime();
-          const allocated =
-            (mission.estimatedMinutes + (mission.extendedMinutes ?? 0)) * 60_000;
-          if (elapsed < allocated) xpGain += 10; // early finish bonus
-        }
-        get().addXp(xpGain);
         requestRemoteSync({ immediate: true });
       },
       cancelMiniMission: (id) => {
@@ -677,6 +691,14 @@ export const useHabitStore = create<HabitStore>()(
     {
       name: "habit-storage",
       storage: createJSONStorage(() => throttledStorage),
+      partialize: (state) => ({
+        habits: state.habits,
+        miniMissions: state.miniMissions,
+        xp: state.xp,
+        dirtyHabitIds: state.dirtyHabitIds,
+        dirtyMiniMissionIds: state.dirtyMiniMissionIds,
+        username: state.username,
+      }),
       // Migrate legacy habits on rehydration
       onRehydrateStorage: () => (state) => {
         if (state) {

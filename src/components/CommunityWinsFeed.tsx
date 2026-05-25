@@ -249,6 +249,17 @@ export function CommunityWinsFeed({
       }
       const ok = await requireUsername("community_like");
       if (!ok) return false;
+      setItems((prev) =>
+        prev.map((w) =>
+          w.id === win.id
+            ? {
+                ...w,
+                viewerHasCheered: !w.viewerHasCheered,
+                cheerCount: w.viewerHasCheered ? Math.max(0, w.cheerCount - 1) : w.cheerCount + 1,
+              }
+            : w,
+        ),
+      );
       const firstResult = await traceAsync(
         "community.cheer.toggle",
         () => toggleCheer(win.id, win.viewerHasCheered),
@@ -266,22 +277,22 @@ export function CommunityWinsFeed({
         }
       }
       if (finalResult.ok === false) {
+        setItems((prev) =>
+          prev.map((w) =>
+            w.id === win.id
+              ? {
+                  ...w,
+                  viewerHasCheered: win.viewerHasCheered,
+                  cheerCount: win.cheerCount,
+                }
+              : w,
+          ),
+        );
         if (finalResult.reason !== "premium_required") {
           showToast(finalResult.error, "error");
         }
         return false;
       }
-      setItems((prev) =>
-        prev.map((w) =>
-          w.id === win.id
-            ? {
-                ...w,
-                viewerHasCheered: !w.viewerHasCheered,
-                cheerCount: w.viewerHasCheered ? Math.max(0, w.cheerCount - 1) : w.cheerCount + 1,
-              }
-            : w,
-        ),
-      );
       return true;
     },
     [session?.user, canCheer, onCheerBlocked, requireUsername, showToast, validateCheerAccess],

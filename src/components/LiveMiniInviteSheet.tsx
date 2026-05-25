@@ -9,7 +9,6 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { BlurView } from "expo-blur";
 import { useRouter } from "expo-router";
 import { Radio, UserPlus, Users, X } from "lucide-react-native";
 import { Text } from "./AppText";
@@ -283,11 +282,6 @@ export function LiveMiniInviteSheet({ visible, mission, onClose }: Props) {
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <BlurView
-        intensity={30}
-        tint={isDark ? "dark" : "light"}
-        style={StyleSheet.absoluteFill}
-      />
       <KeyboardAvoidingView
         behavior="padding"
         keyboardVerticalOffset={0}

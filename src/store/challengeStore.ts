@@ -89,6 +89,14 @@ export const useChallengeStore = create<ChallengeStoreState>()(
         nextEnrollments = nextEnrollments.filter((e) => !toRemove.includes(e.id));
         const trimmedCompleted = nextCompleted.slice(0, 24);
 
+        if (
+          toRemove.length === 0 &&
+          completed.length <= 24 &&
+          trimmedCompleted.length === completed.length
+        ) {
+          return;
+        }
+
         set({ enrollments: nextEnrollments, completed: trimmedCompleted });
       },
 

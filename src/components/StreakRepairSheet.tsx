@@ -9,7 +9,6 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { BlurView } from "expo-blur";
 import { Users, X } from "lucide-react-native";
 import type { Habit } from "../types/habit";
 import { useTheme } from "../context/ThemeContext";
@@ -93,7 +92,6 @@ export function StreakRepairSheet({ visible, onClose, habit, eligible, onRequest
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <BlurView intensity={30} tint={isDark ? "dark" : "light"} style={StyleSheet.absoluteFill} />
       <Pressable
         style={[
           styles.backdrop,

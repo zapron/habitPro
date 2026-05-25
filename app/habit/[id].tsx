@@ -943,11 +943,11 @@ export default function HabitDetail() {
                 </View>
             </View>
 
-            <LazyMount visible={groupSheetOpen}>
+            <LazyMount visible={groupSheetOpen} unmountOnExit>
                 <GroupChallengeSheet visible={groupSheetOpen} onClose={() => setGroupSheetOpen(false)} habit={habit} />
             </LazyMount>
 
-            <LazyMount visible={missionDetailsOpen}>
+            <LazyMount visible={missionDetailsOpen} unmountOnExit>
                 <MissionDetailsSheet
                     variant="habit"
                     visible={missionDetailsOpen}
@@ -956,7 +956,7 @@ export default function HabitDetail() {
                 />
             </LazyMount>
 
-            <LazyMount visible={memoryUi !== null}>
+            <LazyMount visible={memoryUi !== null} unmountOnExit>
                 <StreakMemorySheet
                     visible={memoryUi !== null}
                     mode={memoryUi?.kind === 'view' ? 'view' : 'create'}

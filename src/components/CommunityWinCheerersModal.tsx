@@ -11,7 +11,6 @@ import {
   View,
 } from "react-native";
 import { useEffect, useMemo, useState } from "react";
-import { BlurView } from "expo-blur";
 import { ThumbsUp, X } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "../context/ThemeContext";
@@ -133,7 +132,6 @@ export function CommunityWinCheerersModal({ visible, winId, totalLikes, onClose 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <View style={styles.modalRoot}>
-        <BlurView intensity={30} tint={isDark ? "dark" : "light"} style={StyleSheet.absoluteFillObject} />
         <Pressable
           style={[
             StyleSheet.absoluteFillObject,

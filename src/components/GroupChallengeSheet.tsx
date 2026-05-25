@@ -10,7 +10,6 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { BlurView } from 'expo-blur';
 import { useRouter } from "expo-router";
 import { X } from "lucide-react-native";
 import type { Habit } from "../types/habit";
@@ -231,7 +230,6 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
   return (
     <>
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <BlurView intensity={30} tint={theme.colors.background === '#ffffff' ? "light" : "dark"} style={StyleSheet.absoluteFill} />
       <KeyboardAvoidingView
         behavior="padding"
         keyboardVerticalOffset={0}

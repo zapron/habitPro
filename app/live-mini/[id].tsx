@@ -821,6 +821,7 @@ export default function LiveMiniSquadScreen() {
   const { softAskNotifications } = useNotificationGate();
   const userId = session?.user?.id ?? null;
   const addMiniMission = useHabitStore((s) => s.addMiniMission);
+  const cancelMiniMission = useHabitStore((s) => s.cancelMiniMission);
   const miniMissions = useHabitStore((s) => s.miniMissions);
 
   const [snapshot, setSnapshot] = useState<LiveMiniSquadSnapshot | null>(null);
@@ -1061,21 +1062,6 @@ export default function LiveMiniSquadScreen() {
       const minutes = clampMinutes(selectedMinutes);
       const localId = createMiniMissionId();
       const startedAt = new Date().toISOString();
-      const res = await traceAsync(
-        "liveMini.acceptStart",
-        () =>
-          acceptLiveMiniInvite({
-            squadId,
-            localMiniMissionId: localId,
-            plannedMinutes: minutes,
-            startedAt,
-          }),
-        { slowMs: 900, meta: { minutes } },
-      );
-      if (res.ok === false) {
-        showToast(res.error, "error");
-        return;
-      }
       addMiniMission({
         id: localId,
         title: squad.title,
@@ -1089,8 +1075,31 @@ export default function LiveMiniSquadScreen() {
       });
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       showToast("Joined Live Squad. Timer started.", "success");
-      void load(true, { force: true });
       router.push(`/mini/${localId}`);
+
+      const res = await traceAsync(
+        "liveMini.acceptStart",
+        () =>
+          acceptLiveMiniInvite({
+            squadId,
+            localMiniMissionId: localId,
+            plannedMinutes: minutes,
+            startedAt,
+          }),
+        { slowMs: 900, meta: { minutes } },
+      );
+      if (res.ok === false) {
+        cancelMiniMission(localId);
+        showToast(res.error, "error");
+        return;
+      }
+      if (res.snapshot) {
+        snapshotRef.current = res.snapshot;
+        setSnapshot(res.snapshot);
+        lastBoardLoadAtRef.current = Date.now();
+      } else {
+        void load(true, { force: true });
+      }
     } finally {
       setBusy(null);
     }

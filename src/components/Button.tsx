@@ -63,7 +63,9 @@ export function Button({
                 inactive && styles.disabled,
                 style,
             ]}
-            activeOpacity={0.8}
+            activeOpacity={0.68}
+            delayPressIn={0}
+            delayPressOut={0}
             disabled={inactive}
             {...props}
         >
