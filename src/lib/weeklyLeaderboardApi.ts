@@ -45,11 +45,29 @@ export async function fetchWeeklyLeaderboard(
   if (userError || !user) return { ok: false, error: "Sign in to view weekly ranks." };
 
   const pageSize = Math.max(1, Math.min(Math.floor(limit), 49));
-  const { data, error } = await supabase.rpc("get_weekly_leaderboard", {
+  const params = {
     p_limit: pageSize + 1,
     p_offset: Math.max(0, Math.floor(offset)),
-  });
-  if (error) return { ok: false, error: error.message };
+  };
+  let v2Data: unknown = null;
+  let v2Error: unknown = null;
+  try {
+    const { data, error } = await supabase.rpc("get_weekly_leaderboard_v2", params);
+    v2Data = data;
+    v2Error = error;
+  } catch (error) {
+    v2Error = error;
+  }
+  const { data, error } = v2Error
+    ? await supabase.rpc("get_weekly_leaderboard", params)
+    : { data: v2Data, error: null };
+  if (error) {
+    const message =
+      typeof error === "object" && error !== null && "message" in error
+        ? String((error as { message?: unknown }).message ?? "Could not load weekly ranks.")
+        : String(error);
+    return { ok: false, error: message };
+  }
 
   const allItems: WeeklyLeaderboardEntry[] = ((data ?? []) as WeeklyLeaderboardRow[])
     .map((row) => {

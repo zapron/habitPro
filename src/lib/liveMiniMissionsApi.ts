@@ -12,6 +12,10 @@ export type LiveMiniActionResult =
   | { ok: true }
   | { ok: false; error: string; reason?: "auth_required" | "premium_required" | "expired" };
 
+type LiveMiniSnapshotActionResult =
+  | { ok: true; snapshot?: LiveMiniSquadSnapshot | null }
+  | { ok: false; error: string; reason?: "auth_required" | "premium_required" | "expired" };
+
 export type LiveMiniInviteForMe = {
   participant: LiveMiniParticipantRow;
   squad: LiveMiniSquadRow;
@@ -40,6 +44,39 @@ function actionError(error: unknown): Extract<LiveMiniActionResult, { ok: false 
   };
 }
 
+function normalizeProfileLabel(raw: unknown): { username: string; displayName: string | null; xp: number | null } | null {
+  if (!raw || typeof raw !== "object") return null;
+  const row = raw as { username?: unknown; displayName?: unknown; display_name?: unknown; xp?: unknown };
+  const username = typeof row.username === "string" ? row.username.trim().toLowerCase() : "";
+  if (!username) return null;
+  const dnRaw = row.displayName ?? row.display_name;
+  return {
+    username,
+    displayName: typeof dnRaw === "string" && dnRaw.trim().length > 0 ? dnRaw.trim() : null,
+    xp: typeof row.xp === "number" && Number.isFinite(row.xp) ? row.xp : null,
+  };
+}
+
+function normalizeLiveMiniSnapshot(raw: unknown): LiveMiniSquadSnapshot | null {
+  if (!raw || typeof raw !== "object") return null;
+  const payload = raw as {
+    squad?: LiveMiniSquadRow | null;
+    participants?: LiveMiniParticipantRow[] | null;
+    profiles?: Record<string, unknown> | null;
+  };
+  if (!payload.squad || typeof payload.squad.id !== "string") return null;
+  const profiles: LiveMiniSquadSnapshot["profiles"] = {};
+  for (const [userId, label] of Object.entries(payload.profiles ?? {})) {
+    const normalized = normalizeProfileLabel(label);
+    if (normalized) profiles[userId] = normalized;
+  }
+  return {
+    squad: payload.squad,
+    participants: Array.isArray(payload.participants) ? payload.participants : [],
+    profiles,
+  };
+}
+
 export function isLiveMiniInviteActionable(participant: LiveMiniParticipantRow, nowMs = Date.now()): boolean {
   if (participant.status !== "invited") return false;
   if (!participant.invite_expires_at) return true;
@@ -53,13 +90,35 @@ export async function createLiveMiniSquad(input: {
   objective?: string | null;
   plannedMinutes: number;
   startedAt?: string | null;
-}): Promise<{ ok: true; squadId: string } | Extract<LiveMiniActionResult, { ok: false }>> {
+}): Promise<{ ok: true; squadId: string; snapshot?: LiveMiniSquadSnapshot | null } | Extract<LiveMiniActionResult, { ok: false }>> {
   const supabase = getSupabase();
   if (!supabase) return { ok: false, error: "Supabase not configured" };
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: "Not signed in", reason: "auth_required" };
+
+  let v2Data: unknown = null;
+  let v2Error: unknown = null;
+  try {
+    const { data, error } = await supabase.rpc("rpc_create_live_mini_squad_v2", {
+      p_mini_mission_id: input.miniMissionId,
+      p_title: input.title,
+      p_objective: input.objective ?? null,
+      p_planned_minutes: input.plannedMinutes,
+      p_started_at: input.startedAt ?? null,
+      p_return_snapshot: true,
+    });
+    v2Data = data;
+    v2Error = error;
+  } catch (error) {
+    v2Error = error;
+  }
+  if (!v2Error && v2Data && typeof v2Data === "object") {
+    const payload = v2Data as { squadId?: unknown; snapshot?: unknown };
+    const squadId = typeof payload.squadId === "string" ? payload.squadId : null;
+    if (squadId) return { ok: true, squadId, snapshot: normalizeLiveMiniSnapshot(payload.snapshot) };
+  }
 
   const { data, error } = await supabase.rpc("rpc_create_live_mini_squad", {
     p_mini_mission_id: input.miniMissionId,
@@ -91,9 +150,29 @@ export async function acceptLiveMiniInvite(input: {
   localMiniMissionId: string;
   plannedMinutes: number;
   startedAt: string;
-}): Promise<LiveMiniActionResult> {
+}): Promise<LiveMiniSnapshotActionResult> {
   const supabase = getSupabase();
   if (!supabase) return { ok: false, error: "Supabase not configured" };
+
+  let v2Data: unknown = null;
+  let v2Error: unknown = null;
+  try {
+    const { data, error } = await supabase.rpc("rpc_accept_live_mini_invite_v2", {
+      p_squad_id: input.squadId,
+      p_local_mini_mission_id: input.localMiniMissionId,
+      p_planned_minutes: input.plannedMinutes,
+      p_started_at: input.startedAt,
+      p_return_snapshot: true,
+    });
+    v2Data = data;
+    v2Error = error;
+  } catch (error) {
+    v2Error = error;
+  }
+  if (!v2Error && v2Data && typeof v2Data === "object") {
+    return { ok: true, snapshot: normalizeLiveMiniSnapshot((v2Data as { snapshot?: unknown }).snapshot) };
+  }
+
   const { error } = await supabase.rpc("rpc_accept_live_mini_invite", {
     p_squad_id: input.squadId,
     p_local_mini_mission_id: input.localMiniMissionId,
@@ -158,10 +237,15 @@ export async function fetchLiveMiniSquad(squadId: string): Promise<LiveMiniSquad
   const supabase = getSupabase();
   if (!supabase) return null;
 
-  await Promise.all([
-    refreshLiveMiniMissed(squadId).catch(() => {}),
-    refreshLiveMiniExpiredInvites(squadId).catch(() => {}),
-  ]);
+  let snapshotPayload: unknown = null;
+  try {
+    const { data, error } = await supabase.rpc("rpc_live_mini_snapshot_v1", { p_squad_id: squadId });
+    if (!error) snapshotPayload = data;
+  } catch {
+    snapshotPayload = null;
+  }
+  const snapshot = normalizeLiveMiniSnapshot(snapshotPayload);
+  if (snapshot) return snapshot;
 
   const [squadRes, participantsRes] = await Promise.all([
     supabase.from("live_mini_squads").select("*").eq("id", squadId).maybeSingle(),

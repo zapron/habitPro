@@ -12,6 +12,8 @@ const MISSION_DAY_MILESTONES = [7, 14, 21] as const;
 const STREAK_MILESTONES = [7, 14, 21, 30] as const;
 
 type ChallengeActionResult = { error: Error | null; reason?: "premium_required" };
+type Cursor = { createdAt: string; id: string };
+const challengeActivityCursorByOffset = new Map<string, Cursor | null>();
 
 function isDuplicateKeyError(err: { code?: string; message?: string } | null): boolean {
   if (!err) return false;
@@ -94,6 +96,20 @@ export async function sendChallengeNudge(
   } = await supabase.auth.getUser();
   if (!user) return { error: new Error("Not signed in") };
   if (user.id === toUserId) return { error: new Error("Cannot nudge yourself") };
+
+  let rpcError: unknown = null;
+  try {
+    const { error } = await supabase.rpc("rpc_send_challenge_nudge_v2", {
+      p_challenge_id: challengeId,
+      p_to_user_id: toUserId,
+      p_kind: kind,
+      p_activity_id: kind === "congrats" ? opts?.activityId ?? null : null,
+    });
+    rpcError = error;
+  } catch (error) {
+    rpcError = error;
+  }
+  if (!rpcError) return { error: null };
 
   const { data: inserted, error } = await supabase
     .from("challenge_nudges")
@@ -252,6 +268,38 @@ export async function listChallengeActivityPage(
   if (!supabase) return { items: [], hasMore: false, nextOffset: null };
   const offset = Math.max(0, Math.floor(request.offset));
   const limit = Math.max(1, Math.floor(request.limit));
+  const cursorKey = `${challengeId}:${offset}`;
+  if (offset === 0) {
+    for (const key of [...challengeActivityCursorByOffset.keys()]) {
+      if (key.startsWith(`${challengeId}:`)) challengeActivityCursorByOffset.delete(key);
+    }
+    challengeActivityCursorByOffset.set(cursorKey, null);
+  }
+  if (challengeActivityCursorByOffset.has(cursorKey)) {
+    const cursor = challengeActivityCursorByOffset.get(cursorKey) ?? null;
+    let rpcData: unknown = null;
+    try {
+      const { data, error } = await supabase.rpc("rpc_challenge_activity_page_v1", {
+        p_challenge_id: challengeId,
+        p_cursor_created_at: cursor?.createdAt ?? null,
+        p_cursor_id: cursor?.id ?? null,
+        p_limit: limit,
+      });
+      if (!error) rpcData = data;
+    } catch {
+      rpcData = null;
+    }
+    if (rpcData && typeof rpcData === "object") {
+      const payload = rpcData as { items?: ChallengeActivityRow[]; nextCursor?: Cursor | null };
+      const items = Array.isArray(payload.items) ? payload.items : [];
+      challengeActivityCursorByOffset.set(`${challengeId}:${offset + items.length}`, payload.nextCursor ?? null);
+      return {
+        items,
+        hasMore: Boolean(payload.nextCursor),
+        nextOffset: payload.nextCursor ? offset + items.length : null,
+      };
+    }
+  }
   const { data, error } = await supabase
     .from("challenge_activity")
     .select("id, challenge_id, actor_user_id, kind, value, created_at")

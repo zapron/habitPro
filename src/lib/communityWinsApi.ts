@@ -188,6 +188,91 @@ export type CommunityWinsFeedPage = {
   hasMore: boolean;
 };
 
+type CommunityFeedCursor = { createdAt: string; id: string };
+const communityFeedCursorByOffset = new Map<number, CommunityFeedCursor | null>();
+
+type CommunityFeedRpcItem = {
+  win?: Partial<CommunityWinRow> | null;
+  author?: {
+    username?: string | null;
+    displayName?: string | null;
+    display_name?: string | null;
+    xp?: number | null;
+  } | null;
+  cheerCount?: number | null;
+  viewerHasCheered?: boolean | null;
+};
+
+function normalizeRpcCommunityWinItem(item: CommunityFeedRpcItem): CommunityWinFeedItem | null {
+  const win = item.win;
+  if (!win || typeof win.id !== "string" || typeof win.user_id !== "string") return null;
+  const author = item.author ?? {};
+  const username =
+    typeof author.username === "string" && author.username.trim().length > 0
+      ? author.username.trim().toLowerCase()
+      : null;
+  const displayRaw = author.displayName ?? author.display_name;
+  return {
+    id: win.id,
+    user_id: win.user_id,
+    mini_mission_id: typeof win.mini_mission_id === "string" ? win.mini_mission_id : "",
+    title: typeof win.title === "string" ? win.title : "Community win",
+    completed_at: typeof win.completed_at === "string" ? win.completed_at : new Date(0).toISOString(),
+    memory_note: typeof win.memory_note === "string" ? win.memory_note : null,
+    memory_image_url: typeof win.memory_image_url === "string" ? win.memory_image_url : null,
+    created_at: typeof win.created_at === "string" ? win.created_at : new Date(0).toISOString(),
+    feed_source: (win.feed_source ?? "mini") as CommunityWinFeedSource,
+    streak_mission_day:
+      typeof win.streak_mission_day === "number" && Number.isFinite(win.streak_mission_day)
+        ? win.streak_mission_day
+        : null,
+    streak_count_at_post:
+      typeof win.streak_count_at_post === "number" && Number.isFinite(win.streak_count_at_post)
+        ? win.streak_count_at_post
+        : null,
+    live_squad_id: typeof win.live_squad_id === "string" ? win.live_squad_id : null,
+    username,
+    displayName: typeof displayRaw === "string" && displayRaw.trim().length > 0 ? displayRaw.trim() : null,
+    xp: typeof author.xp === "number" && Number.isFinite(author.xp) ? Math.max(0, author.xp) : 0,
+    cheerCount:
+      typeof item.cheerCount === "number" && Number.isFinite(item.cheerCount)
+        ? Math.max(0, item.cheerCount)
+        : 0,
+    viewerHasCheered: Boolean(item.viewerHasCheered),
+  };
+}
+
+async function fetchCommunityWinsFeedPageViaRpc(
+  offset: number,
+  pageSize: number,
+): Promise<CommunityWinsFeedPage | null> {
+  const supabase = getSupabase();
+  if (!supabase) return null;
+  if (offset === 0) {
+    communityFeedCursorByOffset.clear();
+    communityFeedCursorByOffset.set(0, null);
+  }
+  if (!communityFeedCursorByOffset.has(offset)) return null;
+  const cursor = communityFeedCursorByOffset.get(offset) ?? null;
+  const { data, error } = await supabase.rpc("rpc_community_feed_page_v1", {
+    p_cursor_created_at: cursor?.createdAt ?? null,
+    p_cursor_id: cursor?.id ?? null,
+    p_limit: pageSize,
+  });
+  if (error || !data || typeof data !== "object") return null;
+
+  const payload = data as {
+    items?: CommunityFeedRpcItem[];
+    nextCursor?: CommunityFeedCursor | null;
+  };
+  const items = (Array.isArray(payload.items) ? payload.items : [])
+    .map(normalizeRpcCommunityWinItem)
+    .filter((row): row is CommunityWinFeedItem => row !== null);
+  const nextCursor = payload.nextCursor ?? null;
+  communityFeedCursorByOffset.set(offset + items.length, nextCursor);
+  return { items, hasMore: Boolean(nextCursor) };
+}
+
 async function enrichWinsWithProfilesAndCheers(
   wins: CommunityWinRow[],
   viewerId: string | null,
@@ -252,6 +337,9 @@ export async function fetchCommunityWinsFeedPage(
 ): Promise<CommunityWinsFeedPage> {
   const supabase = getSupabase();
   if (!supabase) return { items: [], hasMore: false };
+
+  const rpcPage = await fetchCommunityWinsFeedPageViaRpc(offset, pageSize).catch(() => null);
+  if (rpcPage) return rpcPage;
 
   const {
     data: { user },
