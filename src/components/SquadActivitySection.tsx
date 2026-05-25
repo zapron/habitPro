@@ -1,5 +1,5 @@
 import { Text } from "./AppText";
-import { useState } from "react";
+import { memo, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Platform,
@@ -166,7 +166,7 @@ type Props = {
   onScrollToSection?: () => void;
 };
 
-export function SquadActivitySection({
+export const SquadActivitySection = memo(function SquadActivitySection({
   theme,
   isDark,
   feedActivity,
@@ -185,11 +185,9 @@ export function SquadActivitySection({
 }: Props) {
   const [expanded, setExpanded] = useState(false);
 
-  if (feedActivity.length === 0 && feedNudges.length === 0 && !loading) return null;
-
   // Dedupe: when a check-in triggers both mission_day and streak_milestone at the same value
   // (common on 7/14/21), prefer showing the streak milestone to avoid repetitive rows.
-  const effectiveActivity = (() => {
+  const effectiveActivity = useMemo(() => {
     const keepByKey = new Map<string, ChallengeActivityRow>();
     for (const row of feedActivity) {
       const k = `${row.actor_user_id}:${row.value}`;
@@ -207,7 +205,9 @@ export function SquadActivitySection({
     // Preserve original order as much as possible.
     const keptIds = new Set([...keepByKey.values()].map((r) => r.id));
     return feedActivity.filter((r) => keptIds.has(r.id));
-  })();
+  }, [feedActivity]);
+
+  if (feedActivity.length === 0 && feedNudges.length === 0 && !loading) return null;
 
   const cardBg = theme.colors.surfaceElevated;
   const border = theme.colors.border;
@@ -454,7 +454,9 @@ export function SquadActivitySection({
       </View>
     </View>
   );
-}
+});
+
+SquadActivitySection.displayName = "SquadActivitySection";
 
 const styles = StyleSheet.create({
   section: { marginBottom: 22 },

@@ -1,5 +1,6 @@
 import { Text } from "./AppText";
 import {
+  memo,
   useMemo,
   useState } from "react";
 import {
@@ -72,6 +73,8 @@ type Props = {
   remotePeer?: boolean;
   /** When false, only mission-day dots + memory modal (header lives in parent card). */
   showIdentityRow?: boolean;
+  /** Stable render clock from the parent screen; avoids Date.now() churn per row. */
+  nowMs?: number;
 };
 
 function uriLoadsForRemoteViewer(uri: string | undefined): boolean {
@@ -79,15 +82,16 @@ function uriLoadsForRemoteViewer(uri: string | undefined): boolean {
   return uri.startsWith("http://") || uri.startsWith("https://");
 }
 
-export function CohortPeerStreakDots({
+export const CohortPeerStreakDots = memo(function CohortPeerStreakDots({
   habit,
   peerUsername,
   remotePeer = true,
   showIdentityRow = true,
+  nowMs: nowMsProp,
 }: Props) {
   const { theme, isDark } = useTheme();
   const total = Math.max(1, habit.totalDays ?? 21);
-  const nowMs = Date.now();
+  const nowMs = nowMsProp ?? Date.now();
   const activeSlot = getHabitActiveMissionDaySlot(habit, nowMs);
 
   const days = useMemo(() => {
@@ -209,7 +213,9 @@ export function CohortPeerStreakDots({
       {dots}
     </View>
   );
-}
+});
+
+CohortPeerStreakDots.displayName = "CohortPeerStreakDots";
 
 const styles = StyleSheet.create({
   wrap: { marginBottom: 16 },

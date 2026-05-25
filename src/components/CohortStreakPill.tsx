@@ -1,5 +1,5 @@
 import { Text } from "./AppText";
-import { useEffect, useRef } from "react";
+import { memo, useEffect, useRef } from "react";
 import { Animated, Easing, StyleSheet, View } from "react-native";
 import { useTheme } from "../context/ThemeContext";
 import { useReducedMotion } from "../hooks/useReducedMotion";
@@ -15,7 +15,7 @@ type Props = {
  * Cohort participant streak: subtle cyan pill; streak ≥ 3 adds warm text +
  * horizontal shimmer (same pill shell).
  */
-export function CohortStreakPill({ streak, isDark }: Props) {
+export const CohortStreakPill = memo(function CohortStreakPill({ streak, isDark }: Props) {
   const { theme } = useTheme();
   const reduceMotion = useReducedMotion();
   const shimmer = useRef(new Animated.Value(0)).current;
@@ -74,7 +74,9 @@ export function CohortStreakPill({ streak, isDark }: Props) {
       </View>
     </View>
   );
-}
+});
+
+CohortStreakPill.displayName = "CohortStreakPill";
 
 const styles = StyleSheet.create({
   pill: {

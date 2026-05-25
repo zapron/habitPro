@@ -47,7 +47,8 @@ export function CustomNudgeModal({ visible, onRequestClose, recipientLabel, busy
     >
       <KeyboardAvoidingView
         style={styles.flex}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        behavior="padding"
+        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 12}
       >
         <View style={styles.root}>
           <Pressable
@@ -129,6 +130,7 @@ const styles = StyleSheet.create({
   sheet: {
     padding: 20,
     borderWidth: 1,
+    maxHeight: "86%",
     maxWidth: 420,
     width: "100%",
     alignSelf: "center",

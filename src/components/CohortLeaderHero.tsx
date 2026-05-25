@@ -1,5 +1,6 @@
 import { Text } from "./AppText";
 import { StyleSheet, View } from "react-native";
+import { Eye, EyeOff } from "lucide-react-native";
 import type { AppTheme } from "../styles/theme";
 import type { Habit } from "../types/habit";
 import type { ProfileLabel } from "../lib/groupChallengesApi";
@@ -84,6 +85,8 @@ export function CohortLeaderHero({
   const secondPct = Math.min(100, Math.round((secondDone / total) * 100));
   const leaderLevel =
     leaderLabel?.xp != null && Number.isFinite(leaderLabel.xp) ? levelFromTotalXp(leaderLabel.xp) : null;
+  const squadVisible = (leaderHabit?.visibility ?? "solo") === "public";
+  const VisibilityIcon = squadVisible ? Eye : EyeOff;
 
   const avatarBg = isDark ? "rgba(129, 140, 248, 0.22)" : "rgba(99, 102, 241, 0.14)";
   const avatarBorder = isDark ? "rgba(129, 140, 248, 0.35)" : "rgba(99, 102, 241, 0.28)";
@@ -133,6 +136,27 @@ export function CohortLeaderHero({
                         <Text style={[styles.levelPillText, { color: theme.colors.yellow[400] }]}>
                           Lv {leaderLevel}
                         </Text>
+                      </View>
+                    ) : null}
+                    {leaderHabit ? (
+                      <View
+                        style={[
+                          styles.memoryVisibilityPill,
+                          {
+                            borderColor: squadVisible
+                              ? isDark ? "rgba(34, 211, 238, 0.36)" : "rgba(8, 145, 178, 0.28)"
+                              : theme.colors.border,
+                            backgroundColor: squadVisible
+                              ? isDark ? "rgba(34, 211, 238, 0.12)" : "rgba(8, 145, 178, 0.08)"
+                              : isDark ? "rgba(148, 163, 184, 0.1)" : "rgba(100, 116, 139, 0.07)",
+                          },
+                        ]}
+                        accessibilityLabel={squadVisible ? "Memories visible to squad" : "Memories private"}
+                      >
+                        <VisibilityIcon
+                          size={13}
+                          color={squadVisible ? theme.colors.cyan[400] : theme.colors.textMuted}
+                        />
                       </View>
                     ) : null}
                   </View>
@@ -276,6 +300,15 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   levelPillText: { fontSize: 11, fontWeight: "800", letterSpacing: 0.2 },
+  memoryVisibilityPill: {
+    width: 24,
+    height: 24,
+    borderRadius: 9999,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
   paceLine: {
     fontSize: 12,
     fontWeight: "700",

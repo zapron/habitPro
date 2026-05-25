@@ -19,7 +19,7 @@ import {
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
 import * as Haptics from "expo-haptics";
-import { ArrowLeft, Clock, Info, LogOut, Users, X } from "lucide-react-native";
+import { ArrowLeft, Clock, Eye, EyeOff, Info, LogOut, Users, X } from "lucide-react-native";
 import { CohortLeaderHero } from "../../src/components/CohortLeaderHero";
 import type { CohortMastheadModel } from "../../src/components/CohortMasthead";
 import { CohortNudgeChips } from "../../src/components/CohortNudgeChips";
@@ -111,6 +111,8 @@ function participantDisplayName(label: ProfileLabel | undefined): string {
 
 const CHALLENGE_ACTIVITY_PAGE_SIZE = 20;
 const CHALLENGE_REPAIR_PAGE_SIZE = 20;
+const INITIAL_PARTICIPANTS_TO_RENDER = 6;
+const PARTICIPANT_RENDER_BATCH = 8;
 
 type ParticipantCardProps = {
   memberId: string;
@@ -128,6 +130,7 @@ type ParticipantCardProps = {
   themedStyles: any;
   theme: any;
   isDark: boolean;
+  nowMs: number;
 };
 
 const ParticipantCard = memo(function ParticipantCard({
@@ -146,10 +149,13 @@ const ParticipantCard = memo(function ParticipantCard({
   themedStyles,
   theme,
   isDark,
+  nowMs,
 }: ParticipantCardProps) {
   const nameOnCard = participantDisplayName(label);
   const xpForLevel = label?.xp != null ? label.xp : myUserId === memberId ? myXp : null;
   const memberLevel = xpForLevel != null ? levelFromTotalXp(xpForLevel) : null;
+  const squadVisible = (habit?.visibility ?? "solo") === "public";
+  const VisibilityIcon = squadVisible ? Eye : EyeOff;
 
   const handleNudgePress = useCallback((kind: PresetChallengeNudgeKind) => {
     void onSendNudge(memberId, kind);
@@ -184,6 +190,27 @@ const ParticipantCard = memo(function ParticipantCard({
               </Text>
             </View>
           ) : null}
+          {habit ? (
+            <View
+              style={[
+                styles.memoryVisibilityPill,
+                {
+                  borderColor: squadVisible
+                    ? isDark ? "rgba(34, 211, 238, 0.36)" : "rgba(8, 145, 178, 0.28)"
+                    : theme.colors.border,
+                  backgroundColor: squadVisible
+                    ? isDark ? "rgba(34, 211, 238, 0.12)" : "rgba(8, 145, 178, 0.08)"
+                    : isDark ? "rgba(148, 163, 184, 0.1)" : "rgba(100, 116, 139, 0.07)",
+                },
+              ]}
+              accessibilityLabel={squadVisible ? "Memories visible to squad" : "Memories private"}
+            >
+              <VisibilityIcon
+                size={13}
+                color={squadVisible ? theme.colors.cyan[400] : theme.colors.textMuted}
+              />
+            </View>
+          ) : null}
         </View>
         <View style={styles.participantHeaderSpacer} />
         <View style={styles.participantHeaderStreakWrap}>
@@ -200,6 +227,7 @@ const ParticipantCard = memo(function ParticipantCard({
           habit={habit}
           peerUsername={label?.username ?? null}
           showIdentityRow={false}
+          nowMs={nowMs}
         />
       ) : (
         <Text style={[styles.noSyncHint, { color: theme.colors.textMuted }]}>
@@ -283,6 +311,7 @@ export default function ChallengeDetailScreen() {
     vote: "approve" | "decline";
   } | null>(null);
   const [missionDetailsOpen, setMissionDetailsOpen] = useState(false);
+  const [visibleParticipantCount, setVisibleParticipantCount] = useState(INITIAL_PARTICIPANTS_TO_RENDER);
 
   const themedStyles = useMemo(() => {
     return {
@@ -313,6 +342,7 @@ export default function ChallengeDetailScreen() {
   const secondaryHydratedRef = useRef(false);
   const activityLoadMoreInFlightRef = useRef(false);
   const repairLoadMoreInFlightRef = useRef(false);
+  const socialActionInFlightRef = useRef(false);
 
   const loadSecondary = useCallback(async (opts?: { silent?: boolean }) => {
     if (!challengeId) return;
@@ -398,6 +428,7 @@ export default function ChallengeDetailScreen() {
     secondaryHydratedRef.current = false;
     activityLoadMoreInFlightRef.current = false;
     repairLoadMoreInFlightRef.current = false;
+    setVisibleParticipantCount(INITIAL_PARTICIPANTS_TO_RENDER);
   }, [challengeId]);
 
   useFocusEffect(
@@ -563,21 +594,23 @@ export default function ChallengeDetailScreen() {
   const onSendNudge = useCallback(
     async (toUserId: string, kind: PresetChallengeNudgeKind) => {
       if (!challengeId || !myUserId || toUserId === myUserId) return;
-      const freshPremium = await refreshPremiumAccess({ force: true, cachedAccessOk: true });
-      if (freshPremium !== true) {
-        openUpsell("squad_nudge");
-        return;
-      }
-      if (
-        myHabit &&
-        !myHabit.isCompleted &&
-        isHabitMissionWindowClosed(myHabit, Date.now())
-      ) {
-        return;
-      }
+      if (socialActionInFlightRef.current) return;
+      socialActionInFlightRef.current = true;
       const key = `${toUserId}-${kind}`;
       setNudgeBusyKey(key);
       try {
+        const freshPremium = await refreshPremiumAccess({ force: true, cachedAccessOk: true });
+        if (freshPremium !== true) {
+          openUpsell("squad_nudge");
+          return;
+        }
+        if (
+          myHabit &&
+          !myHabit.isCompleted &&
+          isHabitMissionWindowClosed(myHabit, Date.now())
+        ) {
+          return;
+        }
         const { error, reason } = await sendChallengeNudge(challengeId, toUserId, kind);
         if (error) {
           if (reason === "premium_required") {
@@ -589,6 +622,7 @@ export default function ChallengeDetailScreen() {
         }
         await load({ silent: true });
       } finally {
+        socialActionInFlightRef.current = false;
         setNudgeBusyKey(null);
       }
     },
@@ -598,21 +632,23 @@ export default function ChallengeDetailScreen() {
   const onCongrats = useCallback(
     async (actorUserId: string, activityId: string) => {
       if (!challengeId || !myUserId || actorUserId === myUserId) return;
-      const freshPremium = await refreshPremiumAccess({ force: true, cachedAccessOk: true });
-      if (freshPremium !== true) {
-        openUpsell("squad_nudge");
-        return;
-      }
-      if (
-        myHabit &&
-        !myHabit.isCompleted &&
-        isHabitMissionWindowClosed(myHabit, Date.now())
-      ) {
-        return;
-      }
+      if (socialActionInFlightRef.current) return;
+      socialActionInFlightRef.current = true;
       const key = `${actorUserId}-congrats`;
       setNudgeBusyKey(key);
       try {
+        const freshPremium = await refreshPremiumAccess({ force: true, cachedAccessOk: true });
+        if (freshPremium !== true) {
+          openUpsell("squad_nudge");
+          return;
+        }
+        if (
+          myHabit &&
+          !myHabit.isCompleted &&
+          isHabitMissionWindowClosed(myHabit, Date.now())
+        ) {
+          return;
+        }
         const { error, reason } = await sendChallengeNudge(challengeId, actorUserId, "congrats", { activityId });
         if (error) {
           if (reason === "premium_required") {
@@ -624,6 +660,7 @@ export default function ChallengeDetailScreen() {
         }
         await load({ silent: true });
       } finally {
+        socialActionInFlightRef.current = false;
         setNudgeBusyKey(null);
       }
     },
@@ -767,14 +804,21 @@ export default function ChallengeDetailScreen() {
     [group],
   );
 
+  const habitByMemberId = useMemo(() => {
+    const m = new Map<string, Habit>();
+    for (const peer of peers) {
+      const ownerId = peer.ownerUserId ?? "";
+      if (ownerId) m.set(ownerId, peer);
+    }
+    if (myUserId && myHabit) {
+      m.set(myUserId, myHabit);
+    }
+    return m;
+  }, [peers, myUserId, myHabit]);
+
   const habitForMember = useCallback(
-    (memberId: string): Habit | undefined => {
-      const fromPeers = peers.find((h) => (h.ownerUserId ?? "") === memberId);
-      if (fromPeers) return fromPeers;
-      if (myUserId && memberId === myUserId && myHabit) return myHabit;
-      return undefined;
-    },
-    [peers, myUserId, myHabit],
+    (memberId: string): Habit | undefined => habitByMemberId.get(memberId),
+    [habitByMemberId],
   );
 
   const sortedMemberIds = useMemo(() => {
@@ -789,6 +833,21 @@ export default function ChallengeDetailScreen() {
       return db - da;
     });
   }, [memberIdsOrdered, habitForMember]);
+
+  useEffect(() => {
+    if (visibleParticipantCount >= sortedMemberIds.length) return;
+    const id = setTimeout(() => {
+      setVisibleParticipantCount((count) =>
+        Math.min(sortedMemberIds.length, count + PARTICIPANT_RENDER_BATCH),
+      );
+    }, 24);
+    return () => clearTimeout(id);
+  }, [sortedMemberIds.length, visibleParticipantCount]);
+
+  const visibleSortedMemberIds = useMemo(
+    () => sortedMemberIds.slice(0, visibleParticipantCount),
+    [sortedMemberIds, visibleParticipantCount],
+  );
 
   const cohortBoard = useMemo((): {
     model: CohortMastheadModel;
@@ -1481,7 +1540,7 @@ export default function ChallengeDetailScreen() {
           {memberIdsOrdered.length === 0 ? (
             <Text style={{ color: theme.colors.textSecondary }}>No members loaded yet.</Text>
           ) : (
-            sortedMemberIds.map((memberId) => (
+            visibleSortedMemberIds.map((memberId) => (
               <ParticipantCard
                 key={memberId}
                 memberId={memberId}
@@ -1490,7 +1549,9 @@ export default function ChallengeDetailScreen() {
                 myXp={myXp}
                 myUserId={myUserId}
                 squadNudgeActionsEnabled={squadNudgeActionsEnabled}
-                nudgeBusyKey={nudgeBusyKey}
+                nudgeBusyKey={
+                  nudgeBusyKey?.startsWith(`${memberId}-`) ? nudgeBusyKey : null
+                }
                 socialLocked={socialLocked}
                 customNoteSentToday={customNoteSentTodayToUserIds.has(memberId)}
                 onSendNudge={onSendNudge}
@@ -1499,9 +1560,15 @@ export default function ChallengeDetailScreen() {
                 themedStyles={themedStyles}
                 theme={theme}
                 isDark={isDark}
+                nowMs={cohortNow}
               />
             ))
           )}
+          {visibleSortedMemberIds.length < sortedMemberIds.length ? (
+            <View style={styles.participantProgressiveFooter}>
+              <ActivityIndicator size="small" color={theme.colors.indigo[400]} />
+            </View>
+          ) : null}
 
           <View
             onLayout={(e) => {
@@ -1536,7 +1603,7 @@ export default function ChallengeDetailScreen() {
         </ScrollView>
       )}
 
-      <LazyMount visible={customNoteToUserId !== null}>
+      <LazyMount visible={customNoteToUserId !== null} unmountOnExit>
         <CustomNudgeModal
           visible={customNoteToUserId !== null}
           onRequestClose={() => setCustomNoteToUserId(null)}
@@ -1546,7 +1613,7 @@ export default function ChallengeDetailScreen() {
         />
       </LazyMount>
 
-      <LazyMount visible={leaveDialogOpen}>
+      <LazyMount visible={leaveDialogOpen} unmountOnExit>
         <ConfirmDialog
           visible={leaveDialogOpen}
           onRequestClose={() => setLeaveDialogOpen(false)}
@@ -1559,7 +1626,7 @@ export default function ChallengeDetailScreen() {
         />
       </LazyMount>
 
-      <LazyMount visible={missionDetailsOpen}>
+      <LazyMount visible={missionDetailsOpen} unmountOnExit>
         {group ? (
           <MissionDetailsSheet
             variant="group"
@@ -1657,6 +1724,12 @@ const styles = StyleSheet.create({
   participantsSectionTitle: {
     marginBottom: 0,
     flexShrink: 0,
+  },
+  participantProgressiveFooter: {
+    height: 36,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 10,
   },
   repairCard: {
     borderWidth: 1,
@@ -1836,6 +1909,15 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   levelPillText: { fontSize: 11, fontWeight: "800", letterSpacing: 0.2 },
+  memoryVisibilityPill: {
+    width: 24,
+    height: 24,
+    borderRadius: 9999,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
   participantName: {
     fontSize: 18,
     fontWeight: "800",
