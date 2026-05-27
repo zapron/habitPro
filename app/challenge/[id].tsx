@@ -49,10 +49,9 @@ import {
   sendChallengeNudge,
 } from "../../src/lib/challengeCohort";
 import {
-  getChallengeGroup,
   getProfileLabelsForIds,
   leaveChallengeGroup,
-  listChallengeMembers,
+  loadChallengePrimarySnapshot,
   refreshCohortPeerHabits,
   refreshCohortPeerHabitsCached,
   type ProfileLabel,
@@ -399,16 +398,10 @@ export default function ChallengeDetailScreen() {
     const silent = opts?.silent ?? false;
     if (!silent) setLoading(true);
     try {
-      const [g, members] = await Promise.all([
-        getChallengeGroup(challengeId),
-        listChallengeMembers(challengeId),
-      ]);
-      setGroup(g);
-      const ids = members.map((m) => m.user_id);
-      setMemberIdsOrdered(ids);
-      const labelIds = new Set<string>(ids);
-      const labels = await getProfileLabelsForIds([...labelIds]);
-      setProfileLabels((prev) => ({ ...prev, ...labels }));
+      const primary = await loadChallengePrimarySnapshot(challengeId);
+      setGroup(primary.group);
+      setMemberIdsOrdered(primary.memberIdsOrdered);
+      setProfileLabels((prev) => ({ ...prev, ...primary.profileLabels }));
       void loadSecondary({ silent: true });
     } finally {
       if (!silent) setLoading(false);
@@ -1134,6 +1127,8 @@ export default function ChallengeDetailScreen() {
         <ScrollView
           ref={scrollRef}
           showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          {...({ delaysContentTouches: false } as object)}
           contentContainerStyle={{ paddingBottom: bottomPad }}
           refreshControl={
             <RefreshControl

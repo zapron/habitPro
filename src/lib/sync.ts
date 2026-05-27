@@ -23,8 +23,16 @@ import { useHabitStore } from "../store/habitStore";
 const HABIT_ROW_SELECT =
   "user_id, id, title, description, mode, visibility, start_date, end_date, completed_dates, streak, total_days, is_completed, status, streak_memories, challenge_group_id, challenge_creator_timezone, mission_timezone, mission_report, mission_report_at, reminder_enabled, reminder_time_local, reminder_locked";
 
-type RemoteSnapshot = Pick<HabitStore, "habits" | "miniMissions" | "xp" | "username"> & {
+export type RemoteSnapshot = Pick<HabitStore, "habits" | "miniMissions" | "xp" | "username"> & {
   cohortPeerHabits: Habit[];
+};
+
+type FocusDeltaRpcPayload = {
+  changedHabits?: unknown[];
+  changedMinis?: unknown[];
+  profilePatch?: Record<string, unknown>;
+  deletedIds?: { habits?: unknown[]; miniMissions?: unknown[] };
+  serverNow?: string;
 };
 
 type SupabaseClient = NonNullable<ReturnType<typeof getSupabase>>;
@@ -530,6 +538,197 @@ export async function pullCohortPeerHabitsFromSupabase(userId: string): Promise<
   return alignHabitsToChallengeGroups(cohortPeerHabits, groupMeta);
 }
 
+async function fetchAppliedRepairsByHabit(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<Map<string, string[]>> {
+  const { data, error } = await supabase
+    .from("streak_repairs")
+    .select("habit_id, date_str")
+    .eq("user_id", userId)
+    .eq("status", "applied");
+  if (error) throw error;
+  const repairedByHabit = new Map<string, string[]>();
+  for (const rr of (data ?? []) as RepairRow[]) {
+    const hid = rr.habit_id;
+    const ds = rr.date_str;
+    if (!hid || !ds) continue;
+    const prev = repairedByHabit.get(hid) ?? [];
+    prev.push(ds);
+    repairedByHabit.set(hid, prev);
+  }
+  return repairedByHabit;
+}
+
+function profileFieldsFromPatch(patch: Record<string, unknown> | undefined): {
+  xp: number;
+  username: string | null;
+} {
+  const xp = typeof patch?.xp === "number" && Number.isFinite(patch.xp) ? patch.xp : 0;
+  const rawUser = patch?.username;
+  const username =
+    typeof rawUser === "string" && rawUser.trim().length > 0 ? rawUser.trim().toLowerCase() : null;
+  return { xp, username };
+}
+
+function deletedIdsFromPayload(payload: FocusDeltaRpcPayload): {
+  habitIds: string[];
+  miniIds: string[];
+} {
+  const habits = payload.deletedIds?.habits;
+  const minis = payload.deletedIds?.miniMissions;
+  return {
+    habitIds: Array.isArray(habits)
+      ? habits.filter((id): id is string => typeof id === "string" && id.length > 0)
+      : [],
+    miniIds: Array.isArray(minis)
+      ? minis.filter((id): id is string => typeof id === "string" && id.length > 0)
+      : [],
+  };
+}
+
+async function pullViaFocusDeltaRpc(
+  supabase: SupabaseClient,
+  sinceIso: string | null,
+): Promise<FocusDeltaRpcPayload | null> {
+  const { data, error } = await supabase.rpc("rpc_focus_delta_v1", {
+    p_since: sinceIso,
+  });
+  if (error) {
+    if (__DEV__) console.warn("[habitPro] rpc_focus_delta_v1 failed, using legacy pull", error.message);
+    return null;
+  }
+  if (!data || typeof data !== "object") return null;
+  return data as FocusDeltaRpcPayload;
+}
+
+function habitsFromDeltaRows(
+  userId: string,
+  rows: unknown[],
+  repairedByHabit: Map<string, string[]>,
+): Habit[] {
+  const habits: Habit[] = [];
+  for (const row of rows) {
+    if (!row || typeof row !== "object") continue;
+    const r = row as Record<string, unknown>;
+    if (typeof r.id !== "string") continue;
+    const owner = typeof r.user_id === "string" ? r.user_id : userId;
+    const hid = String(r.id);
+    const repairedDates = repairedByHabit.get(hid) ?? [];
+    habits.push(
+      habitFromRow({
+        ...(r as Parameters<typeof habitFromRow>[0]),
+        user_id: owner,
+        repairedDates,
+      } as Parameters<typeof habitFromRow>[0] & { repairedDates: string[] }),
+    );
+  }
+  return habits;
+}
+
+function minisFromDeltaRows(userId: string, rows: unknown[]): MiniMission[] {
+  const minis: MiniMission[] = [];
+  for (const row of rows) {
+    if (!row || typeof row !== "object") continue;
+    const r = row as Record<string, unknown>;
+    if (typeof r.id !== "string") continue;
+    const owner = typeof r.user_id === "string" ? r.user_id : userId;
+    minis.push(
+      miniFromRow({
+        ...(r as Parameters<typeof miniFromRow>[0]),
+        user_id: owner,
+      }),
+    );
+  }
+  return minis;
+}
+
+async function alignOwnHabits(supabase: SupabaseClient, habits: Habit[]): Promise<Habit[]> {
+  const alignGroupIds = habits
+    .map((h) => h.challengeGroupId)
+    .filter((id): id is string => Boolean(id));
+  const groupMeta = await fetchChallengeGroupAlignmentMeta(supabase, alignGroupIds);
+  return alignHabitsToChallengeGroups(habits, groupMeta);
+}
+
+async function mapFocusDeltaPayload(
+  supabase: SupabaseClient,
+  userId: string,
+  payload: FocusDeltaRpcPayload,
+  repairedByHabit: Map<string, string[]>,
+): Promise<Pick<RemoteSnapshot, "habits" | "miniMissions" | "xp" | "username">> {
+  const habits = await alignOwnHabits(
+    supabase,
+    habitsFromDeltaRows(userId, payload.changedHabits ?? [], repairedByHabit),
+  );
+  const miniMissions = minisFromDeltaRows(userId, payload.changedMinis ?? []);
+  const { xp, username } = profileFieldsFromPatch(payload.profilePatch);
+  return { habits, miniMissions, xp, username };
+}
+
+export async function pullFocusDeltaFromSupabase(
+  userId: string,
+  sinceMs: number,
+): Promise<{
+  partial: Pick<RemoteSnapshot, "habits" | "miniMissions" | "xp" | "username">;
+  deleted: { habitIds: string[]; miniIds: string[] };
+  serverNow: string;
+} | null> {
+  const supabase = getSupabase();
+  if (!supabase) return null;
+
+  const sinceIso = sinceMs > 0 ? new Date(sinceMs).toISOString() : null;
+  const [payload, repairedByHabit] = await Promise.all([
+    pullViaFocusDeltaRpc(supabase, sinceIso),
+    fetchAppliedRepairsByHabit(supabase, userId),
+  ]);
+  if (!payload) return null;
+
+  const partial = await mapFocusDeltaPayload(supabase, userId, payload, repairedByHabit);
+  const serverNow =
+    typeof payload.serverNow === "string" && payload.serverNow.length > 0
+      ? payload.serverNow
+      : new Date().toISOString();
+  return { partial, deleted: deletedIdsFromPayload(payload), serverNow };
+}
+
+export function applyFocusDeltaToStore(
+  local: Pick<HabitStore, "habits" | "miniMissions" | "xp" | "username" | "cohortPeerHabits">,
+  partial: Pick<RemoteSnapshot, "habits" | "miniMissions" | "xp" | "username">,
+  deleted: { habitIds: string[]; miniIds: string[] },
+): RemoteSnapshot {
+  const deletedHabits = new Set(deleted.habitIds);
+  const deletedMinis = new Set(deleted.miniIds);
+  const changedHabits = new Map(partial.habits.map((h) => [h.id, h]));
+  const changedMinis = new Map(partial.miniMissions.map((m) => [m.id, m]));
+
+  const habits = local.habits
+    .filter((h) => !deletedHabits.has(h.id))
+    .map((h) => changedHabits.get(h.id) ?? h);
+  for (const h of partial.habits) {
+    if (!habits.some((existing) => existing.id === h.id)) {
+      habits.push(h);
+    }
+  }
+
+  const miniMissions = local.miniMissions
+    .filter((m) => !deletedMinis.has(m.id))
+    .map((m) => changedMinis.get(m.id) ?? m);
+  for (const m of partial.miniMissions) {
+    if (!miniMissions.some((existing) => existing.id === m.id)) {
+      miniMissions.push(m);
+    }
+  }
+
+  return {
+    habits,
+    miniMissions,
+    xp: partial.xp,
+    username: partial.username,
+    cohortPeerHabits: local.cohortPeerHabits,
+  };
+}
+
 export async function pullFromSupabase(
   userId: string,
   options?: { includeCohortPeerHabits?: boolean },
@@ -540,54 +739,65 @@ export async function pullFromSupabase(
   }
   const includeCohortPeerHabits = options?.includeCohortPeerHabits ?? true;
 
-  const [habitsRes, miniRes, profileRes, repairsRes] = await Promise.all([
-    supabase.from("habits").select(HABIT_ROW_SELECT).eq("user_id", userId),
-    supabase.from("mini_missions").select("user_id, id, title, objective, visibility, community_feed_revoked, estimated_minutes, extended_minutes, status, created_at, scheduled_start_at, started_at, completed_at, completion_memory, live_squad_id, live_squad_role").eq("user_id", userId),
-    supabase.from("profiles").select("xp, username").eq("id", userId).maybeSingle(),
-    supabase.from("streak_repairs").select("habit_id, date_str").eq("user_id", userId).eq("status", "applied"),
+  const [deltaPayload, repairedByHabit] = await Promise.all([
+    pullViaFocusDeltaRpc(supabase, null),
+    fetchAppliedRepairsByHabit(supabase, userId),
   ]);
 
-  if (habitsRes.error) throw habitsRes.error;
-  if (miniRes.error) throw miniRes.error;
-  if (profileRes.error) throw profileRes.error;
-  if (repairsRes.error) throw repairsRes.error;
+  let habits: Habit[];
+  let miniMissions: MiniMission[];
+  let xp: number;
+  let username: string | null;
 
-  const repairs = (repairsRes.data ?? []) as unknown as RepairRow[];
-  const repairedByHabit = new Map<string, string[]>();
-  for (const rr of repairs) {
-    const hid = rr.habit_id;
-    const ds = rr.date_str;
-    if (!hid || !ds) continue;
-    const prev = repairedByHabit.get(hid) ?? [];
-    prev.push(ds);
-    repairedByHabit.set(hid, prev);
+  if (deltaPayload) {
+    const partial = await mapFocusDeltaPayload(supabase, userId, deltaPayload, repairedByHabit);
+    const deleted = deletedIdsFromPayload(deltaPayload);
+    habits = partial.habits.filter((h) => !deleted.habitIds.includes(h.id));
+    miniMissions = partial.miniMissions.filter((m) => !deleted.miniIds.includes(m.id));
+    xp = partial.xp;
+    username = partial.username;
+  } else {
+    const [habitsRes, miniRes, profileRes] = await Promise.all([
+      supabase.from("habits").select(HABIT_ROW_SELECT).eq("user_id", userId),
+      supabase
+        .from("mini_missions")
+        .select(
+          "user_id, id, title, objective, visibility, community_feed_revoked, estimated_minutes, extended_minutes, status, created_at, scheduled_start_at, started_at, completed_at, completion_memory, live_squad_id, live_squad_role",
+        )
+        .eq("user_id", userId),
+      supabase.from("profiles").select("xp, username").eq("id", userId).maybeSingle(),
+    ]);
+
+    if (habitsRes.error) throw habitsRes.error;
+    if (miniRes.error) throw miniRes.error;
+    if (profileRes.error) throw profileRes.error;
+
+    habits = (habitsRes.data ?? []).map((r) => {
+      const row = r as unknown as Record<string, unknown>;
+      const hid = String(row.id ?? "");
+      const repairedDates = repairedByHabit.get(hid) ?? [];
+      return habitFromRow({ ...(r as any), repairedDates });
+    });
+    miniMissions = (miniRes.data ?? []).map((r) => miniFromRow(r));
+    xp = profileRes.data?.xp ?? 0;
+    const rawUser = profileRes.data as { username?: string | null } | null;
+    username =
+      typeof rawUser?.username === "string" && rawUser.username.trim().length > 0
+        ? rawUser.username.trim().toLowerCase()
+        : null;
+
+    const alignGroupIds = habits
+      .map((h) => h.challengeGroupId)
+      .filter((id): id is string => Boolean(id));
+    const groupMeta = await fetchChallengeGroupAlignmentMeta(supabase, alignGroupIds);
+    habits = alignHabitsToChallengeGroups(habits, groupMeta);
   }
-
-  const habits = (habitsRes.data ?? []).map((r) => {
-    const row = r as unknown as Record<string, unknown>;
-    const hid = String(row.id ?? "");
-    const repairedDates = repairedByHabit.get(hid) ?? [];
-    return habitFromRow({ ...(r as any), repairedDates });
-  });
-  const miniMissions = (miniRes.data ?? []).map((r) => miniFromRow(r));
-  const xp = profileRes.data?.xp ?? 0;
-  const rawUser = profileRes.data as { username?: string | null } | null;
-  const username =
-    typeof rawUser?.username === "string" && rawUser.username.trim().length > 0
-      ? rawUser.username.trim().toLowerCase()
-      : null;
 
   const cohortPeerHabits = includeCohortPeerHabits
     ? await pullCohortPeerHabitsFromSupabase(userId)
     : [];
 
-  const alignGroupIds = [
-    ...habits.map((h) => h.challengeGroupId).filter((id): id is string => Boolean(id)),
-  ];
-  const groupMeta = await fetchChallengeGroupAlignmentMeta(supabase, alignGroupIds);
-  const alignedHabits = alignHabitsToChallengeGroups(habits, groupMeta);
-
-  return { habits: alignedHabits, miniMissions, xp, username, cohortPeerHabits };
+  return { habits, miniMissions, xp, username, cohortPeerHabits };
 }
 
 export async function pushFullState(

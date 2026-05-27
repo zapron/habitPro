@@ -432,6 +432,72 @@ export async function listMyChallengeGroups(): Promise<ChallengeGroupRow[]> {
   return (data ?? []) as ChallengeGroupRow[];
 }
 
+export type ChallengePrimarySnapshot = {
+  group: ChallengeGroupRow | null;
+  memberIdsOrdered: string[];
+  profileLabels: Record<string, ProfileLabel>;
+};
+
+function profileLabelFromRpc(raw: unknown): ProfileLabel | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  const u = typeof o.username === "string" ? o.username.trim().toLowerCase() : "";
+  const dn = typeof o.displayName === "string" ? o.displayName.trim() : "";
+  const xp = typeof o.xp === "number" && Number.isFinite(o.xp) ? o.xp : null;
+  if (!u && !dn) return null;
+  return { username: u || "member", displayName: dn.length > 0 ? dn : null, xp };
+}
+
+async function fetchChallengePrimarySnapshotViaRpc(
+  challengeId: string,
+): Promise<ChallengePrimarySnapshot | null> {
+  const supabase = getSupabase();
+  if (!supabase) return null;
+  const { data, error } = await supabase.rpc("rpc_challenge_snapshot_v1", {
+    p_challenge_id: challengeId,
+  });
+  if (error) {
+    if (__DEV__) console.warn("[habitPro] rpc_challenge_snapshot_v1 failed, using legacy load", error.message);
+    return null;
+  }
+  if (!data || typeof data !== "object") return null;
+  const payload = data as {
+    group?: unknown;
+    members?: { member?: { user_id?: string }; label?: unknown }[];
+  };
+  const group =
+    payload.group && typeof payload.group === "object"
+      ? (payload.group as ChallengeGroupRow)
+      : null;
+  const memberIdsOrdered: string[] = [];
+  const profileLabels: Record<string, ProfileLabel> = {};
+  for (const entry of payload.members ?? []) {
+    const memberId =
+      entry?.member && typeof entry.member.user_id === "string" ? entry.member.user_id : null;
+    if (!memberId) continue;
+    memberIdsOrdered.push(memberId);
+    const label = profileLabelFromRpc(entry.label);
+    if (label) profileLabels[memberId] = label;
+  }
+  return { group, memberIdsOrdered, profileLabels };
+}
+
+/** Group + members + profile labels in one round trip when RPC is available. */
+export async function loadChallengePrimarySnapshot(
+  challengeId: string,
+): Promise<ChallengePrimarySnapshot> {
+  const viaRpc = await fetchChallengePrimarySnapshotViaRpc(challengeId);
+  if (viaRpc) return viaRpc;
+
+  const [g, members] = await Promise.all([
+    getChallengeGroup(challengeId),
+    listChallengeMembers(challengeId),
+  ]);
+  const memberIdsOrdered = members.map((m) => m.user_id);
+  const labels = await getProfileLabelsForIds(memberIdsOrdered);
+  return { group: g, memberIdsOrdered, profileLabels: labels };
+}
+
 export async function getChallengeGroup(id: string): Promise<ChallengeGroupRow | null> {
   const supabase = getSupabase();
   if (!supabase) return null;

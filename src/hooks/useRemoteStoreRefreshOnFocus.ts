@@ -3,7 +3,12 @@ import { useFocusEffect } from "@react-navigation/native";
 import { InteractionManager } from "react-native";
 import { useAuth } from "../context/AuthContext";
 import { saveAccountSnapshotBackup } from "../lib/accountBackup";
-import { pullFromSupabase } from "../lib/sync";
+import {
+  applyFocusDeltaToStore,
+  pullFocusDeltaFromSupabase,
+  pullFromSupabase,
+  type RemoteSnapshot,
+} from "../lib/sync";
 import {
   hasPendingRemoteSync,
   hasRemoteSyncFault,
@@ -18,7 +23,7 @@ const REMOTE_FOCUS_REFRESH_TTL_MS = 60_000;
 const lastRemoteFocusRefreshAtByUserId = new Map<string, number>();
 let lastRemoteFocusUserId: string | null = null;
 
-type RemoteStoreSnapshot = Awaited<ReturnType<typeof pullFromSupabase>>;
+type RemoteStoreSnapshot = RemoteSnapshot;
 type RefreshOptions = { force?: boolean };
 
 function shouldPreserveLocalMini(remoteMini: MiniMission, localMini: MiniMission): boolean {
@@ -101,13 +106,20 @@ export function useRemoteStoreRefreshOnFocus(enabled = true) {
       ) {
         return;
       }
-      const remote = await pullFromSupabase(userId, { includeCohortPeerHabits: false });
-      const remoteWithLocalPeers = {
-        ...remote,
-        cohortPeerHabits: local.cohortPeerHabits,
-      };
+      let remoteWithLocalPeers: RemoteStoreSnapshot;
+      if (!options?.force && lastRefreshAt > 0) {
+        const delta = await pullFocusDeltaFromSupabase(userId, lastRefreshAt);
+        if (delta) {
+          remoteWithLocalPeers = applyFocusDeltaToStore(local, delta.partial, delta.deleted);
+        } else {
+          const remote = await pullFromSupabase(userId, { includeCohortPeerHabits: false });
+          remoteWithLocalPeers = { ...remote, cohortPeerHabits: local.cohortPeerHabits };
+        }
+      } else {
+        const remote = await pullFromSupabase(userId, { includeCohortPeerHabits: false });
+        remoteWithLocalPeers = { ...remote, cohortPeerHabits: local.cohortPeerHabits };
+      }
       const { snapshot, preserved } = preserveLocalMiniProgress(remoteWithLocalPeers, local);
-      void saveAccountSnapshotBackup(userId, local, "pre-focus-refresh");
       useHabitStore.setState(snapshot);
       void saveAccountSnapshotBackup(userId, snapshot, "focus-refresh");
       lastRemoteFocusRefreshAtByUserId.set(userId, Date.now());
