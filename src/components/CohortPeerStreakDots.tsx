@@ -177,7 +177,9 @@ export const CohortPeerStreakDots = memo(function CohortPeerStreakDots({
             // Private completed streaks OR Public rich completed streaks are rendered as glowing Indigo
             if (!isPublic || hasMemory) {
               dotBg = isDark ? "#23274e" : "#eef2ff"; // Solid dark navy or light lavender background
-              dotBorder = isCurrentSlot ? theme.colors.amber[500] : theme.colors.indigo[500];
+              dotBorder = isCurrentSlot
+                ? isDark ? "rgba(245, 158, 11, 0.72)" : "rgba(217, 119, 6, 0.58)"
+                : isDark ? "rgba(99, 102, 241, 0.62)" : "rgba(79, 70, 229, 0.42)";
               dotText = isDark ? theme.colors.white : theme.colors.indigo[600];
               extraStyle = {
                 shadowColor: theme.colors.indigo[500],
@@ -189,7 +191,9 @@ export const CohortPeerStreakDots = memo(function CohortPeerStreakDots({
             } else {
               // Public Check-in Only styling - Flat slate/gray
               dotBg = isDark ? "#1e293b" : "#f3f4f6"; // Solid dark slate or light gray background
-              dotBorder = isCurrentSlot ? theme.colors.amber[500] : isDark ? "#475569" : "#d1d5db";
+              dotBorder = isCurrentSlot
+                ? isDark ? "rgba(245, 158, 11, 0.72)" : "rgba(217, 119, 6, 0.58)"
+                : isDark ? "rgba(71, 85, 105, 0.66)" : "rgba(156, 163, 175, 0.48)";
               dotText = isDark ? "#94a3b8" : "#9ca3af";
             }
           }

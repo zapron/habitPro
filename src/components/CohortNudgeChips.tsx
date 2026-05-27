@@ -133,7 +133,7 @@ export const CohortNudgeChips = memo(function CohortNudgeChips({
               <ActivityIndicator size="small" color={iconColor} />
             ) : (
               <View style={styles.chipInner}>
-                <View style={styles.chipIconRow}>
+                <View style={styles.chipTitleRow}>
                   {glyph ? (
                     <Text style={[styles.glyph, { color: iconColor }]}>{glyph}</Text>
                   ) : Icon ? (
@@ -142,10 +142,10 @@ export const CohortNudgeChips = memo(function CohortNudgeChips({
                   {suffixGlyph ? (
                     <Text style={[styles.glyph, { color: iconColor }]}>{suffixGlyph}</Text>
                   ) : null}
+                  <Text style={[styles.chipLabel, { color: theme.colors.textPrimary }]} numberOfLines={1}>
+                    {label}
+                  </Text>
                 </View>
-                <Text style={[styles.chipLabel, { color: theme.colors.textPrimary }]} numberOfLines={1}>
-                  {label}
-                </Text>
                 <Text style={[styles.chipSubtitle, { color: theme.colors.textMuted }]} numberOfLines={1}>
                   {subtitle}
                 </Text>
@@ -179,13 +179,13 @@ export const CohortNudgeChips = memo(function CohortNudgeChips({
           <ActivityIndicator size="small" color={customIcon} />
         ) : (
           <View style={styles.chipInner}>
-            <View style={styles.chipIconRow}>
+            <View style={styles.chipTitleRow}>
               <MessageSquare size={theme.icon.sm} color={customIcon} strokeWidth={2.2} />
+              <Text style={[styles.chipLabel, { color: theme.colors.textPrimary }]} numberOfLines={1}>
+                {customNoteSentToday ? "Note sent" : "Note"}
+              </Text>
               {plusLocked ? <Text style={[styles.proBadge, { color: customIcon }]}>Plus</Text> : null}
             </View>
-            <Text style={[styles.chipLabel, { color: theme.colors.textPrimary }]} numberOfLines={1}>
-              {customNoteSentToday ? "Note sent" : "Note"}
-            </Text>
             <Text style={[styles.chipSubtitle, { color: theme.colors.textMuted }]} numberOfLines={1}>
               Send a note
             </Text>
@@ -209,23 +209,23 @@ const styles = StyleSheet.create({
   },
   chip: {
     alignItems: "stretch",
-    paddingHorizontal: 10,
-    paddingVertical: 8,
+    paddingHorizontal: 9,
+    paddingVertical: 7,
     borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
-    minHeight: 56,
-    minWidth: 100,
+    minHeight: 46,
+    minWidth: 92,
     justifyContent: "center",
   },
   chipInner: {
-    gap: 2,
+    gap: 1,
     minWidth: 0,
   },
-  chipIconRow: {
+  chipTitleRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    marginBottom: 2,
+    minWidth: 0,
   },
   customChip: {
     borderWidth: 1,
@@ -237,17 +237,21 @@ const styles = StyleSheet.create({
     marginLeft: 2,
   },
   glyph: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "800",
     letterSpacing: -0.3,
   },
   chipLabel: {
+    flexShrink: 1,
+    minWidth: 0,
     fontSize: 11,
-    fontWeight: "800",
+    lineHeight: 14,
+    fontWeight: "900",
     letterSpacing: 0.15,
   },
   chipSubtitle: {
     fontSize: 9,
+    lineHeight: 12,
     fontWeight: "700",
     letterSpacing: 0.12,
   },

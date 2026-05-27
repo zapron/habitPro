@@ -305,6 +305,7 @@ export default function ChallengeDetailScreen() {
   const [customNoteToUserId, setCustomNoteToUserId] = useState<string | null>(null);
   const [repairRows, setRepairRows] = useState<StreakRepairRow[]>([]);
   const [repairVotes, setRepairVotes] = useState<StreakRepairVoteRow[]>([]);
+  const [expandedRepairId, setExpandedRepairId] = useState<string | null>(null);
   const [dismissedRepairIds, setDismissedRepairIds] = useState<Set<string>>(() => new Set());
   const [repairBusyAction, setRepairBusyAction] = useState<{
     id: string;
@@ -418,6 +419,7 @@ export default function ChallengeDetailScreen() {
     setFeedNudges([]);
     setRepairRows([]);
     setRepairVotes([]);
+    setExpandedRepairId(null);
     setDismissedRepairIds(new Set());
     setSecondaryHydrated(false);
     setSecondaryLoading(false);
@@ -1000,6 +1002,8 @@ export default function ChallengeDetailScreen() {
     [dismissedRepairIds, repairRows],
   );
   const showRepairSkeleton = secondaryLoading && !secondaryHydrated && pendingRepairRows.length === 0;
+  const primaryPendingRepair = pendingRepairRows[0] ?? null;
+  const showRepairSlot = showRepairSkeleton || Boolean(primaryPendingRepair);
 
   const bottomPad = 40;
 
@@ -1212,14 +1216,12 @@ export default function ChallengeDetailScreen() {
             </View>
           ) : null}
 
-          {pendingRepairRows.length > 0 || showRepairSkeleton ? (
-            <>
-              <Text style={[styles.sectionLabel, { color: theme.colors.textMuted }]}>REPAIR REQUESTS</Text>
+          {showRepairSlot ? (
+            <View style={styles.repairSlot}>
               {showRepairSkeleton ? (
                 <View
                   style={[
-                    styles.repairCard,
-                    styles.repairSkeletonCard,
+                    styles.repairCompactCard,
                     {
                       backgroundColor: theme.colors.surface,
                       borderColor: theme.colors.border,
@@ -1227,126 +1229,132 @@ export default function ChallengeDetailScreen() {
                     },
                   ]}
                 >
-                  <View style={styles.repairSkeletonTopRow}>
+                  <View style={styles.repairCompactHead}>
                     <View
                       style={[
-                        styles.repairIconBadge,
+                        styles.repairIconBadgeCompact,
                         {
                           backgroundColor: isDark ? "rgba(34, 211, 238, 0.10)" : "rgba(6, 182, 212, 0.10)",
                           borderColor: isDark ? "rgba(34, 211, 238, 0.24)" : "rgba(6, 182, 212, 0.22)",
                         },
                       ]}
                     >
-                      <Clock size={18} color={theme.colors.cyan[500]} />
+                      <Clock size={16} color={theme.colors.cyan[500]} />
                     </View>
-                    <View style={styles.repairSkeletonCopy}>
-                      <Text style={[styles.repairTitle, { color: theme.colors.textPrimary }]}>
+                    <View style={styles.repairCompactCopy}>
+                      <Text style={[styles.repairCompactTitle, { color: theme.colors.textPrimary }]} numberOfLines={1}>
                         Checking repair requests
                       </Text>
-                      <Text style={[styles.repairSkeletonHint, { color: theme.colors.textMuted }]}>
-                        Squad approvals will appear here if someone needs a repair.
+                      <Text style={[styles.repairCompactMeta, { color: theme.colors.textMuted }]} numberOfLines={1}>
+                        Squad approvals will appear here if needed.
                       </Text>
+                      <ShimmerBlock isDark={isDark} height={10} radius={5} style={{ width: "82%", marginTop: 8 }} />
                     </View>
                   </View>
-                  <ShimmerBlock isDark={isDark} height={8} radius={9999} style={styles.repairSkeletonBar} />
                 </View>
-              ) : null}
-              {pendingRepairRows
-                .map((r) => {
-                  const requester = profileLabels[r.user_id];
-                  const name = participantDisplayName(requester);
-                  const votes = repairVotes.filter((v) => v.repair_id === r.id);
-                  const approves = votes.filter((v) => v.vote === "approve").length;
-                  const declines = votes.filter((v) => v.vote === "decline").length;
-                  const myVote = myUserId ? votes.find((v) => v.voter_id === myUserId)?.vote ?? null : null;
-                  const isRequester = Boolean(myUserId && myUserId === r.user_id);
-                  const busyVote = repairBusyAction?.id === r.id ? repairBusyAction.vote : null;
-                  const canVote = Boolean(myUserId && !isRequester && !myVote && declines === 0 && !busyVote);
-                  const approvalsRequired = Math.max(1, r.approvals_required);
-                  const approvalsLeft = Math.max(0, approvalsRequired - approves);
-                  const approvalProgress = Math.min(1, approves / approvalsRequired);
-                  const approvalProgressWidth = `${Math.round(approvalProgress * 100)}%` as const;
-                  const repairToneBg = isDark ? "rgba(34, 211, 238, 0.10)" : "rgba(6, 182, 212, 0.10)";
-                  const repairToneBorder = isDark ? "rgba(34, 211, 238, 0.24)" : "rgba(6, 182, 212, 0.22)";
-                  const approveBg = isDark ? "rgba(34, 211, 238, 0.14)" : "rgba(6, 182, 212, 0.08)";
-                  const approveSelectedBg = isDark ? "rgba(34, 211, 238, 0.22)" : "rgba(6, 182, 212, 0.13)";
-                  const approveBorder = isDark ? "rgba(34, 211, 238, 0.38)" : "rgba(6, 182, 212, 0.26)";
-                  const declineBg = theme.colors.surfaceElevated;
-                  const declineSelectedBg = isDark ? "rgba(239, 68, 68, 0.14)" : "rgba(220, 38, 38, 0.08)";
-                  const declineBorder = theme.colors.border;
-                  const declineSelectedBorder = isDark ? "rgba(239, 68, 68, 0.32)" : "rgba(220, 38, 38, 0.24)";
-                  const actionDisabled = Boolean(!myUserId || isRequester || declines !== 0 || busyVote);
-                  return (
+            ) : primaryPendingRepair ? (() => {
+              const r = primaryPendingRepair;
+              const requester = profileLabels[r.user_id];
+              const name = participantDisplayName(requester);
+              const votes = repairVotes.filter((v) => v.repair_id === r.id);
+              const approves = votes.filter((v) => v.vote === "approve").length;
+              const declines = votes.filter((v) => v.vote === "decline").length;
+              const myVote = myUserId ? votes.find((v) => v.voter_id === myUserId)?.vote ?? null : null;
+              const isRequester = Boolean(myUserId && myUserId === r.user_id);
+              const busyVote = repairBusyAction?.id === r.id ? repairBusyAction.vote : null;
+              const canVote = Boolean(myUserId && !isRequester && !myVote && declines === 0 && !busyVote);
+              const approvalsRequired = Math.max(1, r.approvals_required);
+              const approvalsLeft = Math.max(0, approvalsRequired - approves);
+              const approvalProgress = Math.min(1, approves / approvalsRequired);
+              const approvalProgressWidth = `${Math.round(approvalProgress * 100)}%` as const;
+              const repairToneBg = isDark ? "rgba(34, 211, 238, 0.10)" : "rgba(6, 182, 212, 0.10)";
+              const repairToneBorder = isDark ? "rgba(34, 211, 238, 0.24)" : "rgba(6, 182, 212, 0.22)";
+              const approveBg = isDark ? "rgba(34, 211, 238, 0.14)" : "rgba(6, 182, 212, 0.08)";
+              const approveSelectedBg = isDark ? "rgba(34, 211, 238, 0.22)" : "rgba(6, 182, 212, 0.13)";
+              const approveBorder = isDark ? "rgba(34, 211, 238, 0.38)" : "rgba(6, 182, 212, 0.26)";
+              const declineBg = theme.colors.surfaceElevated;
+              const declineSelectedBg = isDark ? "rgba(239, 68, 68, 0.14)" : "rgba(220, 38, 38, 0.08)";
+              const declineBorder = theme.colors.border;
+              const declineSelectedBorder = isDark ? "rgba(239, 68, 68, 0.32)" : "rgba(220, 38, 38, 0.24)";
+              const actionDisabled = Boolean(!myUserId || isRequester || declines !== 0 || busyVote);
+              const expanded = expandedRepairId === r.id;
+              const extraCount = Math.max(0, pendingRepairRows.length - 1);
+              return (
+                <View
+                  style={[
+                    styles.repairCompactCard,
+                    expanded && styles.repairCompactCardExpanded,
+                    {
+                      backgroundColor: theme.colors.surface,
+                      borderColor: theme.colors.border,
+                      ...theme.shadow.card,
+                    },
+                  ]}
+                >
+                  <Pressable
+                    onPress={() => setExpandedRepairId((prev) => (prev === r.id ? null : r.id))}
+                    style={styles.repairCompactHead}
+                    accessibilityRole="button"
+                    accessibilityLabel={expanded ? "Collapse repair request" : "Expand repair request"}
+                  >
                     <View
-                      key={r.id}
                       style={[
-                        styles.repairCard,
+                        styles.repairIconBadgeCompact,
                         {
-                          backgroundColor: theme.colors.surface,
-                          borderColor: theme.colors.border,
-                          ...theme.shadow.card,
+                          backgroundColor: repairToneBg,
+                          borderColor: repairToneBorder,
                         },
                       ]}
                     >
-                      <View style={styles.repairTopRow}>
+                      <Users size={16} color={theme.colors.cyan[500]} />
+                    </View>
+                    <View style={styles.repairCompactCopy}>
+                      <View style={styles.repairCompactTitleRow}>
+                        <Text style={[styles.repairCompactTitle, { color: theme.colors.textPrimary }]} numberOfLines={1}>
+                          {pendingRepairRows.length === 1
+                            ? "1 pending streak repair"
+                            : `${pendingRepairRows.length} pending streak repairs`}
+                        </Text>
                         <View
                           style={[
-                            styles.repairIconBadge,
+                            styles.repairXpChip,
                             {
-                              backgroundColor: repairToneBg,
-                              borderColor: repairToneBorder,
+                              backgroundColor: isDark ? "rgba(251, 191, 36, 0.12)" : "rgba(234, 179, 8, 0.12)",
+                              borderColor: isDark ? "rgba(251, 191, 36, 0.28)" : "rgba(234, 179, 8, 0.24)",
                             },
                           ]}
                         >
-                          <Users size={18} color={theme.colors.cyan[500]} />
-                        </View>
-                        <View style={{ flex: 1, minWidth: 0 }}>
-                          <View style={styles.repairEyebrowRow}>
-                            <Text style={[styles.repairEyebrow, { color: theme.colors.cyan[500] }]}>
-                              Squad repair
-                            </Text>
-                            <View
-                              style={[
-                                styles.repairXpChip,
-                                {
-                                  backgroundColor: isDark
-                                    ? "rgba(251, 191, 36, 0.12)"
-                                    : "rgba(234, 179, 8, 0.12)",
-                                  borderColor: isDark
-                                    ? "rgba(251, 191, 36, 0.28)"
-                                    : "rgba(234, 179, 8, 0.24)",
-                                },
-                              ]}
-                            >
-                              <Text style={[styles.repairXpChipText, { color: theme.colors.yellow[400] }]}>
-                                {r.xp_cost} XP
-                              </Text>
-                            </View>
-                          </View>
-                          <Text style={[styles.repairTitle, { color: theme.colors.textPrimary }]} numberOfLines={2}>
-                            Approve streak repair?
+                          <Text style={[styles.repairXpChipText, { color: theme.colors.yellow[400] }]}>
+                            {r.xp_cost} XP
                           </Text>
                         </View>
-                        {!isRequester ? (
-                          <TouchableOpacity
-                            activeOpacity={0.75}
-                            hitSlop={8}
-                            accessibilityRole="button"
-                            accessibilityLabel="Hide repair request"
-                            onPress={() => dismissRepairRequest(r.id)}
-                            style={[
-                              styles.repairDismissButton,
-                              {
-                                backgroundColor: theme.colors.surfaceElevated,
-                                borderColor: theme.colors.border,
-                              },
-                            ]}
-                          >
-                            <X size={15} color={theme.colors.textMuted} />
-                          </TouchableOpacity>
-                        ) : null}
                       </View>
+                      <Text style={[styles.repairCompactMeta, { color: theme.colors.textMuted }]} numberOfLines={1}>
+                        {name} missed {r.date_str} · {approves}/{approvalsRequired} approvals{extraCount > 0 ? ` · +${extraCount} more` : ""}
+                      </Text>
+                    </View>
+                    {!isRequester ? (
+                      <TouchableOpacity
+                        activeOpacity={0.75}
+                        hitSlop={8}
+                        accessibilityRole="button"
+                        accessibilityLabel="Hide repair request"
+                        onPress={() => dismissRepairRequest(r.id)}
+                        style={[
+                          styles.repairDismissButtonCompact,
+                          {
+                            backgroundColor: theme.colors.surfaceElevated,
+                            borderColor: theme.colors.border,
+                          },
+                        ]}
+                      >
+                        <X size={14} color={theme.colors.textMuted} />
+                      </TouchableOpacity>
+                    ) : null}
+                  </Pressable>
 
+                  {expanded ? (
+                    <View style={styles.repairExpandedBody}>
                       <View style={styles.repairFactsRow}>
                         <View
                           style={[
@@ -1487,33 +1495,35 @@ export default function ChallengeDetailScreen() {
                           />
                         </View>
                       )}
+                      {repairNextOffset != null ? (
+                        <TouchableOpacity
+                          onPress={() => void loadMoreRepairs()}
+                          disabled={repairLoadingMore}
+                          activeOpacity={0.85}
+                          style={[
+                            styles.repairInlineLoadMore,
+                            {
+                              backgroundColor: theme.colors.surfaceElevated,
+                              borderColor: theme.colors.border,
+                              opacity: repairLoadingMore ? 0.72 : 1,
+                            },
+                          ]}
+                        >
+                          {repairLoadingMore ? (
+                            <ActivityIndicator size="small" color={theme.colors.indigo[400]} />
+                          ) : (
+                            <Text style={[styles.loadMoreSecondaryText, { color: theme.colors.textSecondary }]}>
+                              Load older repair requests
+                            </Text>
+                          )}
+                        </TouchableOpacity>
+                      ) : null}
                     </View>
-                  );
-                })}
-              {repairNextOffset != null ? (
-                <TouchableOpacity
-                  onPress={() => void loadMoreRepairs()}
-                  disabled={repairLoadingMore}
-                  activeOpacity={0.85}
-                  style={[
-                    styles.loadMoreSecondaryBtn,
-                    {
-                      backgroundColor: theme.colors.surfaceElevated,
-                      borderColor: theme.colors.border,
-                      opacity: repairLoadingMore ? 0.72 : 1,
-                    },
-                  ]}
-                >
-                  {repairLoadingMore ? (
-                    <ActivityIndicator size="small" color={theme.colors.indigo[400]} />
-                  ) : (
-                    <Text style={[styles.loadMoreSecondaryText, { color: theme.colors.textSecondary }]}>
-                      Load older repair requests
-                    </Text>
-                  )}
-                </TouchableOpacity>
-              ) : null}
-            </>
+                  ) : null}
+                </View>
+              );
+            })() : null}
+          </View>
           ) : null}
 
           {cohortBoard ? (
@@ -1731,6 +1741,60 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginBottom: 10,
   },
+  repairSlot: {
+    minHeight: 76,
+    marginBottom: 14,
+    justifyContent: "center",
+  },
+  repairCompactCard: {
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 10,
+  },
+  repairCompactCardExpanded: {
+    paddingBottom: 12,
+  },
+  repairCompactHead: {
+    minHeight: 54,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  repairIconBadgeCompact: {
+    width: 34,
+    height: 34,
+    borderRadius: 11,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  repairCompactCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  repairCompactTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    minWidth: 0,
+  },
+  repairCompactTitle: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 14,
+    lineHeight: 18,
+    fontWeight: "900",
+  },
+  repairCompactMeta: {
+    marginTop: 3,
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: "800",
+  },
+  repairExpandedBody: {
+    marginTop: 4,
+  },
   repairCard: {
     borderWidth: 1,
     borderRadius: 18,
@@ -1777,6 +1841,15 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   repairDismissButton: {
+    width: 30,
+    height: 30,
+    borderRadius: 9999,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  repairDismissButtonCompact: {
     width: 30,
     height: 30,
     borderRadius: 9999,
@@ -1856,6 +1929,14 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   repairRequesterText: { fontSize: 12, fontWeight: "800" },
+  repairInlineLoadMore: {
+    minHeight: 42,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 10,
+  },
   loadMoreSecondaryBtn: {
     minHeight: 46,
     borderRadius: 14,
