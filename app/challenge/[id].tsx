@@ -54,6 +54,7 @@ import {
   leaveChallengeGroup,
   listChallengeMembers,
   refreshCohortPeerHabits,
+  refreshCohortPeerHabitsCached,
   type ProfileLabel,
 } from "../../src/lib/groupChallengesApi";
 import { backOrReplace } from "../../src/lib/navigation";
@@ -439,7 +440,7 @@ export default function ChallengeDetailScreen() {
       const silent = focusOnceRef.current;
       focusOnceRef.current = true;
       void load({ silent });
-      void refreshCohortPeerHabits();
+      void refreshCohortPeerHabitsCached();
       void refreshPremiumAccess();
     }, [load, refreshPremiumAccess]),
   );
@@ -1291,48 +1292,50 @@ export default function ChallengeDetailScreen() {
                     },
                   ]}
                 >
-                  <Pressable
-                    onPress={() => setExpandedRepairId((prev) => (prev === r.id ? null : r.id))}
-                    style={styles.repairCompactHead}
-                    accessibilityRole="button"
-                    accessibilityLabel={expanded ? "Collapse repair request" : "Expand repair request"}
-                  >
-                    <View
-                      style={[
-                        styles.repairIconBadgeCompact,
-                        {
-                          backgroundColor: repairToneBg,
-                          borderColor: repairToneBorder,
-                        },
-                      ]}
+                  <View style={styles.repairCompactHead}>
+                    <Pressable
+                      onPress={() => setExpandedRepairId((prev) => (prev === r.id ? null : r.id))}
+                      style={styles.repairCompactHeadPress}
+                      accessibilityRole="button"
+                      accessibilityLabel={expanded ? "Collapse repair request" : "Expand repair request"}
                     >
-                      <Users size={16} color={theme.colors.cyan[500]} />
-                    </View>
-                    <View style={styles.repairCompactCopy}>
-                      <View style={styles.repairCompactTitleRow}>
-                        <Text style={[styles.repairCompactTitle, { color: theme.colors.textPrimary }]} numberOfLines={1}>
-                          {pendingRepairRows.length === 1
-                            ? "1 pending streak repair"
-                            : `${pendingRepairRows.length} pending streak repairs`}
-                        </Text>
-                        <View
-                          style={[
-                            styles.repairXpChip,
-                            {
-                              backgroundColor: isDark ? "rgba(251, 191, 36, 0.12)" : "rgba(234, 179, 8, 0.12)",
-                              borderColor: isDark ? "rgba(251, 191, 36, 0.28)" : "rgba(234, 179, 8, 0.24)",
-                            },
-                          ]}
-                        >
-                          <Text style={[styles.repairXpChipText, { color: theme.colors.yellow[400] }]}>
-                            {r.xp_cost} XP
-                          </Text>
-                        </View>
+                      <View
+                        style={[
+                          styles.repairIconBadgeCompact,
+                          {
+                            backgroundColor: repairToneBg,
+                            borderColor: repairToneBorder,
+                          },
+                        ]}
+                      >
+                        <Users size={16} color={theme.colors.cyan[500]} />
                       </View>
-                      <Text style={[styles.repairCompactMeta, { color: theme.colors.textMuted }]} numberOfLines={1}>
-                        {name} missed {r.date_str} · {approves}/{approvalsRequired} approvals{extraCount > 0 ? ` · +${extraCount} more` : ""}
-                      </Text>
-                    </View>
+                      <View style={styles.repairCompactCopy}>
+                        <View style={styles.repairCompactTitleRow}>
+                          <Text style={[styles.repairCompactTitle, { color: theme.colors.textPrimary }]} numberOfLines={1}>
+                            {pendingRepairRows.length === 1
+                              ? "1 pending streak repair"
+                              : `${pendingRepairRows.length} pending streak repairs`}
+                          </Text>
+                          <View
+                            style={[
+                              styles.repairXpChip,
+                              {
+                                backgroundColor: isDark ? "rgba(251, 191, 36, 0.12)" : "rgba(234, 179, 8, 0.12)",
+                                borderColor: isDark ? "rgba(251, 191, 36, 0.28)" : "rgba(234, 179, 8, 0.24)",
+                              },
+                            ]}
+                          >
+                            <Text style={[styles.repairXpChipText, { color: theme.colors.yellow[400] }]}>
+                              {r.xp_cost} XP
+                            </Text>
+                          </View>
+                        </View>
+                        <Text style={[styles.repairCompactMeta, { color: theme.colors.textMuted }]} numberOfLines={1}>
+                          {name} missed {r.date_str} · {approves}/{approvalsRequired} approvals{extraCount > 0 ? ` · +${extraCount} more` : ""}
+                        </Text>
+                      </View>
+                    </Pressable>
                     {!isRequester ? (
                       <TouchableOpacity
                         activeOpacity={0.75}
@@ -1351,7 +1354,7 @@ export default function ChallengeDetailScreen() {
                         <X size={14} color={theme.colors.textMuted} />
                       </TouchableOpacity>
                     ) : null}
-                  </Pressable>
+                  </View>
 
                   {expanded ? (
                     <View style={styles.repairExpandedBody}>
@@ -1756,6 +1759,12 @@ const styles = StyleSheet.create({
   },
   repairCompactHead: {
     minHeight: 54,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  repairCompactHeadPress: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
     gap: 10,

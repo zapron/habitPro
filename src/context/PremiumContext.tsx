@@ -48,7 +48,6 @@ export function PremiumProvider({ children }: { children: React.ReactNode }) {
       return false;
     }
     const requestedUserId = userId;
-    setDbPremium(false);
     setDbLoading(true);
     try {
       const v = await getProfileIsPremiumForUser(requestedUserId);

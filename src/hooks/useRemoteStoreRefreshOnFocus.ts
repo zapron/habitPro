@@ -94,6 +94,13 @@ export function useRemoteStoreRefreshOnFocus(enabled = true) {
         return;
       }
       const local = useHabitStore.getState();
+      if (
+        !options?.force &&
+        local.dirtyHabitIds &&
+        local.dirtyHabitIds.length > 0
+      ) {
+        return;
+      }
       const remote = await pullFromSupabase(userId, { includeCohortPeerHabits: false });
       const remoteWithLocalPeers = {
         ...remote,

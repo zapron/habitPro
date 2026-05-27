@@ -24,6 +24,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
 import Svg, { Defs, LinearGradient as SvgLinearGradient, Stop, Text as SvgText } from "react-native-svg";
 import { FlashList } from "@shopify/flash-list";
+const MissionFlashList = FlashList as any;
 import {
   Trophy,
   Bolt,
@@ -42,7 +43,10 @@ import { useHabitStore } from "../../src/store/habitStore";
 import { useShallow } from "zustand/react/shallow";
 import { useAuth } from "../../src/context/AuthContext";
 import { isSupabaseConfigured } from "../../src/lib/env";
-import { countUnreadNotifications, refreshCohortPeerHabits } from "../../src/lib/groupChallengesApi";
+import {
+  countUnreadNotifications,
+  refreshCohortPeerHabitsCached,
+} from "../../src/lib/groupChallengesApi";
 import type { AppTheme } from "../../src/styles/theme";
 import { Button } from "../../src/components/Button";
 import { HabitCard } from "../../src/components/HabitCard";
@@ -630,15 +634,12 @@ export default function Home() {
   useEffect(() => {
     if (!session?.user || !syncReady) return;
     setSparkLoading(true);
-    void refreshCohortPeerHabits()
+    void refreshCohortPeerHabitsCached()
       .catch((e) => {
         if (__DEV__) console.warn("[habitPro] background cohort refresh failed", e);
       })
       .finally(() => {
-        // Precise delay to show a beautiful premium transition animation
-        setTimeout(() => {
-          setSparkLoading(false);
-        }, 900);
+        setSparkLoading(false);
       });
   }, [session?.user?.id, syncReady]);
 
@@ -1236,9 +1237,10 @@ export default function Home() {
               </View>
             </ScrollView>
           ) : (
-            <FlashList
+            <MissionFlashList
               data={filteredHabits}
               renderItem={renderHabitCard}
+              estimatedItemSize={132}
               contentContainerStyle={listContentStyle}
               showsVerticalScrollIndicator={false}
               keyExtractor={(item) => item.id}

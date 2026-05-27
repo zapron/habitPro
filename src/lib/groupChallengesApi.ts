@@ -9,10 +9,16 @@ import type {
   ProfileSearchRow,
 } from "../types/groupChallenge";
 import type { PageRequest, PageResult } from "../types/paging";
-import { useHabitStore } from "../store/habitStore";
-import { pullCohortPeerHabitsFromSupabase } from "./sync";
 import { getRemoteSyncUserId } from "./syncQueue";
 import { getSupabase } from "./supabase";
+import {
+  refreshCohortPeerHabitsCached,
+  refreshCohortPeerHabitsImmediate,
+  invalidateCohortPeerHabitsCache,
+  ensureCohortCacheInvalidatesOnSyncSuccess,
+} from "./remoteRefreshCoordinator";
+
+ensureCohortCacheInvalidatesOnSyncSuccess();
 
 type PremiumFailureReason = "premium_required";
 type GroupActionErrorResult = { error: Error | null; reason?: PremiumFailureReason };
@@ -640,13 +646,12 @@ export async function markAllNotificationsRead(): Promise<void> {
     .is("read_at", null);
 }
 
-/** Re-fetch cohort peer habits from Supabase (e.g. after challenge screen focus). */
+/** Re-fetch cohort peer habits (uncached; use after join/accept). */
 export async function refreshCohortPeerHabits(): Promise<void> {
-  const uid = getRemoteSyncUserId();
-  if (!uid) return;
-  const cohortPeerHabits = await pullCohortPeerHabitsFromSupabase(uid);
-  useHabitStore.getState().setCohortPeerHabits(cohortPeerHabits);
+  await refreshCohortPeerHabitsImmediate();
 }
+
+export { refreshCohortPeerHabitsCached, invalidateCohortPeerHabitsCache };
 
 export {
   listChallengeActivity,
