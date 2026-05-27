@@ -914,21 +914,21 @@ export default function CompeteScreen() {
   );
 
   useEffect(() => {
-    if (segment === "leaderboard") {
-      void loadLeague();
-    }
-  }, [loadLeague, segment]);
-
-  useEffect(() => {
     if (segment === "challenges" && challengesSubTab === "invites") {
       void loadInvites();
     }
   }, [challengesSubTab, loadInvites, segment]);
 
+  const leagueSyncDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => {
     if (segment !== "leaderboard") return undefined;
     return subscribeSyncSuccess(() => {
-      void loadLeague({ force: true });
+      if (leagueSyncDebounceRef.current) clearTimeout(leagueSyncDebounceRef.current);
+      leagueSyncDebounceRef.current = setTimeout(() => {
+        leagueSyncDebounceRef.current = null;
+        void loadLeague({ force: true });
+      }, 2500);
     });
   }, [loadLeague, segment]);
 
@@ -979,10 +979,12 @@ export default function CompeteScreen() {
     }
     setInviteBusy(invite.id);
     try {
-      const freshPremium = await refreshPremiumAccess({ force: true, serverOnly: true });
-      if (freshPremium !== true) {
-        openUpsell("invite_accept");
-        return;
+      if (!isPremium || premiumLoading) {
+        const freshPremium = await refreshPremiumAccess({ force: true, serverOnly: true });
+        if (freshPremium !== true) {
+          openUpsell("invite_accept");
+          return;
+        }
       }
       const group = await traceAsync(
         "compete.groupInvite.fetchGroup",
@@ -1022,36 +1024,53 @@ export default function CompeteScreen() {
         throw new Error("Could not create the mission on this device.");
       }
 
-      await traceAsync("compete.groupInvite.upsertHabit", () => upsertRemoteHabit(userId, habit), {
-        slowMs: 900,
-      });
-      const { error, reason } = await traceAsync(
-        "compete.groupInvite.accept",
-        () => acceptInviteAndJoin(invite, newHabitId),
-        { slowMs: 900 },
-      );
-      if (error) {
-        if (reason === "premium_required") {
-          await refreshPremiumAccess({ force: true, serverOnly: true });
-          openUpsell("invite_accept");
-          return;
-        }
-        throw error;
-      }
+      router.push(`/habit/${newHabitId}`);
+      showToast("Joining group mission…", "success");
 
-      useHabitStore.getState().synchronizeHabitWithChallengeGroup(newHabitId, group);
-      const alignedHabit = useHabitStore.getState().habits.find((h) => h.id === newHabitId);
-      if (alignedHabit) {
-        await traceAsync("compete.groupInvite.upsertAlignedHabit", () => upsertRemoteHabit(userId, alignedHabit), {
-          slowMs: 900,
-        });
-      }
-      void refreshCohortPeerHabits();
-      void loadInvites({ force: true });
-      showToast("Joined the group mission", "success");
-      setTimeout(() => {
-        if (mountedRef.current) void suggestNotifications("invite_accept");
-      }, 450);
+      void (async () => {
+        try {
+          await traceAsync("compete.groupInvite.upsertHabit", () => upsertRemoteHabit(userId, habit), {
+            slowMs: 900,
+          });
+          const { error, reason } = await traceAsync(
+            "compete.groupInvite.accept",
+            () => acceptInviteAndJoin(invite, newHabitId),
+            { slowMs: 900 },
+          );
+          if (error) {
+            if (reason === "premium_required") {
+              await refreshPremiumAccess({ force: true, serverOnly: true });
+              openUpsell("invite_accept");
+              return;
+            }
+            throw error;
+          }
+          useHabitStore.getState().synchronizeHabitWithChallengeGroup(newHabitId, group);
+          const alignedHabit = useHabitStore.getState().habits.find((h) => h.id === newHabitId);
+          if (alignedHabit) {
+            await traceAsync(
+              "compete.groupInvite.upsertAlignedHabit",
+              () => upsertRemoteHabit(userId, alignedHabit),
+              { slowMs: 900 },
+            );
+          }
+          void refreshCohortPeerHabits();
+          void loadInvites({ force: true });
+          if (mountedRef.current) showToast("Joined the group mission", "success");
+          setTimeout(() => {
+            if (mountedRef.current) void suggestNotifications("invite_accept");
+          }, 450);
+        } catch (bgErr: unknown) {
+          if (!mountedRef.current) return;
+          const msg =
+            bgErr instanceof Error
+              ? bgErr.message
+              : typeof bgErr === "object" && bgErr && "message" in bgErr
+                ? String((bgErr as { message: string }).message)
+                : String(bgErr);
+          showToast(msg, "error");
+        }
+      })();
     } catch (e: unknown) {
       const msg =
         e instanceof Error
@@ -1064,7 +1083,18 @@ export default function CompeteScreen() {
       inviteActionInFlightRef.current.delete(key);
       setInviteBusy(null);
     }
-  }, [userId, showToast, refreshPremiumAccess, openUpsell, addHabit, loadInvites, suggestNotifications]);
+  }, [
+    userId,
+    showToast,
+    refreshPremiumAccess,
+    openUpsell,
+    addHabit,
+    loadInvites,
+    suggestNotifications,
+    isPremium,
+    premiumLoading,
+    router,
+  ]);
 
   const handleDeclineGroupInvite = useCallback(async (invite: ChallengeInviteRow) => {
     const key = invite.id;

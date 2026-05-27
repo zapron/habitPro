@@ -18,6 +18,10 @@ import {
   uploadHabitStreakMemoryImage,
   uploadMiniStreakMemoryImage,
 } from "./streakMemoryStorage";
+import { useHabitStore } from "../store/habitStore";
+
+const HABIT_ROW_SELECT =
+  "user_id, id, title, description, mode, visibility, start_date, end_date, completed_dates, streak, total_days, is_completed, status, streak_memories, challenge_group_id, challenge_creator_timezone, mission_timezone, mission_report, mission_report_at, reminder_enabled, reminder_time_local, reminder_locked";
 
 type RemoteSnapshot = Pick<HabitStore, "habits" | "miniMissions" | "xp" | "username"> & {
   cohortPeerHabits: Habit[];
@@ -56,9 +60,26 @@ function isHttpImageUri(uri: string | undefined): boolean {
   return Boolean(uri?.startsWith("http://") || uri?.startsWith("https://"));
 }
 
+function scheduleHabitMemoryUpload(habitId: string, dateStr: string, memory: StreakMemory) {
+  const localUri = memory.imageUri;
+  if (!localUri || !shouldUploadLocalStreakImage(localUri) || isHttpImageUri(localUri)) return;
+
+  void uploadHabitStreakMemoryImage({ habitId, dateStr, localUri })
+    .then((imageUrl) => {
+      useHabitStore.getState().patchStreakMemory(habitId, dateStr, { imageUrl });
+      void import("./syncQueue").then(({ requestRemoteSync }) => {
+        requestRemoteSync({ immediate: true });
+      });
+    })
+    .catch((e) => {
+      console.warn("[habitPro] background memory image upload failed", e);
+    });
+}
+
 async function memoryForRemote(
   memory: StreakMemory,
   uploadLocalImage: (localUri: string) => Promise<string>,
+  options?: { deferLocalUpload?: boolean },
 ): Promise<StreakMemory> {
   const next: StreakMemory = { ...memory };
   const localUri = next.imageUri;
@@ -67,6 +88,9 @@ async function memoryForRemote(
     if (isHttpImageUri(localUri)) {
       next.imageUrl = localUri;
     } else if (shouldUploadLocalStreakImage(localUri)) {
+      if (options?.deferLocalUpload) {
+        return next;
+      }
       try {
         next.imageUrl = await uploadLocalImage(localUri);
       } catch (e) {
@@ -85,18 +109,38 @@ async function memoryForRemote(
 async function habitForRemote(h: Habit): Promise<Habit> {
   if (!h.streakMemories) return h;
 
+  const entries = await Promise.all(
+    Object.entries(h.streakMemories).map(async ([dateStr, memory]) => {
+      const localUri = memory.imageUri;
+      const needsBackgroundUpload =
+        !memory.imageUrl &&
+        localUri &&
+        shouldUploadLocalStreakImage(localUri) &&
+        !isHttpImageUri(localUri);
+
+      if (needsBackgroundUpload) {
+        scheduleHabitMemoryUpload(h.id, dateStr, memory);
+      }
+
+      const nextMemory = await memoryForRemote(
+        memory,
+        (uri) => uploadHabitStreakMemoryImage({ habitId: h.id, dateStr, localUri: uri }),
+        { deferLocalUpload: needsBackgroundUpload },
+      );
+      return [dateStr, nextMemory] as const;
+    }),
+  );
+
   let changed = false;
   const nextMemories: Record<string, StreakMemory> = {};
-  for (const [dateStr, memory] of Object.entries(h.streakMemories)) {
-    const nextMemory = await memoryForRemote(memory, (localUri) =>
-      uploadHabitStreakMemoryImage({
-        habitId: h.id,
-        dateStr,
-        localUri,
-      }),
-    );
+  for (const [dateStr, nextMemory] of entries) {
+    const prev = h.streakMemories![dateStr];
     nextMemories[dateStr] = nextMemory;
-    if (nextMemory !== memory || nextMemory.imageUri !== memory.imageUri || nextMemory.imageUrl !== memory.imageUrl) {
+    if (
+      nextMemory !== prev ||
+      nextMemory.imageUri !== prev.imageUri ||
+      nextMemory.imageUrl !== prev.imageUrl
+    ) {
       changed = true;
     }
   }
@@ -425,7 +469,7 @@ export async function pullCohortPeerHabitsFromSupabase(userId: string): Promise<
 
   const { data: peerRows, error: peerErr } = await supabase
     .from("habits")
-    .select("*")
+    .select(HABIT_ROW_SELECT)
     .in("id", habitIds);
   if (peerErr) throw peerErr;
 
@@ -459,7 +503,7 @@ export async function pullFromSupabase(
   const includeCohortPeerHabits = options?.includeCohortPeerHabits ?? true;
 
   const [habitsRes, miniRes, profileRes, repairsRes] = await Promise.all([
-    supabase.from("habits").select("user_id, id, title, description, mode, visibility, start_date, end_date, completed_dates, streak, total_days, is_completed, status, streak_memories, challenge_group_id, challenge_creator_timezone, mission_timezone, mission_report, mission_report_at, reminder_enabled, reminder_time_local, reminder_locked").eq("user_id", userId),
+    supabase.from("habits").select(HABIT_ROW_SELECT).eq("user_id", userId),
     supabase.from("mini_missions").select("user_id, id, title, objective, visibility, community_feed_revoked, estimated_minutes, extended_minutes, status, created_at, scheduled_start_at, started_at, completed_at, completion_memory, live_squad_id, live_squad_role").eq("user_id", userId),
     supabase.from("profiles").select("xp, username").eq("id", userId).maybeSingle(),
     supabase.from("streak_repairs").select("habit_id, date_str").eq("user_id", userId).eq("status", "applied"),
