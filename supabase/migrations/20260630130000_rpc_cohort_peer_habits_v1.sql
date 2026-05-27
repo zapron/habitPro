@@ -1,4 +1,5 @@
 -- Single round-trip cohort peer habits for squad timeline UI.
+-- Timestamp is after 20260630120000 so remote migration history stays linear.
 
 create or replace function public.rpc_cohort_peer_habits_v1()
 returns jsonb
