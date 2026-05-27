@@ -8,6 +8,7 @@ import type { ComponentType } from "react";
 import {
   View,
   ScrollView,
+  Pressable,
   TouchableOpacity,
   StyleSheet,
   StatusBar,
@@ -184,9 +185,38 @@ const VisibilityHabitColumn = memo(function VisibilityHabitColumn({
 
   if (onPressColumn) {
     return (
-      <TouchableOpacity activeOpacity={0.92} onPress={onPressColumn} style={colStyle}>
-        {inner}
-      </TouchableOpacity>
+      <View style={colStyle}>
+        <Pressable onPress={onPressColumn} style={hubVisStyles.visColHead} accessibilityRole="button">
+          <Icon size={14} color={accent} />
+          <Text style={[hubVisStyles.visColTitle, { color: accent }]}>{title}</Text>
+        </Pressable>
+        <View style={hubVisStyles.figureRow}>
+          <TouchableOpacity
+            style={[
+              hubVisStyles.figureTile,
+              { borderColor: theme.colors.border, backgroundColor: theme.colors.surfaceElevated },
+            ]}
+            onPress={onPressActive}
+            activeOpacity={0.85}
+            disabled={!onPressActive}
+          >
+            <FigureLabel color={theme.colors.textMuted}>ACTIVE</FigureLabel>
+            <Text style={[hubVisStyles.figureNum, { color: theme.colors.textPrimary }]}>{active}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              hubVisStyles.figureTile,
+              { borderColor: theme.colors.border, backgroundColor: theme.colors.surfaceElevated },
+            ]}
+            onPress={onPressDone}
+            activeOpacity={0.85}
+            disabled={!onPressDone}
+          >
+            <FigureLabel color={theme.colors.textMuted}>DONE</FigureLabel>
+            <Text style={[hubVisStyles.figureNum, { color: theme.colors.textPrimary }]}>{done}</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
     );
   }
   return <View style={colStyle}>{inner}</View>;
@@ -260,9 +290,38 @@ const VisibilityMiniColumn = memo(function VisibilityMiniColumn({
 
   if (onPressColumn) {
     return (
-      <TouchableOpacity activeOpacity={0.92} onPress={onPressColumn} style={colStyle}>
-        {inner}
-      </TouchableOpacity>
+      <View style={colStyle}>
+        <Pressable onPress={onPressColumn} style={hubVisStyles.visColHead} accessibilityRole="button">
+          <Icon size={14} color={accent} />
+          <Text style={[hubVisStyles.visColTitle, { color: accent }]}>{title}</Text>
+        </Pressable>
+        <View style={hubVisStyles.figureRow}>
+          <TouchableOpacity
+            style={[
+              hubVisStyles.figureTile,
+              { borderColor: theme.colors.border, backgroundColor: theme.colors.surfaceElevated },
+            ]}
+            onPress={onPressActive}
+            activeOpacity={0.85}
+            disabled={!onPressActive}
+          >
+            <FigureLabel color={theme.colors.textMuted}>LIVE</FigureLabel>
+            <Text style={[hubVisStyles.figureNum, { color: theme.colors.amber[500] }]}>{live}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              hubVisStyles.figureTile,
+              { borderColor: theme.colors.border, backgroundColor: theme.colors.surfaceElevated },
+            ]}
+            onPress={onPressDone}
+            activeOpacity={0.85}
+            disabled={!onPressDone}
+          >
+            <FigureLabel color={theme.colors.textMuted}>DONE</FigureLabel>
+            <Text style={[hubVisStyles.figureNum, { color: theme.colors.textPrimary }]}>{completed}</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
     );
   }
   return <View style={colStyle}>{inner}</View>;

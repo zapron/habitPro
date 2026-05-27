@@ -299,12 +299,9 @@ const AnimatedDayCell = React.memo(function AnimatedDayCell({
         Animated.spring(scale, { toValue: 1, tension: 200, friction: 5, useNativeDriver: true }).start();
     }, [scale]);
 
-    // ── Actual press action (fires after touch release, deferred to not block spring) ──
-    const handlePress = useCallback(() => {
-        InteractionManager.runAfterInteractions(() => {
-            onPress(dayIndex, day);
-        });
-    }, [onPress, dayIndex, day]);
+  const handlePress = useCallback(() => {
+    onPress(dayIndex, day);
+  }, [onPress, dayIndex, day]);
 
     const shimmerOpacity = shimmer.interpolate({ inputRange: [0, 1], outputRange: [0.7, 1] });
 
@@ -841,6 +838,17 @@ export default function HabitDetail() {
     if (!habit) {
         return (
             <Screen>
+                <View style={styles.header}>
+                    <TouchableOpacity
+                        style={[styles.iconButton, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}
+                        onPress={() => backOrReplace(router, "/")}
+                        delayPressIn={0}
+                        accessibilityRole="button"
+                        accessibilityLabel="Go back"
+                    >
+                        <ArrowLeft size={theme.icon.xl} color={theme.colors.textPrimary} />
+                    </TouchableOpacity>
+                </View>
                 {pendingExitAfterRemove ? (
                     <View style={styles.notFoundContainer}>
                         <ActivityIndicator size="large" color={theme.colors.cyan[400]} />

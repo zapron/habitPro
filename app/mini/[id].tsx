@@ -1375,6 +1375,22 @@ export default function MiniMissionDetail() {
   if (!mission) {
     return (
       <Screen>
+        <View style={styles.header}>
+          <TouchableOpacity
+            style={[
+              styles.iconButton,
+              {
+                backgroundColor: theme.colors.surface,
+                borderColor: theme.colors.border,
+              },
+            ]}
+            onPress={() => backOrReplace(router, "/mini")}
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
+          >
+            <ArrowLeft size={theme.icon.lg} color={theme.colors.textPrimary} />
+          </TouchableOpacity>
+        </View>
         {pendingExitAfterRemove ? (
           <View style={styles.centered}>
             <ActivityIndicator size="large" color={theme.colors.cyan[400]} />

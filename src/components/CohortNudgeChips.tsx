@@ -72,8 +72,6 @@ export const CohortNudgeChips = memo(function CohortNudgeChips({
   customNoteSentToday,
   onCustomNotePress,
 }: Props) {
-  const busyGlobal = nudgeBusyKey !== null;
-
   const customBusy = nudgeBusyKey === `${memberId}-custom_note`;
   const customBg = isDark ? "rgba(167, 139, 250, 0.1)" : "rgba(124, 58, 237, 0.06)";
   const customBorder = isDark ? "rgba(167, 139, 250, 0.28)" : "rgba(124, 58, 237, 0.22)";
@@ -100,7 +98,7 @@ export const CohortNudgeChips = memo(function CohortNudgeChips({
         return (
           <Pressable
             key={kind}
-            disabled={busyGlobal}
+            disabled={busy}
             onPress={() => {
               if (presetLocked) {
                 onPlusLocked?.();
@@ -124,7 +122,7 @@ export const CohortNudgeChips = memo(function CohortNudgeChips({
                       : isDark
                         ? "rgba(251, 191, 36, 0.22)"
                         : "rgba(217, 119, 6, 0.22)",
-                opacity: presetLocked ? 0.55 : busyGlobal && !busy ? 0.45 : pressed ? 0.92 : 1,
+                opacity: presetLocked ? 0.55 : busy ? 0.5 : pressed ? 0.92 : 1,
                 transform: [{ scale: pressed ? 0.98 : 1 }],
               },
             ]}
@@ -156,7 +154,7 @@ export const CohortNudgeChips = memo(function CohortNudgeChips({
       })}
 
       <Pressable
-        disabled={busyGlobal || customNoteSentToday}
+        disabled={customBusy || customNoteSentToday}
         onPress={() => {
           if (plusLocked) {
             onPlusLocked?.();
@@ -170,8 +168,8 @@ export const CohortNudgeChips = memo(function CohortNudgeChips({
           {
             backgroundColor: customBg,
             borderColor: customBorder,
-            opacity: plusLocked || customNoteSentToday ? 0.55 : busyGlobal ? 0.5 : pressed ? 0.92 : 1,
-            transform: [{ scale: pressed && !busyGlobal && !customNoteSentToday ? 0.98 : 1 }],
+            opacity: plusLocked || customNoteSentToday ? 0.55 : customBusy ? 0.5 : pressed ? 0.92 : 1,
+            transform: [{ scale: pressed && !customBusy && !customNoteSentToday ? 0.98 : 1 }],
           },
         ]}
       >

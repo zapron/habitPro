@@ -14,13 +14,13 @@ import {
   ActivityIndicator,
   TouchableOpacity,
 } from "react-native";
-import { X, Camera, MessageSquare, Lock } from "lucide-react-native";
+import { X, Camera, MessageSquare, Lock, Check } from "lucide-react-native";
 import { useTheme } from "../context/ThemeContext";
 import type { AppTheme } from "../styles/theme";
 import type { Habit, StreakMemory } from "../types/habit";
 import { calendarDateForHabitMissionDayIndex, getHabitActiveMissionDaySlot } from "../utils/missionDaySlots";
 
-/** Dot timeline key: Completed / Today / Upcoming — use once beside the cohort participants heading. */
+/** Dot timeline key: Completed / Today / Upcoming. Use once beside the cohort participants heading. */
 export function CohortParticipantTimelineLegend({
   theme,
   isDark,
@@ -30,8 +30,6 @@ export function CohortParticipantTimelineLegend({
 }) {
   const richLegendFill = isDark ? "#23274e" : "#eef2ff";
   const richLegendBorder = theme.colors.indigo[500];
-  const flatLegendFill = isDark ? "#1e293b" : "#f3f4f6";
-  const flatLegendBorder = isDark ? "#475569" : "#d1d5db";
   const todayLegendBorder = theme.colors.amber[500];
   const upcomingLegendBorder = theme.colors.slate[500];
 
@@ -62,8 +60,8 @@ export function CohortParticipantTimelineLegend({
           style={[
             styles.legendSwatch,
             {
-              backgroundColor: flatLegendFill,
-              borderColor: flatLegendBorder,
+              backgroundColor: richLegendFill,
+              borderColor: richLegendBorder,
               borderWidth: 1.5,
             },
           ]}
@@ -145,6 +143,7 @@ export const CohortPeerStreakDots = memo(function CohortPeerStreakDots({
     dateStr: string;
     memory?: StreakMemory;
     isPrivate?: boolean;
+    isCheckInOnly?: boolean;
   } | null>(null);
   const [imgLoading, setImgLoading] = useState(false);
   const viewerUri = open?.memory?.imageUrl || open?.memory?.imageUri;
@@ -165,51 +164,43 @@ export const CohortPeerStreakDots = memo(function CohortPeerStreakDots({
           const hasPhoto = completed && isPublic && Boolean(memory?.imageUrl || memory?.imageUri);
           const hasNoteOnly = completed && isPublic && !hasPhoto && Boolean(memory?.note?.trim());
           const hasMemory = hasPhoto || hasNoteOnly;
-          const tappable = completed && (hasMemory || !isPublic);
+          const isCheckInOnly = completed && isPublic && !hasMemory;
+          const tappable = completed;
 
-          // Distinct Completed Styles (Option B + Private Complete support)
+          // Completed days share the same indigo circle; memory days add camera/text badges.
           let dotBg = theme.colors.surfaceElevated;
           let dotBorder = isCurrentSlot ? theme.colors.amber[500] : theme.colors.border;
           let dotText = theme.colors.textMuted;
           let extraStyle = {};
 
           if (completed) {
-            // Private completed streaks OR Public rich completed streaks are rendered as glowing Indigo
-            if (!isPublic || hasMemory) {
-              dotBg = isDark ? "#23274e" : "#eef2ff"; // Solid dark navy or light lavender background
-              dotBorder = isCurrentSlot
-                ? isDark ? "rgba(245, 158, 11, 0.72)" : "rgba(217, 119, 6, 0.58)"
-                : isDark ? "rgba(99, 102, 241, 0.62)" : "rgba(79, 70, 229, 0.42)";
-              dotText = isDark ? theme.colors.white : theme.colors.indigo[600];
-              extraStyle = {
-                shadowColor: theme.colors.indigo[500],
-                shadowOffset: { width: 0, height: 1.2 },
-                shadowOpacity: 0.22,
-                shadowRadius: 2.2,
-                elevation: 2,
-              };
-            } else {
-              // Public Check-in Only styling - Flat slate/gray
-              dotBg = isDark ? "#1e293b" : "#f3f4f6"; // Solid dark slate or light gray background
-              dotBorder = isCurrentSlot
-                ? isDark ? "rgba(245, 158, 11, 0.72)" : "rgba(217, 119, 6, 0.58)"
-                : isDark ? "rgba(71, 85, 105, 0.66)" : "rgba(156, 163, 175, 0.48)";
-              dotText = isDark ? "#94a3b8" : "#9ca3af";
-            }
+            dotBg = isDark ? "#23274e" : "#eef2ff";
+            dotBorder = isCurrentSlot
+              ? isDark ? "rgba(245, 158, 11, 0.72)" : "rgba(217, 119, 6, 0.58)"
+              : isDark ? "rgba(99, 102, 241, 0.62)" : "rgba(79, 70, 229, 0.42)";
+            dotText = isDark ? theme.colors.white : theme.colors.indigo[600];
+            extraStyle = {
+              shadowColor: theme.colors.indigo[500],
+              shadowOffset: { width: 0, height: 1.2 },
+              shadowOpacity: 0.22,
+              shadowRadius: 2.2,
+              elevation: 2,
+            };
           }
 
           return (
             <Pressable
               key={dateStr}
               onPress={() => {
-                if (completed) {
-                  if (!isPublic) {
-                    setOpen({ dateStr, isPrivate: true });
-                  } else if (memory && hasMemory) {
-                    const hasImg = Boolean(memory.imageUrl || memory.imageUri);
-                    setImgLoading(hasImg);
-                    setOpen({ dateStr, memory });
-                  }
+                if (!completed) return;
+                if (!isPublic) {
+                  setOpen({ dateStr, isPrivate: true });
+                } else if (memory && hasMemory) {
+                  const hasImg = Boolean(memory.imageUrl || memory.imageUri);
+                  setImgLoading(hasImg);
+                  setOpen({ dateStr, memory });
+                } else if (isCheckInOnly) {
+                  setOpen({ dateStr, isCheckInOnly: true });
                 }
               }}
               disabled={!tappable}
@@ -260,6 +251,25 @@ export const CohortPeerStreakDots = memo(function CohortPeerStreakDots({
                 </Text>
                 <Text style={[styles.privateBody, { color: theme.colors.textSecondary }]}>
                   {handle} has made their streaks private. Ask them to make it public in order to view them.
+                </Text>
+                <TouchableOpacity
+                  activeOpacity={0.86}
+                  onPress={handleClose}
+                  style={[styles.privateCloseBtn, { backgroundColor: theme.colors.indigo[600] }]}
+                >
+                  <Text style={styles.privateCloseText}>Got it</Text>
+                </TouchableOpacity>
+              </View>
+            ) : open?.isCheckInOnly ? (
+              <View style={[styles.privateContainer, { backgroundColor: theme.colors.surfaceElevated, borderColor: theme.colors.border }]}>
+                <View style={[styles.privateIconOrb, { backgroundColor: isDark ? "rgba(99, 102, 241, 0.16)" : "rgba(99, 102, 241, 0.08)", borderColor: theme.colors.indigo[500] }]}>
+                  <Check size={28} color={theme.colors.indigo[500]} strokeWidth={2.5} />
+                </View>
+                <Text style={[styles.privateTitle, { color: theme.colors.textPrimary }]}>
+                  Check-in only
+                </Text>
+                <Text style={[styles.privateBody, { color: theme.colors.textSecondary }]}>
+                  This day is simply marked as complete. No photo or note was shared.
                 </Text>
                 <TouchableOpacity
                   activeOpacity={0.86}
