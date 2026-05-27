@@ -77,7 +77,7 @@ import { useNotificationGate } from "../../src/context/NotificationGateContext";
 import { isSupabaseConfigured } from '../../src/lib/env';
 import {
   leaveChallengeGroup,
-  listChallengeInviteeStatusesForChallenge,
+  listChallengeMembers,
   refreshCohortPeerHabits,
 } from '../../src/lib/groupChallengesApi';
 import {
@@ -463,6 +463,8 @@ export default function HabitDetail() {
     }, [habit, now]);
     const [repairSheetOpen, setRepairSheetOpen] = useState(false);
     const [repairStatus, setRepairStatus] = useState<"pending" | "approved" | "declined" | "applied" | null>(null);
+    const isLoneGroupMission = Boolean(habit?.challengeGroupId && acceptedGroupMemberCount === 1);
+    const pendingRepairCanFinalize = Boolean(repairStatus === "pending" && isLoneGroupMission);
 
     const [isPreMounted, setIsPreMounted] = useState(false);
     useEffect(() => {
@@ -471,7 +473,7 @@ export default function HabitDetail() {
     }, []);
 
     const openRepair = useCallback(async () => {
-        if (!eligibleRepair || repairStatus === "pending") return;
+        if (!eligibleRepair || (repairStatus === "pending" && !pendingRepairCanFinalize)) return;
         const isGroupRepair = Boolean(habit?.challengeGroupId);
         if (isGroupRepair) {
           const freshPremium = await refreshPremiumAccess({ force: true, cachedAccessOk: true });
@@ -481,7 +483,7 @@ export default function HabitDetail() {
           }
         }
         setRepairSheetOpen(true);
-    }, [eligibleRepair, repairStatus, habit?.challengeGroupId, openUpsell, refreshPremiumAccess]);
+    }, [eligibleRepair, repairStatus, pendingRepairCanFinalize, habit?.challengeGroupId, openUpsell, refreshPremiumAccess]);
 
     useEffect(() => {
       if (repair !== "1") return;
@@ -511,6 +513,12 @@ export default function HabitDetail() {
         cancelled = true;
       };
     }, [eligibleRepair?.dateStr, habit?.id]);
+
+    useEffect(() => {
+      if (repairStatus === "pending" && isLoneGroupMission) {
+        setRepairStatus(null);
+      }
+    }, [repairStatus, isLoneGroupMission]);
 
     useEffect(() => {
       if (!habit) return;
@@ -817,12 +825,10 @@ export default function HabitDetail() {
             return;
         }
         let cancelled = false;
-        void listChallengeInviteeStatusesForChallenge(habit.challengeGroupId)
-            .then((m) => {
+        void listChallengeMembers(habit.challengeGroupId)
+            .then((members) => {
                 if (cancelled) return;
-                const acceptedInvites = Object.values(m ?? {}).filter((s) => s === 'accepted').length;
-                // Count includes the creator/owner + accepted invitees.
-                setAcceptedGroupMemberCount(1 + acceptedInvites);
+                setAcceptedGroupMemberCount(members.length);
             })
             .catch(() => {
                 if (!cancelled) setAcceptedGroupMemberCount(0);

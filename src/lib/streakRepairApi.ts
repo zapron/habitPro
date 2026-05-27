@@ -41,7 +41,9 @@ export async function requestStreakRepair(input: {
   xpCost: number;
   challengeId?: string | null;
   approvalsRequired?: number;
-}): Promise<{ ok: true; repairId: string } | StreakRepairActionFailure> {
+}): Promise<
+  { ok: true; repairId: string; status: StreakRepairStatus | null; xpCost: number | null } | StreakRepairActionFailure
+> {
   const supabase = getSupabase();
   if (!supabase) return { ok: false, error: "Cloud sync not configured." };
 
@@ -57,7 +59,20 @@ export async function requestStreakRepair(input: {
   if (error) return actionError(error);
   const repairId = typeof data === "string" ? data : String(data ?? "");
   if (!repairId) return { ok: false, error: "Failed to create repair request." };
-  return { ok: true, repairId };
+
+  const { data: repairRow } = await supabase
+    .from("streak_repairs")
+    .select("status, xp_cost")
+    .eq("id", repairId)
+    .maybeSingle();
+  const row = repairRow as { status?: string; xp_cost?: number | null } | null;
+  const status = row?.status;
+  const normalizedStatus: StreakRepairStatus | null =
+    status === "pending" || status === "approved" || status === "declined" || status === "applied"
+      ? status
+      : null;
+  const xpCost = typeof row?.xp_cost === "number" && Number.isFinite(row.xp_cost) ? row.xp_cost : null;
+  return { ok: true, repairId, status: normalizedStatus, xpCost };
 }
 
 export async function voteStreakRepair(input: {

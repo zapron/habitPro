@@ -320,11 +320,16 @@ export const useHabitStore = create<HabitStore>()(
           xpCost > 0;
 
         let didApply = false;
+        let shouldChargeXp = false;
         set((state) => {
           const updatedHabits = state.habits.map((habit) => {
             if (habit.id !== habitId) return habit;
 
             const prevMem = habit.streakMemories?.[dateStr];
+            const alreadyRepaired =
+              habit.repairedDates?.includes(dateStr) === true ||
+              prevMem?.repairSource === "solo" ||
+              prevMem?.repairSource === "squad";
             const mergedMem = mergeRepairIntoStreakMemory(prevMem, repairSource);
             const nextStreakMemories: Record<string, StreakMemory> = {
               ...(habit.streakMemories ?? {}),
@@ -350,6 +355,7 @@ export const useHabitStore = create<HabitStore>()(
             );
 
             didApply = true;
+            if (!alreadyRepaired) shouldChargeXp = true;
             return {
               ...habit,
               completedDates: normalized,
@@ -362,7 +368,7 @@ export const useHabitStore = create<HabitStore>()(
           });
 
           const nextXp =
-            shouldDeduct && didApply ? Math.max(0, state.xp - (xpCost as number)) : state.xp;
+            shouldDeduct && shouldChargeXp ? Math.max(0, state.xp - (xpCost as number)) : state.xp;
 
           return didApply ? { habits: updatedHabits, xp: nextXp } : { habits: updatedHabits };
         });

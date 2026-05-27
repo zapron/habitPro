@@ -50,12 +50,20 @@ export function StreakRepairSheet({ visible, onClose, habit, eligible, onRequest
   const [busy, setBusy] = useState(false);
   const [askSquad, setAskSquad] = useState(true);
   const [approvalsRequired, setApprovalsRequired] = useState(STREAK_REPAIR_SQUAD_APPROVALS_REQUIRED);
+  const [groupMemberCount, setGroupMemberCount] = useState<number | null>(null);
 
+  const groupIsSoloFallback = Boolean(isGroup && groupMemberCount === 1);
+  const needsSquadApproval = Boolean(isGroup && !groupIsSoloFallback);
   const canSelfApprove = !isGroup || STREAK_REPAIR_ALLOW_GROUP_SELF_APPROVE;
-  const effectiveAskSquad = isGroup ? (canSelfApprove ? askSquad : true) : false;
+  const effectiveAskSquad = needsSquadApproval ? (canSelfApprove ? askSquad : true) : false;
 
   useEffect(() => {
-    if (!visible || !isGroup) return;
+    if (!visible) return;
+    if (!isGroup) {
+      setGroupMemberCount(null);
+      setApprovalsRequired(STREAK_REPAIR_SQUAD_APPROVALS_REQUIRED);
+      return;
+    }
     const cid = habit.challengeGroupId ?? null;
     if (!cid) return;
     let cancelled = false;
@@ -63,12 +71,19 @@ export function StreakRepairSheet({ visible, onClose, habit, eligible, onRequest
       .then((rows) => {
         if (cancelled) return;
         const memberCount = rows.length;
+        setGroupMemberCount(memberCount);
         // Approvals exclude requester. For 2-person squads, require 1 approval.
-        const req = Math.max(1, Math.min(STREAK_REPAIR_SQUAD_APPROVALS_REQUIRED, memberCount - 1));
+        const req =
+          memberCount <= 1
+            ? 0
+            : Math.max(1, Math.min(STREAK_REPAIR_SQUAD_APPROVALS_REQUIRED, memberCount - 1));
         setApprovalsRequired(req);
       })
       .catch(() => {
-        if (!cancelled) setApprovalsRequired(STREAK_REPAIR_SQUAD_APPROVALS_REQUIRED);
+        if (!cancelled) {
+          setGroupMemberCount(null);
+          setApprovalsRequired(STREAK_REPAIR_SQUAD_APPROVALS_REQUIRED);
+        }
       });
     return () => {
       cancelled = true;
@@ -78,12 +93,14 @@ export function StreakRepairSheet({ visible, onClose, habit, eligible, onRequest
   const cost = eligible.xpCost;
   const hasXp = xp >= cost;
   const trimmed = reason.trim();
-  const canSubmit = trimmed.length > 0 && !busy && (!isGroup ? hasXp : true);
+  const submitNeedsXpNow = !isGroup || groupIsSoloFallback;
+  const canSubmit = trimmed.length > 0 && !busy && (!submitNeedsXpNow || hasXp);
 
   const primaryLabel = useMemo(() => {
+    if (groupIsSoloFallback) return "Pay XP & repair";
     if (isGroup) return "Request squad approval";
     return "Pay XP & repair";
-  }, [isGroup]);
+  }, [groupIsSoloFallback, isGroup]);
 
   useEffect(() => {
     if (!visible || !isGroup) return;
@@ -180,25 +197,30 @@ export function StreakRepairSheet({ visible, onClose, habit, eligible, onRequest
                 Streak repairs are part of HabitPro Community.
               </Text>
             ) : null}
-            {!isGroup && !hasXp ? (
+            {groupIsSoloFallback ? (
+              <Text style={[styles.costBody, { color: theme.colors.textSecondary, marginTop: 6 }]}>
+                You're the only active member now, so this repair applies immediately after XP is charged.
+              </Text>
+            ) : null}
+            {submitNeedsXpNow && !hasXp ? (
               <Text style={[styles.costBody, { color: theme.colors.red[500], marginTop: 6 }]}>
                 Not enough XP. Earn more by completing missions.
               </Text>
             ) : null}
           </View>
 
-          {isGroup ? (
+          {needsSquadApproval ? (
             <View style={[styles.verifyCard, { borderColor: theme.colors.border }]}>
               <View style={styles.verifyHead}>
                 <Users size={18} color={theme.colors.indigo[400]} />
                 <Text style={[styles.verifyTitle, { color: theme.colors.textPrimary }]}>
-                  Squad approval
+                  {groupIsSoloFallback ? "Solo repair" : "Squad approval"}
                 </Text>
               </View>
               <Text style={[styles.verifyBody, { color: theme.colors.textSecondary }]}>
                 We’ll apply the repair after {approvalsRequired} squadmate{approvalsRequired === 1 ? "" : "s"} approve. XP is charged only when applied.
               </Text>
-              {canSelfApprove ? (
+              {canSelfApprove && !groupIsSoloFallback ? (
                 <View style={styles.toggleRow}>
                   <Text style={[styles.toggleLabel, { color: theme.colors.textSecondary }]}>
                     Ask squad to approve
@@ -228,7 +250,7 @@ export function StreakRepairSheet({ visible, onClose, habit, eligible, onRequest
             disabled={!canSubmit}
             onPress={async () => {
               if (!trimmed || busy) return;
-              if (!isGroup && !hasXp) return;
+              if (submitNeedsXpNow && !hasXp) return;
               setBusy(true);
               try {
                 if (isGroup) {
@@ -257,12 +279,13 @@ export function StreakRepairSheet({ visible, onClose, habit, eligible, onRequest
                   return;
                 }
 
-                if (!isGroup) {
+                if (!isGroup || res.status === "applied") {
+                  const appliedXpCost = typeof res.xpCost === "number" ? res.xpCost : cost;
                   // Server already charged XP and repaired the date; mirror that without granting completion XP.
                   useHabitStore.getState().applyStreakRepairLocally({
                     habitId: habit.id,
                     dateStr: eligible.dateStr,
-                    xpCost: cost,
+                    xpCost: appliedXpCost,
                     repairSource: "solo",
                     deductXp: true,
                   });
