@@ -2,7 +2,8 @@ import { Text } from "./AppText";
 import {
   memo,
   useMemo,
-  useState } from "react";
+  useState,
+  useCallback } from "react";
 import {
   View,
   Pressable,
@@ -10,8 +11,10 @@ import {
   Modal,
   Image,
   ScrollView,
+  ActivityIndicator,
+  TouchableOpacity,
 } from "react-native";
-import { X } from "lucide-react-native";
+import { X, Camera, MessageSquare, Lock } from "lucide-react-native";
 import { useTheme } from "../context/ThemeContext";
 import type { AppTheme } from "../styles/theme";
 import type { Habit, StreakMemory } from "../types/habit";
@@ -25,25 +28,53 @@ export function CohortParticipantTimelineLegend({
   theme: AppTheme;
   isDark: boolean;
 }) {
-  const completedLegendFill = isDark ? theme.colors.indigo[600] : "rgba(99, 102, 241, 0.18)";
+  const richLegendFill = isDark ? "#23274e" : "#eef2ff";
+  const richLegendBorder = theme.colors.indigo[500];
+  const flatLegendFill = isDark ? "#1e293b" : "#f3f4f6";
+  const flatLegendBorder = isDark ? "#475569" : "#d1d5db";
   const todayLegendBorder = theme.colors.amber[500];
-  /** Stronger than `border` so the swatch doesn’t read as empty space on light cards (timeline dots use low opacity; legend stays legible). */
   const upcomingLegendBorder = theme.colors.slate[500];
 
   return (
     <View
       style={styles.legendRow}
-      accessibilityLabel="Timeline legend: completed days, today, upcoming days"
+      accessibilityLabel="Timeline legend: with memory, check-in only, today, upcoming days"
     >
       <View style={styles.legendItem}>
-        <View style={[styles.legendSwatch, { backgroundColor: completedLegendFill, borderColor: theme.colors.border }]} />
-        <Text style={[styles.legendLabel, { color: theme.colors.textMuted }]}>Completed</Text>
+        <View
+          style={[
+            styles.legendSwatch,
+            {
+              backgroundColor: richLegendFill,
+              borderColor: richLegendBorder,
+              borderWidth: 1.5,
+              shadowColor: theme.colors.indigo[500],
+              shadowOffset: { width: 0, height: 1 },
+              shadowOpacity: 0.2,
+              shadowRadius: 1,
+            },
+          ]}
+        />
+        <Text style={[styles.legendLabel, { color: theme.colors.textMuted }]}>With Memory</Text>
       </View>
       <View style={styles.legendItem}>
         <View
           style={[
             styles.legendSwatch,
-            { backgroundColor: theme.colors.surfaceElevated, borderColor: todayLegendBorder, borderWidth: 2 },
+            {
+              backgroundColor: flatLegendFill,
+              borderColor: flatLegendBorder,
+              borderWidth: 1.5,
+            },
+          ]}
+        />
+        <Text style={[styles.legendLabel, { color: theme.colors.textMuted }]}>Check-in Only</Text>
+      </View>
+      <View style={styles.legendItem}>
+        <View
+          style={[
+            styles.legendSwatch,
+            { backgroundColor: theme.colors.surfaceElevated, borderColor: todayLegendBorder, borderWidth: 1.8 },
           ]}
         />
         <Text style={[styles.legendLabel, { color: theme.colors.textMuted }]}>Today</Text>
@@ -55,7 +86,7 @@ export function CohortParticipantTimelineLegend({
             {
               backgroundColor: theme.colors.surfaceElevated,
               borderColor: upcomingLegendBorder,
-              borderWidth: 2,
+              borderWidth: 1.8,
             },
           ]}
         />
@@ -110,8 +141,18 @@ export const CohortPeerStreakDots = memo(function CohortPeerStreakDots({
     return out;
   }, [habit, nowMs, total]);
 
-  const [open, setOpen] = useState<{ dateStr: string; memory: StreakMemory } | null>(null);
+  const [open, setOpen] = useState<{
+    dateStr: string;
+    memory?: StreakMemory;
+    isPrivate?: boolean;
+  } | null>(null);
+  const [imgLoading, setImgLoading] = useState(false);
   const viewerUri = open?.memory?.imageUrl || open?.memory?.imageUri;
+
+  const handleClose = useCallback(() => {
+    setOpen(null);
+    setImgLoading(false);
+  }, []);
 
   const handle = peerUsername ? `@${peerUsername}` : "Member";
 
@@ -121,71 +162,146 @@ export const CohortPeerStreakDots = memo(function CohortPeerStreakDots({
         {days.map(({ dayNum, dateStr, completed, memory }) => {
           const isCurrentSlot = activeSlot === dayNum;
           const isPublic = (habit.visibility ?? "solo") === "public";
-          const hasMemory = isPublic && Boolean(memory?.note || memory?.imageUrl || memory?.imageUri);
-          const tappable = completed && hasMemory;
-          /** Light mode: soft indigo wash instead of solid 600 (less blunt on white cards). */
-          const completedFill = isDark ? theme.colors.indigo[600] : "rgba(99, 102, 241, 0.18)";
-          const completedNum = isDark ? theme.colors.textPrimary : theme.colors.indigo[600];
-          const completedBorder =
-            isCurrentSlot
-              ? theme.colors.amber[500]
-              : isDark
-                ? theme.colors.border
-                : "rgba(99, 102, 241, 0.38)";
+          const hasPhoto = completed && isPublic && Boolean(memory?.imageUrl || memory?.imageUri);
+          const hasNoteOnly = completed && isPublic && !hasPhoto && Boolean(memory?.note?.trim());
+          const hasMemory = hasPhoto || hasNoteOnly;
+          const tappable = completed && (hasMemory || !isPublic);
+
+          // Distinct Completed Styles (Option B + Private Complete support)
+          let dotBg = theme.colors.surfaceElevated;
+          let dotBorder = isCurrentSlot ? theme.colors.amber[500] : theme.colors.border;
+          let dotText = theme.colors.textMuted;
+          let extraStyle = {};
+
+          if (completed) {
+            // Private completed streaks OR Public rich completed streaks are rendered as glowing Indigo
+            if (!isPublic || hasMemory) {
+              dotBg = isDark ? "#23274e" : "#eef2ff"; // Solid dark navy or light lavender background
+              dotBorder = isCurrentSlot ? theme.colors.amber[500] : theme.colors.indigo[500];
+              dotText = isDark ? theme.colors.white : theme.colors.indigo[600];
+              extraStyle = {
+                shadowColor: theme.colors.indigo[500],
+                shadowOffset: { width: 0, height: 1.2 },
+                shadowOpacity: 0.22,
+                shadowRadius: 2.2,
+                elevation: 2,
+              };
+            } else {
+              // Public Check-in Only styling - Flat slate/gray
+              dotBg = isDark ? "#1e293b" : "#f3f4f6"; // Solid dark slate or light gray background
+              dotBorder = isCurrentSlot ? theme.colors.amber[500] : isDark ? "#475569" : "#d1d5db";
+              dotText = isDark ? "#94a3b8" : "#9ca3af";
+            }
+          }
+
           return (
             <Pressable
               key={dateStr}
               onPress={() => {
-                if (completed && memory && hasMemory) setOpen({ dateStr, memory });
+                if (completed) {
+                  if (!isPublic) {
+                    setOpen({ dateStr, isPrivate: true });
+                  } else if (memory && hasMemory) {
+                    const hasImg = Boolean(memory.imageUrl || memory.imageUri);
+                    setImgLoading(hasImg);
+                    setOpen({ dateStr, memory });
+                  }
+                }
               }}
               disabled={!tappable}
               style={[
                 styles.dot,
                 {
-                  borderColor: completed ? completedBorder : isCurrentSlot ? theme.colors.amber[500] : theme.colors.border,
-                  backgroundColor: completed ? completedFill : theme.colors.surfaceElevated,
+                  borderColor: dotBorder,
+                  backgroundColor: dotBg,
                   opacity: tappable ? 1 : completed ? 0.95 : 0.45,
+                  ...extraStyle,
                 },
               ]}
             >
               <Text
                 style={[
                   styles.dotNum,
-                  { color: completed ? completedNum : theme.colors.textMuted },
+                  { color: dotText },
                 ]}
               >
                 {dayNum}
               </Text>
-              {hasMemory && completed ? (
-                <View style={[styles.memDot, { backgroundColor: theme.colors.amber[400] }]} />
+              
+              {/* Option A Micro-badges (Only rendered for public streaks with memory) */}
+              {isPublic && hasPhoto ? (
+                <View style={[styles.floatingBadge, { backgroundColor: theme.colors.amber[500], borderColor: theme.colors.surfaceElevated }]}>
+                  <Camera size={7.5} color="#111827" strokeWidth={2.5} />
+                </View>
+              ) : isPublic && hasNoteOnly ? (
+                <View style={[styles.floatingBadge, { backgroundColor: theme.colors.indigo[500], borderColor: theme.colors.surfaceElevated }]}>
+                  <MessageSquare size={7.5} color="#ffffff" strokeWidth={2.5} />
+                </View>
               ) : null}
             </Pressable>
           );
         })}
       </ScrollView>
 
-      <Modal visible={open !== null} transparent animationType="fade" onRequestClose={() => setOpen(null)}>
-        <Pressable style={[styles.viewerBackdrop, { backgroundColor: "rgba(0,0,0,0.85)" }]} onPress={() => setOpen(null)}>
+      <Modal visible={open !== null} transparent animationType="fade" onRequestClose={handleClose}>
+        <Pressable style={[styles.viewerBackdrop, { backgroundColor: "rgba(0,0,0,0.85)" }]} onPress={handleClose}>
           <Pressable style={styles.viewerInner} onPress={(e) => e.stopPropagation()}>
-            {viewerUri && (!remotePeer || uriLoadsForRemoteViewer(viewerUri)) ? (
-              <Image source={{ uri: viewerUri }} style={styles.viewerImg} resizeMode="contain" />
-            ) : null}
-            <View style={[styles.viewerMeta, { backgroundColor: theme.colors.surfaceElevated, borderColor: theme.colors.border }]}>
-              <Text style={[styles.viewerDate, { color: theme.colors.cyan[400] }]}>{open?.dateStr}</Text>
-              {open?.memory.note ? (
-                <Text style={[styles.viewerNote, { color: theme.colors.textPrimary }]}>{open.memory.note}</Text>
-              ) : open?.memory?.imageUri && remotePeer && !open.memory.imageUrl && !uriLoadsForRemoteViewer(open.memory.imageUri) ? (
-                <Text style={[styles.viewerNote, { color: theme.colors.textMuted, fontStyle: "italic" }]}>
-                  Photo not synced to cloud yet.
+            {open?.isPrivate ? (
+              <View style={[styles.privateContainer, { backgroundColor: theme.colors.surfaceElevated, borderColor: theme.colors.border }]}>
+                <View style={[styles.privateIconOrb, { backgroundColor: isDark ? "rgba(99, 102, 241, 0.16)" : "rgba(99, 102, 241, 0.08)", borderColor: theme.colors.indigo[500] }]}>
+                  <Lock size={28} color={theme.colors.indigo[500]} />
+                </View>
+                <Text style={[styles.privateTitle, { color: theme.colors.textPrimary }]}>
+                  Private Streak
                 </Text>
-              ) : null}
-            </View>
-            <Pressable
-              onPress={() => setOpen(null)}
-              style={[styles.viewerClose, { backgroundColor: theme.colors.surface }]}
-            >
-              <X size={22} color={theme.colors.textPrimary} />
-            </Pressable>
+                <Text style={[styles.privateBody, { color: theme.colors.textSecondary }]}>
+                  {handle} has made their streaks private. Ask them to make it public in order to view them.
+                </Text>
+                <TouchableOpacity
+                  activeOpacity={0.86}
+                  onPress={handleClose}
+                  style={[styles.privateCloseBtn, { backgroundColor: theme.colors.indigo[600] }]}
+                >
+                  <Text style={styles.privateCloseText}>Got it</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <>
+                {viewerUri && (!remotePeer || uriLoadsForRemoteViewer(viewerUri)) ? (
+                  <View style={styles.imgContainer}>
+                    <Image
+                      source={{ uri: viewerUri }}
+                      style={styles.viewerImg}
+                      resizeMode="contain"
+                      onLoadStart={() => setImgLoading(true)}
+                      onLoadEnd={() => setImgLoading(false)}
+                    />
+                    {imgLoading && (
+                      <View style={[StyleSheet.absoluteFillObject, styles.imgSkeleton, { backgroundColor: isDark ? "#111827" : "#eef2ff" }]}>
+                        <ActivityIndicator size="small" color={theme.colors.indigo[500]} />
+                        <Text style={[styles.skeletonText, { color: theme.colors.textSecondary }]}>Loading moment…</Text>
+                      </View>
+                    )}
+                  </View>
+                ) : null}
+                <View style={[styles.viewerMeta, { backgroundColor: theme.colors.surfaceElevated, borderColor: theme.colors.border }]}>
+                  <Text style={[styles.viewerDate, { color: theme.colors.cyan[400] }]}>{open?.dateStr}</Text>
+                  {open?.memory?.note ? (
+                    <Text style={[styles.viewerNote, { color: theme.colors.textPrimary }]}>{open.memory.note}</Text>
+                  ) : open?.memory?.imageUri && remotePeer && !open.memory.imageUrl && !uriLoadsForRemoteViewer(open.memory.imageUri) ? (
+                    <Text style={[styles.viewerNote, { color: theme.colors.textMuted, fontStyle: "italic" }]}>
+                      Photo not synced to cloud yet.
+                    </Text>
+                  ) : null}
+                </View>
+                <Pressable
+                  onPress={handleClose}
+                  style={[styles.viewerClose, { backgroundColor: theme.colors.surface }]}
+                >
+                  <X size={22} color={theme.colors.textPrimary} />
+                </Pressable>
+              </>
+            )}
           </Pressable>
         </Pressable>
       </Modal>
@@ -216,7 +332,6 @@ export const CohortPeerStreakDots = memo(function CohortPeerStreakDots({
 });
 
 CohortPeerStreakDots.displayName = "CohortPeerStreakDots";
-
 const styles = StyleSheet.create({
   wrap: { marginBottom: 16 },
   wrapEmbedded: { marginTop: 4 },
@@ -249,16 +364,43 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   dotNum: { fontSize: 12, fontWeight: "800" },
-  memDot: {
+  floatingBadge: {
     position: "absolute",
-    bottom: 2,
-    width: 6,
-    height: 6,
-    borderRadius: 9999,
+    top: -4,
+    right: -4,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    borderWidth: 1.2,
+    alignItems: "center",
+    justifyContent: "center",
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.18,
+    shadowRadius: 1,
   },
   viewerBackdrop: { flex: 1, justifyContent: "center", padding: 20 },
   viewerInner: { borderRadius: 20, overflow: "hidden" },
-  viewerImg: { width: "100%", height: 320, backgroundColor: "#000" },
+  imgContainer: {
+    width: "100%",
+    height: 320,
+    backgroundColor: "#000",
+    position: "relative",
+    overflow: "hidden",
+  },
+  viewerImg: { width: "100%", height: "100%" },
+  imgSkeleton: {
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  skeletonText: {
+    fontSize: 12,
+    fontWeight: "700",
+    letterSpacing: 0.5,
+    marginTop: 4,
+  },
   viewerMeta: { padding: 16, borderTopWidth: 1 },
   viewerDate: { fontSize: 12, fontWeight: "800", letterSpacing: 0.8, marginBottom: 8 },
   viewerNote: { fontSize: 16, lineHeight: 24 },
@@ -271,5 +413,49 @@ const styles = StyleSheet.create({
     borderRadius: 9999,
     alignItems: "center",
     justifyContent: "center",
+  },
+  privateContainer: {
+    padding: 24,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    width: "100%",
+  },
+  privateIconOrb: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    borderWidth: 1.5,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 16,
+  },
+  privateTitle: {
+    fontSize: 18,
+    fontWeight: "800",
+    marginBottom: 8,
+    textAlign: "center",
+  },
+  privateBody: {
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: "600",
+    textAlign: "center",
+    marginBottom: 20,
+    paddingHorizontal: 8,
+  },
+  privateCloseBtn: {
+    paddingVertical: 12,
+    paddingHorizontal: 32,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    width: "100%",
+  },
+  privateCloseText: {
+    color: "#ffffff",
+    fontWeight: "800",
+    fontSize: 14,
   },
 });

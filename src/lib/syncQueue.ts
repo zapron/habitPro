@@ -1,5 +1,6 @@
 import type { HabitStore } from "../types/habit";
 import { useHabitStore } from "../store/habitStore";
+import { InteractionManager } from "react-native";
 import { saveAccountSnapshotBackup } from "./accountBackup";
 import { deleteRemoteHabit, deleteRemoteMiniMission, pushFullState } from "./sync";
 
@@ -103,19 +104,21 @@ function flush() {
   const snap = getSnapshot!();
   void saveAccountSnapshotBackup(userId, snap, "pre-remote-push");
   inFlightPushes += 1;
-  void pushFullState(userId!, snap)
-    .then(() => {
-      // Clear the dirty flags in the store on successful sync
-      useHabitStore.getState().clearDirtyState(snap.dirtyHabitIds, snap.dirtyMiniMissionIds);
-      notifySyncSuccess();
-    })
-    .catch((e) => {
-      console.warn("[habitPro] remote sync failed", e);
-      notifySyncFailure(e);
-    })
-    .finally(() => {
-      inFlightPushes = Math.max(0, inFlightPushes - 1);
-    });
+  InteractionManager.runAfterInteractions(() => {
+    pushFullState(userId!, snap)
+      .then(() => {
+        // Clear the dirty flags in the store on successful sync
+        useHabitStore.getState().clearDirtyState(snap.dirtyHabitIds, snap.dirtyMiniMissionIds);
+        notifySyncSuccess();
+      })
+      .catch((e) => {
+        console.warn("[habitPro] remote sync failed", e);
+        notifySyncFailure(e);
+      })
+      .finally(() => {
+        inFlightPushes = Math.max(0, inFlightPushes - 1);
+      });
+  });
 }
 
 export function hasPendingRemoteSync(): boolean {

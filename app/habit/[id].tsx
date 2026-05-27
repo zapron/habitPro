@@ -20,6 +20,7 @@ import { View,
   Switch,
   ActivityIndicator,
   Alert,
+  InteractionManager,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
@@ -107,7 +108,7 @@ function getMilestones(totalDays: number, mode: string): number[] {
     return [...new Set([m1, m2, m3])];
 }
 
-function HabitGridBrandRing({
+const HabitGridBrandRing = React.memo(function HabitGridBrandRing({
     day,
     variant,
     isMilestone,
@@ -215,7 +216,7 @@ function HabitGridBrandRing({
             ) : null}
         </View>
     );
-}
+});
 
 const AnimatedDayCell = React.memo(function AnimatedDayCell({
     day,
@@ -230,24 +231,21 @@ const AnimatedDayCell = React.memo(function AnimatedDayCell({
     repaired,
     repairSource,
     onPress,
+    isSheetOpen,
 }: {
     day: number;
     dayIndex: number;
     isCompleted: boolean;
     isMilestone: boolean;
-    /** Current 24h mission slot — highlight + pulse when not yet completed */
     isCurrentMissionDay: boolean;
-    /** Not yet unlocked, missed, or mission ended — show lock when incomplete */
     locked: boolean;
     canInteract: boolean;
-    /** Any streak memory row (rich moment or check-in-only lock). */
     hasStreakRecord: boolean;
-    /** Photo or note saved for this day (amber dot). */
     hasMomentMedia: boolean;
-    /** This day was restored via Streak Repair. */
     repaired: boolean;
     repairSource?: "squad" | "solo";
     onPress: (dayIndex: number, day: number) => void;
+    isSheetOpen: boolean;
 }) {
     const { theme, isDark } = useTheme();
     const reduceMotion = useReducedMotion();
@@ -256,7 +254,11 @@ const AnimatedDayCell = React.memo(function AnimatedDayCell({
     const todayPulse = useRef(new Animated.Value(1)).current;
 
     useEffect(() => {
-        if (reduceMotion || !(isCurrentMissionDay && !isCompleted)) return;
+        if (reduceMotion || !(isCurrentMissionDay && !isCompleted) || isSheetOpen) {
+            todayPulse.stopAnimation();
+            todayPulse.setValue(1);
+            return undefined;
+        }
         const loop = Animated.loop(
             Animated.sequence([
                 Animated.timing(todayPulse, { toValue: 1.06, duration: 1400, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
@@ -265,7 +267,7 @@ const AnimatedDayCell = React.memo(function AnimatedDayCell({
         );
         loop.start();
         return () => loop.stop();
-    }, [reduceMotion, isCurrentMissionDay, isCompleted, todayPulse]);
+    }, [reduceMotion, isCurrentMissionDay, isCompleted, todayPulse, isSheetOpen]);
 
     useEffect(() => {
         if (reduceMotion || !(isMilestone && isCompleted)) return;
@@ -279,17 +281,30 @@ const AnimatedDayCell = React.memo(function AnimatedDayCell({
         return () => loop.stop();
     }, [reduceMotion, isMilestone, isCompleted, shimmer]);
 
-    const handlePress = useCallback(() => {
-        Animated.sequence([
-            Animated.spring(scale, { toValue: 0.82, tension: 250, friction: 6, useNativeDriver: true }),
-            Animated.spring(scale, { toValue: 1, tension: 200, friction: 5, useNativeDriver: true }),
-        ]).start();
-        
+    // ── Touch-down: instant scale shrink + haptic (fires the MOMENT finger touches) ──
+    const handlePressIn = useCallback(() => {
+        // Stop pulse animation instantly to free up CPU thread for render frame
+        todayPulse.stopAnimation();
+        todayPulse.setValue(1);
+
+        // Instant scale-down on touch
+        Animated.spring(scale, { toValue: 0.82, tension: 250, friction: 6, useNativeDriver: true }).start();
+
         // Instantly play light touch haptic
         void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        
-        onPress(dayIndex, day);
-    }, [onPress, scale, dayIndex, day]);
+    }, [scale, todayPulse]);
+
+    // ── Touch-up: bounce back to normal scale ──
+    const handlePressOut = useCallback(() => {
+        Animated.spring(scale, { toValue: 1, tension: 200, friction: 5, useNativeDriver: true }).start();
+    }, [scale]);
+
+    // ── Actual press action (fires after touch release, deferred to not block spring) ──
+    const handlePress = useCallback(() => {
+        InteractionManager.runAfterInteractions(() => {
+            onPress(dayIndex, day);
+        });
+    }, [onPress, dayIndex, day]);
 
     const shimmerOpacity = shimmer.interpolate({ inputRange: [0, 1], outputRange: [0.7, 1] });
 
@@ -315,9 +330,12 @@ const AnimatedDayCell = React.memo(function AnimatedDayCell({
     return (
         <Animated.View style={{ width: '13%', aspectRatio: 1, marginBottom: 14, transform: [{ scale: animatedScale as any }] }}>
             <TouchableOpacity
+                onPressIn={handlePressIn}
+                onPressOut={handlePressOut}
                 onPress={handlePress}
                 style={dayButtonStyle}
                 activeOpacity={0.8}
+                delayPressIn={0}
                 disabled={!(canInteract || (isCompleted && hasStreakRecord))}
             >
                 {isCompleted ? (
@@ -445,6 +463,12 @@ export default function HabitDetail() {
     }, [habit, now]);
     const [repairSheetOpen, setRepairSheetOpen] = useState(false);
     const [repairStatus, setRepairStatus] = useState<"pending" | "approved" | "declined" | "applied" | null>(null);
+
+    const [isPreMounted, setIsPreMounted] = useState(false);
+    useEffect(() => {
+        const timer = setTimeout(() => setIsPreMounted(true), 300);
+        return () => clearTimeout(timer);
+    }, []);
 
     const openRepair = useCallback(async () => {
         if (!eligibleRepair || repairStatus === "pending") return;
@@ -792,10 +816,6 @@ export default function HabitDetail() {
             setAcceptedGroupMemberCount(0);
             return;
         }
-        if (!memoryUi || memoryUi.kind !== 'create') {
-            setAcceptedGroupMemberCount(0);
-            return;
-        }
         let cancelled = false;
         void listChallengeInviteeStatusesForChallenge(habit.challengeGroupId)
             .then((m) => {
@@ -810,7 +830,7 @@ export default function HabitDetail() {
         return () => {
             cancelled = true;
         };
-    }, [habit?.challengeGroupId, configured, signedIn, memoryUi]);
+    }, [habit?.challengeGroupId, configured, signedIn]);
 
     if (!habit) {
         return (
@@ -840,6 +860,60 @@ export default function HabitDetail() {
 
     const isGroupMission = Boolean(habit.challengeGroupId);
     const showSquadShare = isGroupMission && acceptedGroupMemberCount >= 2 && configured && signedIn;
+
+    const squadShareProp = useMemo(() => {
+        if (!habit) return undefined;
+        return {
+            show: showSquadShare,
+            visibility: habit.visibility ?? 'solo',
+            onToggle: async (nextPublic: boolean) => {
+                const next = nextPublic ? 'public' : 'solo';
+                const prev = habit.visibility ?? 'solo';
+                if (prev === next) return;
+                if (next === 'public' && socialLocked) {
+                    const freshPremium = await refreshPremiumAccess({ force: true, serverOnly: true });
+                    if (freshPremium !== true) {
+                        openUpsell('visibility');
+                        throw new Error('HabitPro Community is required for squad visibility.');
+                    }
+                }
+                lastVisibilityRef.current = { id: habit.id, prev };
+                setHabitVisibility(habit.id, next);
+            },
+        };
+    }, [habit, showSquadShare, socialLocked, refreshPremiumAccess, openUpsell, setHabitVisibility]);
+
+    const habitViewCommunityProp = useMemo(() => {
+        if (!habit || !memoryUi || memoryUi.kind !== 'view') return undefined;
+        const viewMem = habit.streakMemories?.[memoryUi.dateStr] ?? memoryUi.memory;
+        const hasMemoryImage = Boolean(viewMem?.imageUrl || viewMem?.imageUri);
+        const cloudOk = configured && session?.user != null;
+        const plusOk = !socialLocked;
+        return {
+            posted:
+                (habit.streakMemories?.[memoryUi.dateStr]?.communityPosted ??
+                    memoryUi.memory.communityPosted) === true,
+            revoked:
+                (habit.streakMemories?.[memoryUi.dateStr]?.communityFeedRevoked ??
+                    memoryUi.memory.communityFeedRevoked) === true,
+            available: cloudOk && hasMemoryImage && plusOk,
+            needsPhotoForCommunity: cloudOk && !hasMemoryImage,
+            plusRequired: cloudOk && hasMemoryImage && !plusOk,
+            busy: habitCommunityBusy,
+            pendingPublish: habitCommunityPublishPending,
+            onChange: (v: boolean) =>
+                void handleHabitMemoryCommunityChange(v, memoryUi.dateStr, memoryUi.day),
+        };
+    }, [
+        habit,
+        memoryUi,
+        configured,
+        session?.user,
+        socialLocked,
+        habitCommunityBusy,
+        habitCommunityPublishPending,
+        handleHabitMemoryCommunityChange,
+    ]);
 
     const handleReset = () => {
         if (isGroupMission) {
@@ -895,17 +969,13 @@ export default function HabitDetail() {
             return;
         }
 
-        if (!canInteract) {
-            showToast(LOCKED_CHECKIN_MSG, 'info', 5000);
-            return;
-        }
-
-        const changed = toggleCompletion(currentHabit.id, dateStr);
-        if (!changed) {
-            showToast(LOCKED_CHECKIN_MSG, 'info', 5000);
-            return;
-        }
-        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        // Instead of uncompleting, open view-sheet showing "Check-in only"
+        setMemoryUi({
+            kind: 'view',
+            memory: { createdAt: new Date().toISOString(), checkInOnly: true },
+            dateStr,
+            day
+        });
     }, [habitId, toggleCompletion, showToast]);
 
     return (
@@ -915,12 +985,13 @@ export default function HabitDetail() {
             <View style={styles.header}>
                 <TouchableOpacity
                     style={[styles.iconButton, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}
-                    onPress={() => {
+                    onPressIn={() => {
                         void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                        requestAnimationFrame(() => {
-                            backOrReplace(router, "/");
-                        });
                     }}
+                    onPress={() => {
+                        backOrReplace(router, "/");
+                    }}
+                    delayPressIn={0}
                 >
                     <ArrowLeft size={theme.icon.xl} color={theme.colors.textPrimary} />
                 </TouchableOpacity>
@@ -956,7 +1027,7 @@ export default function HabitDetail() {
                 />
             </LazyMount>
 
-            <LazyMount visible={memoryUi !== null} unmountOnExit>
+            <LazyMount visible={isPreMounted} unmountOnExit={false}>
                 <StreakMemorySheet
                     visible={memoryUi !== null}
                     mode={memoryUi?.kind === 'view' ? 'view' : 'create'}
@@ -969,50 +1040,8 @@ export default function HabitDetail() {
                     dayLabel={memoryUi ? String(memoryUi.day) : '1'}
                     habitPublishAvailable={configured && session?.user != null}
                     plusCommunityOk={!socialLocked}
-                    squadShare={{
-                        show: showSquadShare,
-                        visibility: habit.visibility ?? 'solo',
-                        onToggle: async (nextPublic) => {
-                            const next = nextPublic ? 'public' : 'solo';
-                            const prev = habit.visibility ?? 'solo';
-                            if (prev === next) return;
-                            if (next === 'public' && socialLocked) {
-                                const freshPremium = await refreshPremiumAccess({ force: true, serverOnly: true });
-                                if (freshPremium !== true) {
-                                    openUpsell('visibility');
-                                    throw new Error('HabitPro Community is required for squad visibility.');
-                                }
-                            }
-                            lastVisibilityRef.current = { id: habit.id, prev };
-                            setHabitVisibility(habit.id, next);
-                        },
-                    }}
-                    habitViewCommunity={
-                        memoryUi?.kind === 'view'
-                            ? (() => {
-                                  const viewMem =
-                                      habit.streakMemories?.[memoryUi.dateStr] ?? memoryUi.memory;
-                                  const hasMemoryImage = Boolean(viewMem?.imageUrl || viewMem?.imageUri);
-                                  const cloudOk = configured && session?.user != null;
-                                  const plusOk = !socialLocked;
-                                  return {
-                                      posted:
-                                          (habit.streakMemories?.[memoryUi.dateStr]?.communityPosted ??
-                                              memoryUi.memory.communityPosted) === true,
-                                      revoked:
-                                          (habit.streakMemories?.[memoryUi.dateStr]?.communityFeedRevoked ??
-                                              memoryUi.memory.communityFeedRevoked) === true,
-                                      available: cloudOk && hasMemoryImage && plusOk,
-                                      needsPhotoForCommunity: cloudOk && !hasMemoryImage,
-                                      plusRequired: cloudOk && hasMemoryImage && !plusOk,
-                                      busy: habitCommunityBusy,
-                                      pendingPublish: habitCommunityPublishPending,
-                                      onChange: (v) =>
-                                          void handleHabitMemoryCommunityChange(v, memoryUi.dateStr, memoryUi.day),
-                                  };
-                              })()
-                            : undefined
-                    }
+                    squadShare={squadShareProp}
+                    habitViewCommunity={habitViewCommunityProp}
                     onClose={() => {
                         pendingMemoryRef.current = null;
                         setMemoryUi(null);
@@ -1021,7 +1050,7 @@ export default function HabitDetail() {
                 />
             </LazyMount>
 
-            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" {...({ delaysContentTouches: false } as any)}>
                 <View style={styles.modeRow}>
                     <View style={[styles.modeBadge, isManual && styles.modeBadgeManual]}>
                         {isManual ? <Gamepad2 size={13} color={theme.colors.amber[500]} /> : <Plane size={13} color={theme.colors.cyan[400]} />}
@@ -1449,6 +1478,7 @@ export default function HabitDetail() {
                                 repaired={repaired}
                                 repairSource={repairSource}
                                 onPress={handleDayPress} // Stable callback reference
+                                isSheetOpen={memoryUi !== null}
                             />
                         );
                     })}
@@ -1522,15 +1552,13 @@ export default function HabitDetail() {
                                       onPress: () => {
                                           setMissionDialog({ kind: 'none' });
                                           setPendingExitAfterRemove(true);
-                                          void (async () => {
-                                              await deleteAllCommunityWinsForHabit(habit);
-                                              deleteHabit(habit.id);
-                                              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                                              showToast('Mission deleted', 'success');
-                                              requestAnimationFrame(() => {
-                                                  backOrReplace(router, "/");
-                                              });
-                                          })();
+                                          deleteHabit(habit.id);
+                                          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                                          showToast('Mission deleted', 'success');
+                                          void deleteAllCommunityWinsForHabit(habit);
+                                          requestAnimationFrame(() => {
+                                              backOrReplace(router, "/");
+                                          });
                                       },
                                   },
                               ]
@@ -1550,10 +1578,10 @@ export default function HabitDetail() {
                                                     showToast(error.message, 'error');
                                                     return;
                                                 }
-                                                await deleteAllCommunityWinsForHabit(habit);
                                                 setPendingExitAfterRemove(true);
                                                 deleteHabit(habit.id);
-                                                await refreshCohortPeerHabits().catch(() => {});
+                                                void deleteAllCommunityWinsForHabit(habit);
+                                                void refreshCohortPeerHabits().catch(() => {});
                                                 Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
                                                 showToast('Left group mission', 'success');
                                                 requestAnimationFrame(() => {

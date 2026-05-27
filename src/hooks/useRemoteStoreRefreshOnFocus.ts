@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef } from "react";
 import { useFocusEffect } from "@react-navigation/native";
+import { InteractionManager } from "react-native";
 import { useAuth } from "../context/AuthContext";
 import { saveAccountSnapshotBackup } from "../lib/accountBackup";
 import { pullFromSupabase } from "../lib/sync";
@@ -132,8 +133,10 @@ export function useRemoteStoreRefreshOnFocus(enabled = true) {
 
   useFocusEffect(
     useCallback(() => {
-      void refresh();
-      return undefined;
+      const task = InteractionManager.runAfterInteractions(() => {
+        void refresh();
+      });
+      return () => task.cancel();
     }, [refresh]),
   );
 

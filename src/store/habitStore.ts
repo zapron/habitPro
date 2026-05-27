@@ -251,6 +251,7 @@ export const useHabitStore = create<HabitStore>()(
 
         let changed = false;
         set((state) => {
+          let xpGain = 0;
           const updatedHabits = state.habits.map((habit) => {
             if (habit.id !== id) return habit;
 
@@ -265,6 +266,15 @@ export const useHabitStore = create<HabitStore>()(
               habit.totalDays,
               habit.missionReport,
             );
+
+            // Award XP inside the store action atomically
+            if (!isAlreadyCompleted && normalized.includes(date)) {
+              xpGain = 10; // base XP
+              if (streak === 7) xpGain += 50;
+              else if (streak === 14) xpGain += 75;
+              else if (streak === 21) xpGain += 150;
+              else if (streak >= 3 && streak % 7 === 0) xpGain += 30;
+            }
 
             let nextMemories = habit.streakMemories ?? {};
             if (isAlreadyCompleted) {
@@ -281,26 +291,17 @@ export const useHabitStore = create<HabitStore>()(
               streakMemories: nextMemories,
             };
           });
-          return { habits: updatedHabits };
+
+          return changed
+            ? { habits: updatedHabits, xp: state.xp + xpGain }
+            : { habits: updatedHabits };
         });
 
-        // Award XP for completing (not uncompleting)
         if (changed) {
           const habit = get().habits.find((h) => h.id === id);
-          if (habit && habit.completedDates.includes(date)) {
-            let xpGain = 10; // base XP
-            // Streak milestone bonuses (psychological: variable reward)
-            if (habit.streak === 7) xpGain += 50;
-            else if (habit.streak === 14) xpGain += 75;
-            else if (habit.streak === 21) xpGain += 150;
-            else if (habit.streak >= 3 && habit.streak % 7 === 0) xpGain += 30;
-            get().addXp(xpGain);
-            if (habit.challengeGroupId) {
-              void tryRecordChallengeMilestones(habitBefore, habit);
-            }
+          if (habit && habit.challengeGroupId) {
+            void tryRecordChallengeMilestones(habitBefore, habit);
           }
-        }
-        if (changed) {
           requestRemoteSync({ immediate: false });
         }
         return changed;
@@ -446,12 +447,18 @@ export const useHabitStore = create<HabitStore>()(
           return;
         }
 
-        set((state) => ({
-          habits: state.habits.map((habit) => {
+        let didApply = false;
+        set((state) => {
+          let xpGain = 0;
+          const updatedHabits = state.habits.map((habit) => {
             if (habit.id !== id) return habit;
             if (habit.missionReport) return habit;
+            didApply = true;
             const d = getDerivedState(habit.completedDates, habit.totalDays, report);
             const at = new Date().toISOString();
+            if (report === "accomplished") {
+              xpGain = 100;
+            }
             return {
               ...habit,
               completedDates: d.normalized,
@@ -461,15 +468,20 @@ export const useHabitStore = create<HabitStore>()(
               missionReport: report,
               missionReportAt: at,
             };
-          }),
-        }));
+          });
+
+          return didApply
+            ? { habits: updatedHabits, xp: state.xp + xpGain }
+            : { habits: updatedHabits };
+        });
 
         const habitAfter = get().habits.find((h) => h.id === id);
         if (habitBefore && habitAfter && report === "accomplished") {
-          get().addXp(100);
           void tryRecordChallengeMilestones(habitBefore, habitAfter);
         }
-        requestRemoteSync({ immediate: true });
+        if (didApply) {
+          requestRemoteSync({ immediate: true });
+        }
       },
       getHabit: (id) => {
         return get().habits.find((h) => h.id === id);

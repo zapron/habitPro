@@ -649,7 +649,7 @@ export async function hydrateStoreAfterAuth(
   apply: (next: RemoteSnapshot) => void,
 ): Promise<void> {
   const local = getLocal();
-  const remote = await pullFromSupabase(userId);
+  const remote = await pullFromSupabase(userId, { includeCohortPeerHabits: false });
 
   if (isRemoteEmpty(remote) && localCanUploadAsFirstUser(local, userId)) {
     const stamped: RemoteSnapshot = {

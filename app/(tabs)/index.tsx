@@ -16,6 +16,7 @@ import {
   Easing,
   RefreshControl,
   ScrollView,
+  InteractionManager,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -41,7 +42,7 @@ import { useHabitStore } from "../../src/store/habitStore";
 import { useShallow } from "zustand/react/shallow";
 import { useAuth } from "../../src/context/AuthContext";
 import { isSupabaseConfigured } from "../../src/lib/env";
-import { countUnreadNotifications } from "../../src/lib/groupChallengesApi";
+import { countUnreadNotifications, refreshCohortPeerHabits } from "../../src/lib/groupChallengesApi";
 import type { AppTheme } from "../../src/styles/theme";
 import { Button } from "../../src/components/Button";
 import { HabitCard } from "../../src/components/HabitCard";
@@ -349,7 +350,12 @@ export default function Home() {
     styles.listContent,
     { paddingBottom: listBottomPad },
   ], [listBottomPad]);
-  const renderHabitCard = useCallback(({ item }: { item: (typeof filteredHabits)[0] }) => <HabitCard item={item} />, []);
+  const renderHabitCard = useCallback(
+    ({ item }: { item: (typeof filteredHabits)[0] }) => (
+      <HabitCard item={item} nowMs={missionNow} />
+    ),
+    [missionNow],
+  );
 
   const level = levelFromTotalXp(xp);
   const xpInLevel = xpInCurrentLevel(xp);
@@ -523,6 +529,10 @@ export default function Home() {
   const animXpFill = useRef(new Animated.Value(xpProgress)).current;
   const prevXpProgressRef = useRef(xpProgress);
 
+  const animLoaderOpacity = useRef(new Animated.Value(0.3)).current;
+  const animContentOpacity = useRef(new Animated.Value(0)).current;
+  const animContentTranslateY = useRef(new Animated.Value(6)).current;
+
   useEffect(() => {
     if (reduceMotion) {
       headerOpacity.setValue(1);
@@ -590,24 +600,89 @@ export default function Home() {
         return;
       }
       let cancelled = false;
-      void countUnreadNotifications()
-        .then((n) => {
-          if (!cancelled) setUnreadNotifCount(n);
-        })
-        .catch(() => {
-          if (!cancelled) setUnreadNotifCount(0);
-        });
+      const task = InteractionManager.runAfterInteractions(() => {
+        void countUnreadNotifications()
+          .then((n) => {
+            if (!cancelled) setUnreadNotifCount(n);
+          })
+          .catch(() => {
+            if (!cancelled) setUnreadNotifCount(0);
+          });
+      });
       return () => {
         cancelled = true;
+        task.cancel();
       };
     }, [session?.user, showAccount]),
   );
 
   useFocusEffect(
     useCallback(() => {
-      setMissionNow(Date.now());
+      const task = InteractionManager.runAfterInteractions(() => {
+        setMissionNow(Date.now());
+      });
+      return () => task.cancel();
     }, []),
   );
+
+  const [sparkLoading, setSparkLoading] = useState(false);
+
+  useEffect(() => {
+    if (!session?.user || !syncReady) return;
+    setSparkLoading(true);
+    void refreshCohortPeerHabits()
+      .catch((e) => {
+        if (__DEV__) console.warn("[habitPro] background cohort refresh failed", e);
+      })
+      .finally(() => {
+        // Precise delay to show a beautiful premium transition animation
+        setTimeout(() => {
+          setSparkLoading(false);
+        }, 900);
+      });
+  }, [session?.user?.id, syncReady]);
+
+  // Breathing loop animation for the "Finding your spark..." text
+  useEffect(() => {
+    if (!sparkLoading) return;
+    const anim = Animated.loop(
+      Animated.sequence([
+        Animated.timing(animLoaderOpacity, {
+          toValue: 1,
+          duration: 900,
+          useNativeDriver: true,
+        }),
+        Animated.timing(animLoaderOpacity, {
+          toValue: 0.3,
+          duration: 900,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    anim.start();
+    return () => anim.stop();
+  }, [sparkLoading]);
+
+  // Smooth fade-in and slide-up transition once data is ready
+  useEffect(() => {
+    if (!sparkLoading && homeSpark) {
+      animContentOpacity.setValue(0);
+      animContentTranslateY.setValue(6);
+      Animated.parallel([
+        Animated.timing(animContentOpacity, {
+          toValue: 1,
+          duration: 550,
+          useNativeDriver: true,
+        }),
+        Animated.timing(animContentTranslateY, {
+          toValue: 0,
+          duration: 550,
+          easing: Easing.out(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+  }, [sparkLoading, homeSpark]);
 
   const refreshColors = useMemo(() => [theme.colors.indigo[400]], [theme.colors.indigo]);
   const notifRefreshControl = useMemo(() => (
@@ -839,25 +914,60 @@ export default function Home() {
               />
             </Animated.View>
           </View>
-          {homeSpark ? (
-            <TouchableOpacity
+          {sparkLoading ? (
+            <View
               style={[
                 styles.sparkInlineRow,
-                { backgroundColor: sparkTint, borderRadius: theme.radius.sm },
+                {
+                  backgroundColor: isDark ? "rgba(99, 102, 241, 0.05)" : "rgba(99, 102, 241, 0.04)",
+                  borderRadius: theme.radius.sm,
+                  justifyContent: "center",
+                },
               ]}
+            >
+              <Animated.Text
+                style={[
+                  styles.sparkInlineText,
+                  {
+                    fontWeight: "900",
+                    letterSpacing: 0.3,
+                    color: isDark ? "rgba(255, 255, 255, 0.55)" : "rgba(0, 0, 0, 0.45)",
+                    opacity: animLoaderOpacity,
+                    textAlign: "center",
+                  },
+                ]}
+                numberOfLines={1}
+              >
+                Loading your spark...
+              </Animated.Text>
+            </View>
+          ) : homeSpark ? (
+            <TouchableOpacity
               activeOpacity={0.86}
               onPress={onHomeSparkPress}
               accessibilityRole="button"
             >
-              <SparkIcon size={13} color={sparkAccent} strokeWidth={2.4} />
-              <Text style={[styles.sparkInlineText, { color: theme.colors.textSecondary }]} numberOfLines={1}>
-                <Text style={[styles.sparkInlineTitle, { color: theme.colors.textPrimary }]}>
-                  {homeSpark.title}
+              <Animated.View
+                style={[
+                  styles.sparkInlineRow,
+                  {
+                    backgroundColor: sparkTint,
+                    borderRadius: theme.radius.sm,
+                    opacity: animContentOpacity,
+                    transform: [{ translateY: animContentTranslateY }],
+                  },
+                ]}
+              >
+                <SparkIcon size={13} color={sparkAccent} strokeWidth={2.4} />
+                <Text style={[styles.sparkInlineText, { color: theme.colors.textSecondary }]} numberOfLines={1}>
+                  <Text style={[styles.sparkInlineTitle, { color: theme.colors.textPrimary }]}>
+                    {homeSpark.title}
+                  </Text>
+                  {"  "}
+                  {homeSpark.body}
                 </Text>
-                {"  "}
-                {homeSpark.body}
-              </Text>
-              <ChevronRight size={14} color={theme.colors.textMuted} />
+                <ChevronRight size={14} color={theme.colors.textMuted} />
+              </Animated.View>
             </TouchableOpacity>
           ) : stats.missionsCount > 0 ? (
             <Text style={[styles.sparkInlineText, { color: theme.colors.textMuted, marginTop: 7, paddingTop: 6 }]} numberOfLines={1}>

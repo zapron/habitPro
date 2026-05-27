@@ -1,5 +1,5 @@
 import { Text } from "./AppText";
-import {
+import React, {
   useCallback,
   useEffect,
   useRef,
@@ -76,7 +76,7 @@ type StreakMemorySheetProps = {
   };
 };
 
-export function StreakMemorySheet({
+export const StreakMemorySheet = React.memo(function StreakMemorySheet({
   visible,
   mode = "create",
   variant = "habit",
@@ -101,7 +101,6 @@ export function StreakMemorySheet({
   const { theme, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const { height: windowH, width: windowW } = useWindowDimensions();
-  const slideY = useRef(new Animated.Value(420)).current;
   const [note, setNote] = useState("");
   const [imageUri, setImageUri] = useState<string | undefined>();
   const [publishToCommunity, setPublishToCommunity] = useState(false);
@@ -110,6 +109,7 @@ export function StreakMemorySheet({
   const [optimisticSquadPublic, setOptimisticSquadPublic] = useState(
     (squadShare?.visibility ?? "solo") === "public",
   );
+  const [imgLoading, setImgLoading] = useState(false);
 
   useEffect(() => {
     if (!visible || isView) return;
@@ -130,28 +130,22 @@ export function StreakMemorySheet({
 
   useEffect(() => {
     if (visible) {
-      slideY.setValue(420);
       setSubmitting(false);
       if (!isView) {
         setNote("");
         setImageUri(undefined);
         setPublishToCommunity(false);
       }
-      Animated.spring(slideY, {
-        toValue: 0,
-        useNativeDriver: true,
-        tension: 52,
-        friction: 11,
-      }).start();
-    } else {
-      Animated.timing(slideY, {
-        toValue: 420,
-        duration: 220,
-        useNativeDriver: true,
-        easing: Easing.out(Easing.cubic),
-      }).start();
     }
-  }, [visible, slideY, isView]);
+  }, [visible, isView]);
+
+  useEffect(() => {
+    if (visible && isView && (viewMemory?.imageUrl || viewMemory?.imageUri)) {
+      setImgLoading(true);
+    } else {
+      setImgLoading(false);
+    }
+  }, [visible, isView, viewMemory?.imageUrl, viewMemory?.imageUri]);
 
   useCoachMark(
     "mini_complete_memory",
@@ -349,7 +343,7 @@ export function StreakMemorySheet({
     <Modal
       visible={visible}
       transparent
-      animationType="fade"
+      animationType="slide"
       onRequestClose={() => {
         if (!submitting) handleDismiss();
       }}
@@ -387,7 +381,6 @@ export function StreakMemorySheet({
                   backgroundColor: theme.colors.surfaceElevated,
                   borderColor: theme.colors.border,
                   ...theme.shadow.card,
-                  transform: [{ translateY: slideY }],
                 },
               ]}
             >
@@ -506,7 +499,23 @@ export function StreakMemorySheet({
                                 source={{ uri: vm!.imageUrl ?? vm!.imageUri! }}
                                 style={StyleSheet.absoluteFillObject}
                                 resizeMode="cover"
+                                onLoadStart={() => setImgLoading(true)}
+                                onLoadEnd={() => setImgLoading(false)}
                               />
+                              {imgLoading && (
+                                <View
+                                  style={[
+                                    StyleSheet.absoluteFillObject,
+                                    styles.imgSkeleton,
+                                    { backgroundColor: isDark ? "#1e293b" : "#f3f4f6" },
+                                  ]}
+                                >
+                                  <ActivityIndicator size="small" color={theme.colors.indigo[500]} />
+                                  <Text style={[styles.skeletonText, { color: theme.colors.textSecondary }]}>
+                                    Loading moment…
+                                  </Text>
+                                </View>
+                              )}
                             </View>
                           </View>
                         ) : null}
@@ -988,7 +997,7 @@ export function StreakMemorySheet({
       </View>
     </Modal>
   );
-}
+});
 
 const styles = StyleSheet.create({
   backdrop: { flex: 1, justifyContent: "flex-end" },
@@ -1349,4 +1358,15 @@ const styles = StyleSheet.create({
   checkInOnlyTitle: { fontSize: 16, fontWeight: "800", marginBottom: 8 },
   checkInOnlyBody: { fontSize: 14, lineHeight: 21, fontWeight: "600" },
   emptyView: { fontSize: 14, fontStyle: "italic", textAlign: "center", paddingVertical: 12 },
+  imgSkeleton: {
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  skeletonText: {
+    fontSize: 12,
+    fontWeight: "700",
+    letterSpacing: 0.5,
+    marginTop: 4,
+  },
 });

@@ -175,9 +175,12 @@ export async function deleteAllCommunityWinsForHabit(habit: {
     ...Object.keys(habit.streakMemories ?? {}),
     ...habit.completedDates,
   ]);
-  for (const dateStr of dates) {
-    await deleteCommunityWin(habitStreakCommunityWinId(habit.id, dateStr));
-  }
+  const deletePromises = Array.from(dates).map((dateStr) =>
+    deleteCommunityWin(habitStreakCommunityWinId(habit.id, dateStr)).catch((err) =>
+      console.warn("[habitPro] failed to delete community win for date:", dateStr, err)
+    )
+  );
+  await Promise.all(deletePromises);
 }
 
 /** Default page size for Community feed (fetches pageSize+1 to detect hasMore). */

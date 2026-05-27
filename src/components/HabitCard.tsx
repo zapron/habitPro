@@ -160,23 +160,17 @@ const RingDayArcs = memo(function RingDayArcs({
 
 interface HabitCardProps {
     item: Habit;
+    nowMs: number;
 }
 
-export const HabitCard = memo(({ item }: HabitCardProps) => {
+export const HabitCard = memo(({ item, nowMs }: HabitCardProps) => {
     const router = useRouter();
     const { theme, isDark } = useTheme();
     const reduceMotion = useReducedMotion();
-    const [nowMs, setNowMs] = useState(() => Date.now());
     const totalDays = Math.max(1, item.totalDays ?? 21);
     const needsReport = needsMainMissionOutcome(item, nowMs);
     const missionWon = item.missionReport === 'accomplished';
     const isManual = (item.mode ?? 'autopilot') === 'manual';
-
-    useEffect(() => {
-      if (item.status !== "active" || item.isCompleted || missionWon) return;
-      const t = setInterval(() => setNowMs(Date.now()), 30_000);
-      return () => clearInterval(t);
-    }, [item.status, item.isCompleted, missionWon, item.id]);
     /** Mission completion: distinct days checked / campaign length */
     const campaignProgress = Math.min(item.completedDates.length / totalDays, 1);
     /** Current consecutive streak as a share of the mission (ring + center number) */
