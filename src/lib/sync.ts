@@ -435,9 +435,47 @@ function miniToRow(sessionUserId: string, m: MiniMission) {
   };
 }
 
+async function pullCohortPeerHabitsViaRpc(
+  supabase: SupabaseClient,
+): Promise<Habit[] | null> {
+  const { data, error } = await supabase.rpc("rpc_cohort_peer_habits_v1");
+  if (error) {
+    if (__DEV__) console.warn("[habitPro] rpc_cohort_peer_habits_v1 failed, using legacy pull", error.message);
+    return null;
+  }
+  const payload = data as {
+    habits?: unknown;
+    groupMeta?: { id: string; start_date: string; habit_template?: unknown }[];
+  } | null;
+  if (!payload || !Array.isArray(payload.habits)) return null;
+
+  const meta = new Map<string, ChallengeGroupAlignmentMeta>();
+  for (const g of payload.groupMeta ?? []) {
+    if (!g?.id) continue;
+    meta.set(g.id, {
+      start_date: String(g.start_date),
+      habit_template: (g.habit_template ?? {}) as Record<string, unknown>,
+    });
+  }
+
+  const cohortPeerHabits = payload.habits
+    .map((row) => {
+      if (!row || typeof row !== "object") return null;
+      const r = row as Record<string, unknown>;
+      if (typeof r.id !== "string" || typeof r.user_id !== "string") return null;
+      return habitFromRow(r as Parameters<typeof habitFromRow>[0]);
+    })
+    .filter((h): h is Habit => Boolean(h));
+
+  return alignHabitsToChallengeGroups(cohortPeerHabits, meta);
+}
+
 export async function pullCohortPeerHabitsFromSupabase(userId: string): Promise<Habit[]> {
   const supabase = getSupabase();
   if (!supabase) return [];
+
+  const rpcHabits = await pullCohortPeerHabitsViaRpc(supabase);
+  if (rpcHabits) return rpcHabits;
 
   const { data: memberRows } = await supabase
     .from("challenge_members")
