@@ -140,7 +140,7 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
     creatingRef.current = true;
     setCreating(true);
     try {
-      const freshPremium = await refreshPremiumAccess({ force: true, cachedAccessOk: true });
+      const freshPremium = await refreshPremiumAccess({ cachedAccessOk: true });
       if (freshPremium !== true) {
         openUpsell("group_mission");
         return;
@@ -183,7 +183,7 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
       inviteInFlightRef.current.add(inviteKey);
       setInvitingId(userId);
       try {
-        const freshPremium = await refreshPremiumAccess({ force: true, cachedAccessOk: true });
+        const freshPremium = await refreshPremiumAccess({ cachedAccessOk: true });
         if (freshPremium !== true) {
           openUpsell("group_mission");
           return;

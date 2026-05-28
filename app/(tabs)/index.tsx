@@ -534,6 +534,8 @@ export default function Home() {
   const prevXpProgressRef = useRef(xpProgress);
 
   const animLoaderOpacity = useRef(new Animated.Value(0.3)).current;
+  const animSparkShimmerX = useRef(new Animated.Value(0)).current;
+  const [sparkLoaderW, setSparkLoaderW] = useState(0);
   const animContentOpacity = useRef(new Animated.Value(0)).current;
   const animContentTranslateY = useRef(new Animated.Value(6)).current;
 
@@ -664,6 +666,23 @@ export default function Home() {
     return () => anim.stop();
   }, [sparkLoading]);
 
+  useEffect(() => {
+    if (reduceMotion || !sparkLoading || sparkLoaderW <= 0) return;
+    animSparkShimmerX.stopAnimation();
+    animSparkShimmerX.setValue(-sparkLoaderW);
+    const loop = Animated.loop(
+      Animated.timing(animSparkShimmerX, {
+        toValue: sparkLoaderW,
+        duration: 1500,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      }),
+      { resetBeforeIteration: true },
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [reduceMotion, sparkLoading, sparkLoaderW, animSparkShimmerX]);
+
   // Smooth fade-in and slide-up transition once data is ready
   useEffect(() => {
     if (!sparkLoading && homeSpark) {
@@ -703,7 +722,7 @@ export default function Home() {
     Target;
   const sparkAccent =
     homeSpark?.kind === "lead"   ? theme.colors.yellow[400] :
-    homeSpark?.kind === "chase"  ? theme.colors.red[400]    :
+    homeSpark?.kind === "chase"  ? theme.colors.red[500]    :
     homeSpark?.kind === "mini"   ? theme.colors.amber[500]  :
     theme.colors.cyan[400];
   const sparkTint =
@@ -922,10 +941,33 @@ export default function Home() {
                 {
                   backgroundColor: isDark ? "rgba(99, 102, 241, 0.05)" : "rgba(99, 102, 241, 0.04)",
                   borderRadius: theme.radius.sm,
-                  justifyContent: "center",
+                  justifyContent: "flex-start",
+                  overflow: "hidden",
                 },
               ]}
+              onLayout={(e) => setSparkLoaderW(e.nativeEvent.layout.width)}
             >
+              <Animated.View
+                pointerEvents="none"
+                style={[
+                  styles.sparkInlineShimmer,
+                  {
+                    opacity: reduceMotion ? 0 : 1,
+                    transform: [{ translateX: animSparkShimmerX }],
+                  },
+                ]}
+              >
+                <LinearGradient
+                  colors={[
+                    "rgba(255,255,255,0)",
+                    isDark ? "rgba(255,255,255,0.20)" : "rgba(0,0,0,0.08)",
+                    "rgba(255,255,255,0)",
+                  ]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={{ flex: 1 }}
+                />
+              </Animated.View>
               <Animated.Text
                 style={[
                   styles.sparkInlineText,
@@ -934,7 +976,7 @@ export default function Home() {
                     letterSpacing: 0.3,
                     color: isDark ? "rgba(255, 255, 255, 0.55)" : "rgba(0, 0, 0, 0.45)",
                     opacity: animLoaderOpacity,
-                    textAlign: "center",
+                    textAlign: "left",
                   },
                 ]}
                 numberOfLines={1}
@@ -959,7 +1001,12 @@ export default function Home() {
                   },
                 ]}
               >
-                <SparkIcon size={13} color={sparkAccent} strokeWidth={2.4} />
+                <SparkIcon
+                  size={13}
+                  color={sparkAccent}
+                  strokeWidth={2.6}
+                  fill={homeSpark?.kind === "chase" ? sparkAccent : "transparent"}
+                />
                 <Text style={[styles.sparkInlineText, { color: theme.colors.textSecondary }]} numberOfLines={1}>
                   <Text style={[styles.sparkInlineTitle, { color: theme.colors.textPrimary }]}>
                     {homeSpark.title}
@@ -1521,6 +1568,13 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   sparkInlineTitle: { fontWeight: "900" },
+  sparkInlineShimmer: {
+    position: "absolute",
+    top: -2,
+    bottom: -2,
+    left: 0,
+    width: 74,
+  },
 });
 
 const skeletonStyles = StyleSheet.create({

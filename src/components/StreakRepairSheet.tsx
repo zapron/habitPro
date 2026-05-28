@@ -254,7 +254,7 @@ export function StreakRepairSheet({ visible, onClose, habit, eligible, onRequest
               setBusy(true);
               try {
                 if (isGroup) {
-                  const freshPremium = await refreshPremiumAccess({ force: true, cachedAccessOk: true });
+                  const freshPremium = await refreshPremiumAccess({ cachedAccessOk: true });
                   if (freshPremium !== true) {
                     openUpsell("streak_repair");
                     return;

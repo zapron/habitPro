@@ -1459,7 +1459,7 @@ export default function MiniMissionDetail() {
     const wantsPublish = meta?.publishToCommunity === true;
     const publishCloudReady = wantsPublish && isSupabaseConfigured() && session?.user != null;
     const freshPremium = publishCloudReady
-      ? await refreshPremiumAccess({ force: true, cachedAccessOk: true })
+      ? await refreshPremiumAccess({ cachedAccessOk: true })
       : null;
     let canPublish = publishCloudReady && freshPremium === true;
     if (publishCloudReady && freshPremium !== true) {
@@ -1595,7 +1595,7 @@ export default function MiniMissionDetail() {
           return;
         }
         void (async () => {
-          const freshPremium = await refreshPremiumAccess({ force: true, cachedAccessOk: true });
+          const freshPremium = await refreshPremiumAccess({ cachedAccessOk: true });
           if (freshPremium !== true) {
             openUpsell("community_publish");
             return;

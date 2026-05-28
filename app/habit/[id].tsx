@@ -473,7 +473,7 @@ export default function HabitDetail() {
         if (!eligibleRepair || (repairStatus === "pending" && !pendingRepairCanFinalize)) return;
         const isGroupRepair = Boolean(habit?.challengeGroupId);
         if (isGroupRepair) {
-          const freshPremium = await refreshPremiumAccess({ force: true, cachedAccessOk: true });
+          const freshPremium = await refreshPremiumAccess({ cachedAccessOk: true });
           if (freshPremium !== true) {
             openUpsell("streak_repair");
             return;
@@ -613,7 +613,7 @@ export default function HabitDetail() {
                     return;
                 }
                 if (isSupabaseConfigured() && session?.user) {
-                    const freshPremium = await refreshPremiumAccess({ force: true, cachedAccessOk: true });
+                    const freshPremium = await refreshPremiumAccess({ cachedAccessOk: true });
                     if (freshPremium !== true) {
                         openUpsell('community_publish');
                         return;
@@ -705,7 +705,7 @@ export default function HabitDetail() {
             if (!mem || mem.communityFeedRevoked) return;
 
             if (next) {
-                const freshPremium = await refreshPremiumAccess({ force: true, cachedAccessOk: true });
+                const freshPremium = await refreshPremiumAccess({ cachedAccessOk: true });
                 if (freshPremium !== true) {
                     openUpsell('community_publish');
                     return;
@@ -885,7 +885,7 @@ export default function HabitDetail() {
                 const prev = habit.visibility ?? 'solo';
                 if (prev === next) return;
                 if (next === 'public' && socialLocked) {
-                    const freshPremium = await refreshPremiumAccess({ force: true, serverOnly: true });
+                    const freshPremium = await refreshPremiumAccess({ serverOnly: true, cachedAccessOk: true });
                     if (freshPremium !== true) {
                         openUpsell('visibility');
                         throw new Error('HabitPro Community is required for squad visibility.');
@@ -1216,7 +1216,7 @@ export default function HabitDetail() {
                                 const prev = habit.visibility ?? 'solo';
                                 if (prev === next) return;
                                 if (next === 'public') {
-                                    const freshPremium = await refreshPremiumAccess({ force: true, serverOnly: true });
+                                    const freshPremium = await refreshPremiumAccess({ serverOnly: true, cachedAccessOk: true });
                                     if (freshPremium !== true) {
                                         openUpsell('visibility');
                                         return;

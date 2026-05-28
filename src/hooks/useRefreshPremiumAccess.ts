@@ -27,6 +27,10 @@ type PremiumAccessCache = {
   lastSnapshot: PremiumAccessSnapshot | null;
   inFlight: Promise<PremiumAccessSnapshot> | null;
   serverInFlight: Promise<PremiumAccessSnapshot> | null;
+  /** Local calendar day (YYYY-MM-DD) when we last confirmed premium access. */
+  lastPremiumOkDayKey: string | null;
+  /** Local calendar day (YYYY-MM-DD) when we last confirmed server premium access. */
+  lastServerPremiumOkDayKey: string | null;
 };
 
 const cacheByUserId = new Map<string, PremiumAccessCache>();
@@ -40,9 +44,18 @@ function cacheForUser(userId: string): PremiumAccessCache {
     lastSnapshot: null,
     inFlight: null,
     serverInFlight: null,
+    lastPremiumOkDayKey: null,
+    lastServerPremiumOkDayKey: null,
   };
   cacheByUserId.set(userId, next);
   return next;
+}
+
+function localDayKey(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
 function selectAccess(
@@ -62,11 +75,24 @@ export function useRefreshPremiumAccess(minIntervalMs = DEFAULT_MIN_INTERVAL_MS)
   return useCallback(
     async (options?: RefreshPremiumAccessOptions) => {
       if (!userId) return null;
-      if (options?.cachedAccessOk && !options.serverOnly && isPremium) {
-        return true;
-      }
       const cache = cacheForUser(userId);
       const now = Date.now();
+      const todayKey = localDayKey(new Date(now));
+
+      // Premium users: avoid re-checking on every interaction. If we've already confirmed
+      // premium today, trust cached status and rely on server enforcement on edge cases.
+      if (options?.cachedAccessOk && isPremium) {
+        if (options.serverOnly) {
+          if (
+            cache.lastSnapshot?.serverAccess === true &&
+            cache.lastServerPremiumOkDayKey === todayKey
+          ) {
+            return true;
+          }
+        } else if (cache.lastPremiumOkDayKey === todayKey) {
+          return true;
+        }
+      }
 
       if (options?.serverOnly) {
         if (!options.force && cache.serverInFlight) {
@@ -102,6 +128,9 @@ export function useRefreshPremiumAccess(minIntervalMs = DEFAULT_MIN_INTERVAL_MS)
 
         try {
           cache.lastSnapshot = await request;
+          if (cache.lastSnapshot.serverAccess === true) {
+            cache.lastServerPremiumOkDayKey = todayKey;
+          }
           return selectAccess(cache.lastSnapshot, options);
         } finally {
           if (cache.serverInFlight === request) {
@@ -155,6 +184,12 @@ export function useRefreshPremiumAccess(minIntervalMs = DEFAULT_MIN_INTERVAL_MS)
 
       try {
         cache.lastSnapshot = await request;
+        if (cache.lastSnapshot.access === true) {
+          cache.lastPremiumOkDayKey = todayKey;
+        }
+        if (cache.lastSnapshot.serverAccess === true) {
+          cache.lastServerPremiumOkDayKey = todayKey;
+        }
         return selectAccess(cache.lastSnapshot, options);
       } finally {
         if (cache.inFlight === request) {

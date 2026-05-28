@@ -29,9 +29,9 @@ export default function CommunityScreen() {
   );
 
   const validateCheerAccess = useCallback(async () => {
-    const serverPremium = await refreshPremiumAccess({ force: true, serverOnly: true });
+    const serverPremium = await refreshPremiumAccess({ serverOnly: true, cachedAccessOk: true });
     if (serverPremium === true) return true;
-    const freshPremium = await refreshPremiumAccess({ force: true, cachedAccessOk: true });
+    const freshPremium = await refreshPremiumAccess({ cachedAccessOk: true });
     if (freshPremium === true) {
       showToast("Membership is still activating. Try again in a moment.", "info", 4200);
       return false;
