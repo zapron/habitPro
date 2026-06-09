@@ -14,6 +14,9 @@ let syncEnabled = false;
 let getSnapshot: (() => Snapshot) | null = null;
 
 let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+let syncGeneration = 0;
+type ScheduledInteractionTask = { cancel: () => void };
+const scheduledInteractionTasks = new Set<ScheduledInteractionTask>();
 let inFlightPushes = 0;
 let failedSinceLastSuccess = false;
 const DEFAULT_DEBOUNCE_MS = 450;
@@ -75,14 +78,20 @@ export function getRemoteSyncUserId(): string | null {
 
 export function setRemoteSyncContext(uid: string | null, enabled: boolean) {
   const userChanged = userId !== uid;
+  const disabling = !enabled;
   userId = uid;
   syncEnabled = enabled;
-  if (userChanged || !enabled) {
+  if (userChanged || disabling) {
+    syncGeneration += 1;
     failedSinceLastSuccess = false;
   }
-  if (!enabled && debounceTimer) {
+  if (disabling && debounceTimer) {
     clearTimeout(debounceTimer);
     debounceTimer = null;
+  }
+  if (userChanged || disabling) {
+    scheduledInteractionTasks.forEach((task) => task.cancel());
+    scheduledInteractionTasks.clear();
   }
 }
 
@@ -101,24 +110,65 @@ function canWriteRemote(): boolean {
 
 function flush() {
   if (!canPush()) return;
+  const flushUserId = userId;
+  if (!flushUserId) return;
+  const flushGeneration = syncGeneration;
   const snap = getSnapshot!();
-  void saveAccountSnapshotBackup(userId, snap, "pre-remote-push");
+  void saveAccountSnapshotBackup(flushUserId, snap, "pre-remote-push");
   inFlightPushes += 1;
-  InteractionManager.runAfterInteractions(() => {
-    pushFullState(userId!, snap)
+  let finished = false;
+  const finishPush = () => {
+    if (finished) return;
+    finished = true;
+    inFlightPushes = Math.max(0, inFlightPushes - 1);
+  };
+  let scheduledTask: ScheduledInteractionTask;
+  const interactionTask = InteractionManager.runAfterInteractions(() => {
+    scheduledInteractionTasks.delete(scheduledTask);
+    if (!syncEnabled || userId !== flushUserId || syncGeneration !== flushGeneration) {
+      finishPush();
+      return;
+    }
+    pushFullState(flushUserId, snap)
       .then(() => {
-        // Clear the dirty flags in the store on successful sync
-        useHabitStore.getState().clearDirtyState(snap.dirtyHabitIds, snap.dirtyMiniMissionIds);
+        if (!syncEnabled || userId !== flushUserId || syncGeneration !== flushGeneration) return;
+        const state = useHabitStore.getState();
+        const pushedHabitsById = new Map(snap.habits.map((habit) => [habit.id, habit]));
+        const pushedMinisById = new Map(snap.miniMissions.map((mission) => [mission.id, mission]));
+        const safeHabitIds = (snap.dirtyHabitIds ?? []).filter((id) => {
+          const current = state.habits.find((habit) => habit.id === id);
+          return current != null && current === pushedHabitsById.get(id);
+        });
+        const safeMiniIds = (snap.dirtyMiniMissionIds ?? []).filter((id) => {
+          const current = state.miniMissions.find((mission) => mission.id === id);
+          return current != null && current === pushedMinisById.get(id);
+        });
+        state.clearDirtyState(safeHabitIds, safeMiniIds);
         notifySyncSuccess();
+        const nextState = useHabitStore.getState();
+        if (
+          (nextState.dirtyHabitIds?.length ?? 0) > 0 ||
+          (nextState.dirtyMiniMissionIds?.length ?? 0) > 0
+        ) {
+          requestRemoteSync({ immediate: false });
+        }
       })
       .catch((e) => {
         console.warn("[habitPro] remote sync failed", e);
         notifySyncFailure(e);
       })
       .finally(() => {
-        inFlightPushes = Math.max(0, inFlightPushes - 1);
+        finishPush();
       });
   });
+  scheduledTask = {
+    cancel: () => {
+      interactionTask.cancel();
+      scheduledInteractionTasks.delete(scheduledTask);
+      finishPush();
+    },
+  };
+  scheduledInteractionTasks.add(scheduledTask);
 }
 
 export function hasPendingRemoteSync(): boolean {

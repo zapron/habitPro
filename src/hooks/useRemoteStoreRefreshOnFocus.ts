@@ -16,12 +16,16 @@ import {
   subscribeSyncFailure,
   subscribeSyncSuccess,
 } from "../lib/syncQueue";
+import {
+  getRemoteFocusLastRefreshAt,
+  invalidateRemoteFocusRefresh,
+  markRemoteFocusRefreshFresh,
+} from "../lib/remoteFocusRefreshCache";
 import { useHabitStore } from "../store/habitStore";
 import type { HabitStore, MiniMission } from "../types/habit";
 
 const REMOTE_FOCUS_REFRESH_TTL_MS = 60_000;
-const lastRemoteFocusRefreshAtByUserId = new Map<string, number>();
-let lastRemoteFocusUserId: string | null = null;
+const REMOTE_FOCUS_REFRESH_DELAY_MS = 1200;
 
 type RemoteStoreSnapshot = RemoteSnapshot;
 type RefreshOptions = { force?: boolean };
@@ -89,20 +93,16 @@ export function useRemoteStoreRefreshOnFocus(enabled = true) {
       if (hasPendingRemoteSync() || hasRemoteSyncFault()) {
         return;
       }
-      if (lastRemoteFocusUserId !== userId) {
-        lastRemoteFocusRefreshAtByUserId.clear();
-        lastRemoteFocusUserId = userId;
-      }
       const now = Date.now();
-      const lastRefreshAt = lastRemoteFocusRefreshAtByUserId.get(userId) ?? 0;
+      const lastRefreshAt = getRemoteFocusLastRefreshAt(userId);
       if (!options?.force && now - lastRefreshAt < REMOTE_FOCUS_REFRESH_TTL_MS) {
         return;
       }
       const local = useHabitStore.getState();
       if (
         !options?.force &&
-        local.dirtyHabitIds &&
-        local.dirtyHabitIds.length > 0
+        ((local.dirtyHabitIds && local.dirtyHabitIds.length > 0) ||
+          (local.dirtyMiniMissionIds && local.dirtyMiniMissionIds.length > 0))
       ) {
         return;
       }
@@ -122,7 +122,7 @@ export function useRemoteStoreRefreshOnFocus(enabled = true) {
       const { snapshot, preserved } = preserveLocalMiniProgress(remoteWithLocalPeers, local);
       useHabitStore.setState(snapshot);
       void saveAccountSnapshotBackup(userId, snapshot, "focus-refresh");
-      lastRemoteFocusRefreshAtByUserId.set(userId, Date.now());
+      markRemoteFocusRefreshFresh(userId);
       if (preserved) {
         requestRemoteSync({ immediate: true });
       }
@@ -135,12 +135,11 @@ export function useRemoteStoreRefreshOnFocus(enabled = true) {
 
   useEffect(() => {
     if (!userId) {
-      lastRemoteFocusUserId = null;
-      lastRemoteFocusRefreshAtByUserId.clear();
+      invalidateRemoteFocusRefresh(null);
       return undefined;
     }
     const invalidate = () => {
-      lastRemoteFocusRefreshAtByUserId.delete(userId);
+      invalidateRemoteFocusRefresh(userId);
     };
     const unsubSuccess = subscribeSyncSuccess(invalidate);
     const unsubFailure = subscribeSyncFailure(invalidate);
@@ -152,10 +151,16 @@ export function useRemoteStoreRefreshOnFocus(enabled = true) {
 
   useFocusEffect(
     useCallback(() => {
-      const task = InteractionManager.runAfterInteractions(() => {
-        void refresh();
-      });
-      return () => task.cancel();
+      let task: { cancel: () => void } | null = null;
+      const timer = setTimeout(() => {
+        task = InteractionManager.runAfterInteractions(() => {
+          void refresh();
+        });
+      }, REMOTE_FOCUS_REFRESH_DELAY_MS);
+      return () => {
+        clearTimeout(timer);
+        task?.cancel();
+      };
     }, [refresh]),
   );
 

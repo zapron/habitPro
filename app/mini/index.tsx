@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { Text } from "../../src/components/AppText";
 import {
   View,
@@ -41,6 +41,7 @@ import {
 } from "../../src/constants/miniMissionKeepAwake";
 
 type MiniTab = "active" | "queued" | "completed" | "failed";
+const MINI_LIST_CLOCK_MS = 5000;
 
 const formatCountdown = (ms: number) => {
   const totalSeconds = Math.max(0, Math.floor(ms / 1000));
@@ -50,10 +51,11 @@ const formatCountdown = (ms: number) => {
 };
 
 /* ─── Mini Mission Card ──────────────────────────────────── */
-function MiniMissionCard({ item, now }: { item: MiniMission; now: number }) {
+const MiniMissionCard = memo(function MiniMissionCard({ item }: { item: MiniMission }) {
   const router = useRouter();
   const { theme, isDark } = useTheme();
   const retryFailedMiniMission = useHabitStore((s) => s.retryFailedMiniMission);
+  const [now, setNow] = useState(() => Date.now());
 
   const handleRetry = useCallback(() => {
     retryFailedMiniMission(item.id);
@@ -66,6 +68,19 @@ function MiniMissionCard({ item, now }: { item: MiniMission; now: number }) {
   const isInProgress = item.status === "in_progress";
   const isCompleted = item.status === "completed";
   const isCancelled = item.status === "cancelled";
+
+  useEffect(() => {
+    if (!isInProgress || !item.startedAt) return;
+    if (getMiniRemainingMs(item, Date.now()) <= 0) return;
+    const timer = setInterval(() => {
+      const next = Date.now();
+      setNow(next);
+      if (getMiniRemainingMs(item, next) <= 0) {
+        clearInterval(timer);
+      }
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [isInProgress, item]);
 
   // Countdown & progress for in-progress missions
   let remainingMs = totalMs;
@@ -263,7 +278,7 @@ function MiniMissionCard({ item, now }: { item: MiniMission; now: number }) {
       ) : null}
     </View>
   );
-}
+});
 
 /* ─── Screen ─────────────────────────────────────────────── */
 export default function MiniMissionsScreen() {
@@ -282,7 +297,7 @@ export default function MiniMissionsScreen() {
           ? "failed"
           : "active";
   const [tab, setTab] = useState<MiniTab>(initialTab);
-  const [now, setNow] = useState(Date.now());
+  const [listNow, setListNow] = useState(Date.now());
   const [keepScreenOn, setKeepScreenOn] = useState(false);
   const isFocused = useIsFocused();
 
@@ -320,13 +335,13 @@ export default function MiniMissionsScreen() {
     () =>
       miniMissions.some((m) => {
         if (m.status !== "in_progress") return false;
-        return getMiniRemainingMs(m, now) > 0;
+        return getMiniRemainingMs(m, listNow) > 0;
       }),
-    [miniMissions, now],
+    [miniMissions, listNow],
   );
   useEffect(() => {
     if (!hasActiveCountdown) return;
-    const timer = setInterval(() => setNow(Date.now()), 1000);
+    const timer = setInterval(() => setListNow(Date.now()), MINI_LIST_CLOCK_MS);
     return () => clearInterval(timer);
   }, [hasActiveCountdown]);
 
@@ -350,7 +365,7 @@ export default function MiniMissionsScreen() {
     if (tab === "active") {
       return sortByLatestDesc(
         miniMissions.filter(
-          (m) => m.status === "in_progress" && getMiniRemainingMs(m, now) > 0,
+          (m) => m.status === "in_progress" && getMiniRemainingMs(m, listNow) > 0,
         ),
       );
     }
@@ -358,7 +373,7 @@ export default function MiniMissionsScreen() {
       return sortByLatestDesc(
         miniMissions.filter((m) => {
           if (m.status === "cancelled") return true;
-          return m.status === "in_progress" && getMiniRemainingMs(m, now) === 0;
+          return m.status === "in_progress" && getMiniRemainingMs(m, listNow) === 0;
         }),
       );
     }
@@ -373,16 +388,20 @@ export default function MiniMissionsScreen() {
       );
     }
     return [];
-  }, [miniMissions, tab, view, now]);
+  }, [miniMissions, tab, view, listNow]);
 
   const activeCount = miniMissions.filter(
-    (m) => m.status === "in_progress" && getMiniRemainingMs(m, now) > 0,
+    (m) => m.status === "in_progress" && getMiniRemainingMs(m, listNow) > 0,
   ).length;
   const failedCount = miniMissions.filter(
-    (m) => m.status === "cancelled" || (m.status === "in_progress" && getMiniRemainingMs(m, now) === 0),
+    (m) => m.status === "cancelled" || (m.status === "in_progress" && getMiniRemainingMs(m, listNow) === 0),
   ).length;
   const queuedCount = miniMissions.filter((m) => m.status === "pending" || m.status === "scheduled").length;
   const completedCount = miniMissions.filter((m) => m.status === "completed").length;
+  const renderMiniMission = useCallback(
+    ({ item }: { item: MiniMission }) => <MiniMissionCard item={item} />,
+    [],
+  );
 
   return (
     <Screen>
@@ -494,11 +513,10 @@ export default function MiniMissionsScreen() {
         ) : (
           <FlashList
             data={filtered}
-            renderItem={({ item }) => <MiniMissionCard item={item} now={now} />}
+            renderItem={renderMiniMission}
             keyExtractor={(item) => item.id}
             showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.listContent}
-            extraData={now}
           />
         )}
       </View>

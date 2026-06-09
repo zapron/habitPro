@@ -34,8 +34,6 @@ import { playerLeagueForLevel } from "../utils/playerLeague";
 const SCREEN_W = Dimensions.get("window").width;
 /** Second tap within this gap counts as double-tap (cheer + burst). */
 const DOUBLE_TAP_GAP_MS = 280;
-/** Single tap opens lightbox only after this delay if no second tap arrives. */
-const LIGHTBOX_DELAY_MS = 360;
 /** RN aspectRatio is width / height; below 1 makes community moments slightly taller. */
 const COMMUNITY_PHOTO_ASPECT_RATIO = 0.9;
 
@@ -222,11 +220,8 @@ export const CommunityWinFeedPost = memo(function CommunityWinFeedPost({
   const scheduleLightbox = useCallback(
     (uri: string) => {
       clearLightboxTimer();
-      lightboxTimerRef.current = setTimeout(() => {
-        lightboxTimerRef.current = null;
-        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        onOpenLightbox(uri);
-      }, LIGHTBOX_DELAY_MS);
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      onOpenLightbox(uri);
     },
     [clearLightboxTimer, onOpenLightbox],
   );

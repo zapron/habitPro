@@ -1,6 +1,5 @@
 import { create } from "zustand";
-import { createJSONStorage, persist } from "zustand/middleware";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { persist } from "zustand/middleware";
 import type {
   ChallengeEnrollment,
   ChallengeTemplateId,
@@ -9,6 +8,7 @@ import type {
 import { getChallengeTemplate } from "../constants/challengeTemplates";
 import { computeChallengeProgress } from "../utils/challengeProgress";
 import type { Habit, MiniMission } from "../types/habit";
+import { createDeferredJsonPersistStorage } from "../lib/deferredJsonPersistStorage";
 
 const MAX_CONCURRENT = 2;
 
@@ -104,7 +104,9 @@ export const useChallengeStore = create<ChallengeStoreState>()(
     }),
     {
       name: "challenge-storage",
-      storage: createJSONStorage(() => AsyncStorage),
+      storage: createDeferredJsonPersistStorage({
+        delayMs: 250,
+      }),
     },
   ),
 );

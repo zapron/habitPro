@@ -27,6 +27,11 @@ export type RemoteSnapshot = Pick<HabitStore, "habits" | "miniMissions" | "xp" |
   cohortPeerHabits: Habit[];
 };
 
+type LocalHydrateSnapshot = Pick<
+  HabitStore,
+  "habits" | "miniMissions" | "xp" | "username" | "dirtyHabitIds" | "dirtyMiniMissionIds"
+>;
+
 type FocusDeltaRpcPayload = {
   changedHabits?: unknown[];
   changedMinis?: unknown[];
@@ -931,13 +936,58 @@ function localCanUploadAsFirstUser(
   return true;
 }
 
+function belongsToUser(item: { ownerUserId?: string | null }, userId: string): boolean {
+  return item.ownerUserId == null || item.ownerUserId === userId;
+}
+
+function mergeDirtyLocalIntoRemote(
+  remote: RemoteSnapshot,
+  local: LocalHydrateSnapshot,
+  userId: string,
+): RemoteSnapshot {
+  const dirtyHabitIds = new Set(local.dirtyHabitIds ?? []);
+  const dirtyMiniIds = new Set(local.dirtyMiniMissionIds ?? []);
+  if (dirtyHabitIds.size === 0 && dirtyMiniIds.size === 0) return remote;
+
+  let preservedLocalChange = false;
+  const habitsById = new Map(remote.habits.map((habit) => [habit.id, habit]));
+  for (const habit of local.habits) {
+    if (!dirtyHabitIds.has(habit.id) || !belongsToUser(habit, userId)) continue;
+    preservedLocalChange = true;
+    habitsById.set(habit.id, {
+      ...habit,
+      ownerUserId: habit.ownerUserId ?? userId,
+    });
+  }
+
+  const miniMissionsById = new Map(remote.miniMissions.map((mission) => [mission.id, mission]));
+  for (const mission of local.miniMissions) {
+    if (!dirtyMiniIds.has(mission.id) || !belongsToUser(mission, userId)) continue;
+    preservedLocalChange = true;
+    miniMissionsById.set(mission.id, {
+      ...mission,
+      ownerUserId: mission.ownerUserId ?? userId,
+    });
+  }
+
+  if (!preservedLocalChange) return remote;
+
+  return {
+    ...remote,
+    habits: [...habitsById.values()],
+    miniMissions: [...miniMissionsById.values()],
+    xp: Math.max(remote.xp, local.xp),
+    username: remote.username ?? local.username ?? null,
+  };
+}
+
 /**
  * After sign-in: if the server has no rows but this device had offline data, upload it.
  * Otherwise apply the remote snapshot (remote wins when any server data exists).
  */
 export async function hydrateStoreAfterAuth(
   userId: string,
-  getLocal: () => Pick<HabitStore, "habits" | "miniMissions" | "xp" | "username">,
+  getLocal: () => LocalHydrateSnapshot,
   apply: (next: RemoteSnapshot) => void,
 ): Promise<void> {
   const local = getLocal();
@@ -962,5 +1012,5 @@ export async function hydrateStoreAfterAuth(
     return;
   }
 
-  apply(remote);
+  apply(mergeDirtyLocalIntoRemote(remote, getLocal(), userId));
 }

@@ -101,5 +101,11 @@ export function isMissionGridFull(habit: {
   completedDates: string[];
   totalDays: number;
 }): boolean {
-  return getDerivedDatesState(habit.completedDates ?? [], habit.totalDays ?? 21).gridFull;
+  const totalDays = Math.max(1, habit.totalDays ?? 21);
+  const seen = new Set<string>();
+  for (const date of habit.completedDates ?? []) {
+    seen.add(date);
+    if (seen.size >= totalDays) return true;
+  }
+  return false;
 }

@@ -1,6 +1,5 @@
 import { create } from "zustand";
-import { createJSONStorage, persist } from "zustand/middleware";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { persist } from "zustand/middleware";
 import {
   getRemoteSyncUserId,
   registerSyncSnapshotGetter,
@@ -17,6 +16,7 @@ import {
   type StreakMemory,
 } from "../types/habit";
 import { MAX_RESERVE_FUEL_MINUTES } from "../constants/miniMission";
+import { recordAccountDeletedMissionId } from "../lib/accountBackup";
 import { tryRecordChallengeMilestones } from "../lib/challengeCohort";
 import { getDerivedState, isMissionGridFull } from "../utils/habitDerived";
 import { isHabitCalendarDateToggleable } from "../utils/missionDaySlots";
@@ -25,18 +25,7 @@ import { mergeRepairIntoStreakMemory } from "../utils/repairStreakMemoryMerge";
 import { alignGroupHabitToChallengeStart } from "../utils/groupMissionClock";
 import { getMissionCalendarTimeZone } from "../utils/missionCalendarKeys";
 import type { ChallengeGroupRow } from "../types/groupChallenge";
-
-const throttledStorage = {
-  getItem: (name: string) => AsyncStorage.getItem(name),
-  setItem: (name: string, value: string) => {
-    return new Promise<void>((resolve) => {
-      requestAnimationFrame(() => {
-        AsyncStorage.setItem(name, value).then(resolve);
-      });
-    });
-  },
-  removeItem: (name: string) => AsyncStorage.removeItem(name),
-};
+import { createDeferredJsonPersistStorage } from "../lib/deferredJsonPersistStorage";
 /** Calculate endDate by adding `totalDays` to a start ISO string. */
 const calculateEndDate = (startIso: string, totalDays: number): string => {
   const d = new Date(startIso);
@@ -102,6 +91,41 @@ function mergeDirtyIdsByReference<T extends { id: string }>(
   return nextDirtySet ? [...nextDirtySet] : dirtyIds;
 }
 
+function sameStringArray(a: string[] | undefined, b: string[] | undefined): boolean {
+  const aa = a ?? [];
+  const bb = b ?? [];
+  if (aa.length !== bb.length) return false;
+  for (let i = 0; i < aa.length; i += 1) {
+    if (aa[i] !== bb[i]) return false;
+  }
+  return true;
+}
+
+function areCohortPeerHabitsEqual(previous: Habit[], next: Habit[]): boolean {
+  if (previous === next) return true;
+  if (previous.length !== next.length) return false;
+
+  for (let i = 0; i < previous.length; i += 1) {
+    const a = previous[i];
+    const b = next[i];
+    if (
+      a.id !== b.id ||
+      a.ownerUserId !== b.ownerUserId ||
+      a.challengeGroupId !== b.challengeGroupId ||
+      a.status !== b.status ||
+      a.streak !== b.streak ||
+      a.totalDays !== b.totalDays ||
+      a.isCompleted !== b.isCompleted ||
+      a.missionReport !== b.missionReport ||
+      !sameStringArray(a.completedDates, b.completedDates)
+    ) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 export const useHabitStore = create<HabitStore>()(
   persist(
     (rawSet, get) => {
@@ -153,7 +177,13 @@ export const useHabitStore = create<HabitStore>()(
         username: null,
         setUsername: (username) => set({ username }),
         cohortPeerHabits: [],
-        setCohortPeerHabits: (cohortPeerHabits) => set({ cohortPeerHabits }),
+        setCohortPeerHabits: (cohortPeerHabits) => {
+          rawSet((state) =>
+            areCohortPeerHabitsEqual(state.cohortPeerHabits, cohortPeerHabits)
+              ? state
+              : { cohortPeerHabits },
+          );
+        },
       setHabitChallengeMeta: (id, meta) => {
         set((state) => ({
           habits: state.habits.map((h) =>
@@ -407,6 +437,7 @@ export const useHabitStore = create<HabitStore>()(
         requestRemoteSync({ immediate: false });
       },
       deleteHabit: (id) => {
+        void recordAccountDeletedMissionId(getRemoteSyncUserId(), "habit", id);
         set((state) => ({
           habits: state.habits.filter((h) => h.id !== id),
         }));
@@ -691,6 +722,7 @@ export const useHabitStore = create<HabitStore>()(
       deleteMiniMission: (id) => {
         const mission = get().miniMissions.find((m) => m.id === id);
         if (mission?.liveSquadId) return;
+        void recordAccountDeletedMissionId(getRemoteSyncUserId(), "miniMission", id);
         set((state) => ({
           miniMissions: state.miniMissions.filter(
             (mission) => mission.id !== id,
@@ -708,7 +740,9 @@ export const useHabitStore = create<HabitStore>()(
   },
     {
       name: "habit-storage",
-      storage: createJSONStorage(() => throttledStorage),
+      storage: createDeferredJsonPersistStorage({
+        delayMs: 250,
+      }),
       partialize: (state) => ({
         habits: state.habits,
         miniMissions: state.miniMissions,

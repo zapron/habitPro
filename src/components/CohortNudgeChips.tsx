@@ -81,6 +81,9 @@ export const CohortNudgeChips = memo(function CohortNudgeChips({
     <ScrollView
       horizontal
       showsHorizontalScrollIndicator={false}
+      keyboardShouldPersistTaps="handled"
+      directionalLockEnabled
+      canCancelContentTouches={false}
       contentContainerStyle={styles.scrollContent}
       style={styles.scroll}
     >

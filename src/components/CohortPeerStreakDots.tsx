@@ -157,7 +157,14 @@ export const CohortPeerStreakDots = memo(function CohortPeerStreakDots({
 
   const dots = (
     <>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.dotsRow}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        directionalLockEnabled
+        canCancelContentTouches={false}
+        contentContainerStyle={styles.dotsRow}
+      >
         {days.map(({ dayNum, dateStr, completed, memory }) => {
           const isCurrentSlot = activeSlot === dayNum;
           const isPublic = (habit.visibility ?? "solo") === "public";

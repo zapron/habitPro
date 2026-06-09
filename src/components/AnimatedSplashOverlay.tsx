@@ -84,6 +84,7 @@ export function AnimatedSplashOverlay({ onFirstLayout, dismiss, onDismissed }: P
 
   return (
     <Animated.View
+      pointerEvents={dismiss ? "none" : "auto"}
       style={[
         styles.root,
         {

@@ -35,6 +35,7 @@ const RingBoundaryDots = memo(function RingBoundaryDots({
   missedColor,
   futureColor,
   pendingColor,
+  completedDateSet,
 }: {
   ringSize: number;
   strokeWidth: number;
@@ -46,6 +47,7 @@ const RingBoundaryDots = memo(function RingBoundaryDots({
   missedColor: string;
   futureColor: string;
   pendingColor: string;
+  completedDateSet: ReadonlySet<string>;
 }) {
   const days = Math.max(1, Math.floor(totalDays));
   const current = slot == null ? 0 : clamp(Math.floor(slot), 0, days);
@@ -63,7 +65,7 @@ const RingBoundaryDots = memo(function RingBoundaryDots({
     const y = cy + radius * Math.sin(theta) - dotD / 2;
 
     const dateStr = calendarDateForHabitMissionDayIndex(habit, day - 1, nowMs);
-    const done = Boolean(dateStr && habit.completedDates.includes(dateStr));
+    const done = Boolean(dateStr && completedDateSet.has(dateStr));
 
     let bg = futureColor;
     if (day < current) bg = done ? doneColor : missedColor;
@@ -99,6 +101,7 @@ const RingDayArcs = memo(function RingDayArcs({
   missedColor,
   futureColor,
   pendingColor,
+  completedDateSet,
 }: {
   ringSize: number;
   strokeWidth: number;
@@ -110,6 +113,7 @@ const RingDayArcs = memo(function RingDayArcs({
   missedColor: string;
   futureColor: string;
   pendingColor: string;
+  completedDateSet: ReadonlySet<string>;
 }) {
   const days = Math.max(1, Math.floor(totalDays));
   const current = slot == null ? 0 : clamp(Math.floor(slot), 0, days);
@@ -127,7 +131,7 @@ const RingDayArcs = memo(function RingDayArcs({
   const arcs = [];
   for (let day = 1; day <= days; day++) {
     const dateStr = calendarDateForHabitMissionDayIndex(habit, day - 1, nowMs);
-    const done = Boolean(dateStr && habit.completedDates.includes(dateStr));
+    const done = Boolean(dateStr && completedDateSet.has(dateStr));
 
     let color = futureColor;
     if (day < current) color = done ? doneColor : missedColor;
@@ -172,6 +176,7 @@ export const HabitCard = memo(({ item, nowMs }: HabitCardProps) => {
     const needsReport = needsMainMissionOutcome(item, nowMs);
     const missionWon = item.missionReport === 'accomplished';
     const isManual = (item.mode ?? 'autopilot') === 'manual';
+    const completedDateSet = useMemo(() => new Set(item.completedDates), [item.completedDates]);
     /** Mission completion: distinct days checked / campaign length */
     const campaignProgress = Math.min(item.completedDates.length / totalDays, 1);
     /** Current consecutive streak as a share of the mission (ring + center number) */
@@ -186,8 +191,8 @@ export const HabitCard = memo(({ item, nowMs }: HabitCardProps) => {
       if (slot == null) return false;
       const dateStr = calendarDateForHabitMissionDayIndex(item, slot - 1, nowMs);
       if (!dateStr) return false;
-      return !item.completedDates.includes(dateStr);
-    }, [missionWon, needsReport, item, nowMs, totalDays, isManual]);
+      return !completedDateSet.has(dateStr);
+    }, [missionWon, needsReport, item, nowMs, totalDays, isManual, completedDateSet]);
 
     const pulse = useRef(new Animated.Value(0)).current;
     useEffect(() => {
@@ -228,7 +233,10 @@ export const HabitCard = memo(({ item, nowMs }: HabitCardProps) => {
     };
 
     return (
-        <View
+        <Pressable
+            onPress={openHabit}
+            accessibilityRole="button"
+            accessibilityLabel={`Open ${item.title}`}
             style={[
                 styles.card,
                 {
@@ -299,17 +307,17 @@ export const HabitCard = memo(({ item, nowMs }: HabitCardProps) => {
                         ) : null}
                     </View>
 
-                    <Pressable onPress={openHabit} accessibilityRole="button">
+                    <View>
                         <Text style={[styles.cardTitle, { color: theme.colors.textPrimary, fontSize: theme.typography.h3 }]}>{item.title}</Text>
                         {item.description ? (
                             <Text style={[styles.cardDescription, { color: theme.colors.textSecondary }]} numberOfLines={1}>
                                 {item.description}
                             </Text>
                         ) : null}
-                    </Pressable>
+                    </View>
 
                     <View style={styles.cardStats}>
-                        <Pressable onPress={openHabit} accessibilityRole="button">
+                        <View>
                             <Text
                                 style={[
                                     styles.cardStreak,
@@ -333,7 +341,7 @@ export const HabitCard = memo(({ item, nowMs }: HabitCardProps) => {
                                       ? 'Confirm mission outcome'
                                       : `${Math.round(campaignProgress * 100)}% Complete`}
                             </Text>
-                        </Pressable>
+                        </View>
                         {!missionWon && item.challengeGroupId ? (
                             <TouchableOpacity
                                 onPress={() => router.push(`/challenge/${item.challengeGroupId}`)}
@@ -377,6 +385,7 @@ export const HabitCard = memo(({ item, nowMs }: HabitCardProps) => {
                       missedColor={isDark ? "rgba(148, 163, 184, 0.55)" : "rgba(100, 116, 139, 0.55)"}
                       pendingColor={isDark ? "rgba(148, 163, 184, 0.75)" : "rgba(100, 116, 139, 0.75)"}
                       futureColor={isDark ? "rgba(148, 163, 184, 0.22)" : "rgba(100, 116, 139, 0.22)"}
+                      completedDateSet={completedDateSet}
                     />
                   ) : null}
 
@@ -426,7 +435,7 @@ export const HabitCard = memo(({ item, nowMs }: HabitCardProps) => {
                 </View>
               );
             })()}
-        </View>
+        </Pressable>
     );
 });
 

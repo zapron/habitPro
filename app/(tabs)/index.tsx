@@ -45,7 +45,6 @@ import { useAuth } from "../../src/context/AuthContext";
 import { isSupabaseConfigured } from "../../src/lib/env";
 import {
   countUnreadNotifications,
-  refreshCohortPeerHabitsCached,
 } from "../../src/lib/groupChallengesApi";
 import type { AppTheme } from "../../src/styles/theme";
 import { Button } from "../../src/components/Button";
@@ -292,8 +291,10 @@ export default function Home() {
   const [xpTrackWidth, setXpTrackWidth] = useState(0);
   const showAccount = isSupabaseConfigured();
   // On new devices, zustand can hydrate an "empty" store before Supabase hydrate completes.
-  // Show skeleton until first Supabase hydrate finishes to avoid a confusing empty flash.
+  // Returning users should still see their persisted actions immediately.
   const waitingForFirstSync = Boolean(showAccount && session?.user && !syncReady && !syncError);
+  const hasLocalHomeActions = habits.length > 0 || miniMissions.length > 0;
+  const shouldHoldForFirstSync = waitingForFirstSync && !hasLocalHomeActions;
   const cloudSyncBlocked = Boolean(showAccount && session?.user && syncError);
 
   const bellScale = useRef(new Animated.Value(1)).current;
@@ -441,6 +442,21 @@ export default function Home() {
       ? miniMissionStats.live
       : miniMissionStats.waiting;
 
+  const cohortPeersByChallengeId = useMemo(() => {
+    const peersByChallenge = new Map<string, typeof cohortPeerHabits>();
+    for (const peer of cohortPeerHabits) {
+      const challengeId = peer.challengeGroupId;
+      if (!challengeId) continue;
+      const peers = peersByChallenge.get(challengeId);
+      if (peers) {
+        peers.push(peer);
+      } else {
+        peersByChallenge.set(challengeId, [peer]);
+      }
+    }
+    return peersByChallenge;
+  }, [cohortPeerHabits]);
+
   const homeSpark = useMemo<HomeSpark | null>(() => {
     // Deterministic daily seed so the card rotates across missions each day
     // without being random on every render.
@@ -460,8 +476,10 @@ export default function Home() {
       const todayKey = getHabitActiveMissionDateKey(habit, missionNow);
       if (todayKey != null && habit.completedDates.includes(todayKey)) continue;
 
-      const peers = cohortPeerHabits.filter((p) => p.challengeGroupId === habit.challengeGroupId);
-      if (peers.length === 0 || !habit.challengeGroupId) continue;
+      const challengeId = habit.challengeGroupId;
+      if (!challengeId) continue;
+      const peers = cohortPeersByChallengeId.get(challengeId);
+      if (!peers || peers.length === 0) continue;
       const peerMaxStreak = peers.reduce((m, p) => Math.max(m, p.streak ?? 0), 0);
       const leadBy = habit.streak - peerMaxStreak;
       const behindBy = peerMaxStreak - habit.streak;
@@ -470,14 +488,14 @@ export default function Home() {
           kind: "lead",
           title: "You are leading the squad",
           body: `Hold ${habit.title} today to keep a ${leadBy}d gap.`,
-          challengeId: habit.challengeGroupId,
+          challengeId,
         });
       } else if (behindBy > 0) {
         squadSparks.push({
           kind: "chase",
           title: "A squadmate moved ahead",
           body: `${behindBy}d gap in ${habit.title}. One check-in keeps you close.`,
-          challengeId: habit.challengeGroupId,
+          challengeId,
         });
       }
     }
@@ -510,7 +528,7 @@ export default function Home() {
     }
 
     return null;
-  }, [cohortPeerHabits, habits, level, miniMissionStats.live, missionNow, stats.pending, xpInLevel]);
+  }, [cohortPeersByChallengeId, habits, level, miniMissionStats.live, missionNow, stats.pending, xpInLevel]);
 
   const onHomeSparkPress = useCallback(() => {
     if (!homeSpark) return;
@@ -532,12 +550,6 @@ export default function Home() {
   const headerSlide = useRef(new Animated.Value(-15)).current;
   const animXpFill = useRef(new Animated.Value(xpProgress)).current;
   const prevXpProgressRef = useRef(xpProgress);
-
-  const animLoaderOpacity = useRef(new Animated.Value(0.3)).current;
-  const animSparkShimmerX = useRef(new Animated.Value(0)).current;
-  const [sparkLoaderW, setSparkLoaderW] = useState(0);
-  const animContentOpacity = useRef(new Animated.Value(0)).current;
-  const animContentTranslateY = useRef(new Animated.Value(6)).current;
 
   useEffect(() => {
     if (reduceMotion) {
@@ -631,79 +643,6 @@ export default function Home() {
     }, []),
   );
 
-  const [sparkLoading, setSparkLoading] = useState(false);
-
-  useEffect(() => {
-    if (!session?.user || !syncReady) return;
-    setSparkLoading(true);
-    void refreshCohortPeerHabitsCached()
-      .catch((e) => {
-        if (__DEV__) console.warn("[habitPro] background cohort refresh failed", e);
-      })
-      .finally(() => {
-        setSparkLoading(false);
-      });
-  }, [session?.user?.id, syncReady]);
-
-  // Breathing loop animation for the "Finding your spark..." text
-  useEffect(() => {
-    if (!sparkLoading) return;
-    const anim = Animated.loop(
-      Animated.sequence([
-        Animated.timing(animLoaderOpacity, {
-          toValue: 1,
-          duration: 900,
-          useNativeDriver: true,
-        }),
-        Animated.timing(animLoaderOpacity, {
-          toValue: 0.3,
-          duration: 900,
-          useNativeDriver: true,
-        }),
-      ])
-    );
-    anim.start();
-    return () => anim.stop();
-  }, [sparkLoading]);
-
-  useEffect(() => {
-    if (reduceMotion || !sparkLoading || sparkLoaderW <= 0) return;
-    animSparkShimmerX.stopAnimation();
-    animSparkShimmerX.setValue(-sparkLoaderW);
-    const loop = Animated.loop(
-      Animated.timing(animSparkShimmerX, {
-        toValue: sparkLoaderW,
-        duration: 1500,
-        easing: Easing.linear,
-        useNativeDriver: true,
-      }),
-      { resetBeforeIteration: true },
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [reduceMotion, sparkLoading, sparkLoaderW, animSparkShimmerX]);
-
-  // Smooth fade-in and slide-up transition once data is ready
-  useEffect(() => {
-    if (!sparkLoading && homeSpark) {
-      animContentOpacity.setValue(0);
-      animContentTranslateY.setValue(6);
-      Animated.parallel([
-        Animated.timing(animContentOpacity, {
-          toValue: 1,
-          duration: 550,
-          useNativeDriver: true,
-        }),
-        Animated.timing(animContentTranslateY, {
-          toValue: 0,
-          duration: 550,
-          easing: Easing.out(Easing.ease),
-          useNativeDriver: true,
-        }),
-      ]).start();
-    }
-  }, [sparkLoading, homeSpark]);
-
   const refreshColors = useMemo(() => [theme.colors.indigo[400]], [theme.colors.indigo]);
   const notifRefreshControl = useMemo(() => (
     <RefreshControl
@@ -732,7 +671,7 @@ export default function Home() {
     homeSpark?.kind === "xp"     ? (isDark ? "rgba(34,211,238,0.08)"  : "rgba(34,211,238,0.06)")  :
     "transparent";
 
-  const readyForCoachMarks = storeHydrated && !waitingForFirstSync;
+  const readyForCoachMarks = storeHydrated && !shouldHoldForFirstSync;
   useCoachMark(
     "home_create_mission",
     {
@@ -934,57 +873,7 @@ export default function Home() {
               />
             </Animated.View>
           </View>
-          {sparkLoading ? (
-            <View
-              style={[
-                styles.sparkInlineRow,
-                {
-                  backgroundColor: isDark ? "rgba(99, 102, 241, 0.05)" : "rgba(99, 102, 241, 0.04)",
-                  borderRadius: theme.radius.sm,
-                  justifyContent: "flex-start",
-                  overflow: "hidden",
-                },
-              ]}
-              onLayout={(e) => setSparkLoaderW(e.nativeEvent.layout.width)}
-            >
-              <Animated.View
-                pointerEvents="none"
-                style={[
-                  styles.sparkInlineShimmer,
-                  {
-                    opacity: reduceMotion ? 0 : 1,
-                    transform: [{ translateX: animSparkShimmerX }],
-                  },
-                ]}
-              >
-                <LinearGradient
-                  colors={[
-                    "rgba(255,255,255,0)",
-                    isDark ? "rgba(255,255,255,0.20)" : "rgba(0,0,0,0.08)",
-                    "rgba(255,255,255,0)",
-                  ]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                  style={{ flex: 1 }}
-                />
-              </Animated.View>
-              <Animated.Text
-                style={[
-                  styles.sparkInlineText,
-                  {
-                    fontWeight: "900",
-                    letterSpacing: 0.3,
-                    color: isDark ? "rgba(255, 255, 255, 0.55)" : "rgba(0, 0, 0, 0.45)",
-                    opacity: animLoaderOpacity,
-                    textAlign: "left",
-                  },
-                ]}
-                numberOfLines={1}
-              >
-                Loading your spark...
-              </Animated.Text>
-            </View>
-          ) : homeSpark ? (
+          {homeSpark ? (
             <TouchableOpacity
               activeOpacity={0.86}
               onPress={onHomeSparkPress}
@@ -996,8 +885,6 @@ export default function Home() {
                   {
                     backgroundColor: sparkTint,
                     borderRadius: theme.radius.sm,
-                    opacity: animContentOpacity,
-                    transform: [{ translateY: animContentTranslateY }],
                   },
                 ]}
               >
@@ -1199,7 +1086,7 @@ export default function Home() {
                 </View>
               </View>
             </ScrollView>
-          ) : !storeHydrated || waitingForFirstSync ? (
+          ) : !storeHydrated || shouldHoldForFirstSync ? (
             <ListSkeleton theme={theme} isDark={isDark} reduceMotion={reduceMotion} />
           ) : filteredHabits.length === 0 ? (
             <ScrollView
@@ -1568,13 +1455,6 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   sparkInlineTitle: { fontWeight: "900" },
-  sparkInlineShimmer: {
-    position: "absolute",
-    top: -2,
-    bottom: -2,
-    left: 0,
-    width: 74,
-  },
 });
 
 const skeletonStyles = StyleSheet.create({

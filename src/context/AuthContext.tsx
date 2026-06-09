@@ -33,6 +33,7 @@ import {
   syncProfileTimezone,
 } from "../lib/pushTokens";
 import { syncMiniMissionNotifications } from "../utils/miniMissionNotifications";
+import { markRemoteFocusRefreshFresh } from "../lib/remoteFocusRefreshCache";
 
 const PERSIST_KEY = "habit-storage";
 const CHALLENGE_STORAGE_KEY = "challenge-storage";
@@ -196,7 +197,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       },
     )
       .then(() => {
-        if (!cancelled && activeAuthUserIdRef.current === uid) setSyncReady(true);
+        if (!cancelled && activeAuthUserIdRef.current === uid) {
+          markRemoteFocusRefreshFresh(uid);
+          setSyncReady(true);
+        }
       })
       .catch((e) => {
         console.warn("[habitPro] hydrate failed", e);
