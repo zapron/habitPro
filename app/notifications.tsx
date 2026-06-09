@@ -1,16 +1,19 @@
 import { Text } from "../src/components/AppText";
 import {
   useCallback,
+  useEffect,
   useLayoutEffect,
   useRef,
   useState } from "react";
 import {
+  Animated,
   View,
   FlatList,
   TouchableOpacity,
   StyleSheet,
   StatusBar,
   ActivityIndicator,
+  Easing,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
@@ -229,8 +232,42 @@ export default function NotificationsScreen() {
   const [markingAll, setMarkingAll] = useState(false);
   const userIdRef = useRef<string | null>(userId);
   const itemsRef = useRef<NotificationRow[]>([]);
+  const markAllGlow = useRef(new Animated.Value(0)).current;
 
   itemsRef.current = items;
+
+  useEffect(() => {
+    if (!markingAll) {
+      markAllGlow.stopAnimation();
+      markAllGlow.setValue(0);
+      return undefined;
+    }
+
+    markAllGlow.setValue(0);
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(markAllGlow, {
+          toValue: 1,
+          duration: 720,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(markAllGlow, {
+          toValue: 0,
+          duration: 720,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [markAllGlow, markingAll]);
+
+  const markAllGlowOpacity = markAllGlow.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.14, 0.36],
+  });
 
   const load = useCallback(async (options?: { force?: boolean }) => {
     const requestedUserId = userId;
@@ -404,14 +441,32 @@ export default function NotificationsScreen() {
         >
           <ArrowLeft size={theme.icon.xl} color={theme.colors.textPrimary} />
         </TouchableOpacity>
-        <Text style={[styles.title, { color: theme.colors.textPrimary, fontSize: theme.typography.h1 }]}>Notifications</Text>
+        <Text
+          style={[styles.title, { color: theme.colors.textPrimary, fontSize: theme.typography.h1 }]}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.86}
+        >
+          Notifications
+        </Text>
         <TouchableOpacity
           style={[
             styles.markAllBtn,
             {
-              borderColor: theme.colors.border,
-              backgroundColor: theme.colors.surface,
-              opacity: !hasUnread || markingAll ? 0.55 : 1,
+              borderColor: markingAll ? theme.colors.cyan[400] : theme.colors.border,
+              backgroundColor: markingAll
+                ? isDark
+                  ? "rgba(34,211,238,0.08)"
+                  : "rgba(8,145,178,0.06)"
+                : theme.colors.surface,
+              opacity: !hasUnread && !markingAll ? 0.55 : 1,
+            },
+            markingAll && {
+              shadowColor: theme.colors.cyan[400],
+              shadowOpacity: isDark ? 0.34 : 0.22,
+              shadowRadius: 9,
+              shadowOffset: { width: 0, height: 0 },
+              elevation: 3,
             },
           ]}
           onPress={() => void onMarkAllRead()}
@@ -419,9 +474,21 @@ export default function NotificationsScreen() {
           accessibilityRole="button"
           accessibilityLabel={markingAll ? "Marking all notifications read" : "Mark all notifications read"}
         >
-          {markingAll ? <ActivityIndicator size="small" color={theme.colors.indigo[400]} /> : null}
-          <Text style={[styles.markAllText, { color: theme.colors.indigo[400] }]}>
-            {markingAll ? "Marking..." : "Mark all read"}
+          {markingAll ? (
+            <Animated.View
+              pointerEvents="none"
+              style={[
+                styles.markAllGlow,
+                {
+                  opacity: markAllGlowOpacity,
+                  backgroundColor: theme.colors.cyan[400],
+                  borderColor: theme.colors.cyan[400],
+                },
+              ]}
+            />
+          ) : null}
+          <Text style={[styles.markAllText, { color: markingAll ? theme.colors.cyan[400] : theme.colors.indigo[400] }]}>
+            Mark all read
           </Text>
         </TouchableOpacity>
       </View>
@@ -523,9 +590,23 @@ export default function NotificationsScreen() {
 const styles = StyleSheet.create({
   header: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 16 },
   iconButton: { padding: 8, borderRadius: 9999, borderWidth: 1 },
-  title: { fontWeight: "800", flex: 1 },
-  markAllBtn: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 9999, borderWidth: 1, flexDirection: "row", alignItems: "center", gap: 6 },
-  markAllText: { fontWeight: "800", fontSize: 12, letterSpacing: 0.2 },
+  title: { fontWeight: "800", flex: 1, minWidth: 0 },
+  markAllBtn: {
+    minWidth: 122,
+    minHeight: 38,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 9999,
+    borderWidth: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+    position: "relative",
+    overflow: "hidden",
+  },
+  markAllGlow: { ...StyleSheet.absoluteFillObject, borderRadius: 9999, borderWidth: 1 },
+  markAllText: { fontWeight: "800", fontSize: 11, letterSpacing: 0.2 },
   row: { borderRadius: 12, borderWidth: 1, padding: 14, marginBottom: 10 },
   rowInner: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
   unreadDot: { width: 10, height: 10, borderRadius: 9999, marginTop: 5 },

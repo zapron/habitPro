@@ -835,44 +835,7 @@ export default function HabitDetail() {
         };
     }, [habit?.challengeGroupId, configured, signedIn]);
 
-    if (!habit) {
-        return (
-            <Screen>
-                <View style={styles.header}>
-                    <TouchableOpacity
-                        style={[styles.iconButton, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}
-                        onPress={() => backOrReplace(router, "/")}
-                        delayPressIn={0}
-                        accessibilityRole="button"
-                        accessibilityLabel="Go back"
-                    >
-                        <ArrowLeft size={theme.icon.xl} color={theme.colors.textPrimary} />
-                    </TouchableOpacity>
-                </View>
-                {pendingExitAfterRemove ? (
-                    <View style={styles.notFoundContainer}>
-                        <ActivityIndicator size="large" color={theme.colors.cyan[400]} />
-                    </View>
-                ) : (
-                    <View style={styles.notFoundContainer}>
-                        <Text style={[styles.notFoundText, { color: theme.colors.textPrimary, fontSize: theme.typography.body }]}>Mission not found</Text>
-                        <Button
-                            title='Go Back'
-                            onPress={() => {
-                                void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                                requestAnimationFrame(() => {
-                                    backOrReplace(router, "/");
-                                });
-                            }}
-                            style={styles.notFoundButton}
-                        />
-                    </View>
-                )}
-            </Screen>
-        );
-    }
-
-    const isGroupMission = Boolean(habit.challengeGroupId);
+    const isGroupMission = Boolean(habit?.challengeGroupId);
     const showSquadShare = isGroupMission && acceptedGroupMemberCount >= 2 && configured && signedIn;
 
     const squadShareProp = useMemo(() => {
@@ -938,6 +901,7 @@ export default function HabitDetail() {
     };
 
     const handleDelete = () => {
+        if (!habit) return;
         if (isGroupMission) {
             const challengeId = habit.challengeGroupId;
             if (!challengeId) return;
@@ -953,13 +917,16 @@ export default function HabitDetail() {
 
     const days = Array.from({ length: totalDays }, (_, i) => i + 1);
 
-    const getDayDate = useCallback((dayIndex: number) => calendarDateForHabitMissionDayIndex(habit, dayIndex, now), [habit, now]);
+    const getDayDate = useCallback((dayIndex: number) => {
+        if (!habit) return "";
+        return calendarDateForHabitMissionDayIndex(habit, dayIndex, now);
+    }, [habit, now]);
 
     const isManual = mode === 'manual';
-    const activeMissionDaySlot = getHabitActiveMissionDaySlot(habit, now);
+    const activeMissionDaySlot = habit ? getHabitActiveMissionDaySlot(habit, now) : null;
 
     const handleDayPress = useCallback((dayIndex: number, day: number) => {
-        const currentHabit = useHabitStore.getState().getHabit(habitId);
+        const currentHabit = habitId ? useHabitStore.getState().getHabit(habitId) : undefined;
         if (!currentHabit) return;
 
         const dateStr = calendarDateForHabitMissionDayIndex(currentHabit, dayIndex, Date.now());
@@ -991,6 +958,41 @@ export default function HabitDetail() {
             day
         });
     }, [habitId, toggleCompletion, showToast]);
+
+    if (!habit) {
+        return (
+            <Screen>
+                <View style={styles.header}>
+                    <TouchableOpacity
+                        style={[styles.iconButton, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}
+                        onPress={() => backOrReplace(router, "/")}
+                        delayPressIn={0}
+                        accessibilityRole="button"
+                        accessibilityLabel="Go back"
+                    >
+                        <ArrowLeft size={theme.icon.xl} color={theme.colors.textPrimary} />
+                    </TouchableOpacity>
+                </View>
+                {pendingExitAfterRemove ? (
+                    <View style={styles.notFoundContainer}>
+                        <ActivityIndicator size="large" color={theme.colors.cyan[400]} />
+                    </View>
+                ) : (
+                    <View style={styles.notFoundContainer}>
+                        <Text style={[styles.notFoundText, { color: theme.colors.textPrimary, fontSize: theme.typography.body }]}>Mission not found</Text>
+                        <Button
+                            title='Go Back'
+                            onPress={() => {
+                                void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                backOrReplace(router, "/");
+                            }}
+                            style={styles.notFoundButton}
+                        />
+                    </View>
+                )}
+            </Screen>
+        );
+    }
 
     return (
         <Screen>
@@ -1550,9 +1552,7 @@ export default function HabitDetail() {
                                         if (resetHabit(habit.id)) {
                                             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                                             showToast('Mission reset', 'success');
-                                            requestAnimationFrame(() => {
-                                                backOrReplace(router, "/");
-                                            });
+                                            backOrReplace(router, "/");
                                         }
                                     },
                                 },
@@ -1570,9 +1570,7 @@ export default function HabitDetail() {
                                           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                                           showToast('Mission deleted', 'success');
                                           void deleteAllCommunityWinsForHabit(habit);
-                                          requestAnimationFrame(() => {
-                                              backOrReplace(router, "/");
-                                          });
+                                          backOrReplace(router, "/");
                                       },
                                   },
                               ]
@@ -1598,9 +1596,7 @@ export default function HabitDetail() {
                                                 void refreshCohortPeerHabits().catch(() => {});
                                                 Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
                                                 showToast('Left group mission', 'success');
-                                                requestAnimationFrame(() => {
-                                                    backOrReplace(router, "/");
-                                                });
+                                                backOrReplace(router, "/");
                                             })();
                                         },
                                     },

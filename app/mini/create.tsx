@@ -1,6 +1,6 @@
 import { Text } from "../../src/components/AppText";
-import { useState } from "react";
-import { View, TextInput, TouchableOpacity, ScrollView, StyleSheet, StatusBar, Alert } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import { View, TextInput, TouchableOpacity, ScrollView, StyleSheet, StatusBar, Alert, Platform } from "react-native";
 import { useRouter } from "expo-router";
 import { ArrowLeft, Plane } from "lucide-react-native";
 import { Screen } from "../../src/components/Screen";
@@ -50,6 +50,35 @@ export default function CreateMiniMission() {
   const [startMode, setStartMode] = useState<StartMode>("now");
   const [focused, setFocused] = useState<"title" | "objective" | "minutes" | null>(null);
   const [creating, setCreating] = useState(false);
+  const scrollRef = useRef<ScrollView>(null);
+  const objectiveInputYRef = useRef(0);
+  const keyboardScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (keyboardScrollTimerRef.current) {
+        clearTimeout(keyboardScrollTimerRef.current);
+        keyboardScrollTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  const clearPendingKeyboardScroll = () => {
+    if (!keyboardScrollTimerRef.current) return;
+    clearTimeout(keyboardScrollTimerRef.current);
+    keyboardScrollTimerRef.current = null;
+  };
+
+  const scrollObjectiveAboveKeyboard = () => {
+    clearPendingKeyboardScroll();
+    keyboardScrollTimerRef.current = setTimeout(() => {
+      keyboardScrollTimerRef.current = null;
+      scrollRef.current?.scrollTo({
+        y: Math.max(0, objectiveInputYRef.current - 72),
+        animated: true,
+      });
+    }, Platform.OS === "ios" ? 180 : 240);
+  };
 
   const displayHours = Math.floor(totalMinutes / 60);
   const displayMins = totalMinutes % 60;
@@ -106,8 +135,10 @@ export default function CreateMiniMission() {
       </View>
 
       <ScrollView
+        ref={scrollRef}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
         contentContainerStyle={styles.scrollContent}
       >
         <View
@@ -157,6 +188,9 @@ export default function CreateMiniMission() {
 
         <Text style={[styles.label, { color: theme.colors.textSecondary, fontSize: theme.typography.caption }]}>Objective (Optional)</Text>
         <TextInput
+          onLayout={(event) => {
+            objectiveInputYRef.current = event.nativeEvent.layout.y;
+          }}
           style={[
             styles.input,
             styles.textArea,
@@ -172,8 +206,14 @@ export default function CreateMiniMission() {
           placeholderTextColor={theme.colors.textMuted}
           value={objective}
           onChangeText={setObjective}
-          onFocus={() => setFocused("objective")}
-          onBlur={() => setFocused(null)}
+          onFocus={() => {
+            setFocused("objective");
+            scrollObjectiveAboveKeyboard();
+          }}
+          onBlur={() => {
+            clearPendingKeyboardScroll();
+            setFocused(null);
+          }}
           multiline
           textAlignVertical="top"
         />
@@ -291,7 +331,7 @@ export default function CreateMiniMission() {
 }
 
 const styles = StyleSheet.create({
-  scrollContent: { paddingBottom: 24 },
+  scrollContent: { paddingBottom: 140 },
   header: { flexDirection: "row", alignItems: "center", marginBottom: 22 },
   backButton: {
     width: 40,

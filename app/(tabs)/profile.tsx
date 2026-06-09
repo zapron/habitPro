@@ -28,7 +28,12 @@ import { useToast } from "../../src/context/ToastContext";
 import { useHabitStore } from "../../src/store/habitStore";
 import { useShallow } from "zustand/react/shallow";
 import { isSupabaseConfigured } from "../../src/lib/env";
-import { listAccountSnapshotBackups, type AccountBackupSnapshot } from "../../src/lib/accountBackup";
+import {
+  listAccountDeletedMissionIds,
+  listAccountSnapshotBackups,
+  type AccountBackupSnapshot,
+  type AccountDeletedMissionIds,
+} from "../../src/lib/accountBackup";
 import { requestRemoteSync } from "../../src/lib/syncQueue";
 import { useAppVersion } from "../../src/context/AppVersionContext";
 import { useRouter } from "expo-router";
@@ -38,7 +43,9 @@ import { HubListModal } from "../../src/components/HubListModal";
 import { LazyMount } from "../../src/components/LazyMount";
 import { LevelXpRing } from "../../src/components/LevelXpRing";
 import type { AppTheme } from "../../src/styles/theme";
-import type { MissionVisibility, MiniMission } from "../../src/types/habit";
+import type { Habit, MissionVisibility, MiniMission, StreakMemory } from "../../src/types/habit";
+import { getDerivedState } from "../../src/utils/habitDerived";
+import { mergeRepairIntoStreakMemory } from "../../src/utils/repairStreakMemoryMerge";
 import {
   weeklyCompeteScore,
   weeklyTierLabel,
@@ -115,6 +122,118 @@ function backupReasonLabel(reason: string): string {
 function backupSummary(backup: AccountBackupSnapshot): string {
   const level = levelFromTotalXp(backup.xp);
   return `${backup.habits.length} habits - ${backup.miniMissions.length} minis - Level ${level}`;
+}
+
+function countHabitCheckIns(habits: readonly Habit[]): number {
+  return habits.reduce((total, habit) => total + new Set(habit.completedDates ?? []).size, 0);
+}
+
+function countHabitMemoryEntries(habits: readonly Habit[]): number {
+  return habits.reduce((total, habit) => total + Object.keys(habit.streakMemories ?? {}).length, 0);
+}
+
+function countCompletedMinis(minis: readonly MiniMission[]): number {
+  return minis.reduce((total, mini) => total + (mini.status === "completed" ? 1 : 0), 0);
+}
+
+function hasRecoverableMissionData(
+  backup: AccountBackupSnapshot,
+  currentHabits: readonly Habit[],
+  currentMinis: readonly MiniMission[],
+  deletedMissionIds: AccountDeletedMissionIds,
+): boolean {
+  const deletedHabitIds = new Set(deletedMissionIds.habitIds);
+  const deletedMiniIds = new Set(deletedMissionIds.miniMissionIds);
+  const backupHabits = backup.habits.filter((habit) => !deletedHabitIds.has(habit.id));
+  const backupMinis = backup.miniMissions.filter((mini) => !deletedMiniIds.has(mini.id));
+  return (
+    countHabitCheckIns(backupHabits) > countHabitCheckIns(currentHabits) ||
+    countHabitMemoryEntries(backupHabits) > countHabitMemoryEntries(currentHabits) ||
+    countCompletedMinis(backupMinis) > countCompletedMinis(currentMinis)
+  );
+}
+
+function userContentScore(memory: StreakMemory | undefined): number {
+  if (!memory) return 0;
+  return [
+    memory.note?.trim(),
+    memory.imageUri?.trim(),
+    memory.imageUrl?.trim(),
+    memory.checkInOnly === true ? "check-in" : "",
+  ].filter(Boolean).length;
+}
+
+function mergeCurrentRepairStateIntoBackupHabit(backupHabit: Habit, currentHabit: Habit | undefined): Habit {
+  if (!currentHabit) return backupHabit;
+
+  const repairDates = new Set<string>(currentHabit.repairedDates ?? []);
+  for (const [dateStr, memory] of Object.entries(currentHabit.streakMemories ?? {})) {
+    if (memory.repairSource) repairDates.add(dateStr);
+  }
+  if (repairDates.size === 0) return backupHabit;
+
+  const completedDates = new Set(backupHabit.completedDates ?? []);
+  const repairedDates = new Set(backupHabit.repairedDates ?? []);
+  const streakMemories: Record<string, StreakMemory> = { ...(backupHabit.streakMemories ?? {}) };
+
+  for (const dateStr of repairDates) {
+    const currentMemory = currentHabit.streakMemories?.[dateStr];
+    const source = currentMemory?.repairSource ?? streakMemories[dateStr]?.repairSource ?? "squad";
+
+    if (currentHabit.completedDates.includes(dateStr) || currentMemory?.repairSource) {
+      completedDates.add(dateStr);
+    }
+    repairedDates.add(dateStr);
+
+    const backupMemory = streakMemories[dateStr];
+    if (currentMemory?.repairSource && userContentScore(currentMemory) >= userContentScore(backupMemory)) {
+      streakMemories[dateStr] = currentMemory;
+    } else if (!backupMemory) {
+      streakMemories[dateStr] = mergeRepairIntoStreakMemory(undefined, source);
+    } else if (!backupMemory.repairSource) {
+      streakMemories[dateStr] = { ...backupMemory, repairSource: source };
+    }
+  }
+
+  const derived = getDerivedState(
+    Array.from(completedDates),
+    backupHabit.totalDays,
+    backupHabit.missionReport,
+  );
+
+  return {
+    ...backupHabit,
+    completedDates: derived.normalized,
+    repairedDates: Array.from(repairedDates).sort((a, b) => a.localeCompare(b)),
+    streakMemories,
+    totalDays: derived.totalDays,
+    streak: derived.streak,
+    isCompleted: derived.isCompleted,
+    status: derived.status,
+  };
+}
+
+function mergeCurrentRepairStateIntoBackup(
+  backupHabits: readonly Habit[],
+  currentHabits: readonly Habit[],
+): { habits: Habit[]; preservedRepairCount: number } {
+  const currentById = new Map(currentHabits.map((habit) => [habit.id, habit]));
+  let preservedRepairCount = 0;
+  const habits = backupHabits.map((backupHabit) => {
+    const currentHabit = currentById.get(backupHabit.id);
+    const before = new Set(backupHabit.repairedDates ?? []);
+    for (const [dateStr, memory] of Object.entries(backupHabit.streakMemories ?? {})) {
+      if (memory.repairSource) before.add(dateStr);
+    }
+    const merged = mergeCurrentRepairStateIntoBackupHabit(backupHabit, currentHabit);
+    const after = new Set(merged.repairedDates ?? []);
+    for (const [dateStr, memory] of Object.entries(merged.streakMemories ?? {})) {
+      if (memory.repairSource) after.add(dateStr);
+    }
+    if (after.size > before.size) preservedRepairCount += after.size - before.size;
+    return merged;
+  });
+  return { habits, preservedRepairCount };
 }
 
 const VisibilityHabitColumn = memo(function VisibilityHabitColumn({
@@ -370,6 +489,10 @@ export default function ProfileScreen() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [hubSheet, setHubSheet] = useState<HubSheetState>(null);
   const [backups, setBackups] = useState<AccountBackupSnapshot[]>([]);
+  const [deletedMissionIds, setDeletedMissionIds] = useState<AccountDeletedMissionIds>({
+    habitIds: [],
+    miniMissionIds: [],
+  });
   const [restoringBackupAt, setRestoringBackupAt] = useState<string | null>(null);
   const { rawXp, rawUsername, rawHabits, rawMiniMissions } = useHabitStore(
     useShallow((s) => ({
@@ -395,9 +518,15 @@ export default function ProfileScreen() {
     const userId = session?.user?.id ?? null;
     if (!userId) {
       setBackups([]);
+      setDeletedMissionIds({ habitIds: [], miniMissionIds: [] });
       return;
     }
-    setBackups(await listAccountSnapshotBackups(userId));
+    const [nextBackups, nextDeletedIds] = await Promise.all([
+      listAccountSnapshotBackups(userId),
+      listAccountDeletedMissionIds(userId),
+    ]);
+    setBackups(nextBackups);
+    setDeletedMissionIds(nextDeletedIds);
   }, [session?.user?.id]);
 
   useFocusEffect(
@@ -412,14 +541,9 @@ export default function ProfileScreen() {
   const recoveryBackups = useMemo(() => {
     if (cloudSyncBlocked) return backups.slice(0, 3);
     return backups
-      .filter(
-        (backup) =>
-          backup.habits.length > rawHabits.length ||
-          backup.miniMissions.length > rawMiniMissions.length ||
-          backup.xp > rawXp,
-      )
+      .filter((backup) => hasRecoverableMissionData(backup, rawHabits, rawMiniMissions, deletedMissionIds))
       .slice(0, 3);
-  }, [backups, cloudSyncBlocked, rawHabits.length, rawMiniMissions.length, rawXp]);
+  }, [backups, cloudSyncBlocked, deletedMissionIds, rawHabits, rawMiniMissions]);
   const showRecoveryBackups = Boolean(showAccount && session?.user && recoveryBackups.length > 0);
 
   const restoreBackup = useCallback(
@@ -428,10 +552,18 @@ export default function ProfileScreen() {
       if (!userId) return;
       setRestoringBackupAt(backup.savedAt);
       try {
+        const deletedHabitIds = new Set(deletedMissionIds.habitIds);
+        const deletedMiniIds = new Set(deletedMissionIds.miniMissionIds);
+        const backupHabitsToRestore = backup.habits.filter((habit) => !deletedHabitIds.has(habit.id));
+        const backupMinisToRestore = backup.miniMissions.filter((mini) => !deletedMiniIds.has(mini.id));
+        const { habits: restoredHabits, preservedRepairCount } = mergeCurrentRepairStateIntoBackup(
+          backupHabitsToRestore,
+          rawHabits,
+        );
         useHabitStore.setState({
-          habits: backup.habits,
-          miniMissions: backup.miniMissions,
-          xp: backup.xp,
+          habits: restoredHabits,
+          miniMissions: backupMinisToRestore,
+          xp: preservedRepairCount > 0 && backup.xp > rawXp ? rawXp : backup.xp,
           username: backup.username,
           cohortPeerHabits: [],
         });
@@ -446,7 +578,7 @@ export default function ProfileScreen() {
         setRestoringBackupAt(null);
       }
     },
-    [loadBackups, session?.user?.id, showToast, syncError, syncReady],
+    [deletedMissionIds, loadBackups, rawHabits, rawXp, session?.user?.id, showToast, syncError, syncReady],
   );
 
   const confirmRestoreBackup = useCallback(

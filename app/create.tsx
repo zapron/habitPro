@@ -1,5 +1,5 @@
 import { Text } from "../src/components/AppText";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   View,
   TextInput,
@@ -8,6 +8,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   StatusBar,
+  Platform,
 } from "react-native";
 import { useRouter } from "expo-router";
 
@@ -49,6 +50,35 @@ export default function CreateHabit() {
   const [totalDays, setTotalDays] = useState(30);
   const [visibility, setVisibility] = useState<MissionVisibility>("solo");
   const [focused, setFocused] = useState<"title" | "desc" | null>(null);
+  const scrollRef = useRef<ScrollView>(null);
+  const descriptionInputYRef = useRef(0);
+  const keyboardScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (keyboardScrollTimerRef.current) {
+        clearTimeout(keyboardScrollTimerRef.current);
+        keyboardScrollTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  const clearPendingKeyboardScroll = () => {
+    if (!keyboardScrollTimerRef.current) return;
+    clearTimeout(keyboardScrollTimerRef.current);
+    keyboardScrollTimerRef.current = null;
+  };
+
+  const scrollDescriptionAboveKeyboard = () => {
+    clearPendingKeyboardScroll();
+    keyboardScrollTimerRef.current = setTimeout(() => {
+      keyboardScrollTimerRef.current = null;
+      scrollRef.current?.scrollTo({
+        y: Math.max(0, descriptionInputYRef.current - 72),
+        animated: true,
+      });
+    }, Platform.OS === "ios" ? 180 : 240);
+  };
 
   const bumpDays = (delta: number) => {
     setTotalDays((d) => Math.max(1, Math.min(365, d + delta)));
@@ -120,8 +150,10 @@ export default function CreateHabit() {
       </View>
 
       <ScrollView
+        ref={scrollRef}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
         contentContainerStyle={styles.scrollContent}
       >
         <View
@@ -203,6 +235,9 @@ export default function CreateHabit() {
           Brief (Optional)
         </Text>
         <TextInput
+          onLayout={(event) => {
+            descriptionInputYRef.current = event.nativeEvent.layout.y;
+          }}
           style={[
             styles.input,
             styles.textArea,
@@ -217,8 +252,14 @@ export default function CreateHabit() {
           placeholderTextColor={theme.colors.textMuted}
           value={description}
           onChangeText={setDescription}
-          onFocus={() => setFocused("desc")}
-          onBlur={() => setFocused(null)}
+          onFocus={() => {
+            setFocused("desc");
+            scrollDescriptionAboveKeyboard();
+          }}
+          onBlur={() => {
+            clearPendingKeyboardScroll();
+            setFocused(null);
+          }}
           multiline
           textAlignVertical="top"
         />
@@ -528,7 +569,7 @@ export default function CreateHabit() {
 }
 
 const styles = StyleSheet.create({
-  scrollContent: { paddingBottom: 24 },
+  scrollContent: { paddingBottom: 140 },
   header: { flexDirection: "row", alignItems: "center", marginBottom: 22 },
   backButton: {
     width: 40,
