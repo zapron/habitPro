@@ -710,8 +710,10 @@ export function applyFocusDeltaToStore(
   const habits = local.habits
     .filter((h) => !deletedHabits.has(h.id))
     .map((h) => changedHabits.get(h.id) ?? h);
+  const habitIds = new Set(habits.map((h) => h.id));
   for (const h of partial.habits) {
-    if (!habits.some((existing) => existing.id === h.id)) {
+    if (!habitIds.has(h.id)) {
+      habitIds.add(h.id);
       habits.push(h);
     }
   }
@@ -719,8 +721,10 @@ export function applyFocusDeltaToStore(
   const miniMissions = local.miniMissions
     .filter((m) => !deletedMinis.has(m.id))
     .map((m) => changedMinis.get(m.id) ?? m);
+  const miniIds = new Set(miniMissions.map((m) => m.id));
   for (const m of partial.miniMissions) {
-    if (!miniMissions.some((existing) => existing.id === m.id)) {
+    if (!miniIds.has(m.id)) {
+      miniIds.add(m.id);
       miniMissions.push(m);
     }
   }

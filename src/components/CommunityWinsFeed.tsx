@@ -9,12 +9,11 @@ import {
 } from "react";
 import {
   View,
-  FlatList,
   StyleSheet,
   ActivityIndicator,
   RefreshControl,
-  ListRenderItem,
 } from "react-native";
+import { FlashList, type ListRenderItem } from "@shopify/flash-list";
 import type { ReactElement } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import * as Haptics from "expo-haptics";
@@ -370,13 +369,11 @@ export function CommunityWinsFeed({
 
   return (
     <>
-      <FlatList
-        style={[{ flex: 1 }, variant === "feed" ? { marginHorizontal: -feedBleed } : null]}
+      <FlashList
+        style={variant === "feed" ? { flex: 1, marginHorizontal: -feedBleed } : { flex: 1 }}
         data={listRows}
         keyExtractor={(row) => (row.kind === "skeleton" ? row.id : row.win.id)}
         renderItem={renderItem}
-        removeClippedSubviews={true}
-        maxToRenderPerBatch={10}
         contentContainerStyle={{ paddingBottom: contentPaddingBottom, flexGrow: 1 }}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.indigo[400]} />

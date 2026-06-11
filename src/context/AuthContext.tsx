@@ -86,8 +86,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setPasswordRecoveryPending(false);
 
     await Promise.allSettled([
-      AsyncStorage.removeItem(PERSIST_KEY),
-      AsyncStorage.removeItem(CHALLENGE_STORAGE_KEY),
+      AsyncStorage.multiRemove([PERSIST_KEY, CHALLENGE_STORAGE_KEY]),
       syncMiniMissionNotifications([]),
     ]);
   }, []);

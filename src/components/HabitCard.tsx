@@ -173,7 +173,7 @@ export const HabitCard = memo(({ item, nowMs }: HabitCardProps) => {
     const { theme, isDark } = useTheme();
     const reduceMotion = useReducedMotion();
     const totalDays = Math.max(1, item.totalDays ?? 21);
-    const needsReport = needsMainMissionOutcome(item, nowMs);
+    const needsReport = useMemo(() => needsMainMissionOutcome(item, nowMs), [item, nowMs]);
     const missionWon = item.missionReport === 'accomplished';
     const isManual = (item.mode ?? 'autopilot') === 'manual';
     const completedDateSet = useMemo(() => new Set(item.completedDates), [item.completedDates]);

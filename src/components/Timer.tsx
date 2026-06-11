@@ -68,9 +68,9 @@ export function Timer({ startDate, mode = 'autopilot', endDate, missionTimezone,
     const [isExpired, setIsExpired] = useState(false);
 
     useEffect(() => {
+        const start = new Date(startDate).getTime();
         const update = () => {
             const now = Date.now();
-            const start = new Date(startDate).getTime();
 
             // --- Elapsed (count-up) ---
             const elapsed = Math.max(0, now - start);

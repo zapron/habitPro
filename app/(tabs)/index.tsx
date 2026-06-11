@@ -25,6 +25,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import Svg, { Defs, LinearGradient as SvgLinearGradient, Stop, Text as SvgText } from "react-native-svg";
 import { FlashList } from "@shopify/flash-list";
 const MissionFlashList = FlashList as any;
+const habitKeyExtractor = (item: { id: string }) => item.id;
 import {
   Trophy,
   Bolt,
@@ -1177,7 +1178,7 @@ export default function Home() {
               estimatedItemSize={132}
               contentContainerStyle={listContentStyle}
               showsVerticalScrollIndicator={false}
-              keyExtractor={(item) => item.id}
+              keyExtractor={habitKeyExtractor}
               refreshControl={
                 showAccount && session?.user ? notifRefreshControl : undefined
               }

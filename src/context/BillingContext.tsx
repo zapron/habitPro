@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { AppState, Linking, Platform } from "react-native";
+import { AppState, InteractionManager, Linking, Platform } from "react-native";
 import Constants from "expo-constants";
 import Purchases, { type CustomerInfo, LOG_LEVEL } from "react-native-purchases";
 import { HABITPRO_COMMUNITY_ENTITLEMENT_ID } from "../constants/revenueCat";
@@ -426,8 +426,14 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
     if (configuredRef.current) return;
     configuredRef.current = true;
 
-    Purchases.configure({ apiKey });
-    setReady(true);
+    // Defer the native RevenueCat SDK init off the startup critical path so it
+    // never competes with the first render / splash dismissal.
+    // (Intentionally not cancelled on cleanup: configure must run exactly once,
+    // and configuredRef is already latched.)
+    void InteractionManager.runAfterInteractions(() => {
+      Purchases.configure({ apiKey });
+      setReady(true);
+    });
   }, [apiKey, configured, isExpoGo]);
 
   useEffect(() => {

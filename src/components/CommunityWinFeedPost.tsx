@@ -3,6 +3,7 @@ import {
   memo,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState } from "react";
 import {
@@ -266,10 +267,13 @@ export const CommunityWinFeedPost = memo(function CommunityWinFeedPost({
     }).start();
   }, [imageOpacity, reduceMotion]);
 
-  const tileBorder = {
-    borderColor: isDark ? "rgba(148, 163, 184, 0.2)" : "rgba(148, 163, 184, 0.34)",
-    backgroundColor: isDark ? "rgba(15, 23, 42, 0.96)" : theme.colors.background,
-  };
+  const tileBorder = useMemo(
+    () => ({
+      borderColor: isDark ? "rgba(148, 163, 184, 0.2)" : "rgba(148, 163, 184, 0.34)",
+      backgroundColor: isDark ? "rgba(15, 23, 42, 0.96)" : theme.colors.background,
+    }),
+    [isDark, theme.colors.background],
+  );
 
   const cheerButton = (
     <Pressable
