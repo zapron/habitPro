@@ -392,6 +392,7 @@ export default function HabitDetail() {
     );
 
     const lastVisibilityRef = useRef<{ id: string; prev: MissionVisibility } | null>(null);
+    const [visibilityBusy, setVisibilityBusy] = useState(false);
 
     useEffect(() => {
         const unsubFail = subscribeSyncFailure(() => {
@@ -583,9 +584,15 @@ export default function HabitDetail() {
             const ctx = pendingMemoryRef.current;
             if (!ctx || !habit) return;
 
+            // Only block on the image upload when publishing to Community (which needs
+            // the remote URL). For private check-ins we save the local imageUri and let
+            // the background sync upload it (scheduleHabitMemoryUpload), so the
+            // celebration fires instantly instead of waiting on the network.
+            const wantsUploadNow = meta?.publishToCommunity === true;
             let memoryToSave = memory;
             if (
                 memory &&
+                wantsUploadNow &&
                 canUseStreakMemoryUpload() &&
                 shouldUploadLocalStreakImage(memory.imageUri)
             ) {
@@ -1212,20 +1219,27 @@ export default function HabitDetail() {
                     </View>
                     <Switch
                         value={(habit.visibility ?? 'solo') === 'public'}
+                        disabled={visibilityBusy}
                         onValueChange={(v) => {
+                            if (visibilityBusy) return;
                             void (async () => {
                                 const next = v ? 'public' : 'solo';
                                 const prev = habit.visibility ?? 'solo';
                                 if (prev === next) return;
-                                if (next === 'public') {
-                                    const freshPremium = await refreshPremiumAccess({ serverOnly: true, cachedAccessOk: true });
-                                    if (freshPremium !== true) {
-                                        openUpsell('visibility');
-                                        return;
+                                setVisibilityBusy(true);
+                                try {
+                                    if (next === 'public') {
+                                        const freshPremium = await refreshPremiumAccess({ serverOnly: true, cachedAccessOk: true });
+                                        if (freshPremium !== true) {
+                                            openUpsell('visibility');
+                                            return;
+                                        }
                                     }
+                                    lastVisibilityRef.current = { id: habit.id, prev };
+                                    setHabitVisibility(habit.id, next);
+                                } finally {
+                                    setVisibilityBusy(false);
                                 }
-                                lastVisibilityRef.current = { id: habit.id, prev };
-                                setHabitVisibility(habit.id, next);
                             })();
                         }}
                         trackColor={{ false: theme.colors.border, true: theme.colors.indigo[600] }}
