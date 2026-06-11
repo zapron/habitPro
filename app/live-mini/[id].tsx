@@ -33,6 +33,7 @@ import {
   acceptLiveMiniInvite,
   declineLiveMiniInvite,
   fetchLiveMiniSquad,
+  getCachedLiveMiniSquad,
   formatLiveMiniElapsed,
   isLiveMiniInviteActionable,
   subscribeLiveMiniSquad,
@@ -823,8 +824,11 @@ export default function LiveMiniSquadScreen() {
   const addMiniMission = useHabitStore((s) => s.addMiniMission);
   const miniMissions = useHabitStore((s) => s.miniMissions);
 
-  const [snapshot, setSnapshot] = useState<LiveMiniSquadSnapshot | null>(null);
-  const [loading, setLoading] = useState(true);
+  // Seed from the in-memory snapshot cache so revisits paint instantly instead of
+  // blocking on a network round trip behind a spinner. Refresh still runs on focus.
+  const cachedSquad = squadId ? getCachedLiveMiniSquad(squadId) : null;
+  const [snapshot, setSnapshot] = useState<LiveMiniSquadSnapshot | null>(cachedSquad);
+  const [loading, setLoading] = useState(!cachedSquad);
   const [refreshing, setRefreshing] = useState(false);
   const [busy, setBusy] = useState<"accept" | "decline" | null>(null);
   const [selectedMinutes, setSelectedMinutes] = useState(15);
@@ -837,14 +841,20 @@ export default function LiveMiniSquadScreen() {
   const liveSyncKeyRef = useRef<string | null>(null);
   const previousParticipantStatusRef = useRef<Record<string, LiveMiniParticipantStatus>>({});
   const finishHighlightTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
-  const snapshotRef = useRef<LiveMiniSquadSnapshot | null>(null);
+  const snapshotRef = useRef<LiveMiniSquadSnapshot | null>(cachedSquad);
   const loadInFlightRef = useRef(false);
   const pendingSilentLoadRef = useRef(false);
   const lastBoardLoadAtRef = useRef(0);
   const realtimeDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Skip the very first run so cache-seeded state isn't wiped on mount; only reset
+  // when squadId/userId actually change to a different value.
+  const resetKeyRef = useRef(`${squadId ?? ""}|${userId ?? ""}`);
   useEffect(() => {
     userIdRef.current = userId;
+    const key = `${squadId ?? ""}|${userId ?? ""}`;
+    if (resetKeyRef.current === key) return;
+    resetKeyRef.current = key;
     snapshotRef.current = null;
     setSnapshot(null);
     setLoading(Boolean(userId));

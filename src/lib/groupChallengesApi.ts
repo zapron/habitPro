@@ -483,11 +483,28 @@ async function fetchChallengePrimarySnapshotViaRpc(
 }
 
 /** Group + members + profile labels in one round trip when RPC is available. */
+/**
+ * Last successful primary snapshot per challenge, kept in memory so the cohort
+ * screen can paint instantly on revisit and refresh in the background instead of
+ * blocking on a network round trip behind a spinner. Lives for the app session.
+ */
+const primarySnapshotCache = new Map<string, ChallengePrimarySnapshot>();
+
+/** Synchronous read of the last known snapshot for instant first paint (may be stale). */
+export function getCachedChallengePrimarySnapshot(
+  challengeId: string,
+): ChallengePrimarySnapshot | null {
+  return primarySnapshotCache.get(challengeId) ?? null;
+}
+
 export async function loadChallengePrimarySnapshot(
   challengeId: string,
 ): Promise<ChallengePrimarySnapshot> {
   const viaRpc = await fetchChallengePrimarySnapshotViaRpc(challengeId);
-  if (viaRpc) return viaRpc;
+  if (viaRpc) {
+    primarySnapshotCache.set(challengeId, viaRpc);
+    return viaRpc;
+  }
 
   const [g, members] = await Promise.all([
     getChallengeGroup(challengeId),
@@ -495,7 +512,9 @@ export async function loadChallengePrimarySnapshot(
   ]);
   const memberIdsOrdered = members.map((m) => m.user_id);
   const labels = await getProfileLabelsForIds(memberIdsOrdered);
-  return { group: g, memberIdsOrdered, profileLabels: labels };
+  const snapshot: ChallengePrimarySnapshot = { group: g, memberIdsOrdered, profileLabels: labels };
+  primarySnapshotCache.set(challengeId, snapshot);
+  return snapshot;
 }
 
 export async function getChallengeGroup(id: string): Promise<ChallengeGroupRow | null> {

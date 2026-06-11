@@ -49,6 +49,7 @@ import {
   sendChallengeNudge,
 } from "../../src/lib/challengeCohort";
 import {
+  getCachedChallengePrimarySnapshot,
   getProfileLabelsForIds,
   leaveChallengeGroup,
   loadChallengePrimarySnapshot,
@@ -284,10 +285,17 @@ export default function ChallengeDetailScreen() {
   const myXp = useHabitStore((s) => s.xp);
   const deleteHabit = useHabitStore((s) => s.deleteHabit);
 
-  const [group, setGroup] = useState<ChallengeGroupRow | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [memberIdsOrdered, setMemberIdsOrdered] = useState<string[]>([]);
-  const [profileLabels, setProfileLabels] = useState<Record<string, ProfileLabel>>({});
+  // Seed from the in-memory snapshot cache so revisits paint instantly instead of
+  // blocking on a network round trip behind a spinner. Refresh still runs on focus.
+  const cachedSnapshot = challengeId ? getCachedChallengePrimarySnapshot(challengeId) : null;
+  const [group, setGroup] = useState<ChallengeGroupRow | null>(cachedSnapshot?.group ?? null);
+  const [loading, setLoading] = useState(!cachedSnapshot);
+  const [memberIdsOrdered, setMemberIdsOrdered] = useState<string[]>(
+    cachedSnapshot?.memberIdsOrdered ?? [],
+  );
+  const [profileLabels, setProfileLabels] = useState<Record<string, ProfileLabel>>(
+    cachedSnapshot?.profileLabels ?? {},
+  );
   const [feedActivity, setFeedActivity] = useState<ChallengeActivityRow[]>([]);
   const [feedNudges, setFeedNudges] = useState<ChallengeNudgeRow[]>([]);
   const [nudgeBusyKey, setNudgeBusyKey] = useState<string | null>(null);
@@ -338,7 +346,9 @@ export default function ChallengeDetailScreen() {
     };
   }, [theme, isDark]);
 
-  const focusOnceRef = useRef(false);
+  // When seeded from cache, treat the very first focus as a silent background
+  // refresh (content is already on screen — no spinner needed).
+  const focusOnceRef = useRef(Boolean(cachedSnapshot));
   const secondaryLoadInFlightRef = useRef(false);
   const secondaryHydratedRef = useRef(false);
   const activityLoadMoreInFlightRef = useRef(false);

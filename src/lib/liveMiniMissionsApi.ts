@@ -233,6 +233,18 @@ export async function refreshLiveMiniMissed(squadId: string): Promise<void> {
   await supabase.rpc("rpc_refresh_live_mini_missed", { p_squad_id: squadId });
 }
 
+/**
+ * Last successful squad board snapshot per squad, kept in memory so the live-mini
+ * screen can paint instantly on revisit and refresh in the background instead of
+ * blocking on a network round trip behind a spinner. Lives for the app session.
+ */
+const liveMiniSnapshotCache = new Map<string, LiveMiniSquadSnapshot>();
+
+/** Synchronous read of the last known squad snapshot for instant first paint (may be stale). */
+export function getCachedLiveMiniSquad(squadId: string): LiveMiniSquadSnapshot | null {
+  return liveMiniSnapshotCache.get(squadId) ?? null;
+}
+
 export async function fetchLiveMiniSquad(squadId: string): Promise<LiveMiniSquadSnapshot | null> {
   const supabase = getSupabase();
   if (!supabase) return null;
@@ -245,7 +257,10 @@ export async function fetchLiveMiniSquad(squadId: string): Promise<LiveMiniSquad
     snapshotPayload = null;
   }
   const snapshot = normalizeLiveMiniSnapshot(snapshotPayload);
-  if (snapshot) return snapshot;
+  if (snapshot) {
+    liveMiniSnapshotCache.set(squadId, snapshot);
+    return snapshot;
+  }
 
   const [squadRes, participantsRes] = await Promise.all([
     supabase.from("live_mini_squads").select("*").eq("id", squadId).maybeSingle(),
@@ -266,11 +281,13 @@ export async function fetchLiveMiniSquad(squadId: string): Promise<LiveMiniSquad
     ...participants.map((p) => p.user_id),
   ];
   const profiles = await getProfileLabelsForIds(ids);
-  return {
+  const legacySnapshot: LiveMiniSquadSnapshot = {
     squad: squadRes.data as LiveMiniSquadRow,
     participants,
     profiles,
   };
+  liveMiniSnapshotCache.set(squadId, legacySnapshot);
+  return legacySnapshot;
 }
 
 export async function listLiveMiniInvitesForMe(limit = 40): Promise<LiveMiniInviteForMe[]> {
