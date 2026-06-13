@@ -55,6 +55,57 @@ export type CommunityPlayerProfile = {
   recentWins: CommunityPlayerRecentWin[];
 };
 
+export type CommunityPlayerStoryPost = {
+  id: string;
+  title: string;
+  completedAt: string;
+  createdAt: string;
+  memoryNote: string | null;
+  memoryImageUrl: string | null;
+  feedSource: CommunityWinFeedSource;
+  streakMissionDay: number | null;
+  streakCountAtPost: number | null;
+  liveSquadId: string | null;
+  cheerCount: number;
+  viewerHasCheered: boolean;
+};
+
+export type CommunityPlayerMissionStory = {
+  key: string;
+  title: string;
+  postCount: number;
+  photoCount: number;
+  latestAt: string;
+  bestStreak: number | null;
+  posts: CommunityPlayerStoryPost[];
+};
+
+export type CommunityPlayerMissionJourneyPage = {
+  posts: CommunityPlayerStoryPost[];
+  hasMore: boolean;
+};
+
+export type CommunityPlayerWeeklyRank = {
+  rankPosition: number;
+  points: number;
+  habitCheckIns: number;
+  miniCompletions: number;
+};
+
+export type CommunityPlayerGlobalRank = {
+  rankPosition: number;
+  xp: number;
+};
+
+export type CommunityPlayerStory = {
+  profile: CommunityPlayerProfile;
+  weeklyRank: CommunityPlayerWeeklyRank | null;
+  globalRank: CommunityPlayerGlobalRank | null;
+  missionStories: CommunityPlayerMissionStory[];
+  miniPosts: CommunityPlayerStoryPost[];
+  totalPhotoMoments: number;
+};
+
 export type CommunityWinCheerer = {
   userId: string;
   username: string | null;
@@ -409,6 +460,333 @@ export async function toggleCheer(winId: string, currentlyCheered: boolean): Pro
     }
   }
   return { ok: true };
+}
+
+function storyNumber(value: unknown, fallback = 0): number {
+  return typeof value === "number" && Number.isFinite(value) ? Math.max(0, value) : fallback;
+}
+
+function storyString(value: unknown, fallback = ""): string {
+  return typeof value === "string" ? value : fallback;
+}
+
+function normalizeStoryPost(
+  row: CommunityWinRow,
+  cheerCount: number,
+  viewerHasCheered: boolean,
+): CommunityPlayerStoryPost {
+  return {
+    id: row.id,
+    title: row.title,
+    completedAt: row.completed_at,
+    createdAt: row.created_at,
+    memoryNote: row.memory_note ?? null,
+    memoryImageUrl: row.memory_image_url ?? null,
+    feedSource: (row.feed_source ?? "mini") as CommunityWinFeedSource,
+    streakMissionDay: row.streak_mission_day ?? null,
+    streakCountAtPost: row.streak_count_at_post ?? null,
+    liveSquadId: row.live_squad_id ?? null,
+    cheerCount,
+    viewerHasCheered,
+  };
+}
+
+function habitStoryKey(row: CommunityWinRow): string {
+  const syntheticParts = row.mini_mission_id.split(":");
+  if (syntheticParts[0] === "habitwin" && syntheticParts[1]) {
+    return `habit:${syntheticParts[1]}`;
+  }
+  const normalizedTitle = row.title.trim().toLowerCase();
+  return normalizedTitle ? `habit-title:${normalizedTitle}` : `habit:${row.id}`;
+}
+
+function groupMissionStories(rows: CommunityWinRow[], postsById: Map<string, CommunityPlayerStoryPost>) {
+  const grouped = new Map<string, CommunityPlayerStoryPost[]>();
+  for (const row of rows) {
+    if ((row.feed_source ?? "mini") !== "habit_streak") continue;
+    const post = postsById.get(row.id);
+    if (!post) continue;
+    const key = habitStoryKey(row);
+    const existing = grouped.get(key) ?? [];
+    existing.push(post);
+    grouped.set(key, existing);
+  }
+
+  return [...grouped.entries()]
+    .map(([key, posts]) => {
+      const sorted = [...posts].sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+      );
+      const bestStreak = sorted.reduce<number | null>((best, post) => {
+        const n = post.streakCountAtPost;
+        if (typeof n !== "number" || !Number.isFinite(n)) return best;
+        return best === null ? n : Math.max(best, n);
+      }, null);
+      return {
+        key,
+        title: sorted[0]?.title ?? "Mission",
+        postCount: sorted.length,
+        photoCount: sorted.filter((post) => Boolean(post.memoryImageUrl)).length,
+        latestAt: sorted[0]?.createdAt ?? new Date(0).toISOString(),
+        bestStreak,
+        posts: sorted,
+      } satisfies CommunityPlayerMissionStory;
+    })
+    .sort((a, b) => new Date(b.latestAt).getTime() - new Date(a.latestAt).getTime());
+}
+
+function mergeStoryPosts(
+  existing: CommunityPlayerStoryPost[],
+  incoming: CommunityPlayerStoryPost[],
+): CommunityPlayerStoryPost[] {
+  const seen = new Set<string>();
+  const merged: CommunityPlayerStoryPost[] = [];
+  for (const post of [...existing, ...incoming]) {
+    if (seen.has(post.id)) continue;
+    seen.add(post.id);
+    merged.push(post);
+  }
+  return merged.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+}
+
+export function mergeCommunityPlayerStoryPosts(
+  existing: CommunityPlayerStoryPost[],
+  incoming: CommunityPlayerStoryPost[],
+): CommunityPlayerStoryPost[] {
+  return mergeStoryPosts(existing, incoming);
+}
+
+async function fetchCommunityPlayerRanks(
+  userId: string,
+): Promise<{ weeklyRank: CommunityPlayerWeeklyRank | null; globalRank: CommunityPlayerGlobalRank | null }> {
+  const supabase = getSupabase();
+  if (!supabase) return { weeklyRank: null, globalRank: null };
+
+  const { data, error } = await supabase.rpc("rpc_community_player_ranks_v1", {
+    p_user_id: userId,
+  });
+  if (error || !data || typeof data !== "object") {
+    return { weeklyRank: null, globalRank: null };
+  }
+
+  const payload = data as {
+    weekly?: Record<string, unknown> | null;
+    global?: Record<string, unknown> | null;
+  };
+  const weekly = payload.weekly;
+  const global = payload.global;
+
+  return {
+    weeklyRank:
+      weekly && storyNumber(weekly.rankPosition) > 0
+        ? {
+            rankPosition: storyNumber(weekly.rankPosition),
+            points: storyNumber(weekly.points),
+            habitCheckIns: storyNumber(weekly.habitCheckIns),
+            miniCompletions: storyNumber(weekly.miniCompletions),
+          }
+        : null,
+    globalRank:
+      global && storyNumber(global.rankPosition) > 0
+        ? {
+            rankPosition: storyNumber(global.rankPosition),
+            xp: storyNumber(global.xp),
+          }
+        : null,
+  };
+}
+
+export async function fetchCommunityPlayerMissionJourneyPage(input: {
+  userId: string;
+  missionKey: string;
+  missionTitle: string;
+  offset: number;
+  limit?: number;
+}): Promise<{ ok: true; page: CommunityPlayerMissionJourneyPage } | { ok: false; error: string }> {
+  const supabase = getSupabase();
+  if (!supabase) return { ok: false, error: "Cloud sync not configured." };
+
+  const pageSize = Math.max(6, Math.min(Math.floor(input.limit ?? 12), 36));
+  const offset = Math.max(0, Math.floor(input.offset));
+
+  let query = supabase
+    .from("community_wins")
+    .select(
+      "id, user_id, mini_mission_id, title, completed_at, memory_note, memory_image_url, created_at, feed_source, streak_mission_day, streak_count_at_post, live_squad_id",
+    )
+    .eq("user_id", input.userId)
+    .eq("feed_source", "habit_streak")
+    .order("created_at", { ascending: false });
+
+  if (input.missionKey.startsWith("habit:")) {
+    const habitId = input.missionKey.slice("habit:".length);
+    query = habitId
+      ? query.like("mini_mission_id", `habitwin:${habitId}:%`)
+      : query.eq("title", input.missionTitle);
+  } else if (input.missionKey.startsWith("habit-title:")) {
+    query = query.eq("title", input.missionTitle);
+  } else {
+    query = query.eq("title", input.missionTitle);
+  }
+
+  const { data: rowsRaw, error } = await query.range(offset, offset + pageSize);
+  if (error) return { ok: false, error: error.message };
+
+  const rows = ((rowsRaw ?? []) as Partial<CommunityWinRow>[])
+    .map((row) => {
+      if (typeof row.id !== "string") return null;
+      return {
+        id: row.id,
+        user_id: storyString(row.user_id, input.userId),
+        mini_mission_id: storyString(row.mini_mission_id),
+        title: storyString(row.title, input.missionTitle),
+        completed_at: storyString(row.completed_at, row.created_at ?? new Date(0).toISOString()),
+        memory_note: typeof row.memory_note === "string" ? row.memory_note : null,
+        memory_image_url: typeof row.memory_image_url === "string" ? row.memory_image_url : null,
+        created_at: storyString(row.created_at, row.completed_at ?? new Date(0).toISOString()),
+        feed_source: (row.feed_source ?? "habit_streak") as CommunityWinFeedSource,
+        streak_mission_day:
+          typeof row.streak_mission_day === "number" && Number.isFinite(row.streak_mission_day)
+            ? row.streak_mission_day
+            : null,
+        streak_count_at_post:
+          typeof row.streak_count_at_post === "number" && Number.isFinite(row.streak_count_at_post)
+            ? row.streak_count_at_post
+            : null,
+        live_squad_id: typeof row.live_squad_id === "string" ? row.live_squad_id : null,
+      } satisfies CommunityWinRow;
+    })
+    .filter((row): row is CommunityWinRow => row !== null);
+
+  const hasMore = rows.length > pageSize;
+  const pageRows = rows.slice(0, pageSize);
+  const winIds = pageRows.map((row) => row.id);
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const { data: cheersRaw } =
+    winIds.length > 0
+      ? await supabase.from("community_win_cheers").select("win_id, user_id").in("win_id", winIds)
+      : { data: [] as Array<{ win_id: string; user_id: string }> };
+
+  const cheerCountByWin = new Map<string, number>();
+  const viewerCheered = new Set<string>();
+  for (const cheer of cheersRaw ?? []) {
+    const winId = (cheer as { win_id?: unknown }).win_id;
+    const cheerUserId = (cheer as { user_id?: unknown }).user_id;
+    if (typeof winId !== "string") continue;
+    cheerCountByWin.set(winId, (cheerCountByWin.get(winId) ?? 0) + 1);
+    if (typeof cheerUserId === "string" && user?.id === cheerUserId) {
+      viewerCheered.add(winId);
+    }
+  }
+
+  return {
+    ok: true,
+    page: {
+      posts: pageRows.map((row) =>
+        normalizeStoryPost(row, cheerCountByWin.get(row.id) ?? 0, viewerCheered.has(row.id)),
+      ),
+      hasMore,
+    },
+  };
+}
+
+export async function fetchCommunityPlayerStory(
+  userId: string,
+  limit = 48,
+): Promise<{ ok: true; story: CommunityPlayerStory } | { ok: false; error: string }> {
+  const supabase = getSupabase();
+  if (!supabase) return { ok: false, error: "Cloud sync not configured." };
+
+  const requestedLimit = Math.max(10, Math.min(Math.floor(limit), 120));
+  const [
+    profileResult,
+    ranks,
+    {
+      data: { user },
+    },
+    { data: winsRaw, error: winsErr },
+  ] = await Promise.all([
+    fetchCommunityPlayerProfile(userId),
+    fetchCommunityPlayerRanks(userId),
+    supabase.auth.getUser(),
+    supabase
+      .from("community_wins")
+      .select(
+        "id, user_id, mini_mission_id, title, completed_at, memory_note, memory_image_url, created_at, feed_source, streak_mission_day, streak_count_at_post, live_squad_id",
+      )
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(requestedLimit),
+  ]);
+
+  if (profileResult.ok === false) return profileResult;
+  if (winsErr) return { ok: false, error: winsErr.message };
+
+  const rows = ((winsRaw ?? []) as Partial<CommunityWinRow>[])
+    .map((row) => {
+      if (typeof row.id !== "string") return null;
+      return {
+        id: row.id,
+        user_id: storyString(row.user_id, userId),
+        mini_mission_id: storyString(row.mini_mission_id),
+        title: storyString(row.title, "Community win"),
+        completed_at: storyString(row.completed_at, row.created_at ?? new Date(0).toISOString()),
+        memory_note: typeof row.memory_note === "string" ? row.memory_note : null,
+        memory_image_url: typeof row.memory_image_url === "string" ? row.memory_image_url : null,
+        created_at: storyString(row.created_at, row.completed_at ?? new Date(0).toISOString()),
+        feed_source: (row.feed_source ?? "mini") as CommunityWinFeedSource,
+        streak_mission_day:
+          typeof row.streak_mission_day === "number" && Number.isFinite(row.streak_mission_day)
+            ? row.streak_mission_day
+            : null,
+        streak_count_at_post:
+          typeof row.streak_count_at_post === "number" && Number.isFinite(row.streak_count_at_post)
+            ? row.streak_count_at_post
+            : null,
+        live_squad_id: typeof row.live_squad_id === "string" ? row.live_squad_id : null,
+      } satisfies CommunityWinRow;
+    })
+    .filter((row): row is CommunityWinRow => row !== null);
+
+  const winIds = rows.map((row) => row.id);
+  const { data: cheersRaw } =
+    winIds.length > 0
+      ? await supabase.from("community_win_cheers").select("win_id, user_id").in("win_id", winIds)
+      : { data: [] as Array<{ win_id: string; user_id: string }> };
+
+  const cheerCountByWin = new Map<string, number>();
+  const viewerCheered = new Set<string>();
+  for (const cheer of cheersRaw ?? []) {
+    const winId = (cheer as { win_id?: unknown }).win_id;
+    const cheerUserId = (cheer as { user_id?: unknown }).user_id;
+    if (typeof winId !== "string") continue;
+    cheerCountByWin.set(winId, (cheerCountByWin.get(winId) ?? 0) + 1);
+    if (typeof cheerUserId === "string" && user?.id === cheerUserId) {
+      viewerCheered.add(winId);
+    }
+  }
+
+  const posts = rows.map((row) =>
+    normalizeStoryPost(row, cheerCountByWin.get(row.id) ?? 0, viewerCheered.has(row.id)),
+  );
+  const postsById = new Map(posts.map((post) => [post.id, post]));
+  const missionStories = groupMissionStories(rows, postsById);
+  const miniPosts = posts.filter((post) => post.feedSource === "mini");
+  const totalPhotoMoments = posts.filter((post) => Boolean(post.memoryImageUrl)).length;
+
+  return {
+    ok: true,
+    story: {
+      profile: profileResult.profile,
+      weeklyRank: ranks.weeklyRank,
+      globalRank: ranks.globalRank,
+      missionStories,
+      miniPosts,
+      totalPhotoMoments,
+    },
+  };
 }
 
 export async function fetchCommunityPlayerProfile(

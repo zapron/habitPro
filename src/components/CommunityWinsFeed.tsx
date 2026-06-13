@@ -16,6 +16,7 @@ import {
 import { FlashList, type ListRenderItem } from "@shopify/flash-list";
 import type { ReactElement } from "react";
 import { useFocusEffect } from "@react-navigation/native";
+import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { Sparkles } from "lucide-react-native";
 import { useTheme } from "../context/ThemeContext";
@@ -35,7 +36,6 @@ import { CommunityWinFeedPost } from "./CommunityWinFeedPost";
 import { CommunityWinFeedSkeletonRow } from "./CommunityWinFeedSkeleton";
 import { CommunityWinImageLightbox } from "./CommunityWinImageLightbox";
 import { CommunityWinCheerersModal } from "./CommunityWinCheerersModal";
-import { CommunityPlayerDrawer, type CommunityPlayerDrawerSeed } from "./CommunityPlayerDrawer";
 import { useCoachMark } from "../context/CoachMarkContext";
 
 type CheerersSheetState = { winId: string; totalLikes: number };
@@ -68,6 +68,7 @@ export function CommunityWinsFeed({
   listHeaderComponent,
 }: Props) {
   const { theme, isDark } = useTheme();
+  const router = useRouter();
   const { session } = useAuth();
   const { showToast } = useToast();
   const { requireUsername } = useUsernameGate();
@@ -80,7 +81,6 @@ export function CommunityWinsFeed({
   const [expandedById, setExpandedById] = useState<Record<string, boolean>>({});
   const [lightboxUri, setLightboxUri] = useState<string | null>(null);
   const [cheerersSheet, setCheerersSheet] = useState<CheerersSheetState | null>(null);
-  const [playerDrawerWin, setPlayerDrawerWin] = useState<CommunityPlayerDrawerSeed | null>(null);
   const itemsRef = useRef<CommunityWinFeedItem[]>([]);
   const initialLoadInFlight = useRef(false);
   const loadMoreInFlight = useRef(false);
@@ -97,7 +97,6 @@ export function CommunityWinsFeed({
     setExpandedById({});
     setLightboxUri(null);
     setCheerersSheet(null);
-    setPlayerDrawerWin(null);
     setLoading(Boolean(userId && isSupabaseConfigured()));
     setRefreshing(false);
     setLoadingMore(false);
@@ -297,6 +296,18 @@ export function CommunityWinsFeed({
     [session?.user, canCheer, onCheerBlocked, requireUsername, showToast, validateCheerAccess],
   );
 
+  const openPlayerStory = useCallback((win: CommunityWinFeedItem) => {
+    router.push({
+      pathname: "/community-player/[id]",
+      params: {
+        id: win.user_id,
+        username: win.username ?? "",
+        displayName: win.displayName ?? "",
+        xp: String(win.xp),
+      },
+    });
+  }, [router]);
+
   const renderItem: ListRenderItem<ListRow> = useCallback(
     ({ item }) => {
       if (item.kind === "skeleton") {
@@ -314,14 +325,7 @@ export function CommunityWinsFeed({
           reduceMotion={reduceMotion}
           onToggleExpanded={() => toggleExpanded(win.id)}
           onOpenLightbox={(uri) => setLightboxUri(uri)}
-          onOpenPlayer={(w) =>
-            setPlayerDrawerWin({
-              userId: w.user_id,
-              username: w.username,
-              displayName: w.displayName,
-              xp: w.xp,
-            })
-          }
+          onOpenPlayer={openPlayerStory}
           onCheer={handleCheer}
           onOpenCheerers={(w) => setCheerersSheet({ winId: w.id, totalLikes: w.cheerCount })}
           canCheer={canCheer}
@@ -342,6 +346,7 @@ export function CommunityWinsFeed({
       canCheer,
       onCheerBlocked,
       cheerCoachWinId,
+      openPlayerStory,
     ],
   );
 
@@ -414,11 +419,6 @@ export function CommunityWinsFeed({
         winId={cheerersSheet?.winId ?? null}
         totalLikes={cheerersSheet?.totalLikes}
         onClose={() => setCheerersSheet(null)}
-      />
-      <CommunityPlayerDrawer
-        visible={playerDrawerWin !== null}
-        player={playerDrawerWin}
-        onClose={() => setPlayerDrawerWin(null)}
       />
     </>
   );

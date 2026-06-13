@@ -68,7 +68,6 @@ import { ShimmerBlock } from "../../src/components/ShimmerBlock";
 import { useRefreshPremiumAccess } from "../../src/hooks/useRefreshPremiumAccess";
 import { useReducedMotion } from "../../src/hooks/useReducedMotion";
 import { LevelXpRing } from "../../src/components/LevelXpRing";
-import { CommunityPlayerDrawer, type CommunityPlayerDrawerSeed } from "../../src/components/CommunityPlayerDrawer";
 import {
   fetchWeeklyLeaderboard,
   type WeeklyLeaderboardEntry,
@@ -559,7 +558,6 @@ export default function CompeteScreen() {
   const [leagueLoadingMore, setLeagueLoadingMore] = useState(false);
   const [leagueHasMore, setLeagueHasMore] = useState(false);
   const [leagueError, setLeagueError] = useState<string | null>(null);
-  const [leaguePlayerDrawer, setLeaguePlayerDrawer] = useState<CommunityPlayerDrawerSeed | null>(null);
   const deepLinkHandledRef = useRef(false);
   const userIdRef = useRef<string | null>(userId);
   const invitesLoadInFlightRef = useRef(false);
@@ -597,7 +595,6 @@ export default function CompeteScreen() {
     setLeagueLoadingMore(false);
     setLeagueHasMore(false);
     setLeagueError(userId ? null : "Sign in to view Weekly Ranks.");
-    setLeaguePlayerDrawer(null);
     invitesLoadInFlightRef.current = false;
     invitesLoadMoreInFlightRef.current = false;
     leagueLoadInFlightRef.current = false;
@@ -1135,20 +1132,20 @@ export default function CompeteScreen() {
   }, [showToast, loadInvites]);
 
   const handleLeagueRowPress = useCallback((entry: WeeklyLeaderboardEntry) => {
-    setLeaguePlayerDrawer({
-      userId: entry.userId,
-      username: entry.username,
-      displayName: entry.displayName,
-      xp: entry.xp,
-      weekly: {
-        rankPosition: entry.rankPosition,
-        points: entry.points,
-        habitCheckIns: entry.habitCheckIns,
-        miniCompletions: entry.miniCompletions,
-        isMe: entry.isMe,
+    router.push({
+      pathname: "/community-player/[id]",
+      params: {
+        id: entry.userId,
+        username: entry.username,
+        displayName: entry.displayName ?? "",
+        xp: String(entry.xp),
+        weeklyRankPosition: String(entry.rankPosition),
+        weeklyPoints: String(entry.points),
+        weeklyHabitCheckIns: String(entry.habitCheckIns),
+        weeklyMiniCompletions: String(entry.miniCompletions),
       },
     });
-  }, []);
+  }, [router]);
 
   const level = levelFromTotalXp(xp);
   const xpInLevel = xpInCurrentLevel(xp);
@@ -1835,11 +1832,6 @@ export default function CompeteScreen() {
                   )}
                 </TouchableOpacity>
               ) : null}
-              <CommunityPlayerDrawer
-                visible={leaguePlayerDrawer !== null}
-                player={leaguePlayerDrawer}
-                onClose={() => setLeaguePlayerDrawer(null)}
-              />
             </>
           }
         />
@@ -2388,4 +2380,3 @@ const styles = StyleSheet.create({
   invitePassiveActionText: { fontWeight: "800", fontSize: 15 },
   acceptBtnText: { color: "#fff", fontWeight: "800", fontSize: 15 },
 });
-
