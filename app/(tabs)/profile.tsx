@@ -74,6 +74,7 @@ import {
   buildActivityChartA11ySummary,
 } from "../../src/utils/profileStats";
 import { buildProfileIntelligence } from "../../src/utils/profileIntelligence";
+import { isMiniMissionOpen, isMiniMissionRunning } from "../../src/utils/miniMissionTime";
 import { PlusBadge } from "../../src/components/PlusBadge";
 import { useRefreshPremiumAccess } from "../../src/hooks/useRefreshPremiumAccess";
 import { XP_PER_LEVEL, levelFromTotalXp, xpInCurrentLevel } from "../../src/utils/xpLevel";
@@ -876,6 +877,7 @@ export default function ProfileScreen() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [hubSheet, setHubSheet] = useState<HubSheetState>(null);
   const [infoSheet, setInfoSheet] = useState<ProfileInfoKey | null>(null);
+  const [miniClockNow, setMiniClockNow] = useState(() => Date.now());
   const [backups, setBackups] = useState<AccountBackupSnapshot[]>([]);
   const [deletedMissionIds, setDeletedMissionIds] = useState<AccountDeletedMissionIds>({
     habitIds: [],
@@ -919,10 +921,17 @@ export default function ProfileScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      setMiniClockNow(Date.now());
       void refreshPremiumAccess();
       void loadBackups();
     }, [loadBackups, refreshPremiumAccess]),
   );
+
+  useEffect(() => {
+    if (!miniMissions.some((mini) => isMiniMissionRunning(mini, miniClockNow))) return;
+    const timer = setInterval(() => setMiniClockNow(Date.now()), 30_000);
+    return () => clearInterval(timer);
+  }, [miniClockNow, miniMissions]);
 
   const level = levelFromTotalXp(xp);
   const xpInLevel = xpInCurrentLevel(xp);
@@ -993,8 +1002,7 @@ export default function ProfileScreen() {
     const habitDone = (h: (typeof habits)[0]) => h.isCompleted;
     const habitActive = (h: (typeof habits)[0]) => !h.isCompleted;
     const miniDone = (m: (typeof miniMissions)[0]) => m.status === "completed";
-    const miniLive = (m: (typeof miniMissions)[0]) =>
-      m.status === "in_progress" || m.status === "pending" || m.status === "scheduled";
+    const miniOpen = (m: (typeof miniMissions)[0]) => isMiniMissionOpen(m, miniClockNow);
 
     let pubHabitsDone = 0;
     let pubHabitsActive = 0;
@@ -1013,14 +1021,18 @@ export default function ProfileScreen() {
 
     let pubMiniDone = 0;
     let pubMiniLive = 0;
+    let pubMiniTotal = 0;
     let soloMiniDone = 0;
     let soloMiniLive = 0;
+    let soloMiniTotal = 0;
     for (const m of miniMissions) {
       const bucket = visibilityBucket(m.visibility);
+      if (bucket === "public") pubMiniTotal += 1;
+      else soloMiniTotal += 1;
       if (miniDone(m)) {
         if (bucket === "public") pubMiniDone += 1;
         else soloMiniDone += 1;
-      } else if (miniLive(m)) {
+      } else if (miniOpen(m)) {
         if (bucket === "public") pubMiniLive += 1;
         else soloMiniLive += 1;
       }
@@ -1034,15 +1046,17 @@ export default function ProfileScreen() {
         habitsActive: pubHabitsActive,
         miniDone: pubMiniDone,
         miniLive: pubMiniLive,
+        miniTotal: pubMiniTotal,
       },
       solo: {
         habitsDone: soloHabitsDone,
         habitsActive: soloHabitsActive,
         miniDone: soloMiniDone,
         miniLive: soloMiniLive,
+        miniTotal: soloMiniTotal,
       },
     };
-  }, [habits, miniMissions]);
+  }, [habits, miniClockNow, miniMissions]);
 
   const insights = useMemo(() => {
     const activityPoints = lastNDaysHabitCheckInsPerDay(habits, 7);
@@ -1238,8 +1252,7 @@ export default function ProfileScreen() {
   const hubModalContent = useMemo(() => {
     if (!hubSheet) return null;
     const visOf = (v: string | undefined): MissionVisibility => (v === "public" ? "public" : "solo");
-    const miniLiveFn = (m: MiniMission) =>
-      m.status === "in_progress" || m.status === "pending" || m.status === "scheduled";
+    const miniLiveFn = (m: MiniMission) => isMiniMissionOpen(m, miniClockNow);
 
     if (hubSheet.mode === "habits-all") {
       return {
@@ -1298,7 +1311,7 @@ export default function ProfileScreen() {
       return { title, variant: "minis" as const, items: filtered, emptyHint };
     }
     return null;
-  }, [hubSheet, habits, miniMissions]);
+  }, [hubSheet, habits, miniClockNow, miniMissions]);
 
   const onHabitsPublicPress = useCallback(() => setHubSheet({ mode: "habits-filter", visibility: "public" }), []);
   const onHabitsSoloPress = useCallback(() => setHubSheet({ mode: "habits-filter", visibility: "solo" }), []);
@@ -1457,37 +1470,37 @@ export default function ProfileScreen() {
           style={[styles.hero, { borderColor: theme.colors.border, ...theme.shadow.card }]}
         >
           <View style={styles.heroRingColumn}>
-          <LevelXpRing level={level} xpInLevel={xpInLevel}>
-            <View
-              style={[
-                styles.levelOrb,
-                {
-                  borderColor: theme.colors.border,
-                  ...theme.shadow.glow,
-                },
-              ]}
-            >
-              <Image
-                source={require("../../assets/habitpro-logo-transparent-v3.png")}
-                style={styles.heroLogo as ImageStyle}
-                resizeMode="contain"
-                accessibilityLabel="HabitPro logo"
-              />
+            <LevelXpRing level={level} xpInLevel={xpInLevel} size={94} strokeWidth={3}>
               <View
                 style={[
-                  styles.levelBadge,
+                  styles.levelOrb,
                   {
-                    backgroundColor: theme.colors.surface,
                     borderColor: theme.colors.border,
+                    ...theme.shadow.glow,
                   },
                 ]}
               >
-                <Text style={[styles.levelBadgeText, { color: theme.colors.textPrimary }]}>
-                  {level}
-                </Text>
+                <Image
+                  source={require("../../assets/habitpro-logo-transparent-v3.png")}
+                  style={styles.heroLogo as ImageStyle}
+                  resizeMode="contain"
+                  accessibilityLabel="HabitPro logo"
+                />
+                <View
+                  style={[
+                    styles.levelBadge,
+                    {
+                      backgroundColor: theme.colors.surface,
+                      borderColor: theme.colors.border,
+                    },
+                  ]}
+                >
+                  <Text style={[styles.levelBadgeText, { color: theme.colors.textPrimary }]}>
+                    {level}
+                  </Text>
+                </View>
               </View>
-            </View>
-          </LevelXpRing>
+            </LevelXpRing>
           </View>
           <View style={styles.heroText}>
             <View style={styles.heroStatusRow}>
@@ -1512,8 +1525,8 @@ export default function ProfileScreen() {
                     },
                   ]}
                 >
-                  <PlusBadge withFlame />
-                  <Text style={[styles.heroActiveText, { color: theme.colors.textSecondary }]}>Community active</Text>
+                  <PlusBadge withFlame label="Community" />
+                  <Text style={[styles.heroActiveText, { color: theme.colors.green[500] }]}>Premium</Text>
                 </View>
               ) : (
                 <View
@@ -1889,7 +1902,7 @@ export default function ProfileScreen() {
             >
               <User size={13} color={theme.colors.indigo[400]} />
               <Text style={[styles.commitmentChipText, { color: theme.colors.textSecondary }]}>
-                Solo minis {missionStats.solo.miniLive + missionStats.solo.miniDone}
+                Solo minis {missionStats.solo.miniTotal}
               </Text>
             </TouchableOpacity>
           </View>
@@ -1969,55 +1982,58 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     borderRadius: 20,
     borderWidth: 1,
-    padding: 16,
+    padding: 14,
     marginBottom: 22,
-    gap: 16,
-    alignItems: "center",
+    gap: 12,
+    alignItems: "flex-start",
     overflow: "hidden",
   },
   heroRingColumn: {
-    width: 116,
-    alignItems: "center",
-    justifyContent: "center",
+    width: 94,
+    alignItems: "flex-start",
+    justifyContent: "flex-start",
+    paddingTop: 10,
   },
   levelOrb: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
-    borderWidth: 3,
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    borderWidth: 2,
     alignItems: "center",
     justifyContent: "center",
   },
-  heroLogo: { width: 94, height: 94 },
+  heroLogo: { width: 88, height: 88 },
   levelHuge: { fontSize: 32, fontWeight: "900" },
   levelTag: { fontSize: 9, fontWeight: "800", letterSpacing: 1 },
-  heroText: { flex: 1, gap: 7, minWidth: 0 },
+  heroText: { flex: 1, gap: 6, minWidth: 0, paddingTop: 2 },
   heroStatusRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 6,
     flexWrap: "wrap",
     marginBottom: 1,
+    marginLeft: -2,
   },
   heroLevelPill: {
-    minHeight: 27,
+    minHeight: 25,
     borderRadius: 999,
     borderWidth: 1,
-    paddingHorizontal: 11,
+    paddingHorizontal: 10,
     alignItems: "center",
     justifyContent: "center",
   },
-  heroLevelPillText: { fontSize: 12, lineHeight: 15, fontWeight: "900", letterSpacing: 0.35 },
+  heroLevelPillText: { fontSize: 11.5, lineHeight: 14, fontWeight: "900", letterSpacing: 0.25 },
   heroActivePill: {
-    minHeight: 27,
+    minHeight: 25,
     borderRadius: 999,
     borderWidth: 1,
-    paddingHorizontal: 9,
+    paddingHorizontal: 8,
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 5,
+    flexShrink: 1,
   },
-  heroActiveText: { fontSize: 11, lineHeight: 14, fontWeight: "900" },
+  heroActiveText: { fontSize: 10.5, lineHeight: 13, fontWeight: "900" },
   levelBadge: {
     position: "absolute",
     left: "50%",
@@ -2031,9 +2047,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 9,
     transform: [{ translateX: -17 }, { translateY: -17 }],
   },
-  levelBadgeText: { fontSize: 14, fontWeight: "900", fontVariant: ["tabular-nums"] },
+  levelBadgeText: { fontSize: 13, fontWeight: "900", fontVariant: ["tabular-nums"] },
   xpLine: { flexDirection: "row", alignItems: "center", gap: 8, minWidth: 0 },
-  xpBig: { fontSize: 17, fontWeight: "800" },
+  xpBig: { fontSize: 16, lineHeight: 20, fontWeight: "800" },
   heroXpTrack: {
     height: 7,
     borderRadius: 999,
@@ -2041,22 +2057,22 @@ const styles = StyleSheet.create({
     width: "100%",
   },
   heroXpFill: { height: "100%", borderRadius: 999 },
-  totalXp: { fontSize: 13, fontWeight: "700" },
-  handle: { fontSize: 16, lineHeight: 20, fontWeight: "900", marginTop: 1 },
+  totalXp: { fontSize: 12.5, lineHeight: 16, fontWeight: "700" },
+  handle: { fontSize: 15, lineHeight: 19, fontWeight: "900", marginTop: 0 },
   plusActiveRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 2 },
   plusActiveText: { fontSize: 12, fontWeight: "800", letterSpacing: 0.1 },
-  journeyCtaPressable: { alignSelf: "stretch", marginTop: 4 },
+  journeyCtaPressable: { alignSelf: "stretch", marginTop: 2 },
   journeyCtaPressed: { opacity: 0.86, transform: [{ scale: 0.99 }] },
   journeyCta: {
-    minHeight: 42,
+    minHeight: 39,
     borderRadius: 999,
-    paddingHorizontal: 16,
+    paddingHorizontal: 14,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 7,
   },
-  journeyCtaText: { color: "#FFFFFF", fontSize: 13, lineHeight: 17, fontWeight: "900" },
+  journeyCtaText: { color: "#FFFFFF", fontSize: 12.5, lineHeight: 16, fontWeight: "900" },
   plusCard: {
     borderRadius: 18,
     borderWidth: 1,

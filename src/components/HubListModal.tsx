@@ -11,6 +11,7 @@ import { useRouter } from "expo-router";
 import { X, Globe, User } from "lucide-react-native";
 import type { Habit, MiniMission } from "../types/habit";
 import { useTheme } from "../context/ThemeContext";
+import { getMiniMissionDisplayStatus } from "../utils/miniMissionTime";
 
 export type HubListModalProps = {
   visible: boolean;
@@ -22,20 +23,29 @@ export type HubListModalProps = {
   | { variant: "minis"; items: MiniMission[] }
 );
 
-function miniStatusLabel(m: MiniMission): string {
-  switch (m.status) {
-    case "completed":
+function miniStatusLabel(m: MiniMission, now: number): string {
+  switch (getMiniMissionDisplayStatus(m, now)) {
+    case "done":
       return "Done";
-    case "in_progress":
+    case "active":
       return "Active";
-    case "pending":
-    case "scheduled":
+    case "queued":
       return "Queued";
+    case "failed":
+      return "Failed";
     case "cancelled":
       return "Cancelled";
     default:
-      return m.status;
+      return "Active";
   }
+}
+
+function miniStatusColor(m: MiniMission, now: number, theme: ReturnType<typeof useTheme>["theme"]): string {
+  const status = getMiniMissionDisplayStatus(m, now);
+  if (status === "done" || status === "cancelled") return theme.colors.textMuted;
+  if (status === "failed") return theme.colors.red[500];
+  if (status === "queued") return theme.colors.indigo[400];
+  return theme.colors.amber[500];
 }
 
 export function HubListModal(props: HubListModalProps) {
@@ -79,6 +89,7 @@ export function HubListModal(props: HubListModalProps) {
   const renderMini = ({ item }: { item: MiniMission }) => {
     const VisIcon = item.visibility === "public" ? Globe : User;
     const visColor = item.visibility === "public" ? theme.colors.cyan[400] : theme.colors.indigo[400];
+    const now = Date.now();
     return (
       <TouchableOpacity
         style={[rowStyles.row, { borderColor: theme.colors.border, backgroundColor: theme.colors.surfaceElevated }]}
@@ -99,7 +110,9 @@ export function HubListModal(props: HubListModalProps) {
                 {item.visibility === "public" ? "Public" : "Solo"}
               </Text>
             </View>
-            <Text style={[rowStyles.status, { color: theme.colors.amber[500] }]}>{miniStatusLabel(item)}</Text>
+            <Text style={[rowStyles.status, { color: miniStatusColor(item, now, theme) }]}>
+              {miniStatusLabel(item, now)}
+            </Text>
           </View>
         </View>
       </TouchableOpacity>
