@@ -22,9 +22,9 @@ import {
   Camera,
   Clock3,
   Flame,
+  Globe,
   Image as ImageIcon,
   Radio,
-  Sparkles,
   ThumbsUp,
   Trophy,
   X,
@@ -43,11 +43,13 @@ import { LevelXpRing } from "../../src/components/LevelXpRing";
 import {
   fetchCommunityPlayerStory,
   fetchCommunityPlayerMissionJourneyPage,
+  fetchCommunityPlayerStoryPage,
   mergeCommunityPlayerStoryPosts,
   toggleCheer,
   type CommunityPlayerMissionStory,
   type CommunityPlayerProfile,
   type CommunityPlayerStory,
+  type CommunityPlayerStoryPage,
   type CommunityPlayerStoryPost,
   type CommunityPlayerWeeklyRank,
 } from "../../src/lib/communityWinsApi";
@@ -117,6 +119,72 @@ function storyDayLabel(post: CommunityPlayerStoryPost): string {
   }
 
   return "Moment";
+}
+
+function sortTime(iso: string | undefined): number {
+  if (!iso) return 0;
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? 0 : d.getTime();
+}
+
+function normalizeStoryTitle(title: string): string {
+  return title.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function rebuildMissionStory(key: string, title: string, posts: readonly CommunityPlayerStoryPost[]): CommunityPlayerMissionStory {
+  const sorted = mergeCommunityPlayerStoryPosts([], [...posts]).sort((a, b) => sortTime(b.createdAt) - sortTime(a.createdAt));
+  return {
+    key,
+    title,
+    postCount: sorted.length,
+    photoCount: sorted.filter((post) => Boolean(post.memoryImageUrl)).length,
+    latestAt: sorted[0]?.createdAt ?? new Date(0).toISOString(),
+    bestStreak: sorted.reduce<number | null>((best, post) => {
+      const n = post.streakCountAtPost;
+      if (typeof n !== "number" || !Number.isFinite(n)) return best;
+      return best === null ? n : Math.max(best, n);
+    }, null),
+    posts: sorted,
+  };
+}
+
+function mergeMissionStoriesByTitle(
+  existing: readonly CommunityPlayerMissionStory[],
+  incoming: readonly CommunityPlayerMissionStory[],
+): CommunityPlayerMissionStory[] {
+  const groups = new Map<string, { key: string; title: string; posts: CommunityPlayerStoryPost[] }>();
+  const add = (story: CommunityPlayerMissionStory) => {
+    const groupKey = normalizeStoryTitle(story.title) || story.key;
+    const current = groups.get(groupKey);
+    if (current) {
+      current.posts.push(...story.posts);
+      return;
+    }
+    groups.set(groupKey, { key: story.key, title: story.title, posts: [...story.posts] });
+  };
+  existing.forEach(add);
+  incoming.forEach(add);
+  return Array.from(groups.values())
+    .map((story) => rebuildMissionStory(story.key, story.title, story.posts))
+    .sort((a, b) => sortTime(b.latestAt) - sortTime(a.latestAt));
+}
+
+function storyPagePostCount(page: Pick<CommunityPlayerStoryPage, "missionStories" | "miniPosts">): number {
+  return page.missionStories.reduce((total, story) => total + story.postCount, 0) + page.miniPosts.length;
+}
+
+function mergeStoryPage(story: CommunityPlayerStory, page: CommunityPlayerStoryPage): CommunityPlayerStory {
+  const missionStories = mergeMissionStoriesByTitle(story.missionStories, page.missionStories);
+  const miniPosts = mergeCommunityPlayerStoryPosts(story.miniPosts, page.miniPosts);
+  return {
+    ...story,
+    missionStories,
+    miniPosts,
+    totalPhotoMoments:
+      missionStories.reduce((total, mission) => total + mission.photoCount, 0) +
+      miniPosts.filter((post) => Boolean(post.memoryImageUrl)).length,
+    hasMore: page.hasMore,
+  };
 }
 
 const STORY_PILL_TONES = [
@@ -454,10 +522,10 @@ function GalleryMomentCard({
         ]}
       >
         <ThumbsUp
-          size={12}
+          size={10}
           color="#FFFFFF"
           fill={liked ? "#FFFFFF" : "transparent"}
-          strokeWidth={2.2}
+          strokeWidth={2.1}
         />
         <Text style={[styles.galleryCheerText, { color: "#FFFFFF" }]}>
           {post.cheerCount}
@@ -686,7 +754,7 @@ function MissionStoryCard({
         </ScrollView>
       ) : (
         <View style={[styles.textOnlyMoment, { borderColor: theme.colors.border, backgroundColor: theme.colors.surfaceElevated }]}>
-          <Sparkles size={16} color={theme.colors.indigo[400]} />
+          <ImageIcon size={16} color={theme.colors.indigo[400]} />
           <Text style={[styles.textOnlyCopy, { color: theme.colors.textSecondary }]} numberOfLines={2}>
           {latestNote || "A public mission moment without a photo."}
           </Text>
@@ -948,7 +1016,7 @@ function MissionGalleryModal({
             </View>
           ) : (
             <View style={[styles.emptyState, { borderColor: theme.colors.border, backgroundColor: theme.colors.surface }]}>
-              <Sparkles size={24} color={theme.colors.indigo[400]} />
+              <ImageIcon size={24} color={theme.colors.indigo[400]} />
               <Text style={[styles.emptyTitle, { color: theme.colors.textPrimary }]}>No public photos here</Text>
               <Text style={[styles.emptyBody, { color: theme.colors.textSecondary }]}>
                 This mission story has text-only public moments.
@@ -1155,6 +1223,11 @@ export default function CommunityPlayerStoryScreen() {
   const [story, setStory] = useState<CommunityPlayerStory | null>(null);
   const [activeTab, setActiveTab] = useState<StoryTab>("missions");
   const [loading, setLoading] = useState(true);
+  const [storyHasMore, setStoryHasMore] = useState(false);
+  const [storyFetchedCount, setStoryFetchedCount] = useState(0);
+  const [storyLoadingMore, setStoryLoadingMore] = useState(false);
+  const [missionVisibleCount, setMissionVisibleCount] = useState(MISSION_STORY_LIMIT);
+  const [miniVisibleCount, setMiniVisibleCount] = useState(MINI_POST_LIMIT);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lightboxUri, setLightboxUri] = useState<string | null>(null);
@@ -1199,6 +1272,8 @@ export default function CommunityPlayerStoryScreen() {
   const loadStory = useCallback(async (mode: "initial" | "refresh" = "initial") => {
     if (!userId) {
       setError("Player not found.");
+      setStoryHasMore(false);
+      setStoryFetchedCount(0);
       setLoading(false);
       return;
     }
@@ -1209,9 +1284,14 @@ export default function CommunityPlayerStoryScreen() {
       const res = await fetchCommunityPlayerStory(userId, STORY_FETCH_LIMIT);
       if (res.ok === true) {
         setStory(res.story);
+        setStoryHasMore(Boolean(res.story.hasMore));
+        setStoryFetchedCount(storyPagePostCount(res.story));
+        setMissionVisibleCount(MISSION_STORY_LIMIT);
+        setMiniVisibleCount(MINI_POST_LIMIT);
         setMiniCheeringIds(new Set());
       } else {
         setError(res.error);
+        setStoryHasMore(false);
       }
     } catch (e) {
       const message = e instanceof Error ? e.message : "Could not load player story.";
@@ -1220,6 +1300,55 @@ export default function CommunityPlayerStoryScreen() {
     setLoading(false);
     setRefreshing(false);
   }, [userId]);
+
+  const loadMoreStory = useCallback(async () => {
+    if (!story || !userId || storyLoadingMore) return;
+    if (activeTab === "missions" && missionVisibleCount < story.missionStories.length) {
+      setMissionVisibleCount((count) => Math.min(count + MISSION_STORY_LIMIT, story.missionStories.length));
+      return;
+    }
+    if (activeTab === "minis" && miniVisibleCount < story.miniPosts.length) {
+      setMiniVisibleCount((count) => Math.min(count + MINI_POST_LIMIT, story.miniPosts.length));
+      return;
+    }
+    if (!storyHasMore) return;
+
+    setStoryLoadingMore(true);
+    try {
+      const res = await fetchCommunityPlayerStoryPage({
+        userId,
+        offset: storyFetchedCount,
+        limit: STORY_FETCH_LIMIT,
+      });
+      if (res.ok === true) {
+        const pageCount = storyPagePostCount(res.page);
+        setStory((current) => (current ? mergeStoryPage(current, res.page) : current));
+        setStoryFetchedCount((count) => count + pageCount);
+        setStoryHasMore(res.page.hasMore);
+        if (activeTab === "missions") {
+          setMissionVisibleCount((count) => count + MISSION_STORY_LIMIT);
+        } else {
+          setMiniVisibleCount((count) => count + MINI_POST_LIMIT);
+        }
+      } else {
+        showToast(res.error, "error");
+      }
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Unable to load older player story.", "error");
+    } finally {
+      setStoryLoadingMore(false);
+    }
+  }, [
+    activeTab,
+    miniVisibleCount,
+    missionVisibleCount,
+    showToast,
+    story,
+    storyFetchedCount,
+    storyHasMore,
+    storyLoadingMore,
+    userId,
+  ]);
 
   useEffect(() => {
     void loadStory();
@@ -1356,13 +1485,16 @@ export default function CommunityPlayerStoryScreen() {
   }, [story]);
 
   const visibleMissionStories = useMemo(
-    () => story?.missionStories.slice(0, MISSION_STORY_LIMIT) ?? [],
-    [story?.missionStories],
+    () => story?.missionStories.slice(0, missionVisibleCount) ?? [],
+    [missionVisibleCount, story?.missionStories],
   );
   const visibleMiniPosts = useMemo(
-    () => story?.miniPosts.slice(0, MINI_POST_LIMIT) ?? [],
-    [story?.miniPosts],
+    () => story?.miniPosts.slice(0, miniVisibleCount) ?? [],
+    [miniVisibleCount, story?.miniPosts],
   );
+  const activeTotal = activeTab === "missions" ? story?.missionStories.length ?? 0 : story?.miniPosts.length ?? 0;
+  const activeVisible = activeTab === "missions" ? visibleMissionStories.length : visibleMiniPosts.length;
+  const hasMoreVisibleStory = activeVisible < activeTotal || storyHasMore;
 
   const miniTileWidth = Math.max(132, Math.floor((width - 38) / 2));
   const publicMomentPhotoSize = Math.min(104, Math.max(82, Math.floor((width - 96) / 3)));
@@ -1456,7 +1588,7 @@ export default function CommunityPlayerStoryScreen() {
               label="Global rank"
               value={story?.globalRank ? `#${story.globalRank.rankPosition}` : "-"}
               accent={theme.colors.indigo[400]}
-              icon={<Sparkles size={15} color={theme.colors.indigo[400]} />}
+              icon={<Globe size={15} color={theme.colors.indigo[400]} />}
             />
             <StatTile
               theme={theme}
@@ -1551,7 +1683,7 @@ export default function CommunityPlayerStoryScreen() {
           </View>
         ) : error ? (
           <View style={[styles.emptyState, { borderColor: theme.colors.border, backgroundColor: theme.colors.surface }]}>
-            <Sparkles size={24} color={theme.colors.textMuted} />
+            <ImageIcon size={24} color={theme.colors.textMuted} />
             <Text style={[styles.emptyTitle, { color: theme.colors.textPrimary }]}>Story unavailable</Text>
             <Text style={[styles.emptyBody, { color: theme.colors.textSecondary }]}>{error}</Text>
           </View>
@@ -1572,10 +1704,18 @@ export default function CommunityPlayerStoryScreen() {
                   onOpenGallery={() => setSelectedMission(mission)}
                 />
               ))}
-              {story.missionStories.length > visibleMissionStories.length ? (
-                <Text style={[styles.limitHint, { color: theme.colors.textMuted }]}>
-                  Showing the latest {visibleMissionStories.length} mission stories for speed.
-                </Text>
+              {activeTab === "missions" && hasMoreVisibleStory ? (
+                <Pressable
+                  onPress={loadMoreStory}
+                  disabled={storyLoadingMore}
+                  accessibilityRole="button"
+                  accessibilityLabel="Load more mission stories"
+                  style={[styles.loadMoreButton, { borderColor: theme.colors.border, backgroundColor: theme.colors.surface }]}
+                >
+                  <Text style={[styles.loadMoreText, { color: theme.colors.textSecondary }]}>
+                    {storyLoadingMore ? "Loading..." : "Load more missions"}
+                  </Text>
+                </Pressable>
               ) : null}
               </>
             ) : (
@@ -1628,10 +1768,18 @@ export default function CommunityPlayerStoryScreen() {
                   cheerPending={miniCheeringIds.has(post.id)}
                 />
               ))}
-              {story.miniPosts.length > visibleMiniPosts.length ? (
-                <Text style={[styles.limitHint, { color: theme.colors.textMuted }]}>
-                  Showing the latest {visibleMiniPosts.length} public minis for speed.
-                </Text>
+              {activeTab === "minis" && hasMoreVisibleStory ? (
+                <Pressable
+                  onPress={loadMoreStory}
+                  disabled={storyLoadingMore}
+                  accessibilityRole="button"
+                  accessibilityLabel="Load more public minis"
+                  style={[styles.loadMoreButton, { borderColor: theme.colors.border, backgroundColor: theme.colors.surface }]}
+                >
+                  <Text style={[styles.loadMoreText, { color: theme.colors.textSecondary }]}>
+                    {storyLoadingMore ? "Loading..." : "Load more minis"}
+                  </Text>
+                </Pressable>
               ) : null}
               </>
             ) : (
@@ -2000,18 +2148,18 @@ const styles = StyleSheet.create({
   galleryCheerPill: {
     position: "absolute",
     right: 7,
-    top: 7,
-    minHeight: 25,
-    minWidth: 42,
+    top: 6,
+    minHeight: 19,
+    minWidth: 36,
     borderRadius: 9999,
     borderWidth: 1,
-    paddingHorizontal: 8,
+    paddingHorizontal: 7,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 4,
   },
-  galleryCheerText: { fontSize: 11, lineHeight: 14, fontWeight: "900", fontVariant: ["tabular-nums"] },
+  galleryCheerText: { fontSize: 10, lineHeight: 12, fontWeight: "900", fontVariant: ["tabular-nums"] },
   galleryMomentBody: {
     paddingHorizontal: 9,
     paddingVertical: 8,
@@ -2048,5 +2196,4 @@ const styles = StyleSheet.create({
   galleryNote: { borderRadius: 14, borderWidth: 1, padding: 12 },
   galleryNoteTitle: { fontSize: 13, lineHeight: 18, fontWeight: "900" },
   galleryNoteBody: { fontSize: 13, lineHeight: 19, fontWeight: "700", marginTop: 5 },
-  limitHint: { width: "100%", fontSize: 12, lineHeight: 17, fontWeight: "800", textAlign: "center", paddingVertical: 8 },
 });
