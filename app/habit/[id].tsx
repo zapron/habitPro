@@ -844,6 +844,13 @@ export default function HabitDetail() {
 
     const isGroupMission = Boolean(habit?.challengeGroupId);
     const showSquadShare = isGroupMission && acceptedGroupMemberCount >= 2 && configured && signedIn;
+    const canOpenGroupMissionSheet = !showMissionReportInsteadOfTimer;
+
+    useEffect(() => {
+        if (!canOpenGroupMissionSheet && groupSheetOpen) {
+            setGroupSheetOpen(false);
+        }
+    }, [canOpenGroupMissionSheet, groupSheetOpen]);
 
     const squadShareProp = useMemo(() => {
         if (!habit) return undefined;
@@ -1019,13 +1026,15 @@ export default function HabitDetail() {
                     <ArrowLeft size={theme.icon.xl} color={theme.colors.textPrimary} />
                 </TouchableOpacity>
                 <View style={styles.headerActions}>
-                    <TouchableOpacity
-                        style={[styles.iconButton, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}
-                        onPress={() => setGroupSheetOpen(true)}
-                        accessibilityLabel="Group mission"
-                    >
-                        <Users size={theme.icon.xl} color={theme.colors.cyan[400]} />
-                    </TouchableOpacity>
+                    {canOpenGroupMissionSheet ? (
+                        <TouchableOpacity
+                            style={[styles.iconButton, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}
+                            onPress={() => setGroupSheetOpen(true)}
+                            accessibilityLabel="Group mission"
+                        >
+                            <Users size={theme.icon.xl} color={theme.colors.cyan[400]} />
+                        </TouchableOpacity>
+                    ) : null}
                     {!isGroupMission ? (
                         <TouchableOpacity style={styles.resetButton} onPress={handleReset}>
                             <RotateCcw size={theme.icon.xl} color={theme.colors.amber[500]} />
@@ -1037,8 +1046,8 @@ export default function HabitDetail() {
                 </View>
             </View>
 
-            <LazyMount visible={groupSheetOpen} unmountOnExit>
-                <GroupChallengeSheet visible={groupSheetOpen} onClose={() => setGroupSheetOpen(false)} habit={habit} />
+            <LazyMount visible={groupSheetOpen && canOpenGroupMissionSheet} unmountOnExit>
+                <GroupChallengeSheet visible={groupSheetOpen && canOpenGroupMissionSheet} onClose={() => setGroupSheetOpen(false)} habit={habit} />
             </LazyMount>
 
             <LazyMount visible={missionDetailsOpen} unmountOnExit>
