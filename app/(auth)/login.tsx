@@ -1,7 +1,5 @@
 import { Text } from "../../src/components/AppText";
-import {
-  useEffect,
-  useState } from "react";
+import { useEffect, useState } from "react";
 import {
   View,
   TextInput,
@@ -28,6 +26,27 @@ import {
 type FocusKey = "email" | "password" | "confirmPassword" | null;
 
 const FORM_MAX_WIDTH = 400;
+const AUTH_BG_LIGHT = require("../../assets/auth-bg-light.png");
+const AUTH_BG_DARK = require("../../assets/auth-bg-dark.png");
+
+function AuthImageBackdrop({ isDark }: { isDark: boolean }) {
+  return (
+    <View pointerEvents="none" style={styles.backdropLayer}>
+      <Image
+        source={isDark ? AUTH_BG_DARK : AUTH_BG_LIGHT}
+        resizeMode="cover"
+        style={[styles.backdropImage, { opacity: isDark ? 0.72 : 0.9 }]}
+        accessibilityIgnoresInvertColors
+      />
+      <View
+        style={[
+          styles.backdropWash,
+          { backgroundColor: isDark ? "rgba(2,6,14,0.2)" : "rgba(248,250,252,0.18)" },
+        ]}
+      />
+    </View>
+  );
+}
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -106,10 +125,15 @@ export default function LoginScreen() {
     }
   };
 
-  const borderFor = (key: Exclude<FocusKey, null>) =>
-    focused === key ? theme.colors.indigo[500] : theme.colors.border;
-
   const busy = loading || googleLoading;
+  const glassSurface = isDark ? "rgba(15,23,42,0.74)" : "rgba(255,255,255,0.68)";
+  const glassBorder = isDark ? "rgba(148,163,184,0.26)" : "rgba(148,163,184,0.36)";
+  const focusedBorder = isDark ? "rgba(129,140,248,0.84)" : "rgba(79,70,229,0.62)";
+  const fieldTextColor = isDark ? "#F8FAFC" : theme.colors.textPrimary;
+  const fieldMutedColor = isDark ? "rgba(203,213,225,0.62)" : "rgba(71,85,105,0.62)";
+  const labelColor = isDark ? "rgba(226,232,240,0.8)" : theme.colors.textSecondary;
+  const linkColor = isDark ? "#A5B4FC" : theme.colors.indigo[500];
+  const borderFor = (key: Exclude<FocusKey, null>) => (focused === key ? focusedBorder : glassBorder);
 
   return (
     <Screen plain>
@@ -117,6 +141,7 @@ export default function LoginScreen() {
         barStyle={isDark ? "light-content" : "dark-content"}
         backgroundColor={theme.colors.background}
       />
+      <AuthImageBackdrop isDark={isDark} />
       <ScrollView
         style={styles.scroll}
         keyboardShouldPersistTaps="handled"
@@ -220,19 +245,19 @@ export default function LoginScreen() {
             </View>
           ) : supabaseConfigured && (
             <>
-              <Text style={[styles.label, { color: theme.colors.textSecondary }]}>Email</Text>
+              <Text style={[styles.label, { color: labelColor }]}>Email</Text>
               <TextInput
                 style={[
                   styles.input,
                   {
-                    backgroundColor: theme.colors.surface,
-                    borderColor: theme.colors.border,
-                    color: theme.colors.textPrimary,
+                    backgroundColor: glassSurface,
+                    borderColor: glassBorder,
+                    color: fieldTextColor,
                   },
-                  focused === "email" && { borderColor: theme.colors.indigo[500] },
+                  focused === "email" && { borderColor: focusedBorder },
                 ]}
                 placeholder="you@example.com"
-                placeholderTextColor={theme.colors.textMuted}
+                placeholderTextColor={fieldMutedColor}
                 keyboardType="email-address"
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -243,20 +268,21 @@ export default function LoginScreen() {
                 editable={!busy}
               />
 
-              <Text style={[styles.label, { color: theme.colors.textSecondary }]}>Password</Text>
+              <Text style={[styles.label, { color: labelColor }]}>Password</Text>
               <View
                 style={[
                   styles.passwordOuter,
                   {
-                    backgroundColor: theme.colors.surface,
+                    backgroundColor: glassSurface,
                     borderColor: borderFor("password"),
                   },
+                  focused === "password" && { borderColor: focusedBorder },
                 ]}
               >
                 <TextInput
-                  style={[styles.passwordInput, { color: theme.colors.textPrimary }]}
+                  style={[styles.passwordInput, { color: fieldTextColor }]}
                   placeholder="••••••••"
-                  placeholderTextColor={theme.colors.textMuted}
+                  placeholderTextColor={fieldMutedColor}
                   secureTextEntry={!showPassword}
                   value={password}
                   onChangeText={setPassword}
@@ -272,31 +298,32 @@ export default function LoginScreen() {
                   hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 >
                   {showPassword ? (
-                    <EyeOff size={20} color={theme.colors.textMuted} />
+                    <EyeOff size={20} color={fieldMutedColor} />
                   ) : (
-                    <Eye size={20} color={theme.colors.textMuted} />
+                    <Eye size={20} color={fieldMutedColor} />
                   )}
                 </TouchableOpacity>
               </View>
 
               {isSignUp && (
                 <>
-                  <Text style={[styles.label, { color: theme.colors.textSecondary }]}>
+                  <Text style={[styles.label, { color: labelColor }]}>
                     Confirm password
                   </Text>
                   <View
                     style={[
                       styles.passwordOuter,
                       {
-                        backgroundColor: theme.colors.surface,
+                        backgroundColor: glassSurface,
                         borderColor: borderFor("confirmPassword"),
                       },
+                      focused === "confirmPassword" && { borderColor: focusedBorder },
                     ]}
                   >
                     <TextInput
-                      style={[styles.passwordInput, { color: theme.colors.textPrimary }]}
+                      style={[styles.passwordInput, { color: fieldTextColor }]}
                       placeholder="••••••••"
-                      placeholderTextColor={theme.colors.textMuted}
+                      placeholderTextColor={fieldMutedColor}
                       secureTextEntry={!showConfirmPassword}
                       value={confirmPassword}
                       onChangeText={setConfirmPassword}
@@ -314,10 +341,10 @@ export default function LoginScreen() {
                       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                     >
                       {showConfirmPassword ? (
-                        <EyeOff size={20} color={theme.colors.textMuted} />
-                      ) : (
-                        <Eye size={20} color={theme.colors.textMuted} />
-                      )}
+                      <EyeOff size={20} color={fieldMutedColor} />
+                    ) : (
+                      <Eye size={20} color={fieldMutedColor} />
+                    )}
                     </TouchableOpacity>
                   </View>
                 </>
@@ -332,7 +359,7 @@ export default function LoginScreen() {
                   accessibilityRole="button"
                   accessibilityLabel="Forgot password"
                 >
-                  <Text style={[styles.forgotText, { color: theme.colors.indigo[500] }]}>
+                  <Text style={[styles.forgotText, { color: linkColor }]}>
                     Forgot password?
                   </Text>
                 </TouchableOpacity>
@@ -347,10 +374,10 @@ export default function LoginScreen() {
                 activeOpacity={0.8}
                 disabled={busy}
               >
-                <Text style={[styles.switchText, { color: theme.colors.textSecondary }]}>
+                <Text style={[styles.switchText, { color: labelColor }]}>
                   {isSignUp ? "Already have an account? " : "New here? "}
                 </Text>
-                <Text style={[styles.switchAction, { color: theme.colors.indigo[500] }]}>
+                <Text style={[styles.switchAction, { color: linkColor }]}>
                   {isSignUp ? "Sign in" : "Create account"}
                 </Text>
               </TouchableOpacity>
@@ -367,9 +394,9 @@ export default function LoginScreen() {
               )}
 
               <View style={styles.dividerRow}>
-                <View style={[styles.dividerLine, { backgroundColor: theme.colors.border }]} />
-                <Text style={[styles.dividerOr, { color: theme.colors.textMuted }]}>or</Text>
-                <View style={[styles.dividerLine, { backgroundColor: theme.colors.border }]} />
+                <View style={[styles.dividerLine, { backgroundColor: glassBorder }]} />
+                <Text style={[styles.dividerOr, { color: labelColor }]}>or</Text>
+                <View style={[styles.dividerLine, { backgroundColor: glassBorder }]} />
               </View>
 
               {googleLoading ? (
@@ -379,8 +406,8 @@ export default function LoginScreen() {
                   style={[
                     styles.googleBtn,
                     {
-                      borderColor: theme.colors.border,
-                      backgroundColor: theme.colors.surface,
+                      borderColor: glassBorder,
+                      backgroundColor: isDark ? "rgba(15,23,42,0.68)" : "rgba(255,255,255,0.72)",
                     },
                   ]}
                   onPress={() => void onGoogle()}
@@ -391,7 +418,7 @@ export default function LoginScreen() {
                 >
                   <View style={styles.googleBtnContent}>
                     <GoogleGIcon size={22} />
-                    <Text style={[styles.googleBtnText, { color: theme.colors.textPrimary }]}>
+                    <Text style={[styles.googleBtnText, { color: fieldTextColor }]}>
                       Continue with Google
                     </Text>
                   </View>
@@ -406,6 +433,18 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
+  backdropLayer: {
+    ...StyleSheet.absoluteFillObject,
+    overflow: "hidden",
+  },
+  backdropImage: {
+    ...StyleSheet.absoluteFillObject,
+    width: "100%",
+    height: "100%",
+  },
+  backdropWash: {
+    ...StyleSheet.absoluteFillObject,
+  },
   scroll: {
     flex: 1,
     width: "100%",
@@ -511,6 +550,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 4,
+    shadowColor: "#020617",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.1,
+    shadowRadius: 18,
+    elevation: 1,
   },
   googleBtnContent: {
     flexDirection: "row",
@@ -536,6 +580,11 @@ const styles = StyleSheet.create({
     marginBottom: 14,
     fontSize: 16,
     width: "100%",
+    shadowColor: "#020617",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.1,
+    shadowRadius: 18,
+    elevation: 1,
   },
   passwordOuter: {
     flexDirection: "row",
@@ -545,6 +594,11 @@ const styles = StyleSheet.create({
     marginBottom: 14,
     paddingRight: 4,
     width: "100%",
+    shadowColor: "#020617",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.1,
+    shadowRadius: 18,
+    elevation: 1,
   },
   passwordInput: {
     flex: 1,
