@@ -1052,9 +1052,6 @@ export default function ChallengeDetailScreen() {
     return getHabitActiveMissionDaySlot(myHabit, cohortNow);
   }, [myHabit, cohortNow]);
 
-  const scrollRef = useRef<ScrollView>(null);
-  const squadSectionOffsetY = useRef(0);
-
   const customNoteSentTodayToUserIds = useMemo(() => {
     if (!myUserId) return new Set<string>();
     const s = new Set<string>();
@@ -1293,7 +1290,6 @@ export default function ChallengeDetailScreen() {
         </ScrollView>
       ) : (
         <ScrollView
-          ref={scrollRef}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
           {...({ delaysContentTouches: false } as object)}
@@ -1704,6 +1700,24 @@ export default function ChallengeDetailScreen() {
             />
           ) : null}
 
+          <SquadActivitySection
+            theme={theme}
+            isDark={isDark}
+            feedActivity={feedActivity}
+            feedNudges={feedNudges}
+            profileLabels={profileLabels}
+            myUserId={myUserId}
+            nudgeBusyKey={nudgeBusyKey}
+            congratsSentActivityIds={congratsSentActivityIds}
+            onCongrats={(actorUserId, activityId) => void onCongrats(actorUserId, activityId)}
+            allowNudgeActions={squadNudgeActionsEnabled}
+            loading={secondaryLoading}
+            loadingMore={activityLoadingMore}
+            hasMore={activityNextOffset != null || nudgeNextOffset != null}
+            onLoadMore={() => void loadMoreSquadActivity()}
+            compact
+          />
+
           <View style={styles.participantsSectionHeader}>
             <Text style={[styles.sectionLabel, styles.participantsSectionTitle, { color: theme.colors.textMuted }]}>
               PARTICIPANTS
@@ -1745,36 +1759,6 @@ export default function ChallengeDetailScreen() {
             </View>
           ) : null}
 
-          <View
-            onLayout={(e) => {
-              squadSectionOffsetY.current = e.nativeEvent.layout.y;
-            }}
-          >
-            <SquadActivitySection
-              theme={theme}
-              isDark={isDark}
-              feedActivity={feedActivity}
-              feedNudges={feedNudges}
-              profileLabels={profileLabels}
-              myUserId={myUserId}
-              nudgeBusyKey={nudgeBusyKey}
-              congratsSentActivityIds={congratsSentActivityIds}
-              onCongrats={(actorUserId, activityId) => void onCongrats(actorUserId, activityId)}
-              allowNudgeActions={squadNudgeActionsEnabled}
-              loading={secondaryLoading}
-              loadingMore={activityLoadingMore}
-              hasMore={activityNextOffset != null || nudgeNextOffset != null}
-              onLoadMore={() => void loadMoreSquadActivity()}
-              onScrollToSection={() => {
-                setTimeout(() => {
-                  scrollRef.current?.scrollTo({
-                    y: Math.max(0, squadSectionOffsetY.current - 16),
-                    animated: true,
-                  });
-                }, 100);
-              }}
-            />
-          </View>
         </ScrollView>
       )}
 

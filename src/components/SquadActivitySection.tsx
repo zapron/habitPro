@@ -17,13 +17,21 @@ import type {
 import type { ProfileLabel } from "../lib/groupChallengesApi";
 
 /** Calm header: indigo “Squad” + neutral “activity”. */
-function SquadActivityTitle({ theme, isDark }: { theme: AppTheme; isDark: boolean }) {
+function SquadActivityTitle({
+  theme,
+  isDark,
+  compact = false,
+}: {
+  theme: AppTheme;
+  isDark: boolean;
+  compact?: boolean;
+}) {
   return (
     <View style={styles.brandTitleOuter}>
       <View style={styles.brandTitleInner}>
         <View style={styles.brandTitleRow}>
-          <Text style={[styles.heroBrandStrong, { color: theme.colors.indigo[400] }]}>Squad</Text>
-          <Text style={[styles.heroBrandRest, { color: theme.colors.textPrimary }]}> activity</Text>
+          <Text style={[styles.heroBrandStrong, compact && styles.heroBrandStrongCompact, { color: theme.colors.indigo[400] }]}>Squad</Text>
+          <Text style={[styles.heroBrandRest, compact && styles.heroBrandRestCompact, { color: theme.colors.textPrimary }]}> activity</Text>
         </View>
       </View>
     </View>
@@ -162,6 +170,8 @@ type Props = {
   loadingMore?: boolean;
   hasMore?: boolean;
   onLoadMore?: () => void;
+  /** Small top placement used beside/under the cohort ranking summary. */
+  compact?: boolean;
   /** Expand accordion and scroll parent ScrollView to this section (e.g. challenge screen). */
   onScrollToSection?: () => void;
 };
@@ -181,6 +191,7 @@ export const SquadActivitySection = memo(function SquadActivitySection({
   loadingMore = false,
   hasMore = false,
   onLoadMore,
+  compact = false,
   onScrollToSection,
 }: Props) {
   const [expanded, setExpanded] = useState(false);
@@ -220,10 +231,12 @@ export const SquadActivitySection = memo(function SquadActivitySection({
   const summaryLine = summaryParts.length > 0 ? summaryParts.join(" · ") : loading ? "Loading activity" : "Activity";
 
   return (
-    <View style={styles.section}>
+    <View style={[styles.section, compact && styles.compactSection]}>
       <View
         style={[
           styles.accordionShell,
+          compact && styles.compactShell,
+          compact && expanded && styles.compactShellExpanded,
           {
             backgroundColor: cardBg,
             borderColor: border,
@@ -232,11 +245,12 @@ export const SquadActivitySection = memo(function SquadActivitySection({
         ]}
       >
         <View
-          style={[
-            styles.accordionTrigger,
-            {
-              borderBottomWidth: expanded ? StyleSheet.hairlineWidth : 0,
-              borderBottomColor: border,
+        style={[
+          styles.accordionTrigger,
+          compact && styles.compactTrigger,
+          {
+            borderBottomWidth: expanded ? StyleSheet.hairlineWidth : 0,
+            borderBottomColor: border,
             },
           ]}
         >
@@ -246,28 +260,60 @@ export const SquadActivitySection = memo(function SquadActivitySection({
             onPress={() => setExpanded((v) => !v)}
             style={({ pressed }) => [
               styles.accordionTriggerMain,
+              compact && styles.compactTriggerMain,
               {
                 backgroundColor: pressed ? (isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)") : "transparent",
               },
             ]}
           >
-            <View style={[styles.headerIconWrap, { backgroundColor: isDark ? "rgba(129, 140, 248, 0.18)" : "rgba(99, 102, 241, 0.12)" }]}>
-              <Users size={theme.icon.md} color={theme.colors.indigo[400]} strokeWidth={2.2} />
+            <View style={[styles.headerIconWrap, compact && styles.compactHeaderIconWrap, { backgroundColor: isDark ? "rgba(129, 140, 248, 0.18)" : "rgba(99, 102, 241, 0.12)" }]}>
+              <Users size={compact ? theme.icon.sm : theme.icon.md} color={theme.colors.indigo[400]} strokeWidth={2.2} />
             </View>
             <View style={styles.headerText}>
-              <SquadActivityTitle theme={theme} isDark={isDark} />
-              <View style={styles.heroSubColumn}>
-                <Text style={[styles.heroSub, { color: theme.colors.textMuted }]} numberOfLines={1}>
-                  {summaryLine}
-                </Text>
-                <Text style={[styles.heroSubHint, { color: theme.colors.textMuted }]} numberOfLines={1}>
-                  {expanded ? "Milestones and cheers from your group" : "Tap to expand"}
-                </Text>
-              </View>
+              {compact ? (
+                <View style={styles.compactTitleRow}>
+                  <SquadActivityTitle theme={theme} isDark={isDark} compact />
+                  <View style={styles.compactInlineStats}>
+                    {mCount > 0 ? (
+                      <View style={[styles.compactStatPill, { borderColor: theme.colors.border }]}>
+                        <Flag size={11} color={theme.colors.green[500]} strokeWidth={2.4} />
+                        <Text style={[styles.compactStatText, { color: theme.colors.textSecondary }]}>
+                          {mCount}
+                        </Text>
+                      </View>
+                    ) : null}
+                    {nCount > 0 ? (
+                      <View style={[styles.compactStatPill, { borderColor: theme.colors.border }]}>
+                        <MessageSquare size={11} color={theme.colors.amber[500]} strokeWidth={2.4} />
+                        <Text style={[styles.compactStatText, { color: theme.colors.textSecondary }]}>
+                          {nCount}
+                        </Text>
+                      </View>
+                    ) : null}
+                    {mCount === 0 && nCount === 0 ? (
+                      <Text style={[styles.heroSub, styles.compactLoadingText, { color: theme.colors.textMuted }]} numberOfLines={1}>
+                        {summaryLine}
+                      </Text>
+                    ) : null}
+                  </View>
+                </View>
+              ) : (
+                <>
+                  <SquadActivityTitle theme={theme} isDark={isDark} />
+                <View style={styles.heroSubColumn}>
+                  <Text style={[styles.heroSub, { color: theme.colors.textMuted }]} numberOfLines={1}>
+                    {summaryLine}
+                  </Text>
+                  <Text style={[styles.heroSubHint, { color: theme.colors.textMuted }]} numberOfLines={1}>
+                    {expanded ? "Milestones and cheers from your group" : "Tap to expand"}
+                  </Text>
+                </View>
+                </>
+              )}
             </View>
           </Pressable>
-          <View style={styles.headerRightCluster}>
-            {onScrollToSection ? (
+          <View style={[styles.headerRightCluster, compact && styles.compactHeaderRightCluster]}>
+            {!compact && onScrollToSection ? (
               <Pressable
                 onPress={() => {
                   setExpanded(true);
@@ -286,14 +332,25 @@ export const SquadActivitySection = memo(function SquadActivitySection({
               accessibilityState={{ expanded }}
               onPress={() => setExpanded((v) => !v)}
               hitSlop={8}
-              style={({ pressed }) => [{ opacity: pressed ? 0.75 : 1 }]}
+              accessibilityLabel={expanded ? "Collapse squad activity" : "Expand squad activity"}
+              style={({ pressed }) => [
+                styles.expandIconButton,
+                compact && styles.compactExpandIconButton,
+                compact && {
+                  borderColor: theme.colors.border,
+                  backgroundColor: isDark ? "rgba(129, 140, 248, 0.12)" : "rgba(99, 102, 241, 0.08)",
+                },
+                { opacity: pressed ? 0.75 : 1 },
+              ]}
             >
               <ChevronDown
-                size={theme.icon.lg}
-                color={theme.colors.textMuted}
+                size={compact ? theme.icon.md : theme.icon.lg}
+                color={compact ? theme.colors.indigo[400] : theme.colors.textMuted}
                 strokeWidth={2.2}
                 style={{
-                  transform: [{ rotate: expanded ? "0deg" : "-90deg" }],
+                  transform: compact
+                    ? [{ rotate: expanded ? "180deg" : "0deg" }]
+                    : [{ rotate: expanded ? "0deg" : "-90deg" }],
                 }}
               />
             </Pressable>
@@ -460,10 +517,24 @@ SquadActivitySection.displayName = "SquadActivitySection";
 
 const styles = StyleSheet.create({
   section: { marginBottom: 22 },
+  compactSection: {
+    marginBottom: 14,
+    alignItems: "stretch",
+  },
   accordionShell: {
     borderRadius: 18,
     borderWidth: 1,
     overflow: "hidden",
+  },
+  compactShell: {
+    width: "100%",
+    maxWidth: "100%",
+    borderRadius: 16,
+    alignSelf: "stretch",
+  },
+  compactShellExpanded: {
+    alignSelf: "stretch",
+    width: "100%",
   },
   accordionTrigger: {
     flexDirection: "row",
@@ -473,6 +544,12 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     paddingLeft: 14,
   },
+  compactTrigger: {
+    gap: 6,
+    paddingLeft: 10,
+    paddingRight: 8,
+    paddingVertical: 4,
+  },
   accordionTriggerMain: {
     flex: 1,
     flexDirection: "row",
@@ -481,6 +558,11 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     minWidth: 0,
     borderRadius: 12,
+  },
+  compactTriggerMain: {
+    flex: 1,
+    gap: 8,
+    paddingVertical: 5,
   },
   accordionBody: {
     paddingVertical: 8,
@@ -492,6 +574,11 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
+  },
+  compactHeaderIconWrap: {
+    width: 30,
+    height: 30,
+    borderRadius: 10,
   },
   headerText: { flex: 1, minWidth: 0 },
   brandTitleOuter: {
@@ -513,10 +600,18 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     letterSpacing: -0.35,
   },
+  heroBrandStrongCompact: {
+    fontSize: 14,
+    letterSpacing: 0,
+  },
   heroBrandRest: {
     fontSize: 17,
     fontWeight: "600",
     letterSpacing: -0.2,
+  },
+  heroBrandRestCompact: {
+    fontSize: 14,
+    letterSpacing: 0,
   },
   heroSubColumn: {
     marginTop: 4,
@@ -533,15 +628,71 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
     opacity: 0.92,
   },
+  compactStatRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    marginTop: 3,
+  },
+  compactInlineStats: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexShrink: 0,
+    gap: 5,
+    marginLeft: 4,
+  },
+  compactTitleRow: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    minWidth: 0,
+  },
+  compactStatPill: {
+    minHeight: 20,
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+  },
+  compactStatText: {
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 0,
+  },
+  compactLoadingText: {
+    fontSize: 11,
+  },
   headerRightCluster: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
   },
+  compactHeaderRightCluster: {
+    minWidth: 34,
+    justifyContent: "flex-end",
+    gap: 0,
+  },
+  expandIconButton: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  compactExpandIconButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 1,
+  },
   viewAllText: {
     fontSize: 13,
     fontWeight: "800",
     letterSpacing: 0.2,
+  },
+  compactViewText: {
+    fontSize: 12,
+    letterSpacing: 0,
   },
   subsectionHeader: {
     flexDirection: "row",
