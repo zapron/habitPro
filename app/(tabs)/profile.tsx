@@ -922,7 +922,7 @@ export default function ProfileScreen() {
   useFocusEffect(
     useCallback(() => {
       setMiniClockNow(Date.now());
-      void refreshPremiumAccess();
+      void refreshPremiumAccess({ serverOnly: true, cachedAccessOk: true });
       void loadBackups();
     }, [loadBackups, refreshPremiumAccess]),
   );

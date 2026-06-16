@@ -132,7 +132,10 @@ export function PremiumProvider({ children }: { children: React.ReactNode }) {
 
   const dbPremiumForCurrentUser = dbPremiumUserId === userId && dbPremium;
   const isPremium = dbPremiumForCurrentUser || hasCommunityAccess;
-  const loading = dbLoading && !hasCommunityAccess;
+  const hasDbPremiumSnapshot = !userId || dbPremiumUserId === userId || !isSupabaseConfigured();
+  const loading =
+    !hasCommunityAccess &&
+    (initializing || dbLoading || (Boolean(userId) && !hasDbPremiumSnapshot));
 
   const value = useMemo(() => ({ isPremium, loading, refresh }), [isPremium, loading, refresh]);
   return <PremiumContext.Provider value={value}>{children}</PremiumContext.Provider>;

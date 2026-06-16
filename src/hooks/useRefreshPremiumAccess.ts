@@ -6,6 +6,7 @@ import { HABITPRO_COMMUNITY_ENTITLEMENT_ID } from "../constants/revenueCat";
 import { traceAsync } from "../lib/perfTrace";
 
 const DEFAULT_MIN_INTERVAL_MS = 30_000;
+const BILLING_REFRESH_TIMEOUT_MS = 2_500;
 
 type RefreshPremiumAccessOptions = {
   force?: boolean;
@@ -58,6 +59,15 @@ function localDayKey(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, fallback: T): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((resolve) => {
+      setTimeout(() => resolve(fallback), timeoutMs);
+    }),
+  ]);
+}
+
 function selectAccess(
   snapshot: PremiumAccessSnapshot | null,
   options?: RefreshPremiumAccessOptions,
@@ -69,7 +79,7 @@ function selectAccess(
 export function useRefreshPremiumAccess(minIntervalMs = DEFAULT_MIN_INTERVAL_MS) {
   const { session } = useAuth();
   const { refresh: refreshBilling } = useBilling();
-  const { isPremium, refresh: refreshPremium } = usePremium();
+  const { isPremium, loading: premiumLoading, refresh: refreshPremium } = usePremium();
   const userId = session?.user?.id ?? null;
 
   return useCallback(
@@ -79,9 +89,16 @@ export function useRefreshPremiumAccess(minIntervalMs = DEFAULT_MIN_INTERVAL_MS)
       const now = Date.now();
       const todayKey = localDayKey(new Date(now));
 
+      // Tap-time guards should be instant once the app-level premium flag is settled.
+      // Mutations are still protected by Supabase RLS/RPCs, so stale edge cases fail safely.
+      if (options?.cachedAccessOk && !options.force) {
+        if (isPremium) return true;
+        if (!premiumLoading) return false;
+      }
+
       // Premium users: avoid re-checking on every interaction. If we've already confirmed
       // premium today, trust cached status and rely on server enforcement on edge cases.
-      if (options?.cachedAccessOk && isPremium) {
+      if (options?.cachedAccessOk && !options.force && isPremium) {
         if (options.serverOnly) {
           if (
             cache.lastSnapshot?.serverAccess === true &&
@@ -151,7 +168,7 @@ export function useRefreshPremiumAccess(minIntervalMs = DEFAULT_MIN_INTERVAL_MS)
         "premium.refresh",
         async () => {
           const [billingResult, premiumResult] = await Promise.allSettled([
-            refreshBilling(),
+            withTimeout(refreshBilling(), BILLING_REFRESH_TIMEOUT_MS, null),
             refreshPremium(),
           ]);
           const info = billingResult.status === "fulfilled" ? billingResult.value : null;
@@ -197,6 +214,6 @@ export function useRefreshPremiumAccess(minIntervalMs = DEFAULT_MIN_INTERVAL_MS)
         }
       }
     },
-    [isPremium, minIntervalMs, refreshBilling, refreshPremium, userId],
+    [isPremium, premiumLoading, minIntervalMs, refreshBilling, refreshPremium, userId],
   );
 }

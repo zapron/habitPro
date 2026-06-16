@@ -540,7 +540,7 @@ export default function ChallengeDetailScreen() {
       if (silent) scheduleSecondaryHydration();
       void load({ silent });
       void refreshCohortPeerHabitsCached();
-      void refreshPremiumAccess();
+      void refreshPremiumAccess({ serverOnly: true, cachedAccessOk: true });
       return () => {
         screenActiveRef.current = false;
         hydrationTasksRef.current.forEach((task) => task.cancel?.());
@@ -717,7 +717,7 @@ export default function ChallengeDetailScreen() {
       const key = `${toUserId}-${kind}`;
       setNudgeBusyKey(key);
       try {
-        const freshPremium = await refreshPremiumAccess({ cachedAccessOk: true });
+        const freshPremium = await refreshPremiumAccess({ serverOnly: true, cachedAccessOk: true });
         if (freshPremium !== true) {
           openUpsell("squad_nudge");
           return;
@@ -755,7 +755,7 @@ export default function ChallengeDetailScreen() {
       const key = `${actorUserId}-congrats`;
       setNudgeBusyKey(key);
       try {
-        const freshPremium = await refreshPremiumAccess({ cachedAccessOk: true });
+        const freshPremium = await refreshPremiumAccess({ serverOnly: true, cachedAccessOk: true });
         if (freshPremium !== true) {
           openUpsell("squad_nudge");
           return;
@@ -820,7 +820,7 @@ export default function ChallengeDetailScreen() {
 
       setRepairBusyAction({ id: repair.id, vote });
       try {
-        const freshPremium = await refreshPremiumAccess({ cachedAccessOk: true });
+        const freshPremium = await refreshPremiumAccess({ serverOnly: true, cachedAccessOk: true });
         if (!screenActiveRef.current) return;
         if (freshPremium !== true) {
           openUpsell("streak_repair");
@@ -1075,7 +1075,7 @@ export default function ChallengeDetailScreen() {
   const onOpenCustomNote = useCallback(
     (toUserId: string) => {
       void (async () => {
-        const freshPremium = await refreshPremiumAccess({ cachedAccessOk: true });
+        const freshPremium = await refreshPremiumAccess({ serverOnly: true, cachedAccessOk: true });
         if (freshPremium !== true) {
           openUpsell("squad_nudge");
           return;
@@ -1109,7 +1109,7 @@ export default function ChallengeDetailScreen() {
   const onSubmitCustomNote = useCallback(
     async (text: string) => {
       if (!challengeId || !customNoteToUserId || !myUserId) return;
-      const freshPremium = await refreshPremiumAccess({ cachedAccessOk: true });
+      const freshPremium = await refreshPremiumAccess({ serverOnly: true, cachedAccessOk: true });
       if (freshPremium !== true) {
         openUpsell("squad_nudge");
         return;

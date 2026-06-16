@@ -905,7 +905,7 @@ export default function CompeteScreen() {
   useFocusEffect(
     useCallback(() => {
       if (!isPremium || premiumLoading) {
-        void refreshPremiumAccess();
+        void refreshPremiumAccess({ serverOnly: true, cachedAccessOk: true });
       }
     }, [isPremium, premiumLoading, refreshPremiumAccess]),
   );
@@ -1418,23 +1418,25 @@ export default function CompeteScreen() {
     ];
 
     const groupStreaksButton = (
-      <Button
-        title="View Group Streaks"
-        variant="subtle"
-        icon={<Eye size={19} color={theme.colors.amber[500]} strokeWidth={2.6} />}
+      <TouchableOpacity
         onPress={() => router.push(`/challenge/${inv.challenge_id}`)}
+        activeOpacity={0.84}
         accessibilityRole="button"
         accessibilityLabel={`View group streaks: ${missionTitle}`}
         style={[
           styles.inviteGroupStreaksBtn,
           {
-            backgroundColor: "transparent",
-            borderColor: "rgba(245, 158, 11, 0.68)",
+            backgroundColor: isDark ? "rgba(245, 158, 11, 0.14)" : "rgba(255, 251, 235, 0.96)",
+            borderColor: isDark ? "rgba(245, 158, 11, 0.58)" : "rgba(217, 119, 6, 0.42)",
             shadowColor: theme.colors.amber[500],
           },
         ]}
-        textStyle={[styles.inviteGroupStreaksBtnText, { color: theme.colors.amber[500] }]}
-      />
+      >
+        <Eye size={19} color={theme.colors.amber[500]} strokeWidth={2.6} />
+        <Text style={[styles.inviteGroupStreaksBtnText, { color: theme.colors.amber[500] }]}>
+          View Group Streaks
+        </Text>
+      </TouchableOpacity>
     );
 
     const resolvedBlock = (

@@ -4,7 +4,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Screen } from "../../src/components/Screen";
 import { CommunityWinsFeed } from "../../src/components/CommunityWinsFeed";
 import { useTheme } from "../../src/context/ThemeContext";
-import { useToast } from "../../src/context/ToastContext";
 import { PlusBadge } from "../../src/components/PlusBadge";
 import { usePremium } from "../../src/context/PremiumContext";
 import { usePlusUpsell } from "../../src/context/PlusUpsellContext";
@@ -14,7 +13,6 @@ import { useCallback } from "react";
 
 export default function CommunityScreen() {
   const { theme, isDark } = useTheme();
-  const { showToast } = useToast();
   const insets = useSafeAreaInsets();
   const bottomPad = Math.max(insets.bottom, 16) + 8;
   const { isPremium, loading: premiumLoading } = usePremium();
@@ -24,21 +22,16 @@ export default function CommunityScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      void refreshPremiumAccess();
+      void refreshPremiumAccess({ serverOnly: true, cachedAccessOk: true });
     }, [refreshPremiumAccess]),
   );
 
   const validateCheerAccess = useCallback(async () => {
     const serverPremium = await refreshPremiumAccess({ serverOnly: true, cachedAccessOk: true });
     if (serverPremium === true) return true;
-    const freshPremium = await refreshPremiumAccess({ cachedAccessOk: true });
-    if (freshPremium === true) {
-      showToast("Membership is still activating. Try again in a moment.", "info", 4200);
-      return false;
-    }
     openUpsell("community");
     return false;
-  }, [openUpsell, refreshPremiumAccess, showToast]);
+  }, [openUpsell, refreshPremiumAccess]);
 
   const header = (
     <View style={[styles.introInner, { paddingHorizontal: theme.spacing.sm }]}>

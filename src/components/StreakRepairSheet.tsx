@@ -104,7 +104,7 @@ export function StreakRepairSheet({ visible, onClose, habit, eligible, onRequest
 
   useEffect(() => {
     if (!visible || !isGroup) return;
-    void refreshPremiumAccess();
+    void refreshPremiumAccess({ serverOnly: true, cachedAccessOk: true });
   }, [visible, isGroup, refreshPremiumAccess]);
 
   return (
@@ -254,7 +254,7 @@ export function StreakRepairSheet({ visible, onClose, habit, eligible, onRequest
               setBusy(true);
               try {
                 if (isGroup) {
-                  const freshPremium = await refreshPremiumAccess({ cachedAccessOk: true });
+                  const freshPremium = await refreshPremiumAccess({ serverOnly: true, cachedAccessOk: true });
                   if (freshPremium !== true) {
                     openUpsell("streak_repair");
                     return;

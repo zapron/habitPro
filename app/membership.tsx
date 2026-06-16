@@ -81,7 +81,7 @@ export default function MembershipScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      void refreshBilling();
+      void refreshBilling({ forceNetwork: true });
       void refreshPremium();
     }, [refreshBilling, refreshPremium]),
   );
@@ -91,7 +91,7 @@ export default function MembershipScreen() {
     setRestoreBusy(true);
     try {
       await restore();
-      await refreshBilling();
+      await refreshBilling({ forceNetwork: true });
       await refreshPremium();
       showToast("Purchases restored.", "success");
     } catch {
@@ -108,7 +108,7 @@ export default function MembershipScreen() {
       await openManageSubscriptions();
     } finally {
       setManageBusy(false);
-      void refreshBilling();
+      void refreshBilling({ forceNetwork: true });
       void refreshPremium();
     }
   }, [configured, isExpoGo, openManageSubscriptions, ready, refreshBilling, refreshPremium]);
@@ -147,7 +147,7 @@ export default function MembershipScreen() {
         <Text style={[styles.screenTitle, { color: theme.colors.textPrimary }]}>Membership</Text>
         <TouchableOpacity
           onPress={() => {
-            void refreshBilling();
+            void refreshBilling({ forceNetwork: true });
             void refreshPremium();
           }}
           style={[styles.backBtn, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}

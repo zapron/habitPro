@@ -86,7 +86,7 @@ type BillingContextValue = {
   customerInfo: CustomerInfo | null;
   /** True when the entitlement is active in current CustomerInfo. */
   hasCommunityAccess: boolean;
-  refresh: () => Promise<CustomerInfo | null>;
+  refresh: (options?: { forceNetwork?: boolean }) => Promise<CustomerInfo | null>;
   purchaseCommunity: (
     plan: PlanId,
   ) => Promise<{
@@ -474,7 +474,7 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
     };
   }, [configured, ensureRevenueCatUser, isExpoGo, ready, runRevenueCatIdentityTask, userId]);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (options?: { forceNetwork?: boolean }) => {
     if (!ready || !configured || isExpoGo || !userId) {
       setCustomerInfo(null);
       setCustomerInfoUserId(null);
@@ -483,7 +483,9 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
     const requestedUserId = userId;
     await ensureRevenueCatUser(requestedUserId);
     if (activeBillingUserIdRef.current !== requestedUserId) return null;
-    await Purchases.invalidateCustomerInfoCache();
+    if (options?.forceNetwork) {
+      await Purchases.invalidateCustomerInfoCache();
+    }
     const info = await Purchases.getCustomerInfo();
     if (activeBillingUserIdRef.current !== requestedUserId) return null;
     setCustomerInfo(info);

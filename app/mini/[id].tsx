@@ -1157,7 +1157,7 @@ export default function MiniMissionDetail() {
 
   useFocusEffect(
     useCallback(() => {
-      void refreshPremiumAccess();
+      void refreshPremiumAccess({ serverOnly: true, cachedAccessOk: true });
     }, [refreshPremiumAccess]),
   );
 
@@ -1429,7 +1429,7 @@ export default function MiniMissionDetail() {
     setFocusModeOpen(false);
     setTimerFrozenAtMs(Date.now());
     setCompleteSheetOpen(true);
-    void refreshPremiumAccess();
+    void refreshPremiumAccess({ serverOnly: true, cachedAccessOk: true });
   };
 
   const handleCompleteCommit = async (
@@ -1459,7 +1459,7 @@ export default function MiniMissionDetail() {
     const wantsPublish = meta?.publishToCommunity === true;
     const publishCloudReady = wantsPublish && isSupabaseConfigured() && session?.user != null;
     const freshPremium = publishCloudReady
-      ? await refreshPremiumAccess({ cachedAccessOk: true })
+      ? await refreshPremiumAccess({ serverOnly: true, cachedAccessOk: true })
       : null;
     let canPublish = publishCloudReady && freshPremium === true;
     if (publishCloudReady && freshPremium !== true) {
@@ -1595,7 +1595,7 @@ export default function MiniMissionDetail() {
           return;
         }
         void (async () => {
-          const freshPremium = await refreshPremiumAccess({ cachedAccessOk: true });
+          const freshPremium = await refreshPremiumAccess({ serverOnly: true, cachedAccessOk: true });
           if (freshPremium !== true) {
             openUpsell("community_publish");
             return;

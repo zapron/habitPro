@@ -286,7 +286,9 @@ export function CommunityWinsFeed({
               : w,
           ),
         );
-        if (finalResult.reason !== "premium_required") {
+        if (finalResult.reason === "premium_required") {
+          onCheerBlocked?.();
+        } else {
           showToast(finalResult.error, "error");
         }
         return false;

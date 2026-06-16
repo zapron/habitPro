@@ -69,7 +69,7 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
 
   useEffect(() => {
     if (!visible || !configured || !signedIn) return;
-    void refreshPremiumAccess();
+    void refreshPremiumAccess({ serverOnly: true, cachedAccessOk: true });
   }, [visible, configured, signedIn, refreshPremiumAccess]);
 
   const handleServerPremiumRequired = useCallback(async () => {
@@ -140,7 +140,7 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
     creatingRef.current = true;
     setCreating(true);
     try {
-      const freshPremium = await refreshPremiumAccess({ cachedAccessOk: true });
+      const freshPremium = await refreshPremiumAccess({ serverOnly: true, cachedAccessOk: true });
       if (freshPremium !== true) {
         openUpsell("group_mission");
         return;
@@ -183,7 +183,7 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
       inviteInFlightRef.current.add(inviteKey);
       setInvitingId(userId);
       try {
-        const freshPremium = await refreshPremiumAccess({ cachedAccessOk: true });
+        const freshPremium = await refreshPremiumAccess({ serverOnly: true, cachedAccessOk: true });
         if (freshPremium !== true) {
           openUpsell("group_mission");
           return;
