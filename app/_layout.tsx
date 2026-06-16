@@ -118,7 +118,12 @@ function RootLayoutNav() {
       }
 
       if (type === "community_win_cheer") {
-        router.push({ pathname: "/(tabs)/community" });
+        const winId = typeof data.win_id === "string" ? data.win_id : "";
+        if (winId) {
+          router.push(`/journey-moment/${winId}`);
+        } else {
+          router.push({ pathname: "/(tabs)/community" });
+        }
         return;
       }
 

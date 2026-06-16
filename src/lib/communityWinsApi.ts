@@ -430,6 +430,63 @@ export async function fetchCommunityWinsFeedPage(
   return { items, hasMore };
 }
 
+export async function fetchCommunityWinMoment(
+  winId: string,
+): Promise<{ ok: true; win: CommunityWinFeedItem } | { ok: false; error: string }> {
+  const supabase = getSupabase();
+  if (!supabase) return { ok: false, error: "Cloud sync not configured." };
+
+  const id = winId.trim();
+  if (!id) return { ok: false, error: "Moment not found." };
+
+  const {
+    data: { user },
+    error: userErr,
+  } = await supabase.auth.getUser();
+  if (userErr || !user) return { ok: false, error: "Sign in to view this moment." };
+
+  const { data, error } = await supabase
+    .from("community_wins")
+    .select(
+      "id, user_id, mini_mission_id, title, completed_at, memory_note, memory_image_url, created_at, feed_source, streak_mission_day, streak_count_at_post, live_squad_id",
+    )
+    .eq("id", id)
+    .maybeSingle();
+
+  if (error) return { ok: false, error: error.message };
+  if (!data || typeof data.id !== "string") {
+    return { ok: false, error: "This moment is no longer available." };
+  }
+
+  const row = data as Partial<CommunityWinRow>;
+  const win: CommunityWinRow = {
+    id: row.id,
+    user_id: storyString(row.user_id),
+    mini_mission_id: storyString(row.mini_mission_id),
+    title: storyString(row.title, "Community win"),
+    completed_at: storyString(row.completed_at, row.created_at ?? new Date(0).toISOString()),
+    memory_note: typeof row.memory_note === "string" ? row.memory_note : null,
+    memory_image_url: typeof row.memory_image_url === "string" ? row.memory_image_url : null,
+    created_at: storyString(row.created_at, row.completed_at ?? new Date(0).toISOString()),
+    feed_source: (row.feed_source ?? "mini") as CommunityWinFeedSource,
+    streak_mission_day:
+      typeof row.streak_mission_day === "number" && Number.isFinite(row.streak_mission_day)
+        ? row.streak_mission_day
+        : null,
+    streak_count_at_post:
+      typeof row.streak_count_at_post === "number" && Number.isFinite(row.streak_count_at_post)
+        ? row.streak_count_at_post
+        : null,
+    live_squad_id: typeof row.live_squad_id === "string" ? row.live_squad_id : null,
+  };
+
+  if (!win.user_id) return { ok: false, error: "This moment is no longer available." };
+
+  const [enriched] = await enrichWinsWithProfilesAndCheers([win], user.id);
+  if (!enriched) return { ok: false, error: "This moment is no longer available." };
+  return { ok: true, win: enriched };
+}
+
 /** @deprecated Prefer fetchCommunityWinsFeedPage for pagination */
 export async function fetchCommunityWinsFeed(limit = 40): Promise<CommunityWinFeedItem[]> {
   const { items } = await fetchCommunityWinsFeedPage(0, limit);

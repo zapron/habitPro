@@ -16,7 +16,7 @@ import {
   type ViewStyle,
 } from "react-native";
 import type { ImageStyle, LayoutChangeEvent } from "react-native";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { FlashList, type ListRenderItem } from "@shopify/flash-list";
 import Svg, { ClipPath, Defs, Image as SvgImage, Path } from "react-native-svg";
 import {
@@ -76,6 +76,11 @@ const LIKE_BADGE_BACKGROUND = "rgba(15, 23, 42, 0.76)";
 const PRIVATE_BADGE_BACKGROUND = "rgba(8, 145, 178, 0.86)";
 const RECENT_PROOF_BADGE_PATH =
   "M33 5 H67 Q71 5 74 8 L92 26 Q95 29 95 33 V67 Q95 71 92 74 L74 92 Q71 95 67 95 H33 Q29 95 26 92 L8 74 Q5 71 5 67 V33 Q5 29 8 26 L26 8 Q29 5 33 5 Z";
+
+function paramString(value: string | string[] | undefined): string | null {
+  if (Array.isArray(value)) return value[0] ?? null;
+  return value ?? null;
+}
 
 function initialsFromName(name: string): string {
   const parts = name.replace(/^@/, "").replace(/_/g, " ").split(/\s+/).filter(Boolean);
@@ -1184,11 +1189,14 @@ function RowSeparator() {
 
 export default function MyJourneyScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams();
   const { theme, isDark } = useTheme();
   const { session } = useAuth();
   const { width } = useWindowDimensions();
-  const [journeyMode, setJourneyMode] = useState<JourneyMode>("public");
-  const [activeTab, setActiveTab] = useState<StoryTab>("missions");
+  const routeMode = paramString(params.mode) === "private" ? "private" : "public";
+  const routeTab = paramString(params.tab) === "minis" ? "minis" : "missions";
+  const [journeyMode, setJourneyMode] = useState<JourneyMode>(routeMode);
+  const [activeTab, setActiveTab] = useState<StoryTab>(routeTab);
   const [publicStory, setPublicStory] = useState<CommunityPlayerStory | null>(null);
   const [loadingPublic, setLoadingPublic] = useState(true);
   const [publicHasMore, setPublicHasMore] = useState(false);
@@ -1245,6 +1253,11 @@ export default function MyJourneyScreen() {
   useEffect(() => {
     void loadPublicStory("initial");
   }, [loadPublicStory]);
+
+  useEffect(() => {
+    setJourneyMode(routeMode);
+    setActiveTab(routeTab);
+  }, [routeMode, routeTab]);
 
   useEffect(() => {
     setImagesEnabled(false);

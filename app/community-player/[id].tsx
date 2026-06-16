@@ -1220,8 +1220,9 @@ export default function CommunityPlayerStoryScreen() {
   const { showToast } = useToast();
   const { requireUsername } = useUsernameGate();
   const userId = paramString(params.id);
+  const routeTab = paramString(params.tab) === "minis" ? "minis" : "missions";
   const [story, setStory] = useState<CommunityPlayerStory | null>(null);
-  const [activeTab, setActiveTab] = useState<StoryTab>("missions");
+  const [activeTab, setActiveTab] = useState<StoryTab>(routeTab);
   const [loading, setLoading] = useState(true);
   const [storyHasMore, setStoryHasMore] = useState(false);
   const [storyFetchedCount, setStoryFetchedCount] = useState(0);
@@ -1353,6 +1354,10 @@ export default function CommunityPlayerStoryScreen() {
   useEffect(() => {
     void loadStory();
   }, [loadStory]);
+
+  useEffect(() => {
+    setActiveTab(routeTab);
+  }, [routeTab]);
 
   useEffect(() => {
     setImagesEnabled(false);

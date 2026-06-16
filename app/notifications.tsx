@@ -197,9 +197,9 @@ function notificationSubtitle(n: NotificationRow): string | null {
           : "Someone";
       const title = parsed.mini_mission_title;
       if (parsed.feed_source === "habit_streak") {
-        return `${who} cheered your streak moment on “${title}” · Tap for Community`;
+        return `${who} cheered your streak moment on “${title}” · Tap to view`;
       }
-      return `${who} cheered “${title}” · Tap for Community`;
+      return `${who} cheered “${title}” · Tap to view`;
     }
     case "streak_window_reminder": {
       return streakReminderSubtitle(p);
@@ -400,7 +400,13 @@ export default function NotificationsScreen() {
     }
 
     if (n.type === "community_win_cheer") {
-      router.push({ pathname: "/(tabs)/community" });
+      const parsed = parseCommunityWinCheerPayload(p);
+      const winId = parsed?.win_id ?? (typeof p.win_id === "string" ? p.win_id : "");
+      if (winId) {
+        router.push(`/journey-moment/${winId}`);
+      } else {
+        router.push({ pathname: "/(tabs)/community" });
+      }
       return;
     }
 
