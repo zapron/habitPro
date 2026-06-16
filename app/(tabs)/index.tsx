@@ -46,6 +46,8 @@ import { useAuth } from "../../src/context/AuthContext";
 import { isSupabaseConfigured } from "../../src/lib/env";
 import {
   countUnreadNotifications,
+  getCachedChallengePrimarySnapshot,
+  loadChallengePrimarySnapshot,
 } from "../../src/lib/groupChallengesApi";
 import type { AppTheme } from "../../src/styles/theme";
 import { Button } from "../../src/components/Button";
@@ -530,6 +532,33 @@ export default function Home() {
 
     return null;
   }, [cohortPeersByChallengeId, habits, level, miniMissionStats.live, missionNow, stats.pending, xpInLevel]);
+
+  const prewarmedChallengeIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const sparkChallengeId =
+      homeSpark?.kind === "lead" || homeSpark?.kind === "chase" ? homeSpark.challengeId : null;
+    if (!sparkChallengeId) return;
+    if (prewarmedChallengeIdRef.current === sparkChallengeId) return;
+    if (getCachedChallengePrimarySnapshot(sparkChallengeId)) {
+      prewarmedChallengeIdRef.current = sparkChallengeId;
+      return;
+    }
+
+    prewarmedChallengeIdRef.current = sparkChallengeId;
+    const task = InteractionManager.runAfterInteractions(() => {
+      void loadChallengePrimarySnapshot(sparkChallengeId).catch((error) => {
+        if (__DEV__) console.warn("[home] prewarm challenge snapshot", error);
+        if (prewarmedChallengeIdRef.current === sparkChallengeId) {
+          prewarmedChallengeIdRef.current = null;
+        }
+      });
+    });
+
+    return () => {
+      task.cancel?.();
+    };
+  }, [homeSpark]);
 
   const onHomeSparkPress = useCallback(() => {
     if (!homeSpark) return;

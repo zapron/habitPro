@@ -15,7 +15,9 @@ import {
   StatusBar,
   ActivityIndicator,
   RefreshControl,
+  InteractionManager,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
 import * as Haptics from "expo-haptics";
@@ -114,6 +116,11 @@ const CHALLENGE_ACTIVITY_PAGE_SIZE = 20;
 const CHALLENGE_REPAIR_PAGE_SIZE = 20;
 const INITIAL_PARTICIPANTS_TO_RENDER = 6;
 const PARTICIPANT_RENDER_BATCH = 8;
+const REPAIR_DISMISS_STORAGE_PREFIX = "challenge-repair-dismissed";
+
+function repairDismissStorageKey(userId: string, challengeId: string): string {
+  return `${REPAIR_DISMISS_STORAGE_PREFIX}:${userId}:${challengeId}`;
+}
 
 type ParticipantCardProps = {
   memberId: string;
@@ -315,6 +322,8 @@ export default function ChallengeDetailScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [secondaryLoading, setSecondaryLoading] = useState(false);
   const [secondaryHydrated, setSecondaryHydrated] = useState(false);
+  const [repairInitialLoading, setRepairInitialLoading] = useState(false);
+  const [repairHydrated, setRepairHydrated] = useState(false);
   const [activityLoadingMore, setActivityLoadingMore] = useState(false);
   const [repairLoadingMore, setRepairLoadingMore] = useState(false);
   const [activityNextOffset, setActivityNextOffset] = useState<number | null>(null);
@@ -362,8 +371,12 @@ export default function ChallengeDetailScreen() {
   // When seeded from cache, treat the very first focus as a silent background
   // refresh (content is already on screen — no spinner needed).
   const focusOnceRef = useRef(Boolean(cachedSnapshot));
+  const screenActiveRef = useRef(false);
+  const hydrationTasksRef = useRef<ReturnType<typeof InteractionManager.runAfterInteractions>[]>([]);
   const secondaryLoadInFlightRef = useRef(false);
   const secondaryHydratedRef = useRef(false);
+  const repairInitialLoadInFlightRef = useRef(false);
+  const repairHydratedRef = useRef(false);
   const activityLoadMoreInFlightRef = useRef(false);
   const repairLoadMoreInFlightRef = useRef(false);
   const socialActionInFlightRef = useRef(false);
@@ -377,7 +390,7 @@ export default function ChallengeDetailScreen() {
     secondaryLoadInFlightRef.current = true;
     if (showSecondaryLoading) setSecondaryLoading(true);
     try {
-      const [activityPage, nudgePage, repairsRes] = await Promise.all([
+      const [activityPage, nudgePage] = await Promise.all([
         listChallengeActivityPage(challengeId, {
           offset: 0,
           limit: CHALLENGE_ACTIVITY_PAGE_SIZE,
@@ -386,50 +399,95 @@ export default function ChallengeDetailScreen() {
           offset: 0,
           limit: CHALLENGE_ACTIVITY_PAGE_SIZE,
         }).catch(() => ({ items: [], hasMore: false, nextOffset: null })),
-        listChallengeStreakRepairsPage(challengeId, {
-          offset: 0,
-          limit: CHALLENGE_REPAIR_PAGE_SIZE,
-        }),
       ]);
+      if (!screenActiveRef.current) return;
       setFeedActivity(activityPage.items);
       setFeedNudges(nudgePage.items);
       setActivityNextOffset(activityPage.nextOffset);
       setNudgeNextOffset(nudgePage.nextOffset);
-      const nextRepairRows = repairsRes.ok ? repairsRes.page.items : [];
-      setRepairRows(nextRepairRows);
-      setRepairVotes(repairsRes.ok ? repairsRes.votes : []);
-      setRepairNextOffset(repairsRes.ok ? repairsRes.page.nextOffset : null);
       const labelIds = new Set<string>();
       for (const a of activityPage.items) labelIds.add(a.actor_user_id);
       for (const n of nudgePage.items) {
         labelIds.add(n.from_user_id);
         labelIds.add(n.to_user_id);
       }
-      for (const r of nextRepairRows) labelIds.add(r.user_id);
       const labels = await getProfileLabelsForIds([...labelIds]);
+      if (!screenActiveRef.current) return;
       setProfileLabels((prev) => ({ ...prev, ...labels }));
     } finally {
-      secondaryHydratedRef.current = true;
-      setSecondaryHydrated(true);
       secondaryLoadInFlightRef.current = false;
-      if (showSecondaryLoading) setSecondaryLoading(false);
+      if (screenActiveRef.current) {
+        secondaryHydratedRef.current = true;
+        setSecondaryHydrated(true);
+        if (showSecondaryLoading) setSecondaryLoading(false);
+      } else {
+        secondaryHydratedRef.current = false;
+      }
     }
   }, [challengeId]);
+
+  const loadRepairRequests = useCallback(async (opts?: { silent?: boolean }) => {
+    if (!challengeId) return;
+    if (repairInitialLoadInFlightRef.current) return;
+    const silent = opts?.silent ?? false;
+    const firstRepairLoad = !repairHydratedRef.current;
+    const showRepairLoading = !silent || firstRepairLoad;
+    repairInitialLoadInFlightRef.current = true;
+    if (showRepairLoading) setRepairInitialLoading(true);
+    try {
+      const res = await listChallengeStreakRepairsPage(challengeId, {
+        offset: 0,
+        limit: CHALLENGE_REPAIR_PAGE_SIZE,
+        status: "pending",
+      });
+      if (!res.ok) return;
+      if (!screenActiveRef.current) return;
+      setRepairRows(res.page.items);
+      setRepairVotes(res.votes);
+      setRepairNextOffset(res.page.nextOffset);
+      const labels =
+        res.profileLabels ?? await getProfileLabelsForIds(res.page.items.map((row) => row.user_id));
+      if (!screenActiveRef.current) return;
+      setProfileLabels((prev) => ({ ...prev, ...labels }));
+    } finally {
+      repairInitialLoadInFlightRef.current = false;
+      if (screenActiveRef.current) {
+        repairHydratedRef.current = true;
+        setRepairHydrated(true);
+        if (showRepairLoading) setRepairInitialLoading(false);
+      } else {
+        repairHydratedRef.current = false;
+      }
+    }
+  }, [challengeId]);
+
+  const scheduleSecondaryHydration = useCallback(() => {
+    const task = InteractionManager.runAfterInteractions(() => {
+      hydrationTasksRef.current = hydrationTasksRef.current.filter((item) => item !== task);
+      if (!screenActiveRef.current) return;
+      void loadSecondary({ silent: true });
+      void loadRepairRequests({ silent: true });
+    });
+    hydrationTasksRef.current.push(task);
+  }, [loadRepairRequests, loadSecondary]);
 
   const load = useCallback(async (opts?: { silent?: boolean }) => {
     if (!challengeId) return;
     const silent = opts?.silent ?? false;
     if (!silent) setLoading(true);
+    let didLoad = false;
     try {
       const primary = await loadChallengePrimarySnapshot(challengeId);
+      if (!screenActiveRef.current) return;
       setGroup(primary.group);
       setMemberIdsOrdered(primary.memberIdsOrdered);
       setProfileLabels((prev) => ({ ...prev, ...primary.profileLabels }));
-      void loadSecondary({ silent: true });
+      didLoad = true;
     } finally {
-      if (!silent) setLoading(false);
+      if (!silent && screenActiveRef.current) setLoading(false);
     }
-  }, [challengeId, loadSecondary]);
+    if (didLoad) scheduleSecondaryHydration();
+  }, [challengeId, scheduleSecondaryHydration]);
 
   useEffect(() => {
     setFeedActivity([]);
@@ -440,25 +498,55 @@ export default function ChallengeDetailScreen() {
     setDismissedRepairIds(new Set());
     setSecondaryHydrated(false);
     setSecondaryLoading(false);
+    setRepairHydrated(false);
+    setRepairInitialLoading(false);
     setActivityNextOffset(null);
     setNudgeNextOffset(null);
     setRepairNextOffset(null);
     secondaryLoadInFlightRef.current = false;
     secondaryHydratedRef.current = false;
+    repairInitialLoadInFlightRef.current = false;
+    repairHydratedRef.current = false;
     activityLoadMoreInFlightRef.current = false;
     repairLoadMoreInFlightRef.current = false;
     setVisibleParticipantCount(INITIAL_PARTICIPANTS_TO_RENDER);
   }, [challengeId]);
 
+  useEffect(() => {
+    if (!challengeId || !myUserId) {
+      setDismissedRepairIds(new Set());
+      return;
+    }
+    let cancelled = false;
+    void AsyncStorage.getItem(repairDismissStorageKey(myUserId, challengeId))
+      .then((raw) => {
+        if (cancelled) return;
+        const parsed = raw ? JSON.parse(raw) : [];
+        if (!Array.isArray(parsed)) return;
+        setDismissedRepairIds(new Set(parsed.filter((id): id is string => typeof id === "string" && id.length > 0)));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [challengeId, myUserId]);
+
   useFocusEffect(
     useCallback(() => {
+      screenActiveRef.current = true;
       setCohortNow(Date.now());
       const silent = focusOnceRef.current;
       focusOnceRef.current = true;
+      if (silent) scheduleSecondaryHydration();
       void load({ silent });
       void refreshCohortPeerHabitsCached();
       void refreshPremiumAccess();
-    }, [load, refreshPremiumAccess]),
+      return () => {
+        screenActiveRef.current = false;
+        hydrationTasksRef.current.forEach((task) => task.cancel?.());
+        hydrationTasksRef.current = [];
+      };
+    }, [load, refreshPremiumAccess, scheduleSecondaryHydration]),
   );
 
   useEffect(() => {
@@ -484,7 +572,7 @@ export default function ChallengeDetailScreen() {
             setRepairVotes((prev) => prev.filter((vote) => vote.repair_id !== next.id));
             return;
           }
-          void loadSecondary({ silent: true });
+          void loadRepairRequests({ silent: true });
         },
       )
       .on(
@@ -496,7 +584,7 @@ export default function ChallengeDetailScreen() {
           filter: `challenge_id=eq.${challengeId}`,
         },
         () => {
-          void loadSecondary({ silent: true });
+          void loadRepairRequests({ silent: true });
         },
       )
       .subscribe();
@@ -504,16 +592,21 @@ export default function ChallengeDetailScreen() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [challengeId, loadSecondary]);
+  }, [challengeId, loadRepairRequests]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      await Promise.all([load({ silent: true }), loadSecondary({ silent: true }), refreshCohortPeerHabits()]);
+      await Promise.all([
+        load({ silent: true }),
+        loadSecondary({ silent: true }),
+        loadRepairRequests({ silent: true }),
+        refreshCohortPeerHabits(),
+      ]);
     } finally {
-      setRefreshing(false);
+      if (screenActiveRef.current) setRefreshing(false);
     }
-  }, [load, loadSecondary]);
+  }, [load, loadRepairRequests, loadSecondary]);
 
   const loadMoreSquadActivity = useCallback(async () => {
     if (
@@ -541,6 +634,7 @@ export default function ChallengeDetailScreen() {
               limit: CHALLENGE_ACTIVITY_PAGE_SIZE,
             }),
       ]);
+      if (!screenActiveRef.current) return;
       const labelIds = new Set<string>();
       if (activityPage) {
         setFeedActivity((prev) => {
@@ -562,12 +656,13 @@ export default function ChallengeDetailScreen() {
         }
       }
       const labels = await getProfileLabelsForIds([...labelIds]);
+      if (!screenActiveRef.current) return;
       setProfileLabels((prev) => ({ ...prev, ...labels }));
     } catch (e) {
       if (__DEV__) console.warn("[challenge] loadMoreSquadActivity", e);
     } finally {
       activityLoadMoreInFlightRef.current = false;
-      setActivityLoadingMore(false);
+      if (screenActiveRef.current) setActivityLoadingMore(false);
     }
   }, [activityLoadingMore, activityNextOffset, challengeId, nudgeNextOffset]);
 
@@ -581,8 +676,10 @@ export default function ChallengeDetailScreen() {
       const res = await listChallengeStreakRepairsPage(challengeId, {
         offset: repairNextOffset,
         limit: CHALLENGE_REPAIR_PAGE_SIZE,
+        status: "pending",
       });
       if (!res.ok) return;
+      if (!screenActiveRef.current) return;
       setRepairRows((prev) => {
         const seen = new Set(prev.map((row) => row.id));
         return [...prev, ...res.page.items.filter((row) => !seen.has(row.id))];
@@ -592,13 +689,15 @@ export default function ChallengeDetailScreen() {
         return [...prev, ...res.votes.filter((vote) => !seen.has(`${vote.repair_id}:${vote.voter_id}`))];
       });
       setRepairNextOffset(res.page.nextOffset);
-      const labels = await getProfileLabelsForIds(res.page.items.map((row) => row.user_id));
+      const labels =
+        res.profileLabels ?? await getProfileLabelsForIds(res.page.items.map((row) => row.user_id));
+      if (!screenActiveRef.current) return;
       setProfileLabels((prev) => ({ ...prev, ...labels }));
     } catch (e) {
       if (__DEV__) console.warn("[challenge] loadMoreRepairs", e);
     } finally {
       repairLoadMoreInFlightRef.current = false;
-      setRepairLoadingMore(false);
+      if (screenActiveRef.current) setRepairLoadingMore(false);
     }
   }, [challengeId, repairLoadingMore, repairNextOffset]);
 
@@ -697,14 +796,21 @@ export default function ChallengeDetailScreen() {
     return s;
   }, [feedNudges, myUserId]);
 
+  const persistDismissedRepairIds = useCallback((next: Set<string>) => {
+    if (!challengeId || !myUserId) return;
+    const ids = Array.from(next).slice(-120);
+    void AsyncStorage.setItem(repairDismissStorageKey(myUserId, challengeId), JSON.stringify(ids)).catch(() => {});
+  }, [challengeId, myUserId]);
+
   const dismissRepairRequest = useCallback((repairId: string) => {
     setDismissedRepairIds((prev) => {
       if (prev.has(repairId)) return prev;
       const next = new Set(prev);
       next.add(repairId);
+      persistDismissedRepairIds(next);
       return next;
     });
-  }, []);
+  }, [persistDismissedRepairIds]);
 
   const onRepairVote = useCallback(
     async (repair: StreakRepairRow, vote: "approve" | "decline") => {
@@ -715,12 +821,14 @@ export default function ChallengeDetailScreen() {
       setRepairBusyAction({ id: repair.id, vote });
       try {
         const freshPremium = await refreshPremiumAccess({ cachedAccessOk: true });
+        if (!screenActiveRef.current) return;
         if (freshPremium !== true) {
           openUpsell("streak_repair");
           return;
         }
 
         const res = await voteStreakRepair({ repairId: repair.id, vote });
+        if (!screenActiveRef.current) return;
         if (!res.ok) {
           if ("reason" in res && res.reason === "premium_required") {
             await handleServerPremiumRequired("streak_repair");
@@ -756,7 +864,7 @@ export default function ChallengeDetailScreen() {
         void loadSecondary({ silent: true });
         void refreshCohortPeerHabits();
       } finally {
-        setRepairBusyAction(null);
+        if (screenActiveRef.current) setRepairBusyAction(null);
       }
     },
     [
@@ -1034,13 +1142,30 @@ export default function ChallengeDetailScreen() {
     [challengeId, customNoteToUserId, myUserId, myHabit, showToast, load, openUpsell, refreshPremiumAccess, handleServerPremiumRequired],
   );
 
-  const pendingRepairRows = useMemo(
-    () => repairRows.filter((r) => r.status === "pending" && !dismissedRepairIds.has(r.id)),
-    [dismissedRepairIds, repairRows],
+  const repairVotesByRepairId = useMemo(() => {
+    const map = new Map<string, StreakRepairVoteRow[]>();
+    for (const vote of repairVotes) {
+      const list = map.get(vote.repair_id);
+      if (list) list.push(vote);
+      else map.set(vote.repair_id, [vote]);
+    }
+    return map;
+  }, [repairVotes]);
+
+  const actionableRepairRows = useMemo(
+    () =>
+      repairRows.filter((repair) => {
+        if (repair.status !== "pending") return false;
+        if (dismissedRepairIds.has(repair.id)) return false;
+        if (!myUserId) return true;
+        if (repair.user_id === myUserId) return true;
+        const votes = repairVotesByRepairId.get(repair.id) ?? [];
+        return !votes.some((vote) => vote.voter_id === myUserId);
+      }),
+    [dismissedRepairIds, myUserId, repairRows, repairVotesByRepairId],
   );
-  const showRepairSkeleton = secondaryLoading && !secondaryHydrated && pendingRepairRows.length === 0;
-  const primaryPendingRepair = pendingRepairRows[0] ?? null;
-  const showRepairSlot = showRepairSkeleton || Boolean(primaryPendingRepair);
+  const showRepairSkeleton = repairInitialLoading && !repairHydrated && actionableRepairRows.length === 0;
+  const showRepairSlot = showRepairSkeleton || actionableRepairRows.length > 0;
 
   const bottomPad = 40;
 
@@ -1291,11 +1416,10 @@ export default function ChallengeDetailScreen() {
                     </View>
                   </View>
                 </View>
-            ) : primaryPendingRepair ? (() => {
-              const r = primaryPendingRepair;
+            ) : actionableRepairRows.map((r, repairIndex) => {
               const requester = profileLabels[r.user_id];
               const name = participantDisplayName(requester);
-              const votes = repairVotes.filter((v) => v.repair_id === r.id);
+              const votes = repairVotesByRepairId.get(r.id) ?? [];
               const approves = votes.filter((v) => v.vote === "approve").length;
               const declines = votes.filter((v) => v.vote === "decline").length;
               const myVote = myUserId ? votes.find((v) => v.voter_id === myUserId)?.vote ?? null : null;
@@ -1317,9 +1441,10 @@ export default function ChallengeDetailScreen() {
               const declineSelectedBorder = isDark ? "rgba(239, 68, 68, 0.32)" : "rgba(220, 38, 38, 0.24)";
               const actionDisabled = Boolean(!myUserId || isRequester || declines !== 0 || busyVote);
               const expanded = expandedRepairId === r.id;
-              const extraCount = Math.max(0, pendingRepairRows.length - 1);
+              const extraCount = Math.max(0, actionableRepairRows.length - repairIndex - 1);
               return (
                 <View
+                  key={r.id}
                   style={[
                     styles.repairCompactCard,
                     expanded && styles.repairCompactCardExpanded,
@@ -1351,9 +1476,9 @@ export default function ChallengeDetailScreen() {
                       <View style={styles.repairCompactCopy}>
                         <View style={styles.repairCompactTitleRow}>
                           <Text style={[styles.repairCompactTitle, { color: theme.colors.textPrimary }]} numberOfLines={1}>
-                            {pendingRepairRows.length === 1
+                            {actionableRepairRows.length === 1
                               ? "1 pending streak repair"
-                              : `${pendingRepairRows.length} pending streak repairs`}
+                              : `Repair ${repairIndex + 1} of ${actionableRepairRows.length}`}
                           </Text>
                           <View
                             style={[
@@ -1374,24 +1499,22 @@ export default function ChallengeDetailScreen() {
                         </Text>
                       </View>
                     </Pressable>
-                    {!isRequester ? (
-                      <TouchableOpacity
-                        activeOpacity={0.75}
-                        hitSlop={8}
-                        accessibilityRole="button"
-                        accessibilityLabel="Hide repair request"
-                        onPress={() => dismissRepairRequest(r.id)}
-                        style={[
-                          styles.repairDismissButtonCompact,
-                          {
-                            backgroundColor: theme.colors.surfaceElevated,
-                            borderColor: theme.colors.border,
-                          },
-                        ]}
-                      >
-                        <X size={14} color={theme.colors.textMuted} />
-                      </TouchableOpacity>
-                    ) : null}
+                    <TouchableOpacity
+                      activeOpacity={0.75}
+                      hitSlop={8}
+                      accessibilityRole="button"
+                      accessibilityLabel="Do not show this repair request again"
+                      onPress={() => dismissRepairRequest(r.id)}
+                      style={[
+                        styles.repairDismissButtonCompact,
+                        {
+                          backgroundColor: theme.colors.surfaceElevated,
+                          borderColor: theme.colors.border,
+                        },
+                      ]}
+                    >
+                      <X size={14} color={theme.colors.textMuted} />
+                    </TouchableOpacity>
                   </View>
 
                   {expanded ? (
@@ -1536,34 +1659,34 @@ export default function ChallengeDetailScreen() {
                           />
                         </View>
                       )}
-                      {repairNextOffset != null ? (
-                        <TouchableOpacity
-                          onPress={() => void loadMoreRepairs()}
-                          disabled={repairLoadingMore}
-                          activeOpacity={0.85}
-                          style={[
-                            styles.repairInlineLoadMore,
-                            {
-                              backgroundColor: theme.colors.surfaceElevated,
-                              borderColor: theme.colors.border,
-                              opacity: repairLoadingMore ? 0.72 : 1,
-                            },
-                          ]}
-                        >
-                          {repairLoadingMore ? (
-                            <ActivityIndicator size="small" color={theme.colors.indigo[400]} />
-                          ) : (
-                            <Text style={[styles.loadMoreSecondaryText, { color: theme.colors.textSecondary }]}>
-                              Load older repair requests
-                            </Text>
-                          )}
-                        </TouchableOpacity>
-                      ) : null}
                     </View>
                   ) : null}
                 </View>
               );
-            })() : null}
+            })}
+            {!showRepairSkeleton && repairNextOffset != null ? (
+              <TouchableOpacity
+                onPress={() => void loadMoreRepairs()}
+                disabled={repairLoadingMore}
+                activeOpacity={0.85}
+                style={[
+                  styles.repairInlineLoadMore,
+                  {
+                    backgroundColor: theme.colors.surfaceElevated,
+                    borderColor: theme.colors.border,
+                    opacity: repairLoadingMore ? 0.72 : 1,
+                  },
+                ]}
+              >
+                {repairLoadingMore ? (
+                  <ActivityIndicator size="small" color={theme.colors.indigo[400]} />
+                ) : (
+                  <Text style={[styles.loadMoreSecondaryText, { color: theme.colors.textSecondary }]}>
+                    Load older repair requests
+                  </Text>
+                )}
+              </TouchableOpacity>
+            ) : null}
           </View>
           ) : null}
 

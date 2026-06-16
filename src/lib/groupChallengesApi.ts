@@ -489,6 +489,7 @@ async function fetchChallengePrimarySnapshotViaRpc(
  * blocking on a network round trip behind a spinner. Lives for the app session.
  */
 const primarySnapshotCache = new Map<string, ChallengePrimarySnapshot>();
+const primarySnapshotInFlight = new Map<string, Promise<ChallengePrimarySnapshot>>();
 
 /** Synchronous read of the last known snapshot for instant first paint (may be stale). */
 export function getCachedChallengePrimarySnapshot(
@@ -500,21 +501,31 @@ export function getCachedChallengePrimarySnapshot(
 export async function loadChallengePrimarySnapshot(
   challengeId: string,
 ): Promise<ChallengePrimarySnapshot> {
-  const viaRpc = await fetchChallengePrimarySnapshotViaRpc(challengeId);
-  if (viaRpc) {
-    primarySnapshotCache.set(challengeId, viaRpc);
-    return viaRpc;
-  }
+  const inFlight = primarySnapshotInFlight.get(challengeId);
+  if (inFlight) return inFlight;
 
-  const [g, members] = await Promise.all([
-    getChallengeGroup(challengeId),
-    listChallengeMembers(challengeId),
-  ]);
-  const memberIdsOrdered = members.map((m) => m.user_id);
-  const labels = await getProfileLabelsForIds(memberIdsOrdered);
-  const snapshot: ChallengePrimarySnapshot = { group: g, memberIdsOrdered, profileLabels: labels };
-  primarySnapshotCache.set(challengeId, snapshot);
-  return snapshot;
+  const request = (async () => {
+    const viaRpc = await fetchChallengePrimarySnapshotViaRpc(challengeId);
+    if (viaRpc) {
+      primarySnapshotCache.set(challengeId, viaRpc);
+      return viaRpc;
+    }
+
+    const [g, members] = await Promise.all([
+      getChallengeGroup(challengeId),
+      listChallengeMembers(challengeId),
+    ]);
+    const memberIdsOrdered = members.map((m) => m.user_id);
+    const labels = await getProfileLabelsForIds(memberIdsOrdered);
+    const snapshot: ChallengePrimarySnapshot = { group: g, memberIdsOrdered, profileLabels: labels };
+    primarySnapshotCache.set(challengeId, snapshot);
+    return snapshot;
+  })().finally(() => {
+    primarySnapshotInFlight.delete(challengeId);
+  });
+
+  primarySnapshotInFlight.set(challengeId, request);
+  return request;
 }
 
 export async function getChallengeGroup(id: string): Promise<ChallengeGroupRow | null> {

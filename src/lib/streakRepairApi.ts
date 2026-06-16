@@ -24,6 +24,13 @@ export type StreakRepairVoteRow = {
 };
 
 type StreakRepairActionFailure = { ok: false; error: string; reason?: "premium_required" };
+type ProfileLabel = { username: string; displayName: string | null; xp: number | null };
+type StreakRepairPageResult = {
+  ok: true;
+  page: PageResult<StreakRepairRow>;
+  votes: StreakRepairVoteRow[];
+  profileLabels?: Record<string, ProfileLabel>;
+};
 
 function actionError(error: { message?: string } | null | undefined): StreakRepairActionFailure {
   const message = String(error?.message ?? "Streak repair failed.");
@@ -32,6 +39,60 @@ function actionError(error: { message?: string } | null | undefined): StreakRepa
     error: message,
     reason: message.toLowerCase().includes("premium_required") ? "premium_required" : undefined,
   };
+}
+
+function normalizeProfileLabels(raw: unknown): Record<string, ProfileLabel> | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const out: Record<string, ProfileLabel> = {};
+  for (const [userId, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (!value || typeof value !== "object") continue;
+    const row = value as Record<string, unknown>;
+    const username = typeof row.username === "string" && row.username.trim() ? row.username.trim().toLowerCase() : "member";
+    const displayName = typeof row.displayName === "string" && row.displayName.trim() ? row.displayName.trim() : null;
+    const xp = typeof row.xp === "number" && Number.isFinite(row.xp) ? row.xp : null;
+    out[userId] = { username, displayName, xp };
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+function normalizeRepairPageRpcPayload(
+  raw: unknown,
+  limit: number,
+  offset: number,
+): StreakRepairPageResult | null {
+  if (!raw || typeof raw !== "object") return null;
+  const payload = raw as Record<string, unknown>;
+  const rows = Array.isArray(payload.repairs) ? payload.repairs as unknown[] : [];
+  const hasMore = typeof payload.hasMore === "boolean" ? payload.hasMore : rows.length > limit;
+  const repairs = (hasMore ? rows.slice(0, limit) : rows) as StreakRepairRow[];
+  const votes = Array.isArray(payload.votes) ? payload.votes as StreakRepairVoteRow[] : [];
+  return {
+    ok: true,
+    page: {
+      items: repairs,
+      hasMore,
+      nextOffset: hasMore ? offset + limit : null,
+    },
+    votes,
+    profileLabels: normalizeProfileLabels(payload.profileLabels),
+  };
+}
+
+async function listChallengePendingRepairsPageViaRpc(
+  challengeId: string,
+  request: PageRequest,
+): Promise<StreakRepairPageResult | null> {
+  const supabase = getSupabase();
+  if (!supabase) return null;
+  const offset = Math.max(0, Math.floor(request.offset));
+  const limit = Math.max(1, Math.floor(request.limit));
+  const { data, error } = await supabase.rpc("rpc_challenge_pending_repairs_v1", {
+    p_challenge_id: challengeId,
+    p_offset: offset,
+    p_limit: limit,
+  });
+  if (error) return null;
+  return normalizeRepairPageRpcPayload(data, limit, offset);
 }
 
 export async function requestStreakRepair(input: {
@@ -127,9 +188,9 @@ export async function listChallengeStreakRepairs(challengeId: string): Promise<
 
 export async function listChallengeStreakRepairsPage(
   challengeId: string,
-  request: PageRequest,
+  request: PageRequest & { status?: StreakRepairStatus },
 ): Promise<
-  { ok: true; page: PageResult<StreakRepairRow>; votes: StreakRepairVoteRow[] } | { ok: false; error: string }
+  StreakRepairPageResult | { ok: false; error: string }
 > {
   const supabase = getSupabase();
   if (!supabase) {
@@ -138,12 +199,19 @@ export async function listChallengeStreakRepairsPage(
 
   const offset = Math.max(0, Math.floor(request.offset));
   const limit = Math.max(1, Math.floor(request.limit));
-  const repairsRes = await supabase
+  if (request.status === "pending") {
+    const viaRpc = await listChallengePendingRepairsPageViaRpc(challengeId, { offset, limit });
+    if (viaRpc) return viaRpc;
+  }
+  let repairsQuery = supabase
     .from("streak_repairs")
     .select("*")
     .eq("challenge_id", challengeId)
-    .order("created_at", { ascending: false })
-    .range(offset, offset + limit);
+    .order("created_at", { ascending: false });
+  if (request.status) {
+    repairsQuery = repairsQuery.eq("status", request.status);
+  }
+  const repairsRes = await repairsQuery.range(offset, offset + limit);
   if (repairsRes.error) return { ok: false, error: repairsRes.error.message };
 
   const rows = (repairsRes.data ?? []) as unknown as StreakRepairRow[];
