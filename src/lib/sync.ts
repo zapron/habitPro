@@ -18,7 +18,6 @@ import {
   uploadHabitStreakMemoryImage,
   uploadMiniStreakMemoryImage,
 } from "./streakMemoryStorage";
-import { useHabitStore } from "../store/habitStore";
 
 const HABIT_ROW_SELECT =
   "user_id, id, title, description, mode, visibility, start_date, end_date, completed_dates, streak, total_days, is_completed, status, streak_memories, challenge_group_id, challenge_creator_timezone, mission_timezone, mission_report, mission_report_at, reminder_enabled, reminder_time_local, reminder_locked";
@@ -48,6 +47,15 @@ type RepairRow = {
 };
 
 let cachedSessionUserId: string | null = null;
+let commitHabitMemoryUpload:
+  | ((habitId: string, dateStr: string, imageUrl: string) => void)
+  | null = null;
+
+export function registerHabitMemoryUploadCommitter(
+  fn: (habitId: string, dateStr: string, imageUrl: string) => void,
+) {
+  commitHabitMemoryUpload = fn;
+}
 
 export function updateCachedAuthSession(uid: string | null) {
   cachedSessionUserId = uid;
@@ -79,7 +87,7 @@ function scheduleHabitMemoryUpload(habitId: string, dateStr: string, memory: Str
 
   void uploadHabitStreakMemoryImage({ habitId, dateStr, localUri })
     .then((imageUrl) => {
-      useHabitStore.getState().patchStreakMemory(habitId, dateStr, { imageUrl });
+      commitHabitMemoryUpload?.(habitId, dateStr, imageUrl);
       void import("./syncQueue").then(({ requestRemoteSync }) => {
         requestRemoteSync({ immediate: true });
       });

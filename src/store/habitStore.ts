@@ -2,11 +2,13 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import {
   getRemoteSyncUserId,
+  registerSyncCommitHandler,
   registerSyncSnapshotGetter,
   requestRemoteHabitDelete,
   requestRemoteMiniMissionDelete,
   requestRemoteSync,
 } from "../lib/syncQueue";
+import { registerHabitMemoryUploadCommitter } from "../lib/sync";
 import {
   Habit,
   HabitStore,
@@ -836,4 +838,30 @@ registerSyncSnapshotGetter(() => {
     dirtyHabitIds: s.dirtyHabitIds ?? [],
     dirtyMiniMissionIds: s.dirtyMiniMissionIds ?? [],
   };
+});
+
+registerSyncCommitHandler((snap) => {
+  const state = useHabitStore.getState();
+  const pushedHabitsById = new Map(snap.habits.map((habit) => [habit.id, habit]));
+  const pushedMinisById = new Map(snap.miniMissions.map((mission) => [mission.id, mission]));
+  const safeHabitIds = (snap.dirtyHabitIds ?? []).filter((id) => {
+    const current = state.habits.find((habit) => habit.id === id);
+    return current != null && current === pushedHabitsById.get(id);
+  });
+  const safeMiniIds = (snap.dirtyMiniMissionIds ?? []).filter((id) => {
+    const current = state.miniMissions.find((mission) => mission.id === id);
+    return current != null && current === pushedMinisById.get(id);
+  });
+  state.clearDirtyState(safeHabitIds, safeMiniIds);
+
+  const nextState = useHabitStore.getState();
+  return {
+    hasMoreDirty:
+      (nextState.dirtyHabitIds?.length ?? 0) > 0 ||
+      (nextState.dirtyMiniMissionIds?.length ?? 0) > 0,
+  };
+});
+
+registerHabitMemoryUploadCommitter((habitId, dateStr, imageUrl) => {
+  useHabitStore.getState().patchStreakMemory(habitId, dateStr, { imageUrl });
 });

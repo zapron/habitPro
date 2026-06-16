@@ -1,5 +1,4 @@
 import type { HabitStore } from "../types/habit";
-import { useHabitStore } from "../store/habitStore";
 import { InteractionManager } from "react-native";
 import { saveAccountSnapshotBackup } from "./accountBackup";
 import { deleteRemoteHabit, deleteRemoteMiniMission, pushFullState } from "./sync";
@@ -12,6 +11,7 @@ type Snapshot = Pick<
 let userId: string | null = null;
 let syncEnabled = false;
 let getSnapshot: (() => Snapshot) | null = null;
+let commitSyncedSnapshot: ((snapshot: Snapshot) => { hasMoreDirty: boolean }) | null = null;
 
 let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 let syncGeneration = 0;
@@ -65,6 +65,10 @@ function notifySyncSuccess() {
 
 export function registerSyncSnapshotGetter(fn: () => Snapshot) {
   getSnapshot = fn;
+}
+
+export function registerSyncCommitHandler(fn: (snapshot: Snapshot) => { hasMoreDirty: boolean }) {
+  commitSyncedSnapshot = fn;
 }
 
 /**
@@ -132,24 +136,9 @@ function flush() {
     pushFullState(flushUserId, snap)
       .then(() => {
         if (!syncEnabled || userId !== flushUserId || syncGeneration !== flushGeneration) return;
-        const state = useHabitStore.getState();
-        const pushedHabitsById = new Map(snap.habits.map((habit) => [habit.id, habit]));
-        const pushedMinisById = new Map(snap.miniMissions.map((mission) => [mission.id, mission]));
-        const safeHabitIds = (snap.dirtyHabitIds ?? []).filter((id) => {
-          const current = state.habits.find((habit) => habit.id === id);
-          return current != null && current === pushedHabitsById.get(id);
-        });
-        const safeMiniIds = (snap.dirtyMiniMissionIds ?? []).filter((id) => {
-          const current = state.miniMissions.find((mission) => mission.id === id);
-          return current != null && current === pushedMinisById.get(id);
-        });
-        state.clearDirtyState(safeHabitIds, safeMiniIds);
+        const commitResult = commitSyncedSnapshot?.(snap);
         notifySyncSuccess();
-        const nextState = useHabitStore.getState();
-        if (
-          (nextState.dirtyHabitIds?.length ?? 0) > 0 ||
-          (nextState.dirtyMiniMissionIds?.length ?? 0) > 0
-        ) {
+        if (commitResult?.hasMoreDirty) {
           requestRemoteSync({ immediate: false });
         }
       })
