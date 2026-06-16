@@ -619,6 +619,7 @@ function ParticipantCard({
   highlightFinish,
   onOpenMine,
   onOpenImage,
+  onOpenPlayerJourney,
 }: {
   row: LiveMiniParticipantRow;
   rank: number | null;
@@ -628,6 +629,7 @@ function ParticipantCard({
   highlightFinish: boolean;
   onOpenMine: () => void;
   onOpenImage: (uri: string) => void;
+  onOpenPlayerJourney: (userId: string, profile?: LiveMiniProfileLabel) => void;
 }) {
   const { theme, isDark } = useTheme();
   const finishGlow = useRef(new Animated.Value(0)).current;
@@ -649,6 +651,11 @@ function ParticipantCard({
   const progress = elapsedSeconds == null ? 0 : Math.min(1, elapsedSeconds / totalSeconds);
   const showProgress = row.status === "completed" || row.status === "in_progress";
   const memoryImage = row.memory_image_url ? withImageVersion(row.memory_image_url, row.updated_at) : null;
+  const playerName = displayName(profile);
+
+  const handlePlayerJourneyPress = useCallback(() => {
+    onOpenPlayerJourney(row.user_id, profile);
+  }, [onOpenPlayerJourney, profile, row.user_id]);
 
   useEffect(() => {
     if (!highlightFinish) return;
@@ -679,9 +686,20 @@ function ParticipantCard({
       <View style={styles.participantTop}>
         <View style={styles.nameBlock}>
           <View style={styles.participantNameRow}>
-            <Text style={[styles.participantName, { color: theme.colors.textPrimary }]} numberOfLines={1}>
-              {displayName(profile)}
-            </Text>
+            <Pressable
+              onPress={handlePlayerJourneyPress}
+              hitSlop={6}
+              accessibilityRole="button"
+              accessibilityLabel={`Open player journey for ${playerName}`}
+              style={({ pressed }) => [
+                styles.participantNamePressable,
+                pressed ? styles.participantNamePressed : null,
+              ]}
+            >
+              <Text style={[styles.participantName, { color: theme.colors.textPrimary }]} numberOfLines={1}>
+                {playerName}
+              </Text>
+            </Pressable>
             {isMe ? (
               <View
                 style={[
@@ -983,6 +1001,26 @@ export default function LiveMiniSquadScreen() {
       setRefreshing(false);
     }
   }, [load]);
+
+  const onOpenPlayerJourney = useCallback(
+    (targetUserId: string, profile?: LiveMiniProfileLabel) => {
+      if (!targetUserId) return;
+      if (userId && targetUserId === userId) {
+        router.push("/my-journey");
+        return;
+      }
+      router.push({
+        pathname: "/community-player/[id]",
+        params: {
+          id: targetUserId,
+          username: profile?.username ?? "",
+          displayName: profile?.displayName ?? "",
+          xp: profile?.xp != null ? String(profile.xp) : "0",
+        },
+      });
+    },
+    [router, userId],
+  );
 
   const squad = snapshot?.squad ?? null;
   const participants = snapshot?.participants ?? [];
@@ -1387,6 +1425,7 @@ export default function LiveMiniSquadScreen() {
                 if (mid) router.push(`/mini/${mid}`);
               }}
               onOpenImage={setOpenImageUri}
+              onOpenPlayerJourney={onOpenPlayerJourney}
             />
           ))}
         </ScrollView>
@@ -1561,6 +1600,8 @@ const styles = StyleSheet.create({
   nameBlock: { flex: 1, minWidth: 0 },
   participantNameRow: { flexDirection: "row", alignItems: "center", gap: 7, minWidth: 0 },
   participantName: { fontSize: 19, lineHeight: 24, fontWeight: "900", flexShrink: 1 },
+  participantNamePressable: { flexShrink: 1, minWidth: 0 },
+  participantNamePressed: { opacity: 0.72 },
   youBadge: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 7, paddingVertical: 3, flexShrink: 0 },
   youBadgeText: { fontSize: 10, lineHeight: 12, fontWeight: "900" },
   metaLineWrap: { marginTop: 4 },

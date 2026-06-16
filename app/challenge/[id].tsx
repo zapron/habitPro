@@ -128,6 +128,7 @@ type ParticipantCardProps = {
   onSendNudge: (toUserId: string, kind: PresetChallengeNudgeKind) => Promise<void>;
   openUpsell: (reason: any) => void;
   onOpenCustomNote: (toUserId: string) => void;
+  onOpenPlayerJourney: (memberId: string, label?: ProfileLabel) => void;
   themedStyles: any;
   theme: any;
   isDark: boolean;
@@ -147,6 +148,7 @@ const ParticipantCard = memo(function ParticipantCard({
   onSendNudge,
   openUpsell,
   onOpenCustomNote,
+  onOpenPlayerJourney,
   themedStyles,
   theme,
   isDark,
@@ -170,20 +172,31 @@ const ParticipantCard = memo(function ParticipantCard({
     onOpenCustomNote(memberId);
   }, [onOpenCustomNote, memberId]);
 
+  const handlePlayerJourneyPress = useCallback(() => {
+    onOpenPlayerJourney(memberId, label);
+  }, [label, memberId, onOpenPlayerJourney]);
+
   return (
     <View style={[styles.participantCard, themedStyles.card]}>
       <View style={styles.participantHeaderRow}>
         <View style={styles.participantNameLevelCluster}>
-          <Text
-            style={[
-              styles.participantName,
-              styles.participantNameInline,
-              { color: theme.colors.textPrimary },
+          <Pressable
+            onPress={handlePlayerJourneyPress}
+            hitSlop={6}
+            accessibilityRole="button"
+            accessibilityLabel={`Open player journey for ${nameOnCard}`}
+            style={({ pressed }) => [
+              styles.participantNamePressable,
+              pressed ? styles.participantNamePressed : null,
             ]}
-            numberOfLines={2}
           >
-            {nameOnCard}
-          </Text>
+            <Text
+              style={[styles.participantName, { color: theme.colors.textPrimary }]}
+              numberOfLines={2}
+            >
+              {nameOnCard}
+            </Text>
+          </Pressable>
           {memberLevel != null ? (
             <View style={[styles.levelPill, themedStyles.levelPill]}>
               <Text style={[styles.levelPillText, { color: theme.colors.yellow[400] }]}>
@@ -965,6 +978,26 @@ export default function ChallengeDetailScreen() {
     [openUpsell, refreshPremiumAccess],
   );
 
+  const onOpenPlayerJourney = useCallback(
+    (memberId: string, label?: ProfileLabel) => {
+      if (!memberId) return;
+      if (myUserId && memberId === myUserId) {
+        router.push("/my-journey");
+        return;
+      }
+      router.push({
+        pathname: "/community-player/[id]",
+        params: {
+          id: memberId,
+          username: label?.username ?? "",
+          displayName: label?.displayName ?? "",
+          xp: label?.xp != null ? String(label.xp) : "0",
+        },
+      });
+    },
+    [myUserId, router],
+  );
+
   const onSubmitCustomNote = useCallback(
     async (text: string) => {
       if (!challengeId || !customNoteToUserId || !myUserId) return;
@@ -1575,6 +1608,7 @@ export default function ChallengeDetailScreen() {
                 onSendNudge={onSendNudge}
                 openUpsell={openUpsell}
                 onOpenCustomNote={onOpenCustomNote}
+                onOpenPlayerJourney={onOpenPlayerJourney}
                 themedStyles={themedStyles}
                 theme={theme}
                 isDark={isDark}
@@ -2018,6 +2052,13 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     letterSpacing: -0.2,
   },
+  participantNamePressable: {
+    flexGrow: 0,
+    flexShrink: 1,
+    minWidth: 0,
+    maxWidth: "100%",
+  },
+  participantNamePressed: { opacity: 0.72 },
   participantNameInline: {
     flexGrow: 0,
     flexShrink: 1,
