@@ -24,7 +24,7 @@ import { View,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import { ArrowLeft, Trash2, Lock, RotateCcw, Sparkles, Star, Plane, Gamepad2, Globe, User, Users, Info, Bell } from 'lucide-react-native';
+import { ArrowLeft, Trash2, Lock, RotateCcw, Star, Plane, Gamepad2, Globe, User, Users, Info, Bell } from 'lucide-react-native';
 import Svg, { Circle, G } from 'react-native-svg';
 import { useHabitStore } from '../../src/store/habitStore';
 import { useShallow } from 'zustand/react/shallow';
@@ -198,7 +198,7 @@ const HabitGridBrandRing = React.memo(function HabitGridBrandRing({
             {isMilestone ? (
                 <Star size={8} color={theme.colors.yellow[400]} fill={theme.colors.yellow[400]} style={styles.brandRingAccent} />
             ) : current ? (
-                <Sparkles size={8} color={theme.colors.cyan[400]} style={styles.brandRingAccent} />
+                <Star size={8} color={theme.colors.cyan[400]} style={styles.brandRingAccent} />
             ) : null}
             {hasMomentMedia ? (
                 <View style={[styles.memoryDot, { backgroundColor: theme.colors.amber[500], borderColor: theme.colors.surface }]} />

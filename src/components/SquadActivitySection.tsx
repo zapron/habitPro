@@ -7,7 +7,7 @@ import {
   StyleSheet,
   View,
 } from "react-native";
-import { ChevronDown, Flame, Heart, MessageSquare, Sparkles, Flag, Users } from "lucide-react-native";
+import { ChevronDown, Flame, Heart, MessageSquare, Trophy, Flag, Users } from "lucide-react-native";
 import type { AppTheme } from "../styles/theme";
 import type {
   ChallengeActivityRow,
@@ -139,7 +139,7 @@ function NudgeKindIcon({ kind, theme }: { kind: ChallengeNudgeKind; theme: AppTh
     case "fire":
       return <Flame {...common} color={theme.colors.amber[500]} />;
     case "congrats":
-      return <Sparkles {...common} color={theme.colors.indigo[400]} />;
+      return <Trophy {...common} color={theme.colors.indigo[400]} />;
     case "custom_note":
       return <MessageSquare {...common} color={theme.colors.indigo[400]} />;
   }
@@ -376,7 +376,7 @@ export const SquadActivitySection = memo(function SquadActivitySection({
                         </Text>
                       ) : (
                         <>
-                          <Sparkles size={theme.icon.xs} color={theme.colors.indigo[400]} strokeWidth={2.2} />
+                          <Trophy size={theme.icon.xs} color={theme.colors.indigo[400]} strokeWidth={2.2} />
                           <Text style={[styles.congratsPillText, { color: theme.colors.indigo[400] }]}>Congrats</Text>
                         </>
                       )}
@@ -397,7 +397,7 @@ export const SquadActivitySection = memo(function SquadActivitySection({
             }
           >
             <View style={styles.subsectionHeader}>
-              <Sparkles size={theme.icon.sm} color={theme.colors.amber[500]} strokeWidth={2.2} />
+              <MessageSquare size={theme.icon.sm} color={theme.colors.amber[500]} strokeWidth={2.2} />
               <Text style={[styles.subsectionTitle, { color: theme.colors.textMuted }]}>Recent nudges</Text>
             </View>
             {feedNudges.map((row) => (

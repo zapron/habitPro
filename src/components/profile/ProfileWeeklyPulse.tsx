@@ -6,7 +6,7 @@ import {
 } from "react-native";
 import type { AppTheme } from "../../styles/theme";
 import { weeklyTierProgressFraction } from "../../utils/profileStats";
-import { Sparkles } from "lucide-react-native";
+import { Flame } from "lucide-react-native";
 
 type Props = {
   theme: AppTheme;
@@ -44,7 +44,7 @@ export const ProfileWeeklyPulse = memo(function ProfileWeeklyPulse({
     >
       <View style={styles.headRow}>
         <View style={styles.headLeft}>
-          <Sparkles size={20} color={theme.colors.amber[500]} />
+          <Flame size={20} color={theme.colors.amber[500]} />
           <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>This week</Text>
         </View>
         <Text style={[styles.scorePill, { color: theme.colors.indigo[400], backgroundColor: isDark ? "rgba(99,102,241,0.15)" : "rgba(79,70,229,0.1)" }]}>

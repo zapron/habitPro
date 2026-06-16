@@ -19,8 +19,8 @@ import * as Haptics from "expo-haptics";
 import {
   ChevronDown,
   ChevronUp,
+  Camera,
   Radio,
-  Sparkles,
   ThumbsUp,
 } from "lucide-react-native";
 import { LinearGradient } from "expo-linear-gradient";
@@ -375,7 +375,7 @@ export const CommunityWinFeedPost = memo(function CommunityWinFeedPost({
       }
     >
       <View style={[photoFrameStyle, styles.photoPlaceholder, { backgroundColor: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)" }]}>
-        <Sparkles size={36} color={theme.colors.textMuted} strokeWidth={1.8} />
+        <Camera size={36} color={theme.colors.textMuted} strokeWidth={1.8} />
       </View>
     </Pressable>
   );

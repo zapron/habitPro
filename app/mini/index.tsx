@@ -22,7 +22,7 @@ import {
   Timer,
   Globe,
   Radio,
-  Sparkles,
+  Camera,
   Plus,
   CircleX,
 } from "lucide-react-native";
@@ -242,7 +242,7 @@ const MiniMissionCard = memo(function MiniMissionCard({ item }: { item: MiniMiss
             item.completionMemory?.imageUri ||
             item.completionMemory?.imageUrl) && (
             <View style={styles.momentBadge}>
-              <Sparkles size={12} color={theme.colors.amber[500]} />
+              <Camera size={12} color={theme.colors.amber[500]} />
               <Text style={[styles.momentBadgeText, { color: theme.colors.amber[500] }]}>Moment</Text>
             </View>
           )}

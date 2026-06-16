@@ -18,7 +18,7 @@ import type { ReactElement } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
-import { Sparkles } from "lucide-react-native";
+import { Flame } from "lucide-react-native";
 import { useTheme } from "../context/ThemeContext";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
@@ -399,7 +399,7 @@ export function CommunityWinsFeed({
         ListEmptyComponent={
           !loading ? (
             <View style={[styles.emptyCard, { borderColor: theme.colors.border, backgroundColor: theme.colors.surface }]}>
-              <Sparkles size={28} color={theme.colors.amber[500]} />
+              <Flame size={28} color={theme.colors.amber[500]} />
               <Text style={[styles.emptyTitle, { color: theme.colors.textPrimary, marginTop: 12 }]}>No wins yet</Text>
               <Text style={[styles.emptyBody, { color: theme.colors.textSecondary }]}>
                 Complete a public mini mission and choose to post it here. Pull to refresh.

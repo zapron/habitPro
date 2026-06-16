@@ -36,7 +36,7 @@ import {
   Trophy,
   Fuel,
   Flame,
-  Sparkles,
+  Camera,
   Info,
   Maximize2,
   Minimize2,
@@ -2146,7 +2146,7 @@ export default function MiniMissionDetail() {
                 mission.completionMemory?.note) && (
                 <View style={styles.completionMomentSection}>
                   <View style={styles.completionMomentHead}>
-                    <Sparkles size={16} color={theme.colors.amber[500]} />
+                    <Camera size={16} color={theme.colors.amber[500]} />
                     <Text style={[styles.completionMomentTitle, { color: theme.colors.textPrimary }]}>
                       Your moment
                     </Text>
