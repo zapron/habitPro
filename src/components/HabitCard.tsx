@@ -342,7 +342,7 @@ export const HabitCard = memo(({ item, nowMs }: HabitCardProps) => {
                                       : `${Math.round(campaignProgress * 100)}% Complete`}
                             </Text>
                         </View>
-                        {!missionWon && item.challengeGroupId ? (
+                        {item.challengeGroupId ? (
                             <TouchableOpacity
                                 onPress={() => router.push(`/challenge/${item.challengeGroupId}`)}
                                 activeOpacity={0.82}
@@ -359,7 +359,7 @@ export const HabitCard = memo(({ item, nowMs }: HabitCardProps) => {
                             >
                                 <Users size={13} color={theme.colors.amber[500]} strokeWidth={2.6} />
                                 <Text style={[styles.groupStreakPillText, { color: theme.colors.amber[500] }]}>
-                                    View group streaks
+                                    View Group Streaks
                                 </Text>
                             </TouchableOpacity>
                         ) : null}
