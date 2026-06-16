@@ -1421,12 +1421,19 @@ export default function CompeteScreen() {
       <Button
         title="View Group Streaks"
         variant="subtle"
-        icon={<Eye size={18} color={theme.colors.indigo[400]} />}
+        icon={<Eye size={19} color={theme.colors.amber[500]} strokeWidth={2.6} />}
         onPress={() => router.push(`/challenge/${inv.challenge_id}`)}
         accessibilityRole="button"
         accessibilityLabel={`View group streaks: ${missionTitle}`}
-        style={styles.inviteGroupStreaksBtn}
-        textStyle={[styles.inviteGroupStreaksBtnText, { color: theme.colors.indigo[400] }]}
+        style={[
+          styles.inviteGroupStreaksBtn,
+          {
+            backgroundColor: "transparent",
+            borderColor: "rgba(245, 158, 11, 0.68)",
+            shadowColor: theme.colors.amber[500],
+          },
+        ]}
+        textStyle={[styles.inviteGroupStreaksBtnText, { color: theme.colors.amber[500] }]}
       />
     );
 
@@ -2339,13 +2346,18 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
-    marginTop: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 12,
+    marginTop: 14,
+    minHeight: 56,
+    paddingVertical: 14,
+    paddingHorizontal: 18,
+    borderRadius: 16,
     borderWidth: 1,
+    shadowOpacity: 0.18,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
   },
-  inviteGroupStreaksBtnText: { fontSize: 14, fontWeight: "700" },
+  inviteGroupStreaksBtnText: { fontSize: 15, fontWeight: "900", letterSpacing: 0 },
   inviteActions: { flexDirection: "row", gap: 10, alignItems: "center" },
   declineBtn: {
     flex: 1,

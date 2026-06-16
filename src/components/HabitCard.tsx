@@ -345,18 +345,19 @@ export const HabitCard = memo(({ item, nowMs }: HabitCardProps) => {
                         {!missionWon && item.challengeGroupId ? (
                             <TouchableOpacity
                                 onPress={() => router.push(`/challenge/${item.challengeGroupId}`)}
-                                activeOpacity={0.85}
+                                activeOpacity={0.82}
                                 style={[
                                     styles.groupStreakPill,
                                     {
-                                        borderColor: 'rgba(245, 158, 11, 0.45)',
-                                        backgroundColor: 'rgba(245, 158, 11, 0.14)',
+                                        borderColor: 'rgba(245, 158, 11, 0.72)',
+                                        backgroundColor: 'transparent',
+                                        shadowColor: theme.colors.amber[500],
                                     },
                                 ]}
                                 accessibilityRole="button"
                                 accessibilityLabel="View group streaks"
                             >
-                                <Users size={10} color={theme.colors.amber[500]} />
+                                <Users size={13} color={theme.colors.amber[500]} strokeWidth={2.6} />
                                 <Text style={[styles.groupStreakPillText, { color: theme.colors.amber[500] }]}>
                                     View group streaks
                                 </Text>
@@ -482,13 +483,18 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         alignSelf: 'center',
-        paddingVertical: 4,
-        paddingHorizontal: 8,
+        gap: 5,
+        paddingVertical: 7,
+        paddingHorizontal: 11,
         borderRadius: 9999,
         borderWidth: 1,
         flexShrink: 0,
+        shadowOpacity: 0.18,
+        shadowRadius: 8,
+        shadowOffset: { width: 0, height: 3 },
+        elevation: 2,
     },
-    groupStreakPillText: { fontSize: 8, fontWeight: '800', letterSpacing: 0.25 },
+    groupStreakPillText: { fontSize: 10.5, fontWeight: '900', letterSpacing: 0 },
     progressText: { fontWeight: '700', fontSize: 18 },
     streakNumber: { fontWeight: "800", fontSize: 12.5, letterSpacing: -0.15, lineHeight: 15 },
     streakMicroLabel: { fontSize: 8.5, fontWeight: "900", letterSpacing: 1.0, marginTop: 1 },
