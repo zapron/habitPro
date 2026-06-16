@@ -899,37 +899,44 @@ export default function ProfileScreen() {
         ) : null}
 
         <View style={[styles.hero, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, ...theme.shadow.card }]}>
-          <LevelXpRing level={level} xpInLevel={xpInLevel}>
-            <View
-              style={[
-                styles.levelOrb,
-                {
-                  borderColor: theme.colors.border,
-                  ...theme.shadow.glow,
-                },
-              ]}
-            >
-              <Image
-                source={require("../../assets/habitpro-logo-transparent-v3.png")}
-                style={styles.heroLogo as ImageStyle}
-                resizeMode="contain"
-                accessibilityLabel="HabitPro logo"
-              />
+          <Pressable
+            onPress={() => router.push("/my-journey")}
+            accessibilityRole="button"
+            accessibilityLabel="Open my journey"
+            style={({ pressed }) => [{ opacity: pressed ? 0.88 : 1 }]}
+          >
+            <LevelXpRing level={level} xpInLevel={xpInLevel}>
               <View
                 style={[
-                  styles.levelBadge,
+                  styles.levelOrb,
                   {
-                    backgroundColor: theme.colors.surface,
                     borderColor: theme.colors.border,
+                    ...theme.shadow.glow,
                   },
                 ]}
               >
-                <Text style={[styles.levelBadgeText, { color: theme.colors.textPrimary }]}>
-                  {level}
-                </Text>
+                <Image
+                  source={require("../../assets/habitpro-logo-transparent-v3.png")}
+                  style={styles.heroLogo as ImageStyle}
+                  resizeMode="contain"
+                  accessibilityLabel="HabitPro logo"
+                />
+                <View
+                  style={[
+                    styles.levelBadge,
+                    {
+                      backgroundColor: theme.colors.surface,
+                      borderColor: theme.colors.border,
+                    },
+                  ]}
+                >
+                  <Text style={[styles.levelBadgeText, { color: theme.colors.textPrimary }]}>
+                    {level}
+                  </Text>
+                </View>
               </View>
-            </View>
-          </LevelXpRing>
+            </LevelXpRing>
+          </Pressable>
           <View style={styles.heroText}>
             <Text style={[styles.levelInline, { color: theme.colors.textMuted }]}>Level {level}</Text>
             <View style={styles.xpLine}>
