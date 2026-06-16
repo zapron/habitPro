@@ -22,7 +22,7 @@ export default function CommunityScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      void refreshPremiumAccess({ serverOnly: true, cachedAccessOk: true });
+      void refreshPremiumAccess({ serverOnly: true, cachedAccessOk: true, background: true });
     }, [refreshPremiumAccess]),
   );
 

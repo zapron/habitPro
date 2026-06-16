@@ -69,7 +69,7 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
 
   useEffect(() => {
     if (!visible || !configured || !signedIn) return;
-    void refreshPremiumAccess({ serverOnly: true, cachedAccessOk: true });
+    void refreshPremiumAccess({ serverOnly: true, cachedAccessOk: true, background: true });
   }, [visible, configured, signedIn, refreshPremiumAccess]);
 
   const handleServerPremiumRequired = useCallback(async () => {

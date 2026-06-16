@@ -536,7 +536,7 @@ export default function HabitDetail() {
     useFocusEffect(
         useCallback(() => {
             setNow(Date.now());
-            void refreshPremiumAccess({ serverOnly: true, cachedAccessOk: true });
+            void refreshPremiumAccess({ serverOnly: true, cachedAccessOk: true, background: true });
         }, [refreshPremiumAccess]),
     );
 

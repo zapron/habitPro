@@ -7,6 +7,7 @@ import { traceAsync } from "../lib/perfTrace";
 
 const DEFAULT_MIN_INTERVAL_MS = 30_000;
 const BILLING_REFRESH_TIMEOUT_MS = 2_500;
+const SERVER_REFRESH_TIMEOUT_MS = 2_500;
 
 type RefreshPremiumAccessOptions = {
   force?: boolean;
@@ -14,6 +15,8 @@ type RefreshPremiumAccessOptions = {
   serverOnly?: boolean;
   /** For actions that have server-side enforcement, trust current local premium state before forcing a refresh. */
   cachedAccessOk?: boolean;
+  /** Passive screen warmup. Never start a network refresh while the app-level premium flag is still loading. */
+  background?: boolean;
 };
 
 type PremiumAccessSnapshot = {
@@ -94,6 +97,7 @@ export function useRefreshPremiumAccess(minIntervalMs = DEFAULT_MIN_INTERVAL_MS)
       if (options?.cachedAccessOk && !options.force) {
         if (isPremium) return true;
         if (!premiumLoading) return false;
+        if (options.background) return selectAccess(cache.lastSnapshot, options);
       }
 
       // Premium users: avoid re-checking on every interaction. If we've already confirmed
@@ -123,7 +127,11 @@ export function useRefreshPremiumAccess(minIntervalMs = DEFAULT_MIN_INTERVAL_MS)
         const request = traceAsync(
           "premium.refresh",
           async () => {
-            const dbPremium = await refreshPremium();
+            const dbPremium = await withTimeout<boolean | null>(
+              refreshPremium(),
+              SERVER_REFRESH_TIMEOUT_MS,
+              null,
+            );
             const priorRevenueCatAccess = cache.lastSnapshot?.revenueCatAccess === true;
             const serverAccess = dbPremium == null ? null : Boolean(dbPremium);
             return {
@@ -138,6 +146,7 @@ export function useRefreshPremiumAccess(minIntervalMs = DEFAULT_MIN_INTERVAL_MS)
               force: Boolean(options.force),
               serverOnly: true,
               cachedAccessOk: Boolean(options.cachedAccessOk),
+              background: Boolean(options.background),
             },
           },
         );
@@ -169,7 +178,7 @@ export function useRefreshPremiumAccess(minIntervalMs = DEFAULT_MIN_INTERVAL_MS)
         async () => {
           const [billingResult, premiumResult] = await Promise.allSettled([
             withTimeout(refreshBilling(), BILLING_REFRESH_TIMEOUT_MS, null),
-            refreshPremium(),
+            withTimeout<boolean | null>(refreshPremium(), SERVER_REFRESH_TIMEOUT_MS, null),
           ]);
           const info = billingResult.status === "fulfilled" ? billingResult.value : null;
           const dbPremium = premiumResult.status === "fulfilled" ? premiumResult.value : null;
@@ -194,6 +203,7 @@ export function useRefreshPremiumAccess(minIntervalMs = DEFAULT_MIN_INTERVAL_MS)
             force: Boolean(options?.force),
             serverOnly: Boolean(options?.serverOnly),
             cachedAccessOk: Boolean(options?.cachedAccessOk),
+            background: Boolean(options?.background),
           },
         },
       );

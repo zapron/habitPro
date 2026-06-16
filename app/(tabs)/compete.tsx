@@ -905,7 +905,7 @@ export default function CompeteScreen() {
   useFocusEffect(
     useCallback(() => {
       if (!isPremium || premiumLoading) {
-        void refreshPremiumAccess({ serverOnly: true, cachedAccessOk: true });
+        void refreshPremiumAccess({ serverOnly: true, cachedAccessOk: true, background: true });
       }
     }, [isPremium, premiumLoading, refreshPremiumAccess]),
   );

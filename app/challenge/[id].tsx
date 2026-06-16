@@ -540,7 +540,7 @@ export default function ChallengeDetailScreen() {
       if (silent) scheduleSecondaryHydration();
       void load({ silent });
       void refreshCohortPeerHabitsCached();
-      void refreshPremiumAccess({ serverOnly: true, cachedAccessOk: true });
+      void refreshPremiumAccess({ serverOnly: true, cachedAccessOk: true, background: true });
       return () => {
         screenActiveRef.current = false;
         hydrationTasksRef.current.forEach((task) => task.cancel?.());

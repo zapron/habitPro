@@ -104,7 +104,7 @@ export function StreakRepairSheet({ visible, onClose, habit, eligible, onRequest
 
   useEffect(() => {
     if (!visible || !isGroup) return;
-    void refreshPremiumAccess({ serverOnly: true, cachedAccessOk: true });
+    void refreshPremiumAccess({ serverOnly: true, cachedAccessOk: true, background: true });
   }, [visible, isGroup, refreshPremiumAccess]);
 
   return (

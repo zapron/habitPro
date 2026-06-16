@@ -1157,7 +1157,7 @@ export default function MiniMissionDetail() {
 
   useFocusEffect(
     useCallback(() => {
-      void refreshPremiumAccess({ serverOnly: true, cachedAccessOk: true });
+      void refreshPremiumAccess({ serverOnly: true, cachedAccessOk: true, background: true });
     }, [refreshPremiumAccess]),
   );
 
@@ -1429,7 +1429,7 @@ export default function MiniMissionDetail() {
     setFocusModeOpen(false);
     setTimerFrozenAtMs(Date.now());
     setCompleteSheetOpen(true);
-    void refreshPremiumAccess({ serverOnly: true, cachedAccessOk: true });
+    void refreshPremiumAccess({ serverOnly: true, cachedAccessOk: true, background: true });
   };
 
   const handleCompleteCommit = async (
