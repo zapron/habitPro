@@ -246,31 +246,36 @@ export default function LoginScreen() {
           ) : supabaseConfigured && (
             <>
               <Text style={[styles.label, { color: labelColor }]}>Email</Text>
-              <TextInput
+              <View
                 style={[
-                  styles.input,
+                  styles.fieldShell,
                   {
                     backgroundColor: glassSurface,
-                    borderColor: glassBorder,
-                    color: fieldTextColor,
+                    borderColor: borderFor("email"),
                   },
                   focused === "email" && { borderColor: focusedBorder },
                 ]}
-                placeholder="you@example.com"
-                placeholderTextColor={fieldMutedColor}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoCorrect={false}
-                value={email}
-                onChangeText={setEmail}
-                onFocus={() => setFocused("email")}
-                onBlur={() => setFocused(null)}
-                editable={!busy}
-              />
+              >
+                <TextInput
+                  style={[styles.fieldInput, { color: fieldTextColor }]}
+                  placeholder="you@example.com"
+                  placeholderTextColor={fieldMutedColor}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  value={email}
+                  onChangeText={setEmail}
+                  onFocus={() => setFocused("email")}
+                  onBlur={() => setFocused(null)}
+                  editable={!busy}
+                  underlineColorAndroid="transparent"
+                />
+              </View>
 
               <Text style={[styles.label, { color: labelColor }]}>Password</Text>
               <View
                 style={[
+                  styles.fieldShell,
                   styles.passwordOuter,
                   {
                     backgroundColor: glassSurface,
@@ -280,7 +285,7 @@ export default function LoginScreen() {
                 ]}
               >
                 <TextInput
-                  style={[styles.passwordInput, { color: fieldTextColor }]}
+                  style={[styles.fieldInput, styles.passwordInput, { color: fieldTextColor }]}
                   placeholder="••••••••"
                   placeholderTextColor={fieldMutedColor}
                   secureTextEntry={!showPassword}
@@ -290,6 +295,7 @@ export default function LoginScreen() {
                   onBlur={() => setFocused(null)}
                   autoCapitalize="none"
                   editable={!busy}
+                  underlineColorAndroid="transparent"
                 />
                 <TouchableOpacity
                   style={styles.eyeButton}
@@ -312,6 +318,7 @@ export default function LoginScreen() {
                   </Text>
                   <View
                     style={[
+                      styles.fieldShell,
                       styles.passwordOuter,
                       {
                         backgroundColor: glassSurface,
@@ -321,7 +328,7 @@ export default function LoginScreen() {
                     ]}
                   >
                     <TextInput
-                      style={[styles.passwordInput, { color: fieldTextColor }]}
+                      style={[styles.fieldInput, styles.passwordInput, { color: fieldTextColor }]}
                       placeholder="••••••••"
                       placeholderTextColor={fieldMutedColor}
                       secureTextEntry={!showConfirmPassword}
@@ -331,6 +338,7 @@ export default function LoginScreen() {
                       onBlur={() => setFocused(null)}
                       autoCapitalize="none"
                       editable={!busy}
+                      underlineColorAndroid="transparent"
                     />
                     <TouchableOpacity
                       style={styles.eyeButton}
@@ -561,8 +569,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 12,
+    backgroundColor: "transparent",
   },
-  googleBtnText: { fontSize: 16, fontWeight: "700" },
+  googleBtnText: { fontSize: 16, fontWeight: "700", backgroundColor: "transparent" },
   dividerRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -586,25 +595,32 @@ const styles = StyleSheet.create({
     shadowRadius: 18,
     elevation: 1,
   },
-  passwordOuter: {
+  fieldShell: {
     flexDirection: "row",
     alignItems: "center",
     borderWidth: 1,
     borderRadius: 14,
     marginBottom: 14,
-    paddingRight: 4,
     width: "100%",
     shadowColor: "#020617",
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.1,
     shadowRadius: 18,
     elevation: 1,
+    overflow: "hidden",
   },
-  passwordInput: {
+  fieldInput: {
     flex: 1,
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 16,
+    backgroundColor: "transparent",
+  },
+  passwordOuter: {
+    paddingRight: 4,
+  },
+  passwordInput: {
+    minWidth: 0,
   },
   eyeButton: {
     padding: 10,
