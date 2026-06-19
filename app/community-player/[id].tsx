@@ -17,6 +17,7 @@ import {
   type ViewStyle,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { LinearGradient } from "expo-linear-gradient";
 import {
   ArrowLeft,
   Camera,
@@ -1060,11 +1061,28 @@ function MissionGalleryModal({
               disabled={journeyLoadingMore}
               accessibilityRole="button"
               accessibilityLabel="Load more journey moments"
-              style={[styles.loadMoreButton, { borderColor: theme.colors.border, backgroundColor: theme.colors.surface }]}
+              style={[
+                styles.loadMoreButton,
+                {
+                  borderColor: isDark ? "rgba(165, 180, 252, 0.42)" : "rgba(79, 70, 229, 0.2)",
+                  opacity: journeyLoadingMore ? 0.78 : 1,
+                },
+              ]}
             >
-              <Text style={[styles.loadMoreText, { color: theme.colors.textSecondary }]}>
-                {journeyLoadingMore ? "Loading..." : "Load more journey"}
-              </Text>
+              <LinearGradient
+                colors={
+                  isDark
+                    ? (["rgba(79, 70, 229, 0.82)", "rgba(6, 182, 212, 0.62)"] as const)
+                    : ([theme.colors.indigo[500], theme.colors.cyan[500]] as const)
+                }
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.loadMoreGradient}
+              >
+                <Text style={[styles.loadMoreText, { color: theme.colors.white }]}>
+                  {journeyLoadingMore ? "Loading..." : "Load more journey"}
+                </Text>
+              </LinearGradient>
             </Pressable>
           ) : null}
         </ScrollView>
@@ -1715,11 +1733,28 @@ export default function CommunityPlayerStoryScreen() {
                   disabled={storyLoadingMore}
                   accessibilityRole="button"
                   accessibilityLabel="Load more mission stories"
-                  style={[styles.loadMoreButton, { borderColor: theme.colors.border, backgroundColor: theme.colors.surface }]}
+                  style={[
+                    styles.loadMoreButton,
+                    {
+                      borderColor: isDark ? "rgba(165, 180, 252, 0.42)" : "rgba(79, 70, 229, 0.2)",
+                      opacity: storyLoadingMore ? 0.78 : 1,
+                    },
+                  ]}
                 >
-                  <Text style={[styles.loadMoreText, { color: theme.colors.textSecondary }]}>
-                    {storyLoadingMore ? "Loading..." : "Load more missions"}
-                  </Text>
+                  <LinearGradient
+                    colors={
+                      isDark
+                        ? (["rgba(79, 70, 229, 0.82)", "rgba(6, 182, 212, 0.62)"] as const)
+                        : ([theme.colors.indigo[500], theme.colors.cyan[500]] as const)
+                    }
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.loadMoreGradient}
+                  >
+                    <Text style={[styles.loadMoreText, { color: theme.colors.white }]}>
+                      {storyLoadingMore ? "Loading..." : "Load more missions"}
+                    </Text>
+                  </LinearGradient>
                 </Pressable>
               ) : null}
               </>
@@ -1755,10 +1790,9 @@ export default function CommunityPlayerStoryScreen() {
               </View>
             )}
           </View>
-        ) : (
-          <View style={styles.miniGrid}>
-            {story && story.miniPosts.length > 0 ? (
-              <>
+        ) : story && story.miniPosts.length > 0 ? (
+          <View style={styles.miniSection}>
+            <View style={styles.miniGrid}>
               {visibleMiniPosts.map((post) => (
                 <MiniPostTile
                   key={post.id}
@@ -1773,51 +1807,67 @@ export default function CommunityPlayerStoryScreen() {
                   cheerPending={miniCheeringIds.has(post.id)}
                 />
               ))}
-              {activeTab === "minis" && hasMoreVisibleStory ? (
-                <Pressable
-                  onPress={loadMoreStory}
-                  disabled={storyLoadingMore}
-                  accessibilityRole="button"
-                  accessibilityLabel="Load more public minis"
-                  style={[styles.loadMoreButton, { borderColor: theme.colors.border, backgroundColor: theme.colors.surface }]}
-                >
-                  <Text style={[styles.loadMoreText, { color: theme.colors.textSecondary }]}>
-                    {storyLoadingMore ? "Loading..." : "Load more minis"}
-                  </Text>
-                </Pressable>
-              ) : null}
-              </>
-            ) : (
-              <View
+            </View>
+            {activeTab === "minis" && hasMoreVisibleStory ? (
+              <Pressable
+                onPress={loadMoreStory}
+                disabled={storyLoadingMore}
+                accessibilityRole="button"
+                accessibilityLabel="Load more public minis"
                 style={[
-                  styles.storyEmptyState,
+                  styles.loadMoreButton,
                   {
-                    borderColor: theme.colors.border,
-                    backgroundColor: isDark ? "rgba(15, 23, 42, 0.34)" : theme.colors.surfaceElevated,
+                    borderColor: isDark ? "rgba(165, 180, 252, 0.42)" : "rgba(79, 70, 229, 0.2)",
+                    opacity: storyLoadingMore ? 0.78 : 1,
                   },
                 ]}
               >
-                <View
-                  style={[
-                    styles.storyEmptyIcon,
-                    {
-                      borderColor: "rgba(34, 211, 238, 0.32)",
-                      backgroundColor: isDark ? "rgba(34, 211, 238, 0.12)" : "rgba(34, 211, 238, 0.09)",
-                    },
-                  ]}
+                <LinearGradient
+                  colors={
+                    isDark
+                      ? (["rgba(79, 70, 229, 0.82)", "rgba(6, 182, 212, 0.62)"] as const)
+                      : ([theme.colors.indigo[500], theme.colors.cyan[500]] as const)
+                  }
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.loadMoreGradient}
                 >
-                  <Zap size={17} color={theme.colors.cyan[400]} />
-                </View>
-                <View style={styles.storyEmptyCopy}>
-                  <Text style={[styles.storyEmptyTitle, { color: theme.colors.textPrimary }]} numberOfLines={1}>
-                    No public minis yet
+                  <Text style={[styles.loadMoreText, { color: theme.colors.white }]}>
+                    {storyLoadingMore ? "Loading..." : "Load more minis"}
                   </Text>
-                  <Text style={[styles.storyEmptyBody, { color: theme.colors.textMuted }]} numberOfLines={1}>
-                    Mini proofs will show here.
-                  </Text>
-                </View>
-              </View>
-            )}
+                </LinearGradient>
+              </Pressable>
+            ) : null}
+          </View>
+        ) : (
+          <View
+            style={[
+              styles.storyEmptyState,
+              {
+                borderColor: theme.colors.border,
+                backgroundColor: isDark ? "rgba(15, 23, 42, 0.34)" : theme.colors.surfaceElevated,
+              },
+            ]}
+          >
+            <View
+              style={[
+                styles.storyEmptyIcon,
+                {
+                  borderColor: "rgba(34, 211, 238, 0.32)",
+                  backgroundColor: isDark ? "rgba(34, 211, 238, 0.12)" : "rgba(34, 211, 238, 0.09)",
+                },
+              ]}
+            >
+              <Zap size={17} color={theme.colors.cyan[400]} />
+            </View>
+            <View style={styles.storyEmptyCopy}>
+              <Text style={[styles.storyEmptyTitle, { color: theme.colors.textPrimary }]} numberOfLines={1}>
+                No public minis yet
+              </Text>
+              <Text style={[styles.storyEmptyBody, { color: theme.colors.textMuted }]} numberOfLines={1}>
+                Mini proofs will show here.
+              </Text>
+            </View>
           </View>
         )}
       </ScrollView>
@@ -2034,6 +2084,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   textOnlyCopy: { flex: 1, minWidth: 0, fontSize: 12, lineHeight: 16, fontWeight: "800" },
+  miniSection: { gap: 14 },
   miniGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   miniTile: { borderRadius: 16, borderWidth: 1, overflow: "hidden" },
   miniImageFrame: { width: "100%", aspectRatio: 0.9, overflow: "hidden" },
@@ -2188,15 +2239,25 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   loadMoreButton: {
-    minHeight: 44,
     marginTop: 16,
-    marginHorizontal: 16,
+    alignSelf: "center",
+    minHeight: 38,
     borderRadius: 9999,
     borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
+    overflow: "hidden",
   },
-  loadMoreText: { fontSize: 13, lineHeight: 18, fontWeight: "900" },
+  loadMoreGradient: {
+    minHeight: 38,
+    paddingHorizontal: 18,
+    paddingVertical: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  loadMoreText: { fontSize: 12, lineHeight: 16, fontWeight: "900" },
   galleryNotes: { paddingHorizontal: 16, paddingTop: 22, gap: 10 },
   galleryNote: { borderRadius: 14, borderWidth: 1, padding: 12 },
   galleryNoteTitle: { fontSize: 13, lineHeight: 18, fontWeight: "900" },

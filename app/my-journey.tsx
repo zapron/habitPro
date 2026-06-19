@@ -17,6 +17,7 @@ import {
 } from "react-native";
 import type { ImageStyle, LayoutChangeEvent } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { LinearGradient } from "expo-linear-gradient";
 import { FlashList, type ListRenderItem } from "@shopify/flash-list";
 import Svg, { ClipPath, Defs, Image as SvgImage, Path } from "react-native-svg";
 import {
@@ -1621,16 +1622,33 @@ export default function MyJourneyScreen() {
           disabled={loadingMoreHistory}
           accessibilityRole="button"
           accessibilityLabel={`Load more ${noun} history`}
-          style={[styles.loadMoreButton, { borderColor: theme.colors.border, backgroundColor: theme.colors.surface }]}
+          style={[
+            styles.loadMoreButton,
+            {
+              borderColor: isDark ? "rgba(165, 180, 252, 0.42)" : "rgba(79, 70, 229, 0.2)",
+              opacity: loadingMoreHistory ? 0.78 : 1,
+            },
+          ]}
         >
-          {loadingMoreHistory ? <ActivityIndicator size="small" color={theme.colors.indigo[400]} /> : null}
-          <Text style={[styles.loadMoreText, { color: theme.colors.textSecondary }]}>
-            {loadingMoreHistory ? "Loading older history..." : `Load more ${noun}`}
-          </Text>
+          <LinearGradient
+            colors={
+              isDark
+                ? (["rgba(79, 70, 229, 0.82)", "rgba(6, 182, 212, 0.62)"] as const)
+                : ([theme.colors.indigo[500], theme.colors.cyan[500]] as const)
+            }
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.loadMoreGradient}
+          >
+            {loadingMoreHistory ? <ActivityIndicator size="small" color={theme.colors.white} /> : null}
+            <Text style={[styles.loadMoreText, { color: theme.colors.white }]}>
+              {loadingMoreHistory ? "Loading..." : `Load more ${noun}`}
+            </Text>
+          </LinearGradient>
         </Pressable>
       </View>
     );
-  }, [activeTab, hasMoreHistory, loadMoreHistory, loadingMoreHistory, theme]);
+  }, [activeTab, hasMoreHistory, isDark, loadMoreHistory, loadingMoreHistory, theme]);
 
   return (
     <Screen plain>
@@ -1865,7 +1883,14 @@ const styles = StyleSheet.create({
     minHeight: 38,
     borderRadius: 999,
     borderWidth: 1,
-    paddingHorizontal: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+  },
+  loadMoreGradient: {
+    minHeight: 38,
+    paddingHorizontal: 18,
+    paddingVertical: 8,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
