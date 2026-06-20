@@ -1125,13 +1125,43 @@ export default function ChallengeDetailScreen() {
     [habitByMemberId],
   );
 
-  const visibleSortedMemberIds = streakMemberIds;
+  const visibleSortedMemberIds = useMemo(() => {
+    const visibleCount = streakMemberIds.length;
+    if (visibleCount === 0) return streakMemberIds;
+
+    const indexById = new Map<string, number>();
+    const candidates: string[] = [];
+    const seen = new Set<string>();
+
+    streakMemberIds.forEach((memberId, index) => {
+      indexById.set(memberId, index);
+      if (seen.has(memberId)) return;
+      seen.add(memberId);
+      candidates.push(memberId);
+    });
+
+    if (myUserId && myHabit && !seen.has(myUserId)) {
+      indexById.set(myUserId, Number.MAX_SAFE_INTEGER);
+      candidates.push(myUserId);
+    }
+
+    return candidates
+      .sort((a, b) => {
+        const habitA = habitForMember(a);
+        const habitB = habitForMember(b);
+        const streakDiff = (habitB?.streak ?? -1) - (habitA?.streak ?? -1);
+        if (streakDiff !== 0) return streakDiff;
+        const checkInDiff = (habitB?.completedDates.length ?? 0) - (habitA?.completedDates.length ?? 0);
+        if (checkInDiff !== 0) return checkInDiff;
+        return (indexById.get(a) ?? Number.MAX_SAFE_INTEGER) - (indexById.get(b) ?? Number.MAX_SAFE_INTEGER);
+      })
+      .slice(0, visibleCount);
+  }, [habitForMember, myHabit, myUserId, streakMemberIds]);
 
   const cohortBoard = useMemo((): {
     model: CohortMastheadModel;
     spotlight: { userId: string; habit: Habit; name: string } | null;
-    /** Second-ranked member (same sort as spotlight) for 1st vs 2nd progress in the hero card. */
-    runnerUp: { userId: string; habit: Habit; name: string } | null;
+    rankedMembers: { userId: string; habit: Habit; name: string }[];
   } | null => {
     if (memberIdsOrdered.length === 0) return null;
     const rows = memberIdsOrdered.map((id) => ({
@@ -1141,17 +1171,14 @@ export default function ChallengeDetailScreen() {
     }));
     const withHabit = rows.filter((r): r is typeof r & { habit: Habit } => Boolean(r.habit));
     if (withHabit.length === 0) {
-      return { model: { kind: "sync_prompt" }, spotlight: null, runnerUp: null };
+      return { model: { kind: "sync_prompt" }, spotlight: null, rankedMembers: [] };
     }
     const sorted = [...withHabit].sort((a, b) => {
       const d = b.habit.streak - a.habit.streak;
       if (d !== 0) return d;
       return b.habit.completedDates.length - a.habit.completedDates.length;
     });
-    const runnerUp =
-      sorted.length >= 2
-        ? { userId: sorted[1].id, habit: sorted[1].habit, name: sorted[1].name }
-        : null;
+    const rankedMembers = sorted.slice(0, 3).map((row) => ({ userId: row.id, habit: row.habit, name: row.name }));
     const top = sorted[0];
     const maxS = top.habit.streak;
     const leaders = sorted.filter((r) => r.habit.streak === maxS);
@@ -1161,20 +1188,20 @@ export default function ChallengeDetailScreen() {
       return {
         model: { kind: "most_days", leaderName: byDays.name, daysChecked: n },
         spotlight: { userId: byDays.id, habit: byDays.habit, name: byDays.name },
-        runnerUp,
+        rankedMembers,
       };
     }
     if (leaders.length >= 2) {
       return {
         model: { kind: "tie", leadersCount: leaders.length, streakDays: maxS },
         spotlight: { userId: top.id, habit: top.habit, name: top.name },
-        runnerUp,
+        rankedMembers,
       };
     }
     return {
       model: { kind: "leader", leaderName: top.name, streakDays: maxS },
       spotlight: { userId: top.id, habit: top.habit, name: top.name },
-      runnerUp,
+      rankedMembers,
     };
   }, [memberIdsOrdered, profileLabels, habitForMember]);
 
@@ -2022,7 +2049,7 @@ export default function ChallengeDetailScreen() {
                     cohortBoard.spotlight ? profileLabels[cohortBoard.spotlight.userId] : undefined
                   }
                   leaderHabit={cohortBoard.spotlight?.habit}
-                  runnerUp={cohortBoard.runnerUp}
+                  rankedMembers={cohortBoard.rankedMembers}
                 />
               ) : null}
 

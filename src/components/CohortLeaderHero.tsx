@@ -49,7 +49,12 @@ function topTwoPaceLine(
   return `${leaderShort} leads 2nd place by ${d} day${d === 1 ? "" : "s"} on check-ins`;
 }
 
-type RunnerUp = { userId: string; habit: Habit; name: string };
+type RankedMember = { userId: string; habit: Habit; name: string };
+
+function rankLabel(rank: number, name: string): string {
+  const label = rank === 1 ? "1st" : rank === 2 ? "2nd" : rank === 3 ? "3rd" : `${rank}th`;
+  return `${label} - ${shortNameForBar(name)}`;
+}
 
 type Props = {
   theme: AppTheme;
@@ -58,7 +63,7 @@ type Props = {
   leaderName: string;
   leaderLabel: ProfileLabel | undefined;
   leaderHabit: Habit | undefined;
-  runnerUp: RunnerUp | null;
+  rankedMembers: RankedMember[];
 };
 
 export function CohortLeaderHero({
@@ -68,21 +73,24 @@ export function CohortLeaderHero({
   leaderName,
   leaderLabel,
   leaderHabit,
-  runnerUp,
+  rankedMembers,
 }: Props) {
   const initials = initialsFromLabel(leaderLabel, leaderName);
+  const progressMembers =
+    rankedMembers.length > 0
+      ? rankedMembers.slice(0, 3)
+      : leaderHabit
+        ? [{ userId: "leader", habit: leaderHabit, name: leaderName }]
+        : [];
+  const runnerUp = progressMembers[1] ?? null;
   const pace =
     runnerUp && leaderHabit
       ? topTwoPaceLine(model, leaderHabit, runnerUp.habit, leaderName)
       : null;
   const total = Math.max(
     1,
-    leaderHabit?.totalDays ?? runnerUp?.habit.totalDays ?? 21,
+    ...progressMembers.map((member) => member.habit.totalDays ?? 21),
   );
-  const firstDone = leaderHabit ? leaderHabit.completedDates.length : 0;
-  const secondDone = runnerUp ? runnerUp.habit.completedDates.length : 0;
-  const firstPct = Math.min(100, Math.round((firstDone / total) * 100));
-  const secondPct = Math.min(100, Math.round((secondDone / total) * 100));
   const leaderLevel =
     leaderLabel?.xp != null && Number.isFinite(leaderLabel.xp) ? levelFromTotalXp(leaderLabel.xp) : null;
   const squadVisible = (leaderHabit?.visibility ?? "solo") === "public";
@@ -91,8 +99,7 @@ export function CohortLeaderHero({
   const avatarBg = isDark ? "rgba(129, 140, 248, 0.22)" : "rgba(99, 102, 241, 0.14)";
   const avatarBorder = isDark ? "rgba(129, 140, 248, 0.35)" : "rgba(99, 102, 241, 0.28)";
 
-  const firstBarLabel = runnerUp ? `1st · ${shortNameForBar(leaderName)}` : shortNameForBar(leaderName);
-  const secondBarLabel = runnerUp ? `2nd · ${shortNameForBar(runnerUp.name)}` : null;
+  const progressColors = [theme.colors.indigo[500], theme.colors.cyan[500], theme.colors.amber[500]];
 
   return (
     <View
@@ -178,46 +185,31 @@ export function CohortLeaderHero({
             </View>
 
             <View style={styles.progressBlock}>
-              <View style={styles.progressRow}>
-                <Text style={[styles.progressLabel, { color: theme.colors.textMuted }]} numberOfLines={1}>
-                  {firstBarLabel}
-                </Text>
-                <View style={[styles.track, { backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)" }]}>
-                  <View
-                    style={[
-                      styles.trackFill,
-                      {
-                        width: `${firstPct}%`,
-                        backgroundColor: theme.colors.indigo[500],
-                      },
-                    ]}
-                  />
-                </View>
-                <Text style={[styles.progressPct, { color: theme.colors.textSecondary }]}>
-                  {firstDone}/{total}
-                </Text>
-              </View>
-              {runnerUp ? (
-                <View style={styles.progressRow}>
-                  <Text style={[styles.progressLabel, { color: theme.colors.textMuted }]} numberOfLines={1}>
-                    {secondBarLabel}
-                  </Text>
-                  <View style={[styles.track, { backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)" }]}>
-                    <View
-                      style={[
-                        styles.trackFill,
-                        {
-                          width: `${secondPct}%`,
-                          backgroundColor: theme.colors.cyan[500],
-                        },
-                      ]}
-                    />
+              {progressMembers.map((member, index) => {
+                const done = member.habit.completedDates.length;
+                const pct = Math.min(100, Math.round((done / total) * 100));
+                return (
+                  <View key={member.userId} style={styles.progressRow}>
+                    <Text style={[styles.progressLabel, { color: theme.colors.textMuted }]} numberOfLines={1}>
+                      {rankLabel(index + 1, member.name)}
+                    </Text>
+                    <View style={[styles.track, { backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)" }]}>
+                      <View
+                        style={[
+                          styles.trackFill,
+                          {
+                            width: `${pct}%`,
+                            backgroundColor: progressColors[index] ?? theme.colors.indigo[500],
+                          },
+                        ]}
+                      />
+                    </View>
+                    <Text style={[styles.progressPct, { color: theme.colors.textSecondary }]}>
+                      {done}/{total}
+                    </Text>
                   </View>
-                  <Text style={[styles.progressPct, { color: theme.colors.textSecondary }]}>
-                    {secondDone}/{total}
-                  </Text>
-                </View>
-              ) : null}
+                );
+              })}
             </View>
 
             <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />
