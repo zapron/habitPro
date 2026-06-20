@@ -74,6 +74,7 @@ export type CommunityPlayerStoryPost = {
 export type CommunityPlayerMissionStory = {
   key: string;
   title: string;
+  description?: string | null;
   postCount: number;
   photoCount: number;
   latestAt: string;
@@ -566,6 +567,72 @@ function habitStoryKey(row: CommunityWinRow): string {
   return normalizedTitle ? `habit-title:${normalizedTitle}` : `habit:${row.id}`;
 }
 
+function habitIdFromStoryKey(key: string): string | null {
+  if (!key.startsWith("habit:")) return null;
+  const habitId = key.slice("habit:".length).trim();
+  return habitId || null;
+}
+
+function storyDescriptionRecord(value: unknown): Record<string, string> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const out: Record<string, string> = {};
+  for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
+    if (typeof raw !== "string") continue;
+    const description = raw.trim();
+    if (description) out[key] = description;
+  }
+  return out;
+}
+
+async function fetchMissionDescriptionMap(
+  userId: string,
+  stories: readonly CommunityPlayerMissionStory[],
+): Promise<Map<string, string>> {
+  const habitIds = Array.from(
+    new Set(stories.map((story) => habitIdFromStoryKey(story.key)).filter((id): id is string => Boolean(id))),
+  );
+  if (habitIds.length === 0) return new Map();
+
+  const supabase = getSupabase();
+  if (!supabase) return new Map();
+
+  const { data: rpcData, error: rpcError } = await supabase.rpc("rpc_community_player_mission_descriptions_v1", {
+    p_user_id: userId,
+    p_habit_ids: habitIds,
+  });
+  if (!rpcError) {
+    return new Map(Object.entries(storyDescriptionRecord(rpcData)));
+  }
+
+  const { data } = await supabase
+    .from("habits")
+    .select("id, description")
+    .eq("user_id", userId)
+    .in("id", habitIds);
+
+  const descriptions = new Map<string, string>();
+  for (const row of (data ?? []) as Array<{ id?: unknown; description?: unknown }>) {
+    if (typeof row.id !== "string" || typeof row.description !== "string") continue;
+    const description = row.description.trim();
+    if (description) descriptions.set(row.id, description);
+  }
+  return descriptions;
+}
+
+async function enrichMissionStoriesWithDescriptions(
+  userId: string,
+  stories: readonly CommunityPlayerMissionStory[],
+): Promise<CommunityPlayerMissionStory[]> {
+  const descriptions = await fetchMissionDescriptionMap(userId, stories);
+  if (descriptions.size === 0) return [...stories];
+
+  return stories.map((story) => {
+    const habitId = habitIdFromStoryKey(story.key);
+    const description = habitId ? descriptions.get(habitId) : null;
+    return description ? { ...story, description } : story;
+  });
+}
+
 function groupMissionStories(rows: CommunityWinRow[], postsById: Map<string, CommunityPlayerStoryPost>) {
   const grouped = new Map<string, CommunityPlayerStoryPost[]>();
   for (const row of rows) {
@@ -591,6 +658,7 @@ function groupMissionStories(rows: CommunityWinRow[], postsById: Map<string, Com
       return {
         key,
         title: sorted[0]?.title ?? "Mission",
+        description: null,
         postCount: sorted.length,
         photoCount: sorted.filter((post) => Boolean(post.memoryImageUrl)).length,
         latestAt: sorted[0]?.createdAt ?? new Date(0).toISOString(),
@@ -830,7 +898,7 @@ export async function fetchCommunityPlayerStoryPage(input: {
     normalizeStoryPost(row, cheerCountByWin.get(row.id) ?? 0, viewerCheered.has(row.id)),
   );
   const postsById = new Map(posts.map((post) => [post.id, post]));
-  const missionStories = groupMissionStories(pageRows, postsById);
+  const missionStories = await enrichMissionStoriesWithDescriptions(input.userId, groupMissionStories(pageRows, postsById));
   const miniPosts = posts.filter((post) => post.feedSource === "mini");
 
   return {
@@ -926,7 +994,7 @@ export async function fetchCommunityPlayerStory(
     normalizeStoryPost(row, cheerCountByWin.get(row.id) ?? 0, viewerCheered.has(row.id)),
   );
   const postsById = new Map(posts.map((post) => [post.id, post]));
-  const missionStories = groupMissionStories(pageRows, postsById);
+  const missionStories = await enrichMissionStoriesWithDescriptions(userId, groupMissionStories(pageRows, postsById));
   const miniPosts = posts.filter((post) => post.feedSource === "mini");
   const totalPhotoMoments = posts.filter((post) => Boolean(post.memoryImageUrl)).length;
 

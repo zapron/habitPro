@@ -3,8 +3,10 @@ import type { ReactNode } from "react";
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Image,
   InteractionManager,
+  Modal,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -27,6 +29,7 @@ import {
   Flame,
   Globe,
   Image as ImageIcon,
+  Info,
   LockKeyhole,
   ThumbsUp,
   Trophy,
@@ -93,6 +96,11 @@ function initialsFromName(name: string): string {
 
 function plural(value: number, one: string, many: string): string {
   return value === 1 ? one : many;
+}
+
+function missionDescriptionText(story: CommunityPlayerMissionStory): string {
+  const description = story.description?.trim();
+  return description || "No mission description is available for this mission yet.";
 }
 
 function thumbnailUri(uri: string, width: number, height: number): string {
@@ -273,6 +281,7 @@ function buildPrivateStory(habits: readonly Habit[], minis: readonly MiniMission
       missionStories.push({
         key: `private-habit-${habit.id}`,
         title: habit.title,
+        description: habit.description?.trim() || null,
         postCount: sorted.length,
         photoCount: sorted.filter((post) => Boolean(post.memoryImageUrl)).length,
         latestAt: sorted[0]?.createdAt ?? new Date(0).toISOString(),
@@ -372,11 +381,17 @@ function dedupeStoryPostsPreferPublic(posts: readonly CommunityPlayerStoryPost[]
   return out;
 }
 
-function rebuildMissionStory(key: string, title: string, posts: readonly CommunityPlayerStoryPost[]): CommunityPlayerMissionStory {
+function rebuildMissionStory(
+  key: string,
+  title: string,
+  posts: readonly CommunityPlayerStoryPost[],
+  description?: string | null,
+): CommunityPlayerMissionStory {
   const sorted = dedupeStoryPostsPreferPublic(posts).sort((a, b) => sortTime(b.createdAt) - sortTime(a.createdAt));
   return {
     key,
     title,
+    description: description?.trim() || null,
     postCount: sorted.length,
     photoCount: sorted.filter((post) => Boolean(post.memoryImageUrl)).length,
     latestAt: sorted[0]?.createdAt ?? new Date(0).toISOString(),
@@ -394,17 +409,20 @@ function buildCompleteOwnerStory(
   publicMinis: readonly CommunityPlayerStoryPost[],
   privateStory: JourneyStoryData,
 ): JourneyStoryData {
-  const missionGroups = new Map<string, { key: string; title: string; posts: CommunityPlayerStoryPost[] }>();
+  const missionGroups = new Map<string, { key: string; title: string; description: string | null; posts: CommunityPlayerStoryPost[] }>();
   const addMissionStory = (story: CommunityPlayerMissionStory) => {
     const groupKey = normalizeStoryTitle(story.title) || story.key;
+    const description = story.description?.trim() || null;
     const existing = missionGroups.get(groupKey);
     if (existing) {
+      if (!existing.description && description) existing.description = description;
       existing.posts.push(...story.posts);
       return;
     }
     missionGroups.set(groupKey, {
       key: `complete-${groupKey || story.key}`,
       title: story.title,
+      description,
       posts: [...story.posts],
     });
   };
@@ -414,7 +432,7 @@ function buildCompleteOwnerStory(
 
   return {
     missionStories: Array.from(missionGroups.values())
-      .map((story) => rebuildMissionStory(story.key, story.title, story.posts))
+      .map((story) => rebuildMissionStory(story.key, story.title, story.posts, story.description))
       .sort((a, b) => sortTime(b.latestAt) - sortTime(a.latestAt)),
     miniPosts: dedupeStoryPostsPreferPublic([...publicMinis, ...privateStory.miniPosts]).sort(
       (a, b) => sortTime(b.createdAt) - sortTime(a.createdAt),
@@ -436,20 +454,22 @@ function mergeMissionStoriesByTitle(
   existing: readonly CommunityPlayerMissionStory[],
   incoming: readonly CommunityPlayerMissionStory[],
 ): CommunityPlayerMissionStory[] {
-  const groups = new Map<string, { key: string; title: string; posts: CommunityPlayerStoryPost[] }>();
+  const groups = new Map<string, { key: string; title: string; description: string | null; posts: CommunityPlayerStoryPost[] }>();
   const add = (story: CommunityPlayerMissionStory) => {
     const groupKey = normalizeStoryTitle(story.title) || story.key;
+    const description = story.description?.trim() || null;
     const current = groups.get(groupKey);
     if (current) {
+      if (!current.description && description) current.description = description;
       current.posts.push(...story.posts);
       return;
     }
-    groups.set(groupKey, { key: story.key, title: story.title, posts: [...story.posts] });
+    groups.set(groupKey, { key: story.key, title: story.title, description, posts: [...story.posts] });
   };
   existing.forEach(add);
   incoming.forEach(add);
   return Array.from(groups.values())
-    .map((story) => rebuildMissionStory(story.key, story.title, story.posts))
+    .map((story) => rebuildMissionStory(story.key, story.title, story.posts, story.description))
     .sort((a, b) => sortTime(b.latestAt) - sortTime(a.latestAt));
 }
 
@@ -837,7 +857,13 @@ const MissionStoryCard = memo(function MissionStoryCard({
           <Text style={[styles.missionTitle, { color: theme.colors.textPrimary }]} numberOfLines={1}>
             {story.title}
           </Text>
-          <View style={styles.missionStatRow}>
+          <ScrollView
+            horizontal
+            nestedScrollEnabled
+            showsHorizontalScrollIndicator={false}
+            style={styles.missionStatScroller}
+            contentContainerStyle={styles.missionStatRow}
+          >
             <View style={[styles.missionStatPill, { borderColor: theme.colors.border, backgroundColor: metaPillBackground }]}>
               <Camera size={9} color={theme.colors.cyan[400]} />
               <Text style={[styles.missionStatText, { color: theme.colors.textSecondary }]} numberOfLines={1}>
@@ -858,7 +884,7 @@ const MissionStoryCard = memo(function MissionStoryCard({
                 </Text>
               </View>
             ) : null}
-          </View>
+          </ScrollView>
         </View>
         <Pressable
           onPress={() => onOpenGallery(story)}
@@ -1141,17 +1167,41 @@ function MissionGalleryModal({
     const posts = mission?.posts ?? [];
     return buildZigzagMasonryColumns(posts, columnCount, cardWidth, gap);
   }, [cardWidth, columnCount, gap, mission?.posts]);
+  const hasDescription = Boolean(mission?.description?.trim());
+  const handleShowDescription = useCallback(() => {
+    if (!mission) return;
+    Alert.alert(mission.title, missionDescriptionText(mission));
+  }, [mission]);
 
   if (!visible) return null;
 
   return (
-    <Pressable style={[styles.galleryOverlay, { backgroundColor: theme.colors.background }]} onPress={onClose}>
-      <Pressable style={styles.gallerySheet} onPress={(event) => event.stopPropagation()}>
+    <Modal
+      visible={visible}
+      animationType="fade"
+      presentationStyle="fullScreen"
+      onRequestClose={onClose}
+    >
+      <View style={[styles.galleryOverlay, { backgroundColor: theme.colors.background }]}>
+        <View style={styles.gallerySheet}>
           <View style={styles.galleryHeader}>
             <View style={styles.galleryHeaderText}>
-              <Text style={[styles.galleryTitle, { color: theme.colors.textPrimary }]} numberOfLines={1}>
-                {mission?.title ?? "Journey"}
-              </Text>
+              <View style={styles.galleryTitleRow}>
+                <Text style={[styles.galleryTitle, { color: theme.colors.textPrimary }]} numberOfLines={1}>
+                  {mission?.title ?? "Journey"}
+                </Text>
+                {hasDescription ? (
+                  <Pressable
+                    onPress={handleShowDescription}
+                    accessibilityRole="button"
+                    accessibilityLabel={`View ${mission?.title ?? "journey"} description`}
+                    hitSlop={8}
+                    style={styles.galleryInfoButton}
+                  >
+                    <Info size={16} color={theme.colors.textMuted} />
+                  </Pressable>
+                ) : null}
+              </View>
               <Text style={[styles.gallerySubtitle, { color: theme.colors.textMuted }]} numberOfLines={1}>
                 {mission?.postCount ?? 0} memories - {mission?.photoCount ?? 0} photos
               </Text>
@@ -1160,7 +1210,12 @@ function MissionGalleryModal({
               <Text style={[styles.galleryCloseText, { color: theme.colors.textPrimary }]}>Close</Text>
             </Pressable>
           </View>
-          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.galleryScrollContent}>
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            nestedScrollEnabled
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={styles.galleryScrollContent}
+          >
             <View style={[styles.galleryMasonryRow, { gap, paddingHorizontal: horizontalPad }]}>
               {columns.map((column, columnIndex) => (
                 <View key={`column-${columnIndex}`} style={[styles.galleryMasonryColumn, { width: cardWidth, gap }]}>
@@ -1179,8 +1234,9 @@ function MissionGalleryModal({
               ))}
             </View>
           </ScrollView>
-      </Pressable>
-    </Pressable>
+        </View>
+      </View>
+    </Modal>
   );
 }
 
@@ -1271,7 +1327,30 @@ export default function MyJourneyScreen() {
   }, [activeTab, journeyMode, publicStory?.profile.userId]);
 
   const privateStory = useMemo(() => buildPrivateStory(habits, miniMissions), [habits, miniMissions]);
-  const publicMissions = useMemo(() => publicStory?.missionStories ?? [], [publicStory?.missionStories]);
+  const missionDescriptions = useMemo(() => {
+    const byTitle = new Map<string, string>();
+    const byKey = new Map<string, string>();
+    habits.forEach((habit) => {
+      const description = habit.description?.trim();
+      if (!description) return;
+      byTitle.set(normalizeStoryTitle(habit.title), description);
+      byKey.set(`habit:${habit.id}`, description);
+      byKey.set(`private-habit-${habit.id}`, description);
+    });
+    return { byTitle, byKey };
+  }, [habits]);
+  const publicMissions = useMemo(
+    () =>
+      (publicStory?.missionStories ?? []).map((story) => ({
+        ...story,
+        description:
+          story.description?.trim() ||
+          missionDescriptions.byKey.get(story.key) ||
+          missionDescriptions.byTitle.get(normalizeStoryTitle(story.title)) ||
+          null,
+      })),
+    [missionDescriptions, publicStory?.missionStories],
+  );
   const publicMinis = useMemo(() => publicStory?.miniPosts ?? [], [publicStory?.miniPosts]);
   const completeStory = useMemo(
     () => buildCompleteOwnerStory(publicMissions, publicMinis, privateStory),
@@ -1800,9 +1879,12 @@ const styles = StyleSheet.create({
   missionCard: { borderRadius: 15, borderWidth: 1, padding: 9, overflow: "hidden" },
   missionHeader: { flexDirection: "row", alignItems: "flex-start", gap: 8 },
   missionTitleWrap: { flex: 1, minWidth: 0 },
-  missionTitle: { fontSize: 16, lineHeight: 20, fontWeight: "900" },
-  missionStatRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 5, overflow: "hidden" },
-  missionStatPill: { minHeight: 24, borderRadius: 999, borderWidth: 1, paddingHorizontal: 8, flexDirection: "row", alignItems: "center", gap: 4 },
+  missionTitleRow: { flexDirection: "row", alignItems: "center", gap: 6, minWidth: 0 },
+  missionTitle: { flex: 1, minWidth: 0, fontSize: 16, lineHeight: 20, fontWeight: "900" },
+  missionInfoButton: { padding: 2, alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  missionStatScroller: { marginTop: 5, maxWidth: "100%" },
+  missionStatRow: { flexDirection: "row", alignItems: "center", gap: 4, paddingRight: 8 },
+  missionStatPill: { minHeight: 24, flexShrink: 0, borderRadius: 999, borderWidth: 1, paddingHorizontal: 8, flexDirection: "row", alignItems: "center", gap: 4 },
   missionStatText: { fontSize: 11, lineHeight: 14, fontWeight: "900" },
   journeyButton: { minHeight: 34, borderRadius: 999, borderWidth: 1, paddingHorizontal: 10, alignItems: "center", justifyContent: "center", maxWidth: 112 },
   journeyText: { fontSize: 12, lineHeight: 15, fontWeight: "900" },
@@ -1902,11 +1984,13 @@ const styles = StyleSheet.create({
   emptyState: { borderWidth: 1, borderRadius: 16, minHeight: 145, alignItems: "center", justifyContent: "center", padding: 18 },
   emptyTitle: { fontSize: 17, lineHeight: 22, fontWeight: "900", marginTop: 10, textAlign: "center" },
   emptyBody: { fontSize: 13, lineHeight: 19, fontWeight: "700", textAlign: "center", marginTop: 5 },
-  galleryOverlay: { ...StyleSheet.absoluteFillObject, paddingTop: 28 },
+  galleryOverlay: { flex: 1, paddingTop: 28 },
   gallerySheet: { flex: 1 },
   galleryHeader: { minHeight: 56, flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 12, marginBottom: 4 },
   galleryHeaderText: { flex: 1, minWidth: 0 },
-  galleryTitle: { fontSize: 21, lineHeight: 26, fontWeight: "900" },
+  galleryTitleRow: { flexDirection: "row", alignItems: "center", gap: 6, minWidth: 0 },
+  galleryTitle: { flexShrink: 1, minWidth: 0, fontSize: 21, lineHeight: 26, fontWeight: "900" },
+  galleryInfoButton: { padding: 2, alignItems: "center", justifyContent: "center", flexShrink: 0, transform: [{ translateY: 2 }] },
   gallerySubtitle: { fontSize: 12, lineHeight: 16, fontWeight: "900", marginTop: 2 },
   galleryClose: { minHeight: 36, borderRadius: 999, borderWidth: 1, paddingHorizontal: 13, alignItems: "center", justifyContent: "center" },
   galleryCloseText: { fontSize: 12, lineHeight: 15, fontWeight: "900" },
