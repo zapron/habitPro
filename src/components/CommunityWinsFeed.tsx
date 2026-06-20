@@ -299,6 +299,17 @@ export function CommunityWinsFeed({
   );
 
   const openPlayerStory = useCallback((win: CommunityWinFeedItem) => {
+    if (userId && win.user_id === userId) {
+      router.push({
+        pathname: "/my-journey",
+        params: {
+          mode: "public",
+          tab: win.feed_source === "mini" ? "minis" : "missions",
+          focusWinId: win.id,
+        },
+      });
+      return;
+    }
     router.push({
       pathname: "/community-player/[id]",
       params: {
@@ -308,7 +319,7 @@ export function CommunityWinsFeed({
         xp: String(win.xp),
       },
     });
-  }, [router]);
+  }, [router, userId]);
 
   const renderItem: ListRenderItem<ListRow> = useCallback(
     ({ item }) => {

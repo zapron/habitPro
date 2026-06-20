@@ -1135,6 +1135,17 @@ export default function CompeteScreen() {
   }, [showToast, loadInvites]);
 
   const handleLeagueRowPress = useCallback((entry: WeeklyLeaderboardEntry) => {
+    if (userId && entry.userId === userId) {
+      router.push({
+        pathname: "/my-journey",
+        params: {
+          mode: "public",
+          weeklyRankPosition: String(entry.rankPosition),
+          weeklyPoints: String(entry.points),
+        },
+      });
+      return;
+    }
     router.push({
       pathname: "/community-player/[id]",
       params: {
@@ -1148,7 +1159,7 @@ export default function CompeteScreen() {
         weeklyMiniCompletions: String(entry.miniCompletions),
       },
     });
-  }, [router]);
+  }, [router, userId]);
 
   const level = levelFromTotalXp(xp);
   const xpInLevel = xpInCurrentLevel(xp);
