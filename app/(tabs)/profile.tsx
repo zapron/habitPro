@@ -2227,9 +2227,9 @@ const styles = StyleSheet.create({
     gap: 8,
     marginTop: 12,
   },
-  momentumMiniCell: { flex: 1, minWidth: 0 },
-  metricValue: { fontSize: 18, lineHeight: 22, fontWeight: "900", fontVariant: ["tabular-nums"] },
-  metricLabel: { fontSize: 10, lineHeight: 13, fontWeight: "900" },
+  momentumMiniCell: { flex: 1, minWidth: 0, alignItems: "center" },
+  metricValue: { fontSize: 18, lineHeight: 22, fontWeight: "900", fontVariant: ["tabular-nums"], textAlign: "center" },
+  metricLabel: { fontSize: 10, lineHeight: 13, fontWeight: "900", textAlign: "center" },
   mathCardRow: { flexDirection: "row", gap: 10, marginBottom: 12 },
   mathCard: {
     flex: 1,

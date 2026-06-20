@@ -126,8 +126,8 @@ export default function LoginScreen() {
   };
 
   const busy = loading || googleLoading;
-  const glassSurface = isDark ? "rgba(15,23,42,0.74)" : "rgba(255,255,255,0.68)";
-  const glassBorder = isDark ? "rgba(148,163,184,0.26)" : "rgba(148,163,184,0.36)";
+  const glassSurface = isDark ? "rgba(15,23,42,0.74)" : "rgba(248,250,252,0.96)";
+  const glassBorder = isDark ? "rgba(148,163,184,0.26)" : "rgba(100,116,139,0.28)";
   const focusedBorder = isDark ? "rgba(129,140,248,0.84)" : "rgba(79,70,229,0.62)";
   const fieldTextColor = isDark ? "#F8FAFC" : theme.colors.textPrimary;
   const fieldMutedColor = isDark ? "rgba(203,213,225,0.62)" : "rgba(71,85,105,0.62)";
@@ -415,7 +415,7 @@ export default function LoginScreen() {
                     styles.googleBtn,
                     {
                       borderColor: glassBorder,
-                      backgroundColor: isDark ? "rgba(15,23,42,0.68)" : "rgba(255,255,255,0.72)",
+                      backgroundColor: isDark ? "rgba(15,23,42,0.68)" : "rgba(248,250,252,0.96)",
                     },
                   ]}
                   onPress={() => void onGoogle()}
