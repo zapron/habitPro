@@ -629,8 +629,14 @@ export default function CompeteScreen() {
     return () => loop.stop();
   }, [hasAwaitingInvite, invitePulse, reduceMotion]);
 
-  const { xp, habits, miniMissions, addHabit } = useHabitStore(
-    useShallow((s) => ({ xp: s.xp, habits: s.habits, miniMissions: s.miniMissions, addHabit: s.addHabit })),
+  const { xp, habits, miniMissions, addHabit, deleteHabit } = useHabitStore(
+    useShallow((s) => ({
+      xp: s.xp,
+      habits: s.habits,
+      miniMissions: s.miniMissions,
+      addHabit: s.addHabit,
+      deleteHabit: s.deleteHabit,
+    })),
   );
 
   const enrollments = useChallengeStore((s) => s.enrollments);
@@ -1002,6 +1008,7 @@ export default function CompeteScreen() {
       const startIso = inviteeHabitStartIsoFromGroupStartDate(group.start_date, group.creator_timezone);
 
       const existingHabit = useHabitStore.getState().habits.find((h) => h.challengeGroupId === group.id);
+      const createdLocalHabit = !existingHabit;
       const newHabitId =
         existingHabit?.id ??
         addHabit({
@@ -1021,12 +1028,11 @@ export default function CompeteScreen() {
         throw new Error("Could not create the mission on this device.");
       }
 
-      router.push(`/habit/${newHabitId}`);
-      showToast("Joining group mission…", "success");
+      showToast("Joining group mission...", "success", 900);
 
-      void (async () => {
-        try {
-          await traceAsync("compete.groupInvite.upsertHabit", () => upsertRemoteHabit(userId, habit), {
+      let joinedOnServer = false;
+      try {
+        await traceAsync("compete.groupInvite.upsertHabit", () => upsertRemoteHabit(userId, habit), {
             slowMs: 900,
           });
           const { error, reason } = await traceAsync(
@@ -1036,12 +1042,14 @@ export default function CompeteScreen() {
           );
           if (error) {
             if (reason === "premium_required") {
+              if (createdLocalHabit) deleteHabit(newHabitId);
               await refreshPremiumAccess({ force: true, serverOnly: true });
               openUpsell("invite_accept");
               return;
             }
             throw error;
           }
+          joinedOnServer = true;
           useHabitStore.getState().synchronizeHabitWithChallengeGroup(newHabitId, group);
           const alignedHabit = useHabitStore.getState().habits.find((h) => h.id === newHabitId);
           if (alignedHabit) {
@@ -1053,21 +1061,15 @@ export default function CompeteScreen() {
           }
           void refreshCohortPeerHabits();
           void loadInvites({ force: true });
-          if (mountedRef.current) showToast("Joined the group mission", "success");
+          router.push(`/habit/${newHabitId}`);
+          if (mountedRef.current) showToast("Joined the group mission", "success", 1200);
           setTimeout(() => {
             if (mountedRef.current) void suggestNotifications("invite_accept");
           }, 450);
-        } catch (bgErr: unknown) {
-          if (!mountedRef.current) return;
-          const msg =
-            bgErr instanceof Error
-              ? bgErr.message
-              : typeof bgErr === "object" && bgErr && "message" in bgErr
-                ? String((bgErr as { message: string }).message)
-                : String(bgErr);
-          showToast(msg, "error");
-        }
-      })();
+      } catch (joinErr) {
+        if (!joinedOnServer && createdLocalHabit) deleteHabit(newHabitId);
+        throw joinErr;
+      }
     } catch (e: unknown) {
       const msg =
         e instanceof Error
@@ -1086,6 +1088,7 @@ export default function CompeteScreen() {
     refreshPremiumAccess,
     openUpsell,
     addHabit,
+    deleteHabit,
     loadInvites,
     suggestNotifications,
     isPremium,
@@ -1426,8 +1429,8 @@ export default function CompeteScreen() {
         style={[
           styles.inviteGroupStreaksBtn,
           {
-            backgroundColor: isDark ? "rgba(245, 158, 11, 0.14)" : "rgba(255, 251, 235, 0.96)",
-            borderColor: isDark ? "rgba(245, 158, 11, 0.58)" : "rgba(217, 119, 6, 0.42)",
+            backgroundColor: isDark ? "rgba(245, 158, 11, 0.13)" : "rgba(245, 158, 11, 0.10)",
+            borderColor: isDark ? "rgba(245, 158, 11, 0.62)" : "rgba(217, 119, 6, 0.42)",
             shadowColor: theme.colors.amber[500],
           },
         ]}
@@ -2349,17 +2352,14 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 8,
     marginTop: 14,
-    minHeight: 56,
-    paddingVertical: 14,
-    paddingHorizontal: 18,
-    borderRadius: 16,
+    minHeight: 46,
+    paddingVertical: 9,
+    paddingHorizontal: 16,
+    borderRadius: 999,
     borderWidth: 1,
-    shadowOpacity: 0.18,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 2,
+    overflow: "hidden",
   },
-  inviteGroupStreaksBtnText: { fontSize: 15, fontWeight: "900", letterSpacing: 0 },
+  inviteGroupStreaksBtnText: { fontSize: 15, fontWeight: "900", letterSpacing: 0, backgroundColor: "transparent" },
   inviteActions: { flexDirection: "row", gap: 10, alignItems: "center" },
   declineBtn: {
     flex: 1,

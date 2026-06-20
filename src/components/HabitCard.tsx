@@ -349,8 +349,8 @@ export const HabitCard = memo(({ item, nowMs }: HabitCardProps) => {
                                 style={[
                                     styles.groupStreakPill,
                                     {
-                                        borderColor: 'rgba(245, 158, 11, 0.72)',
-                                        backgroundColor: 'transparent',
+                                        borderColor: isDark ? 'rgba(245, 158, 11, 0.72)' : 'rgba(217, 119, 6, 0.42)',
+                                        backgroundColor: isDark ? 'rgba(245, 158, 11, 0.13)' : 'rgba(245, 158, 11, 0.10)',
                                         shadowColor: theme.colors.amber[500],
                                     },
                                 ]}
@@ -482,13 +482,16 @@ const styles = StyleSheet.create({
     groupStreakPill: {
         flexDirection: 'row',
         alignItems: 'center',
+        justifyContent: 'center',
         alignSelf: 'center',
         gap: 5,
-        paddingVertical: 7,
+        minHeight: 34,
+        paddingVertical: 6,
         paddingHorizontal: 11,
         borderRadius: 9999,
         borderWidth: 1,
         flexShrink: 0,
+        overflow: 'hidden',
         shadowOpacity: 0.18,
         shadowRadius: 8,
         shadowOffset: { width: 0, height: 3 },

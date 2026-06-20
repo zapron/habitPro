@@ -21,11 +21,8 @@ export type ToastContextValue = {
   showToast: (message: string, variant?: ToastVariant, durationMs?: number) => void;
 };
 
-type ToastInternalContextValue = ToastContextValue & {
-  payload: ToastPayload | null;
-};
-
-const ToastContext = createContext<ToastInternalContextValue | null>(null);
+const ToastActionContext = createContext<ToastContextValue | null>(null);
+const ToastStateContext = createContext<ToastPayload | null>(null);
 
 const DEFAULT_MS = 2800;
 const LONG_MS = 4200;
@@ -98,10 +95,10 @@ function ToastBanner({
  * {@link useToastBottomPadding} can detect (tabs) vs full-screen routes.
  */
 export function ToastHost() {
-  const ctx = useContext(ToastContext);
+  const payload = useContext(ToastStateContext);
   const paddingBottom = useToastBottomPadding();
-  if (!ctx?.payload) return null;
-  return <ToastBanner payload={ctx.payload} paddingBottom={paddingBottom} />;
+  if (!payload) return null;
+  return <ToastBanner payload={payload} paddingBottom={paddingBottom} />;
 }
 
 export function ToastProvider({ children }: { children: ReactNode }) {
@@ -128,20 +125,21 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     [],
   );
 
-  const value = useMemo(
-    () => ({ showToast, payload } satisfies ToastInternalContextValue),
-    [showToast, payload],
-  );
+  const value = useMemo(() => ({ showToast } satisfies ToastContextValue), [showToast]);
 
-  return <ToastContext.Provider value={value}>{children}</ToastContext.Provider>;
+  return (
+    <ToastActionContext.Provider value={value}>
+      <ToastStateContext.Provider value={payload}>{children}</ToastStateContext.Provider>
+    </ToastActionContext.Provider>
+  );
 }
 
 export function useToast(): ToastContextValue {
-  const ctx = useContext(ToastContext);
+  const ctx = useContext(ToastActionContext);
   if (!ctx) {
     throw new Error("useToast must be used within ToastProvider");
   }
-  return { showToast: ctx.showToast };
+  return ctx;
 }
 
 const styles = StyleSheet.create({
