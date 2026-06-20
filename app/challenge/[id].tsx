@@ -43,7 +43,6 @@ import { useAuth } from "../../src/context/AuthContext";
 import { usePremium } from "../../src/context/PremiumContext";
 import { usePlusUpsell } from "../../src/context/PlusUpsellContext";
 import { useHabitStore } from "../../src/store/habitStore";
-import { useShallow } from "zustand/react/shallow";
 import {
   listChallengeActivityPage,
   listRecentNudgesPage,
@@ -54,9 +53,8 @@ import {
   getCachedChallengePrimarySnapshot,
   getProfileLabelsForIds,
   leaveChallengeGroup,
+  listChallengeStreakMembersPage,
   loadChallengePrimarySnapshot,
-  refreshCohortPeerHabits,
-  refreshCohortPeerHabitsCached,
   type ProfileLabel,
 } from "../../src/lib/groupChallengesApi";
 import { backOrReplace } from "../../src/lib/navigation";
@@ -114,9 +112,12 @@ function participantDisplayName(label: ProfileLabel | undefined): string {
 
 const CHALLENGE_ACTIVITY_PAGE_SIZE = 20;
 const CHALLENGE_REPAIR_PAGE_SIZE = 20;
-const INITIAL_PARTICIPANTS_TO_RENDER = 6;
-const PARTICIPANT_RENDER_BATCH = 8;
+const REPAIR_BADGE_PEEK_LIMIT = 3;
+const STREAK_MEMBERS_PAGE_SIZE = 5;
+const STREAK_SKELETON_CARD_COUNT = 3;
 const REPAIR_DISMISS_STORAGE_PREFIX = "challenge-repair-dismissed";
+
+type ChallengeDetailTab = "streaks" | "activity" | "repairs";
 
 function repairDismissStorageKey(userId: string, challengeId: string): string {
   return `${REPAIR_DISMISS_STORAGE_PREFIX}:${userId}:${challengeId}`;
@@ -141,6 +142,49 @@ type ParticipantCardProps = {
   isDark: boolean;
   nowMs: number;
 };
+
+type ParticipantCardSkeletonProps = {
+  themedStyles: any;
+  isDark: boolean;
+};
+
+const ParticipantCardSkeleton = memo(function ParticipantCardSkeleton({
+  themedStyles,
+  isDark,
+}: ParticipantCardSkeletonProps) {
+  return (
+    <View style={[styles.participantCard, themedStyles.card]}>
+      <View style={styles.participantSkeletonHeader}>
+        <View style={styles.participantSkeletonTitleCluster}>
+          <ShimmerBlock isDark={isDark} height={20} radius={10} style={{ width: "58%" }} />
+          <View style={styles.participantSkeletonPills}>
+            <ShimmerBlock isDark={isDark} height={24} radius={999} style={{ width: 54 }} />
+            <ShimmerBlock isDark={isDark} height={24} radius={999} style={{ width: 30 }} />
+          </View>
+        </View>
+        <ShimmerBlock isDark={isDark} height={30} radius={999} style={{ width: 126 }} />
+      </View>
+
+      <View style={styles.participantSkeletonProgress}>
+        <View style={styles.participantSkeletonProgressTop}>
+          <ShimmerBlock isDark={isDark} height={12} radius={6} style={{ width: 78 }} />
+          <ShimmerBlock isDark={isDark} height={12} radius={6} style={{ width: 48 }} />
+        </View>
+        <ShimmerBlock isDark={isDark} height={8} radius={999} style={{ width: "86%" }} />
+      </View>
+
+      <View style={styles.participantSkeletonFooter}>
+        <ShimmerBlock isDark={isDark} height={34} radius={14} style={{ width: 46 }} />
+        <View style={styles.participantSkeletonFooterCopy}>
+          <ShimmerBlock isDark={isDark} height={14} radius={7} style={{ width: "74%" }} />
+          <ShimmerBlock isDark={isDark} height={12} radius={6} style={{ width: "46%" }} />
+        </View>
+      </View>
+    </View>
+  );
+});
+
+ParticipantCardSkeleton.displayName = "ParticipantCardSkeleton";
 
 const ParticipantCard = memo(function ParticipantCard({
   memberId,
@@ -294,14 +338,6 @@ export default function ChallengeDetailScreen() {
       [challengeId]
     )
   );
-  const peers = useHabitStore(
-    useShallow(
-      useCallback(
-        (s) => s.cohortPeerHabits.filter((h) => h.challengeGroupId === challengeId),
-        [challengeId]
-      )
-    )
-  );
   const myXp = useHabitStore((s) => s.xp);
   const deleteHabit = useHabitStore((s) => s.deleteHabit);
 
@@ -329,6 +365,13 @@ export default function ChallengeDetailScreen() {
   const [activityNextOffset, setActivityNextOffset] = useState<number | null>(null);
   const [nudgeNextOffset, setNudgeNextOffset] = useState<number | null>(null);
   const [repairNextOffset, setRepairNextOffset] = useState<number | null>(null);
+  const [repairPreviewHasMore, setRepairPreviewHasMore] = useState(false);
+  const [streakMemberIds, setStreakMemberIds] = useState<string[]>([]);
+  const [streakHabitByMemberId, setStreakHabitByMemberId] = useState<Record<string, Habit>>({});
+  const [streakNextOffset, setStreakNextOffset] = useState<number | null>(null);
+  const [streakInitialLoading, setStreakInitialLoading] = useState(false);
+  const [streakLoadingMore, setStreakLoadingMore] = useState(false);
+  const [streakHydrated, setStreakHydrated] = useState(false);
   const [cohortNow, setCohortNow] = useState(() => Date.now());
   const [leaveBusy, setLeaveBusy] = useState(false);
   const [leaveDialogOpen, setLeaveDialogOpen] = useState(false);
@@ -342,7 +385,7 @@ export default function ChallengeDetailScreen() {
     vote: "approve" | "decline";
   } | null>(null);
   const [missionDetailsOpen, setMissionDetailsOpen] = useState(false);
-  const [visibleParticipantCount, setVisibleParticipantCount] = useState(INITIAL_PARTICIPANTS_TO_RENDER);
+  const [activeTab, setActiveTab] = useState<ChallengeDetailTab>("streaks");
 
   const themedStyles = useMemo(() => {
     return {
@@ -377,9 +420,14 @@ export default function ChallengeDetailScreen() {
   const secondaryHydratedRef = useRef(false);
   const repairInitialLoadInFlightRef = useRef(false);
   const repairHydratedRef = useRef(false);
+  const repairBadgeProbeInFlightRef = useRef(false);
+  const repairBadgeProbeHydratedRef = useRef(false);
   const activityLoadMoreInFlightRef = useRef(false);
   const repairLoadMoreInFlightRef = useRef(false);
+  const streakLoadInFlightRef = useRef(false);
+  const streakNextOffsetRef = useRef<number | null>(null);
   const socialActionInFlightRef = useRef(false);
+  const activeTabRef = useRef<ChallengeDetailTab>("streaks");
 
   const loadSecondary = useCallback(async (opts?: { silent?: boolean }) => {
     if (!challengeId) return;
@@ -445,6 +493,7 @@ export default function ChallengeDetailScreen() {
       setRepairRows(res.page.items);
       setRepairVotes(res.votes);
       setRepairNextOffset(res.page.nextOffset);
+      setRepairPreviewHasMore(res.page.nextOffset != null);
       const labels =
         res.profileLabels ?? await getProfileLabelsForIds(res.page.items.map((row) => row.user_id));
       if (!screenActiveRef.current) return;
@@ -461,33 +510,134 @@ export default function ChallengeDetailScreen() {
     }
   }, [challengeId]);
 
-  const scheduleSecondaryHydration = useCallback(() => {
+  const loadRepairBadgeHint = useCallback(async () => {
+    if (!challengeId) return;
+    if (repairHydratedRef.current || repairInitialLoadInFlightRef.current) return;
+    if (repairBadgeProbeInFlightRef.current || repairBadgeProbeHydratedRef.current) return;
+    repairBadgeProbeInFlightRef.current = true;
+    try {
+      const res = await listChallengeStreakRepairsPage(challengeId, {
+        offset: 0,
+        limit: REPAIR_BADGE_PEEK_LIMIT,
+        status: "pending",
+      });
+      if (!res.ok) return;
+      if (!screenActiveRef.current || repairHydratedRef.current) return;
+      setRepairRows(res.page.items);
+      setRepairVotes(res.votes);
+      setRepairNextOffset(res.page.nextOffset);
+      setRepairPreviewHasMore(res.page.nextOffset != null);
+      if (res.profileLabels) {
+        setProfileLabels((prev) => ({ ...prev, ...res.profileLabels }));
+      }
+    } finally {
+      repairBadgeProbeInFlightRef.current = false;
+      repairBadgeProbeHydratedRef.current = true;
+    }
+  }, [challengeId]);
+
+  const loadStreakMembers = useCallback(async (opts?: { reset?: boolean; silent?: boolean }) => {
+    if (!challengeId) return;
+    if (streakLoadInFlightRef.current) return;
+    const reset = opts?.reset ?? false;
+    const silent = opts?.silent ?? false;
+    const offset = reset ? 0 : streakNextOffsetRef.current;
+    if (!reset && offset == null) return;
+
+    streakLoadInFlightRef.current = true;
+    if (reset) {
+      if (!silent) setStreakInitialLoading(true);
+    } else {
+      setStreakLoadingMore(true);
+    }
+    try {
+      const page = await listChallengeStreakMembersPage(challengeId, {
+        offset: offset ?? 0,
+        limit: STREAK_MEMBERS_PAGE_SIZE,
+      });
+      if (!screenActiveRef.current) return;
+      setStreakMemberIds((prev) => {
+        if (reset) return page.items.map((item) => item.memberId);
+        const seen = new Set(prev);
+        const next = [...prev];
+        for (const item of page.items) {
+          if (seen.has(item.memberId)) continue;
+          seen.add(item.memberId);
+          next.push(item.memberId);
+        }
+        return next;
+      });
+      setStreakHabitByMemberId((prev) => {
+        const next: Record<string, Habit> = reset ? {} : { ...prev };
+        for (const item of page.items) {
+          if (item.habit) next[item.memberId] = item.habit;
+        }
+        return next;
+      });
+      setProfileLabels((prev) => {
+        const next = { ...prev };
+        for (const item of page.items) {
+          if (item.label) next[item.memberId] = item.label;
+        }
+        return next;
+      });
+      streakNextOffsetRef.current = page.nextOffset;
+      setStreakNextOffset(page.nextOffset);
+      setStreakHydrated(true);
+    } catch (e) {
+      if (__DEV__) console.warn("[challenge] loadStreakMembers", e);
+    } finally {
+      streakLoadInFlightRef.current = false;
+      if (screenActiveRef.current) {
+        setStreakInitialLoading(false);
+        setStreakLoadingMore(false);
+      }
+    }
+  }, [challengeId]);
+
+  useEffect(() => {
+    activeTabRef.current = activeTab;
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (!screenActiveRef.current) return undefined;
+    const shouldLoadActivity =
+      activeTab === "activity" &&
+      !secondaryHydratedRef.current &&
+      !secondaryLoadInFlightRef.current;
+    const shouldLoadRepairs =
+      activeTab === "repairs" &&
+      !repairHydratedRef.current &&
+      !repairInitialLoadInFlightRef.current;
+    if (!shouldLoadActivity && !shouldLoadRepairs) return undefined;
+
     const task = InteractionManager.runAfterInteractions(() => {
       hydrationTasksRef.current = hydrationTasksRef.current.filter((item) => item !== task);
-      if (!screenActiveRef.current) return;
-      void loadSecondary({ silent: true });
-      void loadRepairRequests({ silent: true });
+      if (!screenActiveRef.current || activeTabRef.current !== activeTab) return;
+      if (shouldLoadActivity) void loadSecondary({ silent: false });
+      if (shouldLoadRepairs) void loadRepairRequests({ silent: false });
     });
     hydrationTasksRef.current.push(task);
-  }, [loadRepairRequests, loadSecondary]);
+    return () => {
+      task.cancel?.();
+      hydrationTasksRef.current = hydrationTasksRef.current.filter((item) => item !== task);
+    };
+  }, [activeTab, loadRepairRequests, loadSecondary]);
 
   const load = useCallback(async (opts?: { silent?: boolean }) => {
     if (!challengeId) return;
     const silent = opts?.silent ?? false;
     if (!silent) setLoading(true);
-    let didLoad = false;
     try {
       const primary = await loadChallengePrimarySnapshot(challengeId);
       if (!screenActiveRef.current) return;
       setGroup(primary.group);
       setMemberIdsOrdered(primary.memberIdsOrdered);
       setProfileLabels((prev) => ({ ...prev, ...primary.profileLabels }));
-      didLoad = true;
     } finally {
       if (!silent && screenActiveRef.current) setLoading(false);
     }
-    if (didLoad) scheduleSecondaryHydration();
-  }, [challengeId, scheduleSecondaryHydration]);
+  }, [challengeId]);
 
   useEffect(() => {
     setFeedActivity([]);
@@ -500,6 +650,13 @@ export default function ChallengeDetailScreen() {
     setSecondaryLoading(false);
     setRepairHydrated(false);
     setRepairInitialLoading(false);
+    setRepairPreviewHasMore(false);
+    setStreakMemberIds([]);
+    setStreakHabitByMemberId({});
+    setStreakNextOffset(null);
+    setStreakInitialLoading(false);
+    setStreakLoadingMore(false);
+    setStreakHydrated(false);
     setActivityNextOffset(null);
     setNudgeNextOffset(null);
     setRepairNextOffset(null);
@@ -507,9 +664,14 @@ export default function ChallengeDetailScreen() {
     secondaryHydratedRef.current = false;
     repairInitialLoadInFlightRef.current = false;
     repairHydratedRef.current = false;
+    repairBadgeProbeInFlightRef.current = false;
+    repairBadgeProbeHydratedRef.current = false;
     activityLoadMoreInFlightRef.current = false;
     repairLoadMoreInFlightRef.current = false;
-    setVisibleParticipantCount(INITIAL_PARTICIPANTS_TO_RENDER);
+    streakLoadInFlightRef.current = false;
+    streakNextOffsetRef.current = null;
+    activeTabRef.current = "streaks";
+    setActiveTab("streaks");
   }, [challengeId]);
 
   useEffect(() => {
@@ -537,16 +699,21 @@ export default function ChallengeDetailScreen() {
       setCohortNow(Date.now());
       const silent = focusOnceRef.current;
       focusOnceRef.current = true;
-      if (silent) scheduleSecondaryHydration();
       void load({ silent });
-      void refreshCohortPeerHabitsCached();
+      void loadStreakMembers({ reset: true, silent });
       void refreshPremiumAccess({ serverOnly: true, cachedAccessOk: true, background: true });
+      const repairBadgeTask = InteractionManager.runAfterInteractions(() => {
+        hydrationTasksRef.current = hydrationTasksRef.current.filter((item) => item !== repairBadgeTask);
+        if (!screenActiveRef.current || activeTabRef.current === "repairs") return;
+        void loadRepairBadgeHint();
+      });
+      hydrationTasksRef.current.push(repairBadgeTask);
       return () => {
         screenActiveRef.current = false;
         hydrationTasksRef.current.forEach((task) => task.cancel?.());
         hydrationTasksRef.current = [];
       };
-    }, [load, refreshPremiumAccess, scheduleSecondaryHydration]),
+    }, [load, loadRepairBadgeHint, loadStreakMembers, refreshPremiumAccess]),
   );
 
   useEffect(() => {
@@ -572,7 +739,12 @@ export default function ChallengeDetailScreen() {
             setRepairVotes((prev) => prev.filter((vote) => vote.repair_id !== next.id));
             return;
           }
-          void loadRepairRequests({ silent: true });
+          if (repairHydratedRef.current || activeTabRef.current === "repairs") {
+            void loadRepairRequests({ silent: true });
+          } else {
+            repairBadgeProbeHydratedRef.current = false;
+            void loadRepairBadgeHint();
+          }
         },
       )
       .on(
@@ -584,7 +756,12 @@ export default function ChallengeDetailScreen() {
           filter: `challenge_id=eq.${challengeId}`,
         },
         () => {
-          void loadRepairRequests({ silent: true });
+          if (repairHydratedRef.current || activeTabRef.current === "repairs") {
+            void loadRepairRequests({ silent: true });
+          } else {
+            repairBadgeProbeHydratedRef.current = false;
+            void loadRepairBadgeHint();
+          }
         },
       )
       .subscribe();
@@ -592,21 +769,22 @@ export default function ChallengeDetailScreen() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [challengeId, loadRepairRequests]);
+  }, [challengeId, loadRepairBadgeHint, loadRepairRequests]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      await Promise.all([
+      const tasks: Promise<unknown>[] = [
         load({ silent: true }),
-        loadSecondary({ silent: true }),
-        loadRepairRequests({ silent: true }),
-        refreshCohortPeerHabits(),
-      ]);
+      ];
+      if (activeTab === "streaks") tasks.push(loadStreakMembers({ reset: true, silent: true }));
+      if (activeTab === "activity") tasks.push(loadSecondary({ silent: true }));
+      if (activeTab === "repairs") tasks.push(loadRepairRequests({ silent: true }));
+      await Promise.all(tasks);
     } finally {
       if (screenActiveRef.current) setRefreshing(false);
     }
-  }, [load, loadRepairRequests, loadSecondary]);
+  }, [activeTab, load, loadRepairRequests, loadSecondary, loadStreakMembers]);
 
   const loadMoreSquadActivity = useCallback(async () => {
     if (
@@ -862,17 +1040,17 @@ export default function ChallengeDetailScreen() {
         }
 
         void loadSecondary({ silent: true });
-        void refreshCohortPeerHabits();
+        void loadStreakMembers({ reset: true, silent: true });
       } finally {
         if (screenActiveRef.current) setRepairBusyAction(null);
       }
     },
     [
       loadSecondary,
+      loadStreakMembers,
       dismissRepairRequest,
       myUserId,
       openUpsell,
-      refreshCohortPeerHabits,
       refreshPremiumAccess,
       handleServerPremiumRequired,
       repairBusyAction,
@@ -905,14 +1083,14 @@ export default function ChallengeDetailScreen() {
         }
         await deleteAllCommunityWinsForHabit(habitSnapshot);
         deleteHabit(habitId);
-        await refreshCohortPeerHabits().catch(() => {});
+        await loadStreakMembers({ reset: true, silent: true }).catch(() => {});
         showToast("Left group mission", "success");
         backOrReplace(router, "/(tabs)/compete");
       } finally {
         setLeaveBusy(false);
       }
     })();
-  }, [challengeId, myHabit, deleteHabit, router, showToast]);
+  }, [challengeId, myHabit, deleteHabit, loadStreakMembers, router, showToast]);
 
   useEffect(() => {
     if (!myHabit || myHabit.isCompleted) return;
@@ -933,48 +1111,21 @@ export default function ChallengeDetailScreen() {
 
   const habitByMemberId = useMemo(() => {
     const m = new Map<string, Habit>();
-    for (const peer of peers) {
-      const ownerId = peer.ownerUserId ?? "";
-      if (ownerId) m.set(ownerId, peer);
+    for (const [memberId, habit] of Object.entries(streakHabitByMemberId)) {
+      m.set(memberId, habit);
     }
     if (myUserId && myHabit) {
       m.set(myUserId, myHabit);
     }
     return m;
-  }, [peers, myUserId, myHabit]);
+  }, [streakHabitByMemberId, myUserId, myHabit]);
 
   const habitForMember = useCallback(
     (memberId: string): Habit | undefined => habitByMemberId.get(memberId),
     [habitByMemberId],
   );
 
-  const sortedMemberIds = useMemo(() => {
-    return [...memberIdsOrdered].sort((a, b) => {
-      const ha = habitForMember(a);
-      const hb = habitForMember(b);
-      const sa = ha?.streak ?? -1;
-      const sb = hb?.streak ?? -1;
-      if (sb !== sa) return sb - sa;
-      const da = ha?.completedDates.length ?? 0;
-      const db = hb?.completedDates.length ?? 0;
-      return db - da;
-    });
-  }, [memberIdsOrdered, habitForMember]);
-
-  useEffect(() => {
-    if (visibleParticipantCount >= sortedMemberIds.length) return;
-    const id = setTimeout(() => {
-      setVisibleParticipantCount((count) =>
-        Math.min(sortedMemberIds.length, count + PARTICIPANT_RENDER_BATCH),
-      );
-    }, 24);
-    return () => clearTimeout(id);
-  }, [sortedMemberIds.length, visibleParticipantCount]);
-
-  const visibleSortedMemberIds = useMemo(
-    () => sortedMemberIds.slice(0, visibleParticipantCount),
-    [sortedMemberIds, visibleParticipantCount],
-  );
+  const visibleSortedMemberIds = streakMemberIds;
 
   const cohortBoard = useMemo((): {
     model: CohortMastheadModel;
@@ -1163,6 +1314,18 @@ export default function ChallengeDetailScreen() {
   );
   const showRepairSkeleton = repairInitialLoading && !repairHydrated && actionableRepairRows.length === 0;
   const showRepairSlot = showRepairSkeleton || actionableRepairRows.length > 0;
+  const activityTabCount = secondaryHydrated ? feedActivity.length + feedNudges.length : null;
+  const repairTabCount =
+    repairHydrated || actionableRepairRows.length > 0
+      ? repairNextOffset != null || (!repairHydrated && repairPreviewHasMore)
+        ? `${actionableRepairRows.length}+`
+        : actionableRepairRows.length
+      : null;
+  const detailTabs: { key: ChallengeDetailTab; label: string; count: number | string | null }[] = [
+    { key: "streaks", label: "Streaks", count: memberIdsOrdered.length },
+    { key: "activity", label: "Activity", count: activityTabCount },
+    { key: "repairs", label: "Repairs", count: repairTabCount },
+  ];
 
   const bottomPad = 40;
 
@@ -1376,9 +1539,77 @@ export default function ChallengeDetailScreen() {
             </View>
           ) : null}
 
-          {showRepairSlot ? (
-            <View style={styles.repairSlot}>
-              {showRepairSkeleton ? (
+          <View
+            style={[
+              styles.detailTabs,
+              {
+                backgroundColor: isDark ? "rgba(15, 23, 42, 0.72)" : theme.colors.surface,
+                borderColor: theme.colors.border,
+              },
+            ]}
+          >
+            {detailTabs.map((tab) => {
+              const active = activeTab === tab.key;
+              return (
+                <TouchableOpacity
+                  key={tab.key}
+                  activeOpacity={0.86}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Show ${tab.label}`}
+                  onPress={() => setActiveTab(tab.key)}
+                  style={[
+                    styles.detailTab,
+                    {
+                      backgroundColor: active
+                        ? theme.colors.indigo[500]
+                        : "transparent",
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.detailTabText,
+                      { color: active ? theme.colors.white : theme.colors.textSecondary },
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {tab.label}
+                  </Text>
+                  {tab.count != null ? (
+                    <View
+                      style={[
+                        styles.detailTabBadge,
+                        {
+                          backgroundColor: active
+                            ? "rgba(255,255,255,0.18)"
+                            : isDark
+                              ? "rgba(148, 163, 184, 0.14)"
+                              : theme.colors.surfaceElevated,
+                          borderColor: active
+                            ? "rgba(255,255,255,0.26)"
+                            : theme.colors.border,
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.detailTabBadgeText,
+                          { color: active ? theme.colors.white : theme.colors.textMuted },
+                        ]}
+                      >
+                        {tab.count}
+                      </Text>
+                    </View>
+                  ) : null}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          {activeTab === "repairs" ? (
+            showRepairSlot ? (
+              <View style={styles.repairSlot}>
+                {showRepairSkeleton ? (
                 <View
                   style={[
                     styles.repairCompactCard,
@@ -1683,80 +1914,187 @@ export default function ChallengeDetailScreen() {
                 )}
               </TouchableOpacity>
             ) : null}
-          </View>
+              </View>
+            ) : (
+              <View
+                style={[
+                  styles.tabEmptyCard,
+                  {
+                    backgroundColor: theme.colors.surface,
+                    borderColor: theme.colors.border,
+                  },
+                ]}
+              >
+                {repairInitialLoading || !repairHydrated ? (
+                  <ActivityIndicator size="small" color={theme.colors.cyan[500]} />
+                ) : (
+                  <Clock size={18} color={theme.colors.cyan[500]} />
+                )}
+                <View style={styles.tabEmptyCopy}>
+                  <Text style={[styles.tabEmptyTitle, { color: theme.colors.textPrimary }]}>
+                    {repairInitialLoading || !repairHydrated ? "Checking repairs" : "No repair requests"}
+                  </Text>
+                  <Text style={[styles.tabEmptyBody, { color: theme.colors.textMuted }]}>
+                    {repairInitialLoading || !repairHydrated
+                      ? "Squad approvals will appear here."
+                      : "Pending squad repair requests will show here."}
+                  </Text>
+                </View>
+              </View>
+            )
           ) : null}
 
-          {cohortBoard ? (
-            <CohortLeaderHero
-              theme={theme}
-              isDark={isDark}
-              model={cohortBoard.model}
-              leaderName={cohortBoard.spotlight?.name ?? "Squad"}
-              leaderLabel={
-                cohortBoard.spotlight ? profileLabels[cohortBoard.spotlight.userId] : undefined
-              }
-              leaderHabit={cohortBoard.spotlight?.habit}
-              runnerUp={cohortBoard.runnerUp}
-            />
-          ) : null}
-
-          <SquadActivitySection
-            theme={theme}
-            isDark={isDark}
-            feedActivity={feedActivity}
-            feedNudges={feedNudges}
-            profileLabels={profileLabels}
-            myUserId={myUserId}
-            nudgeBusyKey={nudgeBusyKey}
-            congratsSentActivityIds={congratsSentActivityIds}
-            onCongrats={(actorUserId, activityId) => void onCongrats(actorUserId, activityId)}
-            allowNudgeActions={squadNudgeActionsEnabled}
-            loading={secondaryLoading}
-            loadingMore={activityLoadingMore}
-            hasMore={activityNextOffset != null || nudgeNextOffset != null}
-            onLoadMore={() => void loadMoreSquadActivity()}
-            compact
-          />
-
-          <View style={styles.participantsSectionHeader}>
-            <Text style={[styles.sectionLabel, styles.participantsSectionTitle, { color: theme.colors.textMuted }]}>
-              PARTICIPANTS
-            </Text>
-            <CohortParticipantTimelineLegend theme={theme} isDark={isDark} />
-          </View>
-
-          {memberIdsOrdered.length === 0 ? (
-            <Text style={{ color: theme.colors.textSecondary }}>No members loaded yet.</Text>
-          ) : (
-            visibleSortedMemberIds.map((memberId) => (
-              <ParticipantCard
-                key={memberId}
-                memberId={memberId}
-                label={profileLabels[memberId]}
-                habit={habitForMember(memberId)}
-                myXp={myXp}
-                myUserId={myUserId}
-                squadNudgeActionsEnabled={squadNudgeActionsEnabled}
-                nudgeBusyKey={
-                  nudgeBusyKey?.startsWith(`${memberId}-`) ? nudgeBusyKey : null
-                }
-                socialLocked={socialLocked}
-                customNoteSentToday={customNoteSentTodayToUserIds.has(memberId)}
-                onSendNudge={onSendNudge}
-                openUpsell={openUpsell}
-                onOpenCustomNote={onOpenCustomNote}
-                onOpenPlayerJourney={onOpenPlayerJourney}
-                themedStyles={themedStyles}
+          {activeTab === "activity" ? (
+            <>
+              <SquadActivitySection
                 theme={theme}
                 isDark={isDark}
-                nowMs={cohortNow}
+                feedActivity={feedActivity}
+                feedNudges={feedNudges}
+                profileLabels={profileLabels}
+                myUserId={myUserId}
+                nudgeBusyKey={nudgeBusyKey}
+                congratsSentActivityIds={congratsSentActivityIds}
+                onCongrats={(actorUserId, activityId) => void onCongrats(actorUserId, activityId)}
+                allowNudgeActions={squadNudgeActionsEnabled}
+                loading={secondaryLoading}
+                loadingMore={activityLoadingMore}
+                hasMore={activityNextOffset != null || nudgeNextOffset != null}
+                onLoadMore={() => void loadMoreSquadActivity()}
+                alwaysExpanded
               />
-            ))
-          )}
-          {visibleSortedMemberIds.length < sortedMemberIds.length ? (
-            <View style={styles.participantProgressiveFooter}>
-              <ActivityIndicator size="small" color={theme.colors.indigo[400]} />
-            </View>
+
+              {!secondaryHydrated && !secondaryLoading ? (
+                <View
+                  style={[
+                    styles.tabEmptyCard,
+                    {
+                      backgroundColor: theme.colors.surface,
+                      borderColor: theme.colors.border,
+                    },
+                  ]}
+                >
+                  <ActivityIndicator size="small" color={theme.colors.indigo[400]} />
+                  <View style={styles.tabEmptyCopy}>
+                    <Text style={[styles.tabEmptyTitle, { color: theme.colors.textPrimary }]}>
+                      Loading activity
+                    </Text>
+                    <Text style={[styles.tabEmptyBody, { color: theme.colors.textMuted }]}>
+                      Milestones and nudges will appear here.
+                    </Text>
+                  </View>
+                </View>
+              ) : null}
+
+              {!secondaryLoading && secondaryHydrated && feedActivity.length === 0 && feedNudges.length === 0 ? (
+                <View
+                  style={[
+                    styles.tabEmptyCard,
+                    {
+                      backgroundColor: theme.colors.surface,
+                      borderColor: theme.colors.border,
+                    },
+                  ]}
+                >
+                  <Users size={18} color={theme.colors.indigo[400]} />
+                  <View style={styles.tabEmptyCopy}>
+                    <Text style={[styles.tabEmptyTitle, { color: theme.colors.textPrimary }]}>
+                      No squad activity yet
+                    </Text>
+                    <Text style={[styles.tabEmptyBody, { color: theme.colors.textMuted }]}>
+                      Milestones and nudges will appear here.
+                    </Text>
+                  </View>
+                </View>
+              ) : null}
+            </>
+          ) : null}
+
+          {activeTab === "streaks" ? (
+            <>
+              {cohortBoard ? (
+                <CohortLeaderHero
+                  theme={theme}
+                  isDark={isDark}
+                  model={cohortBoard.model}
+                  leaderName={cohortBoard.spotlight?.name ?? "Squad"}
+                  leaderLabel={
+                    cohortBoard.spotlight ? profileLabels[cohortBoard.spotlight.userId] : undefined
+                  }
+                  leaderHabit={cohortBoard.spotlight?.habit}
+                  runnerUp={cohortBoard.runnerUp}
+                />
+              ) : null}
+
+              <View style={styles.participantsSectionHeader}>
+                <Text style={[styles.sectionLabel, styles.participantsSectionTitle, { color: theme.colors.textMuted }]}>
+                  PARTICIPANTS
+                </Text>
+                <CohortParticipantTimelineLegend theme={theme} isDark={isDark} />
+              </View>
+
+              {!streakHydrated && (streakInitialLoading || memberIdsOrdered.length > 0) ? (
+                Array.from({ length: STREAK_SKELETON_CARD_COUNT }, (_, index) => (
+                  <ParticipantCardSkeleton
+                    key={`streak-skeleton-${index}`}
+                    themedStyles={themedStyles}
+                    isDark={isDark}
+                  />
+                ))
+              ) : memberIdsOrdered.length === 0 ? (
+                <Text style={{ color: theme.colors.textSecondary }}>No members loaded yet.</Text>
+              ) : visibleSortedMemberIds.length === 0 ? (
+                <Text style={{ color: theme.colors.textSecondary }}>No streaks loaded yet.</Text>
+              ) : (
+                visibleSortedMemberIds.map((memberId) => (
+                  <ParticipantCard
+                    key={memberId}
+                    memberId={memberId}
+                    label={profileLabels[memberId]}
+                    habit={habitForMember(memberId)}
+                    myXp={myXp}
+                    myUserId={myUserId}
+                    squadNudgeActionsEnabled={squadNudgeActionsEnabled}
+                    nudgeBusyKey={
+                      nudgeBusyKey?.startsWith(`${memberId}-`) ? nudgeBusyKey : null
+                    }
+                    socialLocked={socialLocked}
+                    customNoteSentToday={customNoteSentTodayToUserIds.has(memberId)}
+                    onSendNudge={onSendNudge}
+                    openUpsell={openUpsell}
+                    onOpenCustomNote={onOpenCustomNote}
+                    onOpenPlayerJourney={onOpenPlayerJourney}
+                    themedStyles={themedStyles}
+                    theme={theme}
+                    isDark={isDark}
+                    nowMs={cohortNow}
+                  />
+                ))
+              )}
+              {streakNextOffset != null ? (
+                <TouchableOpacity
+                  onPress={() => void loadStreakMembers({ reset: false })}
+                  disabled={streakLoadingMore}
+                  activeOpacity={0.85}
+                  style={[
+                    styles.loadMoreSecondaryBtn,
+                    {
+                      backgroundColor: theme.colors.surfaceElevated,
+                      borderColor: theme.colors.border,
+                      opacity: streakLoadingMore ? 0.72 : 1,
+                    },
+                  ]}
+                >
+                  {streakLoadingMore ? (
+                    <ActivityIndicator size="small" color={theme.colors.indigo[400]} />
+                  ) : (
+                    <Text style={[styles.loadMoreSecondaryText, { color: theme.colors.textSecondary }]}>
+                      Load more members
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              ) : null}
+            </>
           ) : null}
 
         </ScrollView>
@@ -1866,6 +2204,69 @@ const styles = StyleSheet.create({
   dayPillText: { fontSize: 11, fontWeight: "800", letterSpacing: 0.3 },
   plusGateRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 14 },
   plusGateText: { fontSize: 12, fontWeight: "700" },
+  detailTabs: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderRadius: 18,
+    padding: 4,
+    gap: 4,
+    marginBottom: 14,
+  },
+  detailTab: {
+    flex: 1,
+    minHeight: 44,
+    borderRadius: 14,
+    paddingHorizontal: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+  },
+  detailTabText: {
+    fontSize: 13,
+    lineHeight: 17,
+    fontWeight: "900",
+  },
+  detailTabBadge: {
+    minWidth: 22,
+    height: 22,
+    paddingHorizontal: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  detailTabBadgeText: {
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: "900",
+  },
+  tabEmptyCard: {
+    minHeight: 84,
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  tabEmptyCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  tabEmptyTitle: {
+    fontSize: 14,
+    lineHeight: 18,
+    fontWeight: "900",
+  },
+  tabEmptyBody: {
+    marginTop: 3,
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: "700",
+  },
   sectionLabel: {
     fontSize: 11,
     fontWeight: "800",
@@ -2117,6 +2518,42 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     padding: 16,
     marginBottom: 14,
+  },
+  participantSkeletonHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+    marginBottom: 14,
+  },
+  participantSkeletonTitleCluster: {
+    flex: 1,
+    minWidth: 0,
+    gap: 8,
+  },
+  participantSkeletonPills: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  participantSkeletonProgress: {
+    gap: 8,
+    marginBottom: 14,
+  },
+  participantSkeletonProgressTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  participantSkeletonFooter: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  participantSkeletonFooterCopy: {
+    flex: 1,
+    minWidth: 0,
+    gap: 8,
   },
   participantHeaderRow: {
     flexDirection: "row",

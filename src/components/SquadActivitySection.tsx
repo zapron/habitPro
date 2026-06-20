@@ -172,6 +172,8 @@ type Props = {
   onLoadMore?: () => void;
   /** Small top placement used beside/under the cohort ranking summary. */
   compact?: boolean;
+  /** Render the feed body directly without accordion controls. */
+  alwaysExpanded?: boolean;
   /** Expand accordion and scroll parent ScrollView to this section (e.g. challenge screen). */
   onScrollToSection?: () => void;
 };
@@ -192,9 +194,11 @@ export const SquadActivitySection = memo(function SquadActivitySection({
   hasMore = false,
   onLoadMore,
   compact = false,
+  alwaysExpanded = false,
   onScrollToSection,
 }: Props) {
   const [expanded, setExpanded] = useState(false);
+  const isExpanded = alwaysExpanded || expanded;
 
   // Dedupe: when a check-in triggers both mission_day and streak_milestone at the same value
   // (common on 7/14/21), prefer showing the streak milestone to avoid repetitive rows.
@@ -236,7 +240,7 @@ export const SquadActivitySection = memo(function SquadActivitySection({
         style={[
           styles.accordionShell,
           compact && styles.compactShell,
-          compact && expanded && styles.compactShellExpanded,
+          compact && isExpanded && styles.compactShellExpanded,
           {
             backgroundColor: cardBg,
             borderColor: border,
@@ -249,14 +253,15 @@ export const SquadActivitySection = memo(function SquadActivitySection({
           styles.accordionTrigger,
           compact && styles.compactTrigger,
           {
-            borderBottomWidth: expanded ? StyleSheet.hairlineWidth : 0,
+            borderBottomWidth: isExpanded ? StyleSheet.hairlineWidth : 0,
             borderBottomColor: border,
             },
           ]}
         >
           <Pressable
             accessibilityRole="button"
-            accessibilityState={{ expanded }}
+            accessibilityState={{ expanded: isExpanded }}
+            disabled={alwaysExpanded}
             onPress={() => setExpanded((v) => !v)}
             style={({ pressed }) => [
               styles.accordionTriggerMain,
@@ -305,7 +310,7 @@ export const SquadActivitySection = memo(function SquadActivitySection({
                     {summaryLine}
                   </Text>
                   <Text style={[styles.heroSubHint, { color: theme.colors.textMuted }]} numberOfLines={1}>
-                    {expanded ? "Milestones and cheers from your group" : "Tap to expand"}
+                    {isExpanded ? "Milestones and cheers from your group" : "Tap to expand"}
                   </Text>
                 </View>
                 </>
@@ -327,38 +332,49 @@ export const SquadActivitySection = memo(function SquadActivitySection({
                 <Text style={[styles.viewAllText, { color: theme.colors.indigo[400] }]}>View all</Text>
               </Pressable>
             ) : null}
-            <Pressable
-              accessibilityRole="button"
-              accessibilityState={{ expanded }}
-              onPress={() => setExpanded((v) => !v)}
-              hitSlop={8}
-              accessibilityLabel={expanded ? "Collapse squad activity" : "Expand squad activity"}
-              style={({ pressed }) => [
-                styles.expandIconButton,
-                compact && styles.compactExpandIconButton,
-                compact && {
-                  borderColor: theme.colors.border,
-                  backgroundColor: isDark ? "rgba(129, 140, 248, 0.12)" : "rgba(99, 102, 241, 0.08)",
-                },
-                { opacity: pressed ? 0.75 : 1 },
-              ]}
-            >
-              <ChevronDown
-                size={compact ? theme.icon.md : theme.icon.lg}
-                color={compact ? theme.colors.indigo[400] : theme.colors.textMuted}
-                strokeWidth={2.2}
-                style={{
-                  transform: compact
-                    ? [{ rotate: expanded ? "180deg" : "0deg" }]
-                    : [{ rotate: expanded ? "0deg" : "-90deg" }],
-                }}
-              />
-            </Pressable>
+            {!alwaysExpanded ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityState={{ expanded: isExpanded }}
+                onPress={() => setExpanded((v) => !v)}
+                hitSlop={8}
+                accessibilityLabel={isExpanded ? "Collapse squad activity" : "Expand squad activity"}
+                style={({ pressed }) => [
+                  styles.expandIconButton,
+                  compact && styles.compactExpandIconButton,
+                  compact && {
+                    borderColor: theme.colors.border,
+                    backgroundColor: isDark ? "rgba(129, 140, 248, 0.12)" : "rgba(99, 102, 241, 0.08)",
+                  },
+                  { opacity: pressed ? 0.75 : 1 },
+                ]}
+              >
+                <ChevronDown
+                  size={compact ? theme.icon.md : theme.icon.lg}
+                  color={compact ? theme.colors.indigo[400] : theme.colors.textMuted}
+                  strokeWidth={2.2}
+                  style={{
+                    transform: compact
+                      ? [{ rotate: isExpanded ? "180deg" : "0deg" }]
+                      : [{ rotate: isExpanded ? "0deg" : "-90deg" }],
+                  }}
+                />
+              </Pressable>
+            ) : null}
           </View>
         </View>
 
-        {expanded ? (
+        {isExpanded ? (
           <View style={styles.accordionBody}>
+        {loading && effectiveActivity.length === 0 && feedNudges.length === 0 ? (
+          <View style={styles.loadingState}>
+            <ActivityIndicator size="small" color={theme.colors.indigo[400]} />
+            <Text style={[styles.loadingStateText, { color: theme.colors.textMuted }]}>
+              Loading squad activity
+            </Text>
+          </View>
+        ) : null}
+
         {effectiveActivity.length > 0 ? (
           <>
             <View style={styles.subsectionHeader}>
@@ -567,6 +583,16 @@ const styles = StyleSheet.create({
   accordionBody: {
     paddingVertical: 8,
     paddingHorizontal: 4,
+  },
+  loadingState: {
+    minHeight: 72,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  loadingStateText: {
+    fontSize: 12,
+    fontWeight: "800",
   },
   headerIconWrap: {
     width: 40,
