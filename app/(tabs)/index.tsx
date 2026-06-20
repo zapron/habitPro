@@ -17,6 +17,7 @@ import {
   RefreshControl,
   ScrollView,
   InteractionManager,
+  Linking,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -39,10 +40,12 @@ import {
   Globe,
   Swords,
   Flame,
+  Download,
 } from "lucide-react-native";
 import { useHabitStore } from "../../src/store/habitStore";
 import { useShallow } from "zustand/react/shallow";
 import { useAuth } from "../../src/context/AuthContext";
+import { useAppVersion } from "../../src/context/AppVersionContext";
 import { isSupabaseConfigured } from "../../src/lib/env";
 import {
   countUnreadNotifications,
@@ -274,6 +277,7 @@ export default function Home() {
   const insets = useSafeAreaInsets();
   const { theme, isDark } = useTheme();
   const { session, syncReady, syncError, retryHydrate } = useAuth();
+  const { softUpdateAvailable, latestVersion, softUpdateUrl, softUpdateMessage } = useAppVersion();
   const reduceMotion = useReducedMotion();
   const { habits, cohortPeerHabits, miniMissions, xp } = useHabitStore(
     useShallow((s) => ({ habits: s.habits, cohortPeerHabits: s.cohortPeerHabits, miniMissions: s.miniMissions, xp: s.xp })),
@@ -573,6 +577,11 @@ export default function Home() {
     }
     router.push("/mini");
   }, [homeSpark, router]);
+
+  const onSoftUpdatePress = useCallback(() => {
+    if (!softUpdateUrl) return;
+    void Linking.openURL(softUpdateUrl).catch(() => {});
+  }, [softUpdateUrl]);
 
   const greetingText = useMemo(() => getGreeting(), []);
 
@@ -940,6 +949,51 @@ export default function Home() {
             </Text>
           ) : null}
         </View>
+
+        {softUpdateAvailable ? (
+          <TouchableOpacity
+            activeOpacity={softUpdateUrl ? 0.86 : 1}
+            disabled={!softUpdateUrl}
+            onPress={onSoftUpdatePress}
+            accessibilityRole={softUpdateUrl ? "button" : undefined}
+            accessibilityLabel={
+              latestVersion
+                ? `Update version ${latestVersion} available`
+                : "App update available"
+            }
+            style={[
+              styles.softUpdateStrip,
+              {
+                backgroundColor: isDark ? "rgba(79, 70, 229, 0.14)" : "rgba(79, 70, 229, 0.08)",
+                borderColor: isDark ? "rgba(129, 140, 248, 0.34)" : "rgba(79, 70, 229, 0.16)",
+              },
+            ]}
+          >
+            <View
+              style={[
+                styles.softUpdateIcon,
+                {
+                  backgroundColor: isDark ? "rgba(34, 211, 238, 0.14)" : "rgba(8, 145, 178, 0.1)",
+                },
+              ]}
+            >
+              <Download size={15} color={theme.colors.cyan[400]} strokeWidth={2.5} />
+            </View>
+            <View style={styles.softUpdateCopy}>
+              <Text style={[styles.softUpdateTitle, { color: theme.colors.textPrimary }]} numberOfLines={1}>
+                {latestVersion ? `Update v${latestVersion} available` : "Update available"}
+              </Text>
+              <Text style={[styles.softUpdateBody, { color: theme.colors.textMuted }]} numberOfLines={1}>
+                {softUpdateMessage ?? "Small improvements are ready when you are."}
+              </Text>
+            </View>
+            {softUpdateUrl ? (
+              <View style={[styles.softUpdateAction, { backgroundColor: theme.colors.indigo[600] }]}>
+                <Text style={styles.softUpdateActionText}>Update</Text>
+              </View>
+            ) : null}
+          </TouchableOpacity>
+        ) : null}
 
         <CoachMarkTarget id="home_mini_missions">
           <TouchableOpacity
@@ -1468,6 +1522,54 @@ const styles = StyleSheet.create({
   xpValue: { fontSize: 11, fontWeight: "600" },
   xpTrack: { height: 6, borderRadius: 3, overflow: "hidden" },
   xpFill: { height: "100%", borderRadius: 3 },
+  softUpdateStrip: {
+    minHeight: 48,
+    borderRadius: 16,
+    borderWidth: 1,
+    marginBottom: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  softUpdateIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: 9999,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  softUpdateCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  softUpdateTitle: {
+    fontSize: 12,
+    lineHeight: 15,
+    fontWeight: "900",
+  },
+  softUpdateBody: {
+    marginTop: 2,
+    fontSize: 10.5,
+    lineHeight: 13,
+    fontWeight: "700",
+  },
+  softUpdateAction: {
+    minHeight: 28,
+    borderRadius: 9999,
+    paddingHorizontal: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  softUpdateActionText: {
+    color: "#ffffff",
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: "900",
+  },
   sparkInlineRow: {
     flexDirection: "row",
     alignItems: "center",
