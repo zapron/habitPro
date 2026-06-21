@@ -21,7 +21,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
 import * as Haptics from "expo-haptics";
-import { ArrowLeft, Clock, Eye, EyeOff, Info, LogOut, Users, X } from "lucide-react-native";
+import { ArrowLeft, Check, Clock, Eye, EyeOff, Info, LogOut, Users, X } from "lucide-react-native";
 import { CohortLeaderHero } from "../../src/components/CohortLeaderHero";
 import type { CohortMastheadModel } from "../../src/components/CohortMasthead";
 import { CohortNudgeChips } from "../../src/components/CohortNudgeChips";
@@ -108,6 +108,22 @@ function participantDisplayName(label: ProfileLabel | undefined): string {
     return u.charAt(0).toUpperCase() + u.slice(1);
   }
   return "Member";
+}
+
+async function getRepairProfileLabels(
+  rows: StreakRepairRow[],
+  votes: StreakRepairVoteRow[],
+  provided?: Record<string, ProfileLabel>,
+): Promise<Record<string, ProfileLabel>> {
+  const labels: Record<string, ProfileLabel> = { ...(provided ?? {}) };
+  const ids = new Set<string>();
+  for (const row of rows) ids.add(row.user_id);
+  for (const vote of votes) ids.add(vote.voter_id);
+  const missing = [...ids].filter((id) => !labels[id]);
+  if (missing.length > 0) {
+    Object.assign(labels, await getProfileLabelsForIds(missing));
+  }
+  return labels;
 }
 
 const CHALLENGE_ACTIVITY_PAGE_SIZE = 20;
@@ -355,6 +371,7 @@ export default function ChallengeDetailScreen() {
   const [feedActivity, setFeedActivity] = useState<ChallengeActivityRow[]>([]);
   const [feedNudges, setFeedNudges] = useState<ChallengeNudgeRow[]>([]);
   const [nudgeBusyKey, setNudgeBusyKey] = useState<string | null>(null);
+  const [optimisticCongratsActivityIds, setOptimisticCongratsActivityIds] = useState<Set<string>>(() => new Set());
   const [refreshing, setRefreshing] = useState(false);
   const [secondaryLoading, setSecondaryLoading] = useState(false);
   const [secondaryHydrated, setSecondaryHydrated] = useState(false);
@@ -486,7 +503,6 @@ export default function ChallengeDetailScreen() {
       const res = await listChallengeStreakRepairsPage(challengeId, {
         offset: 0,
         limit: CHALLENGE_REPAIR_PAGE_SIZE,
-        status: "pending",
       });
       if (!res.ok) return;
       if (!screenActiveRef.current) return;
@@ -494,8 +510,7 @@ export default function ChallengeDetailScreen() {
       setRepairVotes(res.votes);
       setRepairNextOffset(res.page.nextOffset);
       setRepairPreviewHasMore(res.page.nextOffset != null);
-      const labels =
-        res.profileLabels ?? await getProfileLabelsForIds(res.page.items.map((row) => row.user_id));
+      const labels = await getRepairProfileLabels(res.page.items, res.votes, res.profileLabels);
       if (!screenActiveRef.current) return;
       setProfileLabels((prev) => ({ ...prev, ...labels }));
     } finally {
@@ -519,7 +534,6 @@ export default function ChallengeDetailScreen() {
       const res = await listChallengeStreakRepairsPage(challengeId, {
         offset: 0,
         limit: REPAIR_BADGE_PEEK_LIMIT,
-        status: "pending",
       });
       if (!res.ok) return;
       if (!screenActiveRef.current || repairHydratedRef.current) return;
@@ -527,9 +541,9 @@ export default function ChallengeDetailScreen() {
       setRepairVotes(res.votes);
       setRepairNextOffset(res.page.nextOffset);
       setRepairPreviewHasMore(res.page.nextOffset != null);
-      if (res.profileLabels) {
-        setProfileLabels((prev) => ({ ...prev, ...res.profileLabels }));
-      }
+      const labels = await getRepairProfileLabels(res.page.items, res.votes, res.profileLabels);
+      if (!screenActiveRef.current || repairHydratedRef.current) return;
+      setProfileLabels((prev) => ({ ...prev, ...labels }));
     } finally {
       repairBadgeProbeInFlightRef.current = false;
       repairBadgeProbeHydratedRef.current = true;
@@ -642,6 +656,7 @@ export default function ChallengeDetailScreen() {
   useEffect(() => {
     setFeedActivity([]);
     setFeedNudges([]);
+    setOptimisticCongratsActivityIds(new Set());
     setRepairRows([]);
     setRepairVotes([]);
     setExpandedRepairId(null);
@@ -854,7 +869,6 @@ export default function ChallengeDetailScreen() {
       const res = await listChallengeStreakRepairsPage(challengeId, {
         offset: repairNextOffset,
         limit: CHALLENGE_REPAIR_PAGE_SIZE,
-        status: "pending",
       });
       if (!res.ok) return;
       if (!screenActiveRef.current) return;
@@ -867,8 +881,7 @@ export default function ChallengeDetailScreen() {
         return [...prev, ...res.votes.filter((vote) => !seen.has(`${vote.repair_id}:${vote.voter_id}`))];
       });
       setRepairNextOffset(res.page.nextOffset);
-      const labels =
-        res.profileLabels ?? await getProfileLabelsForIds(res.page.items.map((row) => row.user_id));
+      const labels = await getRepairProfileLabels(res.page.items, res.votes, res.profileLabels);
       if (!screenActiveRef.current) return;
       setProfileLabels((prev) => ({ ...prev, ...labels }));
     } catch (e) {
@@ -930,7 +943,7 @@ export default function ChallengeDetailScreen() {
       if (!challengeId || !myUserId || actorUserId === myUserId) return;
       if (socialActionInFlightRef.current) return;
       socialActionInFlightRef.current = true;
-      const key = `${actorUserId}-congrats`;
+      const key = `congrats:${activityId}`;
       setNudgeBusyKey(key);
       try {
         const freshPremium = await refreshPremiumAccess({ serverOnly: true, cachedAccessOk: true });
@@ -951,9 +964,24 @@ export default function ChallengeDetailScreen() {
             await handleServerPremiumRequired("squad_nudge");
             return;
           }
+          if (error.message.toLowerCase().includes("already congratulated")) {
+            setOptimisticCongratsActivityIds((prev) => {
+              if (prev.has(activityId)) return prev;
+              const next = new Set(prev);
+              next.add(activityId);
+              return next;
+            });
+            return;
+          }
           showToast(error.message, "error");
           return;
         }
+        setOptimisticCongratsActivityIds((prev) => {
+          if (prev.has(activityId)) return prev;
+          const next = new Set(prev);
+          next.add(activityId);
+          return next;
+        });
         await load({ silent: true });
       } finally {
         socialActionInFlightRef.current = false;
@@ -965,14 +993,14 @@ export default function ChallengeDetailScreen() {
 
   const congratsSentActivityIds = useMemo(() => {
     if (!myUserId) return new Set<string>();
-    const s = new Set<string>();
+    const s = new Set<string>(optimisticCongratsActivityIds);
     for (const n of feedNudges) {
       if (n.from_user_id === myUserId && n.kind === "congrats" && typeof n.activity_id === "string" && n.activity_id) {
         s.add(n.activity_id);
       }
     }
     return s;
-  }, [feedNudges, myUserId]);
+  }, [feedNudges, myUserId, optimisticCongratsActivityIds]);
 
   const persistDismissedRepairIds = useCallback((next: Set<string>) => {
     if (!challengeId || !myUserId) return;
@@ -1032,10 +1060,20 @@ export default function ChallengeDetailScreen() {
           (vote === "approve" ? 1 : 0);
         const resolvesRequest = vote === "decline" || approveCount >= repair.approvals_required;
         if (resolvesRequest) {
-          setRepairRows((prev) => prev.filter((row) => row.id !== repair.id));
+          const resolvedAt = new Date().toISOString();
+          setRepairRows((prev) =>
+            prev.map((row) =>
+              row.id === repair.id
+                ? {
+                    ...row,
+                    status: vote === "decline" ? "declined" : "applied",
+                    applied_at: vote === "approve" ? row.applied_at ?? resolvedAt : row.applied_at,
+                  }
+                : row,
+            ),
+          );
           showToast(vote === "approve" ? "Repair vote saved." : "Repair declined.", "success");
         } else {
-          if (vote === "approve") dismissRepairRequest(repair.id);
           showToast("Repair vote saved.", "success");
         }
 
@@ -1048,7 +1086,6 @@ export default function ChallengeDetailScreen() {
     [
       loadSecondary,
       loadStreakMembers,
-      dismissRepairRequest,
       myUserId,
       openUpsell,
       refreshPremiumAccess,
@@ -1329,15 +1366,8 @@ export default function ChallengeDetailScreen() {
 
   const actionableRepairRows = useMemo(
     () =>
-      repairRows.filter((repair) => {
-        if (repair.status !== "pending") return false;
-        if (dismissedRepairIds.has(repair.id)) return false;
-        if (!myUserId) return true;
-        if (repair.user_id === myUserId) return true;
-        const votes = repairVotesByRepairId.get(repair.id) ?? [];
-        return !votes.some((vote) => vote.voter_id === myUserId);
-      }),
-    [dismissedRepairIds, myUserId, repairRows, repairVotesByRepairId],
+      repairRows.filter((repair) => !dismissedRepairIds.has(repair.id)),
+    [dismissedRepairIds, repairRows],
   );
   const showRepairSkeleton = repairInitialLoading && !repairHydrated && actionableRepairRows.length === 0;
   const showRepairSlot = showRepairSkeleton || actionableRepairRows.length > 0;
@@ -1678,12 +1708,68 @@ export default function ChallengeDetailScreen() {
               const declines = votes.filter((v) => v.vote === "decline").length;
               const myVote = myUserId ? votes.find((v) => v.voter_id === myUserId)?.vote ?? null : null;
               const isRequester = Boolean(myUserId && myUserId === r.user_id);
+              const isPendingRepair = r.status === "pending";
+              const statusLabel =
+                r.status === "applied"
+                  ? "Repaired"
+                  : r.status === "approved"
+                    ? "Approved"
+                    : r.status === "declined"
+                      ? "Declined"
+                      : "Pending";
+              const statusAccent =
+                r.status === "declined"
+                  ? theme.colors.red[500]
+                  : r.status === "pending"
+                    ? theme.colors.cyan[500]
+                    : theme.colors.green[500];
+              const statusRowBg =
+                r.status === "declined"
+                  ? isDark
+                    ? "rgba(239, 68, 68, 0.12)"
+                    : "rgba(220, 38, 38, 0.08)"
+                  : r.status === "pending"
+                    ? isDark
+                      ? "rgba(34, 211, 238, 0.10)"
+                      : "rgba(6, 182, 212, 0.10)"
+                    : isDark
+                      ? "rgba(34, 197, 94, 0.12)"
+                      : "rgba(22, 163, 74, 0.10)";
+              const statusRowBorder =
+                r.status === "declined"
+                  ? isDark
+                    ? "rgba(239, 68, 68, 0.32)"
+                    : "rgba(220, 38, 38, 0.24)"
+                  : r.status === "pending"
+                    ? isDark
+                      ? "rgba(34, 211, 238, 0.24)"
+                      : "rgba(6, 182, 212, 0.22)"
+                    : isDark
+                      ? "rgba(34, 197, 94, 0.28)"
+                      : "rgba(22, 163, 74, 0.22)";
+              const statusRowText =
+                r.status === "pending"
+                  ? "Waiting for squad approvals..."
+                  : r.status === "declined"
+                    ? "Repair request declined."
+                    : "Repair has been applied.";
+              const approvedNames = votes
+                .filter((v) => v.vote === "approve")
+                .map((v) => participantDisplayName(profileLabels[v.voter_id]));
+              const declinedNames = votes
+                .filter((v) => v.vote === "decline")
+                .map((v) => participantDisplayName(profileLabels[v.voter_id]));
               const busyVote = repairBusyAction?.id === r.id ? repairBusyAction.vote : null;
-              const canVote = Boolean(myUserId && !isRequester && !myVote && declines === 0 && !busyVote);
+              const canVote = Boolean(isPendingRepair && myUserId && !isRequester && !myVote && declines === 0 && !busyVote);
               const approvalsRequired = Math.max(1, r.approvals_required);
               const approvalsLeft = Math.max(0, approvalsRequired - approves);
               const approvalProgress = Math.min(1, approves / approvalsRequired);
               const approvalProgressWidth = `${Math.round(approvalProgress * 100)}%` as const;
+              const approvalProgressHint = isPendingRepair
+                ? approvalsLeft === 0
+                  ? "Ready"
+                  : `${approvalsLeft} more`
+                : statusLabel;
               const repairToneBg = isDark ? "rgba(34, 211, 238, 0.10)" : "rgba(6, 182, 212, 0.10)";
               const repairToneBorder = isDark ? "rgba(34, 211, 238, 0.24)" : "rgba(6, 182, 212, 0.22)";
               const approveBg = isDark ? "rgba(34, 211, 238, 0.14)" : "rgba(6, 182, 212, 0.08)";
@@ -1693,7 +1779,7 @@ export default function ChallengeDetailScreen() {
               const declineSelectedBg = isDark ? "rgba(239, 68, 68, 0.14)" : "rgba(220, 38, 38, 0.08)";
               const declineBorder = theme.colors.border;
               const declineSelectedBorder = isDark ? "rgba(239, 68, 68, 0.32)" : "rgba(220, 38, 38, 0.24)";
-              const actionDisabled = Boolean(!myUserId || isRequester || declines !== 0 || busyVote);
+              const actionDisabled = Boolean(!isPendingRepair || !myUserId || isRequester || declines !== 0 || busyVote || myVote);
               const expanded = expandedRepairId === r.id;
               const extraCount = Math.max(0, actionableRepairRows.length - repairIndex - 1);
               return (
@@ -1725,13 +1811,19 @@ export default function ChallengeDetailScreen() {
                           },
                         ]}
                       >
-                        <Users size={16} color={theme.colors.cyan[500]} />
+                        {r.status === "declined" ? (
+                          <X size={16} color={statusAccent} />
+                        ) : r.status === "pending" ? (
+                          <Users size={16} color={statusAccent} />
+                        ) : (
+                          <Check size={16} color={statusAccent} strokeWidth={2.8} />
+                        )}
                       </View>
                       <View style={styles.repairCompactCopy}>
                         <View style={styles.repairCompactTitleRow}>
                           <Text style={[styles.repairCompactTitle, { color: theme.colors.textPrimary }]} numberOfLines={1}>
                             {actionableRepairRows.length === 1
-                              ? "1 pending streak repair"
+                              ? `${statusLabel} streak repair`
                               : `Repair ${repairIndex + 1} of ${actionableRepairRows.length}`}
                           </Text>
                           <View
@@ -1818,7 +1910,7 @@ export default function ChallengeDetailScreen() {
                             {approves} of {approvalsRequired} approvals
                           </Text>
                           <Text style={[styles.repairProgressHint, { color: theme.colors.textMuted }]}>
-                            {approvalsLeft === 0 ? "Ready" : `${approvalsLeft} more`}
+                            {approvalProgressHint}
                           </Text>
                         </View>
                         <View style={[styles.repairProgressTrack, { backgroundColor: theme.colors.border }]}>
@@ -1832,6 +1924,26 @@ export default function ChallengeDetailScreen() {
                             ]}
                           />
                         </View>
+                      </View>
+
+                      <View
+                        style={[
+                          styles.repairVoteSummary,
+                          {
+                            backgroundColor: theme.colors.surfaceElevated,
+                            borderColor: theme.colors.border,
+                          },
+                        ]}
+                      >
+                        <Text style={[styles.repairReasonLabel, { color: theme.colors.textMuted }]}>Squad votes</Text>
+                        <Text style={[styles.repairVoteSummaryText, { color: theme.colors.textSecondary }]} numberOfLines={2}>
+                          {approvedNames.length > 0 ? `Approved by ${approvedNames.join(", ")}` : "No approvals yet"}
+                        </Text>
+                        {declinedNames.length > 0 ? (
+                          <Text style={[styles.repairVoteSummaryText, { color: theme.colors.red[500] }]} numberOfLines={2}>
+                            Declined by {declinedNames.join(", ")}
+                          </Text>
+                        ) : null}
                       </View>
 
                       {r.reason ? (
@@ -1851,19 +1963,25 @@ export default function ChallengeDetailScreen() {
                         </View>
                       ) : null}
 
-                      {isRequester ? (
+                      {isRequester || !isPendingRepair ? (
                         <View
                           style={[
                             styles.repairRequesterRow,
                             {
-                              backgroundColor: repairToneBg,
-                              borderColor: repairToneBorder,
+                              backgroundColor: statusRowBg,
+                              borderColor: statusRowBorder,
                             },
                           ]}
                         >
-                          <Clock size={15} color={theme.colors.cyan[500]} />
+                          {r.status === "declined" ? (
+                            <X size={15} color={statusAccent} />
+                          ) : r.status === "pending" ? (
+                            <Clock size={15} color={statusAccent} />
+                          ) : (
+                            <Check size={15} color={statusAccent} strokeWidth={2.8} />
+                          )}
                           <Text style={[styles.repairRequesterText, { color: theme.colors.textSecondary }]}>
-                            Waiting for squad approvals...
+                            {statusRowText}
                           </Text>
                         </View>
                       ) : (
@@ -1959,12 +2077,12 @@ export default function ChallengeDetailScreen() {
                 )}
                 <View style={styles.tabEmptyCopy}>
                   <Text style={[styles.tabEmptyTitle, { color: theme.colors.textPrimary }]}>
-                    {repairInitialLoading || !repairHydrated ? "Checking repairs" : "No repair requests"}
+                    {repairInitialLoading || !repairHydrated ? "Checking repairs" : "No repair history"}
                   </Text>
                   <Text style={[styles.tabEmptyBody, { color: theme.colors.textMuted }]}>
                     {repairInitialLoading || !repairHydrated
                       ? "Squad approvals will appear here."
-                      : "Pending squad repair requests will show here."}
+                      : "Squad repair requests and results will show here."}
                   </Text>
                 </View>
               </View>
@@ -2500,6 +2618,15 @@ const styles = StyleSheet.create({
   },
   repairReasonLabel: { fontSize: 9, fontWeight: "900", marginBottom: 4 },
   repairReason: { fontSize: 12, fontWeight: "700", lineHeight: 17 },
+  repairVoteSummary: {
+    borderRadius: 14,
+    borderWidth: 1,
+    paddingHorizontal: 11,
+    paddingVertical: 10,
+    marginTop: 10,
+    gap: 3,
+  },
+  repairVoteSummaryText: { fontSize: 12, fontWeight: "800", lineHeight: 17 },
   repairActionsRow: { flexDirection: "row", gap: 10, marginTop: 12 },
   repairRequesterRow: {
     flexDirection: "row",

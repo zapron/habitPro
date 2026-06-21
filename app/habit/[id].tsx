@@ -100,12 +100,11 @@ type MissionDialogState =
     | { kind: 'blockedReset' }
     | { kind: 'signInRequired' };
 
-function getMilestones(totalDays: number, mode: string): number[] {
-    if (mode === 'autopilot') return [7, 14, 21];
-    const m1 = Math.round(totalDays / 3);
-    const m2 = Math.round((totalDays * 2) / 3);
-    const m3 = totalDays;
-    return [...new Set([m1, m2, m3])];
+function getMilestones(totalDays: number, _mode: string): number[] {
+    const days = Math.max(1, Math.floor(totalDays));
+    const markers: number[] = [];
+    for (let day = 7; day <= days; day += 7) markers.push(day);
+    return markers;
 }
 
 const HabitGridBrandRing = React.memo(function HabitGridBrandRing({

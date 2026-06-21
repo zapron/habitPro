@@ -9,7 +9,7 @@ import {
   Easing,
 } from "react-native";
 import { useRouter } from 'expo-router';
-import { Flame, Check, Plane, Gamepad2, Globe, Swords, Users } from 'lucide-react-native';
+import { Flame, Check, CircleX, Plane, Gamepad2, Globe, Swords, Users } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
 import { Habit } from '../types/habit';
 import { needsMainMissionOutcome } from '../utils/mainMissionUi';
@@ -175,6 +175,8 @@ export const HabitCard = memo(({ item, nowMs }: HabitCardProps) => {
     const totalDays = Math.max(1, item.totalDays ?? 21);
     const needsReport = useMemo(() => needsMainMissionOutcome(item, nowMs), [item, nowMs]);
     const missionWon = item.missionReport === 'accomplished';
+    const missionFailed = item.missionReport === 'failed';
+    const failedOutcomeColor = isDark ? "#fca5a5" : "#fb7185";
     const isManual = (item.mode ?? 'autopilot') === 'manual';
     const completedDateSet = useMemo(() => new Set(item.completedDates), [item.completedDates]);
     /** Mission completion: distinct days checked / campaign length */
@@ -260,7 +262,7 @@ export const HabitCard = memo(({ item, nowMs }: HabitCardProps) => {
                         {Boolean(item.challengeGroupId) && (
                             <Swords size={14} color={theme.colors.indigo[400]} />
                         )}
-                        {streakCheckinAvailable && !missionWon ? (
+                        {streakCheckinAvailable && !missionWon && !missionFailed ? (
                             <View
                                 style={styles.pulseGlyphWrap}
                                 accessibilityLabel="Streak check-in available"
@@ -283,13 +285,10 @@ export const HabitCard = memo(({ item, nowMs }: HabitCardProps) => {
                         {item.missionReport === 'accomplished' && (
                             <Text style={[styles.reportPillText, { color: theme.colors.green[500] }]}>ACCOMPLISHED</Text>
                         )}
-                        {item.missionReport === 'failed' && (
-                            <Text style={[styles.reportPillText, { color: theme.colors.red[500] }]}>FAILED</Text>
-                        )}
                         {needsReport && (
                             <Text style={[styles.reportPillText, { color: theme.colors.amber[500] }]}>REVIEW DUE</Text>
                         )}
-                        {repair && !missionWon && !needsReport ? (
+                        {repair && !missionWon && !missionFailed && !needsReport ? (
                           <TouchableOpacity
                             onPress={() => {
                               void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -316,8 +315,10 @@ export const HabitCard = memo(({ item, nowMs }: HabitCardProps) => {
                         ) : null}
                     </View>
 
-                    <View style={styles.cardStats}>
-                        <View>
+                    {!missionFailed || item.challengeGroupId ? (
+                      <View style={styles.cardStats}>
+                          {!missionFailed ? (
+                            <View>
                             <Text
                                 style={[
                                     styles.cardStreak,
@@ -341,8 +342,9 @@ export const HabitCard = memo(({ item, nowMs }: HabitCardProps) => {
                                       ? 'Confirm mission outcome'
                                       : `${Math.round(campaignProgress * 100)}% Complete`}
                             </Text>
-                        </View>
-                        {item.challengeGroupId ? (
+                            </View>
+                          ) : null}
+                          {item.challengeGroupId ? (
                             <TouchableOpacity
                                 onPress={() => router.push(`/challenge/${item.challengeGroupId}`)}
                                 activeOpacity={0.82}
@@ -362,8 +364,9 @@ export const HabitCard = memo(({ item, nowMs }: HabitCardProps) => {
                                     View Group Streaks
                                 </Text>
                             </TouchableOpacity>
-                        ) : null}
-                    </View>
+                          ) : null}
+                      </View>
+                    ) : null}
             </View>
 
             {(() => {
@@ -373,7 +376,7 @@ export const HabitCard = memo(({ item, nowMs }: HabitCardProps) => {
 
               return (
                 <View style={[styles.ringWrap, { width: ringSize, height: ringSize }]}>
-                  {!missionWon ? (
+                  {!missionWon && !missionFailed ? (
                     <RingDayArcs
                       ringSize={ringSize}
                       strokeWidth={strokeWidth}
@@ -403,6 +406,8 @@ export const HabitCard = memo(({ item, nowMs }: HabitCardProps) => {
                   >
                     {missionWon ? (
                       <Check size={20} color={theme.colors.green[500]} strokeWidth={3} />
+                    ) : missionFailed ? (
+                      <CircleX size={38} color={failedOutcomeColor} strokeWidth={2.1} />
                     ) : (
                       <View style={styles.ringCenterInner}>
                         <Text

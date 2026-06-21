@@ -384,6 +384,8 @@ export const SquadActivitySection = memo(function SquadActivitySection({
             {effectiveActivity.map((row, index) => {
               const { title, subtitle } = milestoneCopy(row, profileLabels);
               const isMission = row.kind === "mission_day";
+              const isCongratsBusy = nudgeBusyKey === `congrats:${row.id}`;
+              const alreadyCongratulated = congratsSentActivityIds?.has(row.id) === true;
               const accent = isMission ? theme.colors.green[500] : theme.colors.cyan[400];
               const tintBg = isMission
                 ? isDark
@@ -424,7 +426,7 @@ export const SquadActivitySection = memo(function SquadActivitySection({
                   </View>
                   {allowNudgeActions && myUserId && row.actor_user_id !== myUserId ? (
                     <Pressable
-                      disabled={nudgeBusyKey !== null || congratsSentActivityIds?.has(row.id) === true}
+                      disabled={nudgeBusyKey !== null || alreadyCongratulated}
                       onPress={() => onCongrats(row.actor_user_id, row.id)}
                       style={({ pressed }) => [
                         styles.congratsPill,
@@ -433,7 +435,7 @@ export const SquadActivitySection = memo(function SquadActivitySection({
                           opacity:
                             pressed
                               ? 0.85
-                              : congratsSentActivityIds?.has(row.id) === true
+                              : alreadyCongratulated
                                 ? 0.55
                                 : nudgeBusyKey !== null
                                   ? 0.5
@@ -441,9 +443,9 @@ export const SquadActivitySection = memo(function SquadActivitySection({
                         },
                       ]}
                     >
-                      {nudgeBusyKey === `${row.actor_user_id}-congrats` ? (
+                      {isCongratsBusy ? (
                         <ActivityIndicator size="small" color={theme.colors.indigo[400]} />
-                      ) : congratsSentActivityIds?.has(row.id) === true ? (
+                      ) : alreadyCongratulated ? (
                         <Text style={[styles.congratsPillText, { color: theme.colors.indigo[400] }]}>
                           Congratulated
                         </Text>

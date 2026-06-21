@@ -724,6 +724,7 @@ function RawStatTile({
   color,
   theme,
   isDark,
+  wide = false,
 }: {
   value: string | number;
   label: string;
@@ -731,11 +732,13 @@ function RawStatTile({
   color: string;
   theme: AppTheme;
   isDark: boolean;
+  wide?: boolean;
 }) {
   return (
     <View
       style={[
         styles.rawStatTile,
+        wide && styles.rawStatTileWide,
         {
           backgroundColor: isDark ? "rgba(255,255,255,0.035)" : "rgba(15,23,42,0.035)",
           borderColor: color + "3D",
@@ -1802,7 +1805,7 @@ export default function ProfileScreen() {
             <Text style={[styles.statsBoardHint, { color: theme.colors.textMuted }]}>visible data</Text>
           </View>
           <View style={styles.rawStatGrid}>
-            {rawStatTiles.map((tile) => (
+            {rawStatTiles.slice(0, 6).map((tile) => (
               <RawStatTile
                 key={tile.label}
                 value={tile.value}
@@ -1811,6 +1814,20 @@ export default function ProfileScreen() {
                 color={tile.color}
                 theme={theme}
                 isDark={isDark}
+              />
+            ))}
+          </View>
+          <View style={styles.rawStatWideRow}>
+            {rawStatTiles.slice(6).map((tile) => (
+              <RawStatTile
+                key={tile.label}
+                value={tile.value}
+                label={tile.label}
+                detail={tile.detail}
+                color={tile.color}
+                theme={theme}
+                isDark={isDark}
+                wide
               />
             ))}
           </View>
@@ -2293,6 +2310,14 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     padding: 10,
     justifyContent: "center",
+  },
+  rawStatWideRow: {
+    flexDirection: "row",
+    gap: 9,
+    marginTop: 9,
+  },
+  rawStatTileWide: {
+    width: "48.5%",
   },
   rawStatValue: { fontSize: 21, lineHeight: 25, fontWeight: "900", fontVariant: ["tabular-nums"] },
   rawStatLabel: { fontSize: 11, lineHeight: 14, fontWeight: "900", marginTop: 2 },
