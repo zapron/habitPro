@@ -19,7 +19,6 @@ import { View,
   LayoutChangeEvent,
   Switch,
   ActivityIndicator,
-  Alert,
   InteractionManager,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -74,6 +73,7 @@ import { useRefreshPremiumAccess } from "../../src/hooks/useRefreshPremiumAccess
 import { useRemoteStoreRefreshOnFocus } from "../../src/hooks/useRemoteStoreRefreshOnFocus";
 import { useUsernameGate } from "../../src/context/UsernameGateContext";
 import { useNotificationGate } from "../../src/context/NotificationGateContext";
+import { showAppAlert } from "../../src/context/AppDialogContext";
 import { isSupabaseConfigured } from '../../src/lib/env';
 import {
   leaveChallengeGroup,
@@ -613,7 +613,7 @@ export default function HabitDetail() {
             if (wantsPublish && memoryToSave) {
                 const hasImage = Boolean(memoryToSave.imageUrl || memoryToSave.imageUri);
                 if (!hasImage) {
-                    Alert.alert('Photo required', 'Community posts need a photo. Add a photo and save again to publish.', [
+                    showAppAlert('Photo required', 'Community posts need a photo. Add a photo and save again to publish.', [
                         { text: 'OK' },
                     ]);
                     return;
@@ -646,7 +646,7 @@ export default function HabitDetail() {
             const wantsPublishAfterSave = meta?.publishToCommunity === true && Boolean(memoryToSave);
             if (wantsPublishAfterSave && memoryToSave) {
                 if (!isSupabaseConfigured()) {
-                    Alert.alert(
+                    showAppAlert(
                         'Can’t publish',
                         'Cloud sync isn’t configured. Your moment is saved; Community wasn’t updated.',
                         [{ text: 'OK' }],
@@ -654,7 +654,7 @@ export default function HabitDetail() {
                     return;
                 }
                 if (!session?.user) {
-                    Alert.alert(
+                    showAppAlert(
                         'Sign in to publish',
                         'Sign in to share this moment in Community. Your check-in is saved.',
                         [{ text: 'OK' }],
@@ -665,7 +665,7 @@ export default function HabitDetail() {
                 const streakAfter = useHabitStore.getState().getHabit(habit.id)?.streak ?? 1;
                 const ok = await requireUsername("community_post");
                 if (!ok) {
-                    Alert.alert('Username required', 'Choose a username to publish to Community.', [{ text: 'OK' }]);
+                    showAppAlert('Username required', 'Choose a username to publish to Community.', [{ text: 'OK' }]);
                     return;
                 }
                 const res = await postCommunityWin({
@@ -686,7 +686,7 @@ export default function HabitDetail() {
                         openUpsell('community_publish');
                         return;
                     }
-                    Alert.alert('Couldn’t publish', res.error, [{ text: 'OK' }]);
+                    showAppAlert('Couldn’t publish', res.error, [{ text: 'OK' }]);
                 }
             }
         },
@@ -719,7 +719,7 @@ export default function HabitDetail() {
                 if (mem.communityPosted) return;
                 const hasMemoryImage = Boolean(mem.imageUrl || mem.imageUri);
                 if (!hasMemoryImage) {
-                    Alert.alert(
+                    showAppAlert(
                         'Photo required',
                         'Community posts need a photo. This moment only has text, so it can’t be shared to the feed.',
                         [{ text: 'OK' }],
@@ -727,11 +727,11 @@ export default function HabitDetail() {
                     return;
                 }
                 if (!isSupabaseConfigured()) {
-                    Alert.alert('Can’t publish', 'Cloud sync isn’t configured.', [{ text: 'OK' }]);
+                    showAppAlert('Can’t publish', 'Cloud sync isn’t configured.', [{ text: 'OK' }]);
                     return;
                 }
                 if (!session?.user) {
-                    Alert.alert('Sign in to publish', 'Sign in to share this moment in Community.', [{ text: 'OK' }]);
+                    showAppAlert('Sign in to publish', 'Sign in to share this moment in Community.', [{ text: 'OK' }]);
                     return;
                 }
                 setHabitCommunityPublishPending(true);
@@ -755,7 +755,7 @@ export default function HabitDetail() {
                     }
                     const ok = await requireUsername("community_post");
                     if (!ok) {
-                        Alert.alert('Username required', 'Choose a username to publish to Community.', [{ text: 'OK' }]);
+                        showAppAlert('Username required', 'Choose a username to publish to Community.', [{ text: 'OK' }]);
                         return;
                     }
                     const res = await postCommunityWin({
@@ -776,7 +776,7 @@ export default function HabitDetail() {
                             openUpsell('community_publish');
                             return;
                         }
-                        Alert.alert('Couldn’t publish', res.error, [{ text: 'OK' }]);
+                        showAppAlert('Couldn’t publish', res.error, [{ text: 'OK' }]);
                     }
                 } finally {
                     setHabitCommunityBusy(false);
@@ -786,7 +786,7 @@ export default function HabitDetail() {
             }
 
             if (!mem.communityPosted) return;
-            Alert.alert(
+            showAppAlert(
                 'Remove from Community?',
                 'This removes this moment from the feed. You won’t be able to share this check-in to Community again.',
                 [
@@ -800,7 +800,7 @@ export default function HabitDetail() {
                                 try {
                                     const del = await deleteCommunityWin(habitStreakCommunityWinId(habit.id, dateStr));
                                     if (del.ok === false) {
-                                        Alert.alert('Couldn’t remove', del.error, [{ text: 'OK' }]);
+                                        showAppAlert('Couldn’t remove', del.error, [{ text: 'OK' }]);
                                         return;
                                     }
                                     patchStreakMemory(habit.id, dateStr, {

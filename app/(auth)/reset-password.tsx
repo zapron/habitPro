@@ -7,7 +7,6 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  Alert,
   ActivityIndicator,
   ScrollView,
   StatusBar,
@@ -21,6 +20,7 @@ import { useAuth } from "../../src/context/AuthContext";
 import { Button } from "../../src/components/Button";
 import { getSupabase } from "../../src/lib/supabase";
 import { tryCompleteAuthFromUrl } from "../../src/lib/oauthExchange";
+import { showAppAlert } from "../../src/context/AppDialogContext";
 
 const FORM_MAX_WIDTH = 400;
 const MIN_LEN = 6;
@@ -65,27 +65,27 @@ export default function ResetPasswordScreen() {
 
   const onSubmit = async () => {
     if (password.length < MIN_LEN) {
-      Alert.alert("Password", `Use at least ${MIN_LEN} characters.`);
+      showAppAlert("Password", `Use at least ${MIN_LEN} characters.`);
       return;
     }
     if (password !== confirm) {
-      Alert.alert("Mismatch", "Enter the same password in both fields.");
+      showAppAlert("Mismatch", "Enter the same password in both fields.");
       return;
     }
     const supabase = getSupabase();
     if (!supabase) {
-      Alert.alert("Not configured", "Supabase is not configured.");
+      showAppAlert("Not configured", "Supabase is not configured.");
       return;
     }
     setLoading(true);
     const { error } = await supabase.auth.updateUser({ password });
     setLoading(false);
     if (error) {
-      Alert.alert("Could not update password", error.message);
+      showAppAlert("Could not update password", error.message);
       return;
     }
     clearPasswordRecovery();
-    Alert.alert("Password updated", "You can continue with your new password.", [
+    showAppAlert("Password updated", "You can continue with your new password.", [
       { text: "OK", onPress: () => router.replace("/") },
     ]);
   };

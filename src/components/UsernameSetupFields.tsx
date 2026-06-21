@@ -8,7 +8,6 @@ import { View,
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
-  Alert,
 } from "react-native";
 import { useTheme } from "../context/ThemeContext";
 import { useAuth } from "../context/AuthContext";
@@ -16,6 +15,7 @@ import { isSupabaseConfigured } from "../lib/env";
 import { getSupabase } from "../lib/supabase";
 import { validateUsername } from "../lib/profileUsername";
 import { useHabitStore } from "../store/habitStore";
+import { showAppAlert } from "../context/AppDialogContext";
 
 type Props = {
   /** Tighter layout for Profile hero vs Settings sheet */
@@ -42,7 +42,7 @@ export function UsernameSetupFields({ compact = false }: Props) {
 
     const v = validateUsername(usernameDraft);
     if (v.ok === false) {
-      Alert.alert("Invalid username", v.message);
+      showAppAlert("Invalid username", v.message);
       return;
     }
 
@@ -58,7 +58,7 @@ export function UsernameSetupFields({ compact = false }: Props) {
           code === "23505" ||
           error.message.toLowerCase().includes("duplicate") ||
           error.message.toLowerCase().includes("unique");
-        Alert.alert("Could not save username", taken ? "That username is already taken." : error.message);
+        showAppAlert("Could not save username", taken ? "That username is already taken." : error.message);
         return;
       }
       const { data: profile } = await supabase

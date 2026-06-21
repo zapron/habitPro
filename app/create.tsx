@@ -3,7 +3,6 @@ import { useEffect, useRef, useState } from "react";
 import {
   View,
   TextInput,
-  Alert,
   ScrollView,
   StyleSheet,
   TouchableOpacity,
@@ -33,6 +32,7 @@ import { usePlusUpsell } from "../src/context/PlusUpsellContext";
 import { backOrReplace } from "../src/lib/navigation";
 import { useNotificationGate } from "../src/context/NotificationGateContext";
 import { useRefreshPremiumAccess } from "../src/hooks/useRefreshPremiumAccess";
+import { showAppAlert } from "../src/context/AppDialogContext";
 
 export default function CreateHabit() {
   const router = useRouter();
@@ -86,7 +86,7 @@ export default function CreateHabit() {
 
   const handleCreate = async () => {
     if (!title.trim()) {
-      Alert.alert("Error", "Please enter a mission title.");
+      showAppAlert("Error", "Please enter a mission title.");
       return;
     }
     if (visibility === "public") {

@@ -5,7 +5,6 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  Alert,
   ActivityIndicator,
   ScrollView,
   StatusBar,
@@ -22,6 +21,7 @@ import {
   SPLASH_WORDMARK_HABIT_COLOR,
   SPLASH_WORDMARK_PRO_COLOR,
 } from "../../src/constants/splash";
+import { showAppAlert } from "../../src/context/AppDialogContext";
 
 type FocusKey = "email" | "password" | "confirmPassword" | null;
 
@@ -76,7 +76,7 @@ export default function LoginScreen() {
     try {
       const { error } = await signInWithGoogle();
       if (error) {
-        Alert.alert("Google sign-in failed", error.message);
+        showAppAlert("Google sign-in failed", error.message);
       }
     } finally {
       setGoogleLoading(false);
@@ -86,16 +86,16 @@ export default function LoginScreen() {
   const onSubmit = async () => {
     const trimmedEmail = email.trim();
     if (!trimmedEmail) {
-      Alert.alert("Missing email", "Enter your email.");
+      showAppAlert("Missing email", "Enter your email.");
       return;
     }
     if (password.length < 6) {
-      Alert.alert("Password", "Use at least 6 characters.");
+      showAppAlert("Password", "Use at least 6 characters.");
       return;
     }
     if (isSignUp) {
       if (password !== confirmPassword) {
-        Alert.alert("Passwords do not match", "Enter the same password in both fields.");
+        showAppAlert("Passwords do not match", "Enter the same password in both fields.");
         return;
       }
     }
@@ -104,7 +104,7 @@ export default function LoginScreen() {
       const { error, needsEmailConfirmation } = await signUp(trimmedEmail, password);
       setLoading(false);
       if (error) {
-        Alert.alert("Sign up failed", error.message);
+        showAppAlert("Sign up failed", error.message);
         return;
       }
       setEmail(trimmedEmail);
@@ -120,7 +120,7 @@ export default function LoginScreen() {
     const { error } = await signIn(trimmedEmail, password);
     setLoading(false);
     if (error) {
-      Alert.alert("Sign in failed", error.message);
+      showAppAlert("Sign in failed", error.message);
       return;
     }
   };

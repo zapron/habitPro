@@ -17,7 +17,6 @@ import {
   useWindowDimensions,
   Animated,
   Easing,
-  Alert,
   ActivityIndicator,
   Switch,
   TouchableOpacity,
@@ -29,6 +28,7 @@ import * as Haptics from "expo-haptics";
 import { useTheme } from "../context/ThemeContext";
 import { CoachMarkTarget, useCoachMark } from "../context/CoachMarkContext";
 import type { StreakMemory } from "../types/habit";
+import { showAppAlert } from "../context/AppDialogContext";
 
 type StreakMemorySheetProps = {
   visible: boolean;
@@ -201,7 +201,7 @@ export const StreakMemorySheet = React.memo(function StreakMemorySheet({
       return;
     }
     requestAnimationFrame(() => {
-      Alert.alert(
+      showAppAlert(
         "Add a photo",
         "Take a new picture or choose one from your gallery.",
         [
@@ -284,7 +284,7 @@ export const StreakMemorySheet = React.memo(function StreakMemorySheet({
     };
     const hasContent = memory.note || memory.imageUri;
     if (!hasContent) {
-      Alert.alert(
+      showAppAlert(
         "Nothing to save",
         isMini
           ? "Add a photo or a note first to use Complete with Memory, or tap Just Mark Complete to finish without one."

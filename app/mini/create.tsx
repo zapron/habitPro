@@ -1,6 +1,6 @@
 import { Text } from "../../src/components/AppText";
 import { useEffect, useRef, useState } from "react";
-import { View, TextInput, TouchableOpacity, ScrollView, StyleSheet, StatusBar, Alert, Platform } from "react-native";
+import { View, TextInput, TouchableOpacity, ScrollView, StyleSheet, StatusBar, Platform } from "react-native";
 import { useRouter } from "expo-router";
 import { ArrowLeft, Plane } from "lucide-react-native";
 import { Screen } from "../../src/components/Screen";
@@ -11,6 +11,7 @@ import { FuelTimePresetButton } from "../../src/components/fuel/FuelTimePresetBu
 import { FuelQuickMinutesStrip } from "../../src/components/fuel/FuelQuickMinutesStrip";
 import { backOrReplace } from "../../src/lib/navigation";
 import { useNotificationGate } from "../../src/context/NotificationGateContext";
+import { showAppAlert } from "../../src/context/AppDialogContext";
 
 type StartMode = "now" | "later";
 
@@ -86,12 +87,12 @@ export default function CreateMiniMission() {
   const handleCreate = () => {
     if (creating) return;
     if (!title.trim()) {
-      Alert.alert("Error", "Please enter the mini mission.");
+      showAppAlert("Error", "Please enter the mini mission.");
       return;
     }
     const minutes = clampTotal(totalMinutes);
     if (minutes < MIN_FUEL_MINUTES) {
-      Alert.alert("Error", "Set at least one minute for this mission.");
+      showAppAlert("Error", "Set at least one minute for this mission.");
       return;
     }
 

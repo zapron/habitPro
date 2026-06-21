@@ -3,7 +3,6 @@ import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Image,
   InteractionManager,
   Modal,
@@ -40,6 +39,7 @@ import { Screen } from "../../src/components/Screen";
 import { useTheme } from "../../src/context/ThemeContext";
 import { useAuth } from "../../src/context/AuthContext";
 import { useToast } from "../../src/context/ToastContext";
+import { showAppAlert } from "../../src/context/AppDialogContext";
 import { useUsernameGate } from "../../src/context/UsernameGateContext";
 import { CommunityWinImageLightbox } from "../../src/components/CommunityWinImageLightbox";
 import { LevelXpRing } from "../../src/components/LevelXpRing";
@@ -819,7 +819,7 @@ function MissionGalleryModal({
   const hasDescription = Boolean(mission?.description?.trim());
   const handleShowDescription = useCallback(() => {
     if (!mission) return;
-    Alert.alert(mission.title, missionDescriptionText(mission));
+    showAppAlert(mission.title, missionDescriptionText(mission));
   }, [mission]);
 
   useEffect(() => {

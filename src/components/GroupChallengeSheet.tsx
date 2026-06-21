@@ -16,6 +16,7 @@ import type { Habit } from "../types/habit";
 import { useTheme } from "../context/ThemeContext";
 import { isSupabaseConfigured } from "../lib/env";
 import {
+  type ChallengeInviteeStatus,
   createGroupChallengeFromHabit,
   listChallengeInviteeStatusesForChallenge,
   searchProfilesByUsernamePrefix,
@@ -60,7 +61,7 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
   const [invitingId, setInvitingId] = useState<string | null>(null);
   const [noUsernameDialogOpen, setNoUsernameDialogOpen] = useState(false);
   const [inviteeStatusById, setInviteeStatusById] = useState<
-    Partial<Record<string, "pending" | "declined" | "accepted">>
+    Partial<Record<string, ChallengeInviteeStatus>>
   >({});
 
   const signedIn = Boolean(session?.user);
@@ -299,9 +300,11 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
                         ? "Already invited"
                         : st === "declined"
                           ? "Invite again"
-                          : st === "accepted"
-                            ? "Joined"
-                            : null;
+                          : st === "left"
+                            ? "Re-invite"
+                            : st === "accepted"
+                              ? "Joined"
+                              : null;
                     return (
                       <TouchableOpacity
                         key={item.id}
@@ -322,7 +325,7 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
                         ) : statusLabel ? (
                           <Text
                             style={{
-                              color: st === "declined" ? theme.colors.cyan[400] : theme.colors.textMuted,
+                              color: st === "declined" || st === "left" ? theme.colors.cyan[400] : theme.colors.textMuted,
                               fontWeight: "700",
                             }}
                           >

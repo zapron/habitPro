@@ -9,7 +9,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { Platform, StyleSheet, View } from "react-native";
+import { Platform, StyleSheet, ToastAndroid, View } from "react-native";
 import { useTheme } from "./ThemeContext";
 import { useToastBottomPadding } from "../hooks/useToastBottomPadding";
 
@@ -55,6 +55,7 @@ function ToastBanner({
 
   return (
     <View
+      collapsable={false}
       pointerEvents="none"
       style={[
         styles.wrap,
@@ -64,28 +65,30 @@ function ToastBanner({
         },
       ]}
     >
-      <Text
-        style={[
-          styles.text,
-          {
-            color: textColor,
-            backgroundColor: slab,
-            borderColor: isDark ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.12)",
-            borderLeftColor: accent,
-            borderLeftWidth: 3,
-            ...(Platform.OS === "android"
-              ? { elevation: 6 }
-              : {
-                  shadowColor: "#000",
-                  shadowOffset: { width: 0, height: 2 },
-                  shadowOpacity: 0.22,
-                  shadowRadius: 4,
-                }),
-          },
-        ]}
-      >
-        {payload.message}
-      </Text>
+      <View collapsable={false} pointerEvents="none">
+        <Text
+          style={[
+            styles.text,
+            {
+              color: textColor,
+              backgroundColor: slab,
+              borderColor: isDark ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.12)",
+              borderLeftColor: accent,
+              borderLeftWidth: 3,
+              ...(Platform.OS === "android"
+                ? { elevation: 6 }
+                : {
+                    shadowColor: "#000",
+                    shadowOffset: { width: 0, height: 2 },
+                    shadowOpacity: 0.22,
+                    shadowRadius: 4,
+                  }),
+            },
+          ]}
+        >
+          {payload.message}
+        </Text>
+      </View>
     </View>
   );
 }
@@ -109,6 +112,15 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     (message: string, variant: ToastVariant = "info", durationMs?: number) => {
       if (hideTimer.current) clearTimeout(hideTimer.current);
       const ms = durationMs ?? (message.length > 90 ? LONG_MS : DEFAULT_MS);
+      if (Platform.OS === "android") {
+        setPayload(null);
+        hideTimer.current = null;
+        ToastAndroid.show(
+          message,
+          ms > DEFAULT_MS ? ToastAndroid.LONG : ToastAndroid.SHORT,
+        );
+        return;
+      }
       setPayload({ message, variant });
       hideTimer.current = setTimeout(() => {
         setPayload(null);

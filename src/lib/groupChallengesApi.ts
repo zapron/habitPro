@@ -153,6 +153,7 @@ export async function createGroupChallengeFromHabit(
 }
 
 export type ChallengeInviteRowStatus = ChallengeInviteRow["status"];
+export type ChallengeInviteeStatus = ChallengeInviteRowStatus | "left";
 
 /**
  * Latest invite status per invitee for this challenge (newest `created_at` wins).
@@ -160,13 +161,25 @@ export type ChallengeInviteRowStatus = ChallengeInviteRow["status"];
  */
 export async function listChallengeInviteeStatusesForChallenge(
   challengeId: string,
-): Promise<Partial<Record<string, ChallengeInviteRowStatus>>> {
+): Promise<Partial<Record<string, ChallengeInviteeStatus>>> {
   const supabase = getSupabase();
   if (!supabase) return {};
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return {};
+
+  const { data: members, error: membersErr } = await supabase
+    .from("challenge_members")
+    .select("user_id")
+    .eq("challenge_id", challengeId);
+  if (membersErr) throw membersErr;
+  const activeMemberIds = new Set(
+    (members ?? [])
+      .map((r) => (r as { user_id?: string | null }).user_id)
+      .filter((id): id is string => typeof id === "string" && id.length > 0),
+  );
+
   const { data, error } = await supabase
     .from("challenge_invites")
     .select("invitee_id, status, created_at")
@@ -174,13 +187,20 @@ export async function listChallengeInviteeStatusesForChallenge(
     .in("status", ["pending", "declined", "accepted"])
     .order("created_at", { ascending: false });
   if (error) throw error;
-  const out: Partial<Record<string, ChallengeInviteRowStatus>> = {};
+  const out: Partial<Record<string, ChallengeInviteeStatus>> = {};
   for (const r of data ?? []) {
     const row = r as { invitee_id: string; status: string };
     if (out[row.invitee_id]) continue;
-    if (row.status === "pending" || row.status === "declined" || row.status === "accepted") {
-      out[row.invitee_id] = row.status;
+    if (activeMemberIds.has(row.invitee_id)) {
+      out[row.invitee_id] = "accepted";
+      continue;
     }
+    if (row.status === "pending" || row.status === "declined" || row.status === "accepted") {
+      out[row.invitee_id] = row.status === "accepted" ? "left" : row.status;
+    }
+  }
+  for (const memberId of activeMemberIds) {
+    if (memberId !== user.id && !out[memberId]) out[memberId] = "accepted";
   }
   return out;
 }
@@ -260,6 +280,19 @@ export async function sendChallengeInvite(
   } = await supabase.auth.getUser();
   if (!user) return { error: new Error("Not signed in") };
 
+  const { data: activeMember, error: memberErr } = await supabase
+    .from("challenge_members")
+    .select("user_id")
+    .eq("challenge_id", challengeId)
+    .eq("user_id", inviteeUserId)
+    .maybeSingle();
+  if (memberErr) return { error: new Error(memberErr.message) };
+  if (activeMember) {
+    return {
+      error: new Error("This person already joined this group mission."),
+    };
+  }
+
   const { data: latest } = await supabase
     .from("challenge_invites")
     .select("status")
@@ -275,11 +308,6 @@ export async function sendChallengeInvite(
       error: new Error(
         "There is already a pending invite to this person for this group mission.",
       ),
-    };
-  }
-  if (st === "accepted") {
-    return {
-      error: new Error("This person already joined this group mission."),
     };
   }
 

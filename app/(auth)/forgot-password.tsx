@@ -7,7 +7,6 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  Alert,
   ActivityIndicator,
   ScrollView,
   StatusBar,
@@ -20,6 +19,7 @@ import { Button } from "../../src/components/Button";
 import { getPasswordResetRedirectUrl } from "../../src/lib/authRedirects";
 import { backOrReplace } from "../../src/lib/navigation";
 import { getSupabase } from "../../src/lib/supabase";
+import { showAppAlert } from "../../src/context/AppDialogContext";
 
 const FORM_MAX_WIDTH = 400;
 
@@ -40,12 +40,12 @@ export default function ForgotPasswordScreen() {
   const onSend = async () => {
     const trimmed = email.trim();
     if (!trimmed) {
-      Alert.alert("Email required", "Enter the email you used to sign up.");
+      showAppAlert("Email required", "Enter the email you used to sign up.");
       return;
     }
     const supabase = getSupabase();
     if (!supabase) {
-      Alert.alert("Not configured", "Supabase is not configured.");
+      showAppAlert("Not configured", "Supabase is not configured.");
       return;
     }
     setSubmitting(true);
@@ -53,10 +53,10 @@ export default function ForgotPasswordScreen() {
     const { error } = await supabase.auth.resetPasswordForEmail(trimmed, { redirectTo });
     setSubmitting(false);
     if (error) {
-      Alert.alert("Could not send email", error.message);
+      showAppAlert("Could not send email", error.message);
       return;
     }
-    Alert.alert(
+    showAppAlert(
       "Check your inbox",
       "If an account exists for that email, we sent reset instructions. Open the link on this device to choose a new password.",
       [{ text: "OK", onPress: () => backOrReplace(router, "/login") }],

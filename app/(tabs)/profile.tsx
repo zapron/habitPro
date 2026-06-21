@@ -17,7 +17,6 @@ import {
   TouchableOpacity,
   StyleSheet,
   StatusBar,
-  Alert,
   Image,
 } from "react-native";
 import type { ImageStyle } from "react-native";
@@ -78,6 +77,7 @@ import { isMiniMissionOpen, isMiniMissionRunning } from "../../src/utils/miniMis
 import { PlusBadge } from "../../src/components/PlusBadge";
 import { useRefreshPremiumAccess } from "../../src/hooks/useRefreshPremiumAccess";
 import { XP_PER_LEVEL, levelFromTotalXp, xpInCurrentLevel } from "../../src/utils/xpLevel";
+import { showAppAlert } from "../../src/context/AppDialogContext";
 
 type HubSheetState =
   | null
@@ -983,7 +983,7 @@ export default function ProfileScreen() {
 
   const confirmRestoreBackup = useCallback(
     (backup: AccountBackupSnapshot) => {
-      Alert.alert(
+      showAppAlert(
         "Restore this backup?",
         `${backupSummary(backup)}\n${formatBackupSavedAt(backup.savedAt)}\n\nThis replaces the account data currently on this device.`,
         [
@@ -1341,7 +1341,7 @@ export default function ProfileScreen() {
           {showAccount && session?.user ? (
             <TouchableOpacity
               onPress={() => {
-                Alert.alert("Sign out", "You will need to sign in again to continue.", [
+                showAppAlert("Sign out", "You will need to sign in again to continue.", [
                   { text: "Cancel", style: "cancel" },
                   { text: "Sign out", style: "destructive", onPress: () => void signOut() },
                 ]);

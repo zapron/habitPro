@@ -11,7 +11,6 @@ import {
   TouchableOpacity,
   StyleSheet,
   StatusBar,
-  Alert,
   Vibration,
   Animated,
   Easing,
@@ -91,6 +90,7 @@ import {
 } from "../../src/lib/streakMemoryStorage";
 import { syncLiveMiniFromLocalMission } from "../../src/lib/liveMiniMissionProgress";
 import { backOrReplace } from "../../src/lib/navigation";
+import { showAppAlert } from "../../src/context/AppDialogContext";
 
 // Notification handler is configured globally in _layout.tsx via setupNotifications()
 
@@ -1334,7 +1334,7 @@ export default function MiniMissionDetail() {
     if (!mission) return;
     setDeleteDialogOpen(false);
     if (mission.liveSquadId) {
-      Alert.alert("Live Squad mission", "Live mini missions cannot be deleted. Cancel it instead to close your run.");
+      showAppAlert("Live Squad mission", "Live mini missions cannot be deleted. Cancel it instead to close your run.");
       return;
     }
     const id = mission.id;
@@ -1450,7 +1450,7 @@ export default function MiniMissionDetail() {
         memoryToSave = { ...memory, imageUrl, imageUri: undefined };
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
-        Alert.alert("Photo upload failed", msg, [{ text: "OK" }]);
+        showAppAlert("Photo upload failed", msg, [{ text: "OK" }]);
         throw e;
       }
     }
@@ -1468,7 +1468,7 @@ export default function MiniMissionDetail() {
     if (canPublish) {
       const hasImage = Boolean(memoryToSave?.imageUrl || memoryToSave?.imageUri);
       if (!hasImage) {
-        Alert.alert(
+        showAppAlert(
           "Photo required",
           "Community posts need a photo. Add a photo and tap Complete with Memory again.",
           [{ text: "OK" }],
@@ -1478,13 +1478,13 @@ export default function MiniMissionDetail() {
     }
 
     if (wantsPublish && !isSupabaseConfigured()) {
-      Alert.alert(
+      showAppAlert(
         "Can’t publish",
         "Cloud sync isn’t configured. Your mission is saved as private.",
         [{ text: "OK" }],
       );
     } else if (wantsPublish && !session?.user) {
-      Alert.alert(
+      showAppAlert(
         "Sign in to publish",
         "Sign in to share this win in Community. Your mission is saved as private.",
         [{ text: "OK" }],
@@ -1509,7 +1509,7 @@ export default function MiniMissionDetail() {
     if (canPublish) {
       const ok = await requireUsername("community_post");
       if (!ok) {
-        Alert.alert("Username required", "Choose a username to publish to Community.", [{ text: "OK" }]);
+        showAppAlert("Username required", "Choose a username to publish to Community.", [{ text: "OK" }]);
         return;
       }
       const res = await postCommunityWin({
@@ -1529,7 +1529,7 @@ export default function MiniMissionDetail() {
           openUpsell("community_publish");
           return;
         }
-        Alert.alert("Couldn’t publish", res.error, [{ text: "OK" }]);
+        showAppAlert("Couldn’t publish", res.error, [{ text: "OK" }]);
       }
     }
 
@@ -1542,7 +1542,7 @@ export default function MiniMissionDetail() {
     if (prev === next) return;
 
     if (prev === "public" && next === "solo") {
-      Alert.alert(
+      showAppAlert(
         "Remove from Community?",
         "This removes your win from the feed. You won’t be able to publish this mission to Community again.",
         [
@@ -1554,7 +1554,7 @@ export default function MiniMissionDetail() {
               void (async () => {
                 const del = await deleteCommunityWin(mission.id);
                 if (del.ok === false) {
-                  Alert.alert("Couldn’t remove", del.error, [{ text: "OK" }]);
+                  showAppAlert("Couldn’t remove", del.error, [{ text: "OK" }]);
                   return;
                 }
                   useHabitStore.getState().setMiniMissionVisibility(mission.id, "solo");
@@ -1569,7 +1569,7 @@ export default function MiniMissionDetail() {
   
       if (prev === "solo" && next === "public") {
         if (mission.communityFeedRevoked) {
-          Alert.alert(
+          showAppAlert(
             "Can’t publish to Community",
             "This mission stays private. Community sharing was turned off when you completed it, or you removed it from the feed.",
             [{ text: "OK" }],
@@ -1577,7 +1577,7 @@ export default function MiniMissionDetail() {
           return;
         }
         if (!isSupabaseConfigured() || !session?.user) {
-          Alert.alert(
+          showAppAlert(
             "Sign in required",
             "Sign in to publish to Community wins.",
             [{ text: "OK" }],
@@ -1587,7 +1587,7 @@ export default function MiniMissionDetail() {
         const completionMem = mission.completionMemory;
         const hasCompletionPhoto = Boolean(completionMem?.imageUrl || completionMem?.imageUri);
         if (!hasCompletionPhoto) {
-          Alert.alert(
+          showAppAlert(
             "Photo required",
             "Community posts need a photo. Add one to your completion memory first.",
             [{ text: "OK" }],
@@ -1603,7 +1603,7 @@ export default function MiniMissionDetail() {
           lastVisibilityRef.current = { id: mission.id, prev };
           const ok = await requireUsername("community_post");
           if (!ok) {
-            Alert.alert("Username required", "Choose a username to publish to Community.", [{ text: "OK" }]);
+            showAppAlert("Username required", "Choose a username to publish to Community.", [{ text: "OK" }]);
             lastVisibilityRef.current = null;
             return;
           }
@@ -1622,7 +1622,7 @@ export default function MiniMissionDetail() {
               lastVisibilityRef.current = null;
               return;
             }
-            Alert.alert("Couldn’t publish", res.error, [{ text: "OK" }]);
+            showAppAlert("Couldn’t publish", res.error, [{ text: "OK" }]);
             lastVisibilityRef.current = null;
             return;
           }
@@ -1649,7 +1649,7 @@ export default function MiniMissionDetail() {
     const handleReserveFuel = () => {
       if (reserveFull) {
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-        Alert.alert(
+        showAppAlert(
           "Reserve fuel maxed",
           `You can add at most ${MAX_RESERVE_FUEL_MINUTES} minutes of reserve fuel for this mission. Mark complete or risk running out of time.`,
         );
@@ -1675,7 +1675,7 @@ export default function MiniMissionDetail() {
   
     const handleRetryFailed = () => {
       if (mission.liveSquadId) {
-        Alert.alert("Live Squad mission", "Live mini missions cannot be retried. Start a fresh mini mission when you want another run.");
+        showAppAlert("Live Squad mission", "Live mini missions cannot be retried. Start a fresh mini mission when you want another run.");
         return;
       }
       useHabitStore.getState().retryFailedMiniMission(mission.id);
@@ -1775,7 +1775,7 @@ export default function MiniMissionDetail() {
           ]}
           onPress={() => {
             if (mission.liveSquadId) {
-              Alert.alert("Live Squad mission", "Live mini missions cannot be deleted. Cancel it instead to close your run.");
+              showAppAlert("Live Squad mission", "Live mini missions cannot be deleted. Cancel it instead to close your run.");
               return;
             }
             setDeleteDialogOpen(true);
