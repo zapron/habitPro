@@ -19,6 +19,7 @@ import {
   Pressable,
   ScrollView,
   ActivityIndicator,
+  InteractionManager,
   useWindowDimensions,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -93,6 +94,12 @@ import { backOrReplace } from "../../src/lib/navigation";
 import { showAppAlert } from "../../src/context/AppDialogContext";
 
 // Notification handler is configured globally in _layout.tsx via setupNotifications()
+
+function runAfterCurrentInteractions(task: () => void) {
+  InteractionManager.runAfterInteractions(() => {
+    setTimeout(task, 0);
+  });
+}
 
 const QUOTES = [
   {
@@ -1339,11 +1346,11 @@ export default function MiniMissionDetail() {
     }
     const id = mission.id;
     setPendingExitAfterRemove(true);
-    void (async () => {
-      await deleteCommunityWin(id);
-      useHabitStore.getState().deleteMiniMission(id);
-      router.replace("/mini");
-    })();
+    useHabitStore.getState().deleteMiniMission(id);
+    router.replace("/mini");
+    runAfterCurrentInteractions(() => {
+      void deleteCommunityWin(id);
+    });
   }, [mission, router]);
 
   useCoachMark(

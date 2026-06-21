@@ -834,11 +834,13 @@ export async function pushFullState(
   );
 
   // Incremental Filter: only push what is dirty (or all if dirty tracking is empty/undefined)
+  const dirtyHabitIdSet = state.dirtyHabitIds ? new Set(state.dirtyHabitIds) : null;
+  const dirtyMiniIdSet = state.dirtyMiniMissionIds ? new Set(state.dirtyMiniMissionIds) : null;
   const dirtyHabits = state.dirtyHabitIds
-    ? localHabitsForUser.filter((h) => state.dirtyHabitIds!.includes(h.id))
+    ? localHabitsForUser.filter((h) => dirtyHabitIdSet!.has(h.id))
     : localHabitsForUser;
   const dirtyMinis = state.dirtyMiniMissionIds
-    ? localMinisForUser.filter((m) => state.dirtyMiniMissionIds!.includes(m.id))
+    ? localMinisForUser.filter((m) => dirtyMiniIdSet!.has(m.id))
     : localMinisForUser;
 
   // If there are no dirty items and XP/Username hasn't changed, we can skip network write entirely!

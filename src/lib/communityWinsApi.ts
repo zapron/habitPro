@@ -232,16 +232,38 @@ export async function deleteAllCommunityWinsForHabit(habit: {
   streakMemories?: Record<string, unknown>;
   completedDates: string[];
 }): Promise<void> {
+  const supabase = getSupabase();
+  if (!supabase) return;
+
+  try {
+    const { error } = await supabase.rpc("rpc_delete_habit_community_wins_v1", { p_habit_id: habit.id });
+    if (!error) return;
+  } catch {
+    // Fall through to client-side batch delete for environments without this RPC.
+  }
+
   const dates = new Set<string>([
     ...Object.keys(habit.streakMemories ?? {}),
     ...habit.completedDates,
   ]);
-  const deletePromises = Array.from(dates).map((dateStr) =>
-    deleteCommunityWin(habitStreakCommunityWinId(habit.id, dateStr)).catch((err) =>
-      console.warn("[habitPro] failed to delete community win for date:", dateStr, err)
-    )
-  );
-  await Promise.all(deletePromises);
+  const ids = Array.from(dates).map((dateStr) => habitStreakCommunityWinId(habit.id, dateStr));
+  if (ids.length === 0) return;
+
+  const {
+    data: { user },
+    error: userErr,
+  } = await supabase.auth.getUser();
+  if (userErr || !user) return;
+
+  const { error } = await supabase
+    .from("community_wins")
+    .delete()
+    .eq("user_id", user.id)
+    .in("mini_mission_id", ids);
+
+  if (error) {
+    console.warn("[habitPro] failed to delete habit community wins", error);
+  }
 }
 
 /** Default page size for Community feed (fetches pageSize+1 to detect hasMore). */

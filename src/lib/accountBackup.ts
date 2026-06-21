@@ -14,6 +14,7 @@ export type AccountDeletedMissionIds = {
 
 const MAX_BACKUPS_PER_USER = 5;
 const BACKUP_SAVE_DELAY_MS = 1200;
+const MIN_BACKUP_INTERVAL_MS = 5 * 60 * 1000;
 const MAX_DELETED_IDS_PER_USER = 250;
 
 let cachedBackups: { [userId: string]: AccountBackupSnapshot[] } = {};
@@ -144,9 +145,16 @@ async function writeAccountSnapshotBackup(
   };
 
   try {
-    const raw = await AsyncStorage.getItem(key);
-    const parsed = raw ? JSON.parse(raw) : [];
-    const previous = Array.isArray(parsed) ? parsed : [];
+    let previous = cachedBackups[userId];
+    if (!previous) {
+      const raw = await AsyncStorage.getItem(key);
+      const parsed = raw ? JSON.parse(raw) : [];
+      previous = Array.isArray(parsed) ? parsed.filter(isBackupSnapshot) : [];
+    }
+    const lastSavedAt = previous[0]?.savedAt ? new Date(previous[0].savedAt).getTime() : 0;
+    if (Date.now() - lastSavedAt < MIN_BACKUP_INTERVAL_MS) {
+      return;
+    }
     const backups = [next, ...previous].slice(0, MAX_BACKUPS_PER_USER);
     await AsyncStorage.setItem(key, JSON.stringify(backups));
     // Update the in-memory cache
@@ -177,6 +185,11 @@ export async function saveAccountSnapshotBackup(
   reason: string,
 ): Promise<void> {
   if (!userId) return;
+  const cached = cachedBackups[userId];
+  const lastSavedAt = cached?.[0]?.savedAt ? new Date(cached[0].savedAt).getTime() : 0;
+  if (lastSavedAt > 0 && Date.now() - lastSavedAt < MIN_BACKUP_INTERVAL_MS) {
+    return;
+  }
 
   const previous = pendingBackupSaves.get(userId);
   if (previous) {

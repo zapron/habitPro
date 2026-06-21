@@ -92,6 +92,12 @@ import { requestRemoteSync } from "../../src/lib/syncQueue";
 const LOCKED_CHECKIN_MSG =
     'You can only check in for the current mission day. Each day unlocks 24 hours after the mission started (day 2 after the first 24 hours, and so on).';
 
+function runAfterCurrentInteractions(task: () => void) {
+    InteractionManager.runAfterInteractions(() => {
+        setTimeout(task, 0);
+    });
+}
+
 type MissionDialogState =
     | { kind: 'none' }
     | { kind: 'reset' }
@@ -1591,8 +1597,10 @@ export default function HabitDetail() {
                                           deleteHabit(habit.id);
                                           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                                           showToast('Mission deleted', 'success');
-                                          void deleteAllCommunityWinsForHabit(habit);
                                           backOrReplace(router, "/");
+                                          runAfterCurrentInteractions(() => {
+                                              void deleteAllCommunityWinsForHabit(habit);
+                                          });
                                       },
                                   },
                               ]
@@ -1614,11 +1622,13 @@ export default function HabitDetail() {
                                                 }
                                                 setPendingExitAfterRemove(true);
                                                 deleteHabit(habit.id);
-                                                void deleteAllCommunityWinsForHabit(habit);
-                                                void refreshCohortPeerHabits().catch(() => {});
                                                 Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
                                                 showToast('Left group mission', 'success');
                                                 backOrReplace(router, "/");
+                                                runAfterCurrentInteractions(() => {
+                                                    void deleteAllCommunityWinsForHabit(habit);
+                                                    void refreshCohortPeerHabits().catch(() => {});
+                                                });
                                             })();
                                         },
                                     },

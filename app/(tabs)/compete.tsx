@@ -1061,8 +1061,7 @@ export default function CompeteScreen() {
           }
           void refreshCohortPeerHabits();
           void loadInvites({ force: true });
-          router.push(`/habit/${newHabitId}`);
-          if (mountedRef.current) showToast("Joined the group mission", "success", 1200);
+          if (mountedRef.current) showToast("Joined the group mission. Start it from Home.", "success", 1400);
           setTimeout(() => {
             if (mountedRef.current) void suggestNotifications("invite_accept");
           }, 450);

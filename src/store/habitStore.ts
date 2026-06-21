@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import {
   getRemoteSyncUserId,
+  noteLocalStoreMutation,
   registerSyncCommitHandler,
   registerSyncSnapshotGetter,
   requestRemoteHabitDelete,
@@ -27,7 +28,7 @@ import { mergeRepairIntoStreakMemory } from "../utils/repairStreakMemoryMerge";
 import { alignGroupHabitToChallengeStart } from "../utils/groupMissionClock";
 import { getMissionCalendarTimeZone } from "../utils/missionCalendarKeys";
 import type { ChallengeGroupRow } from "../types/groupChallenge";
-import { createDeferredJsonPersistStorage } from "../lib/deferredJsonPersistStorage";
+import { createChunkedHabitPersistStorage } from "../lib/chunkedHabitPersistStorage";
 /** Calculate endDate by adding `totalDays` to a start ISO string. */
 const calculateEndDate = (startIso: string, totalDays: number): string => {
   const d = new Date(startIso);
@@ -155,6 +156,7 @@ export const useHabitStore = create<HabitStore>()(
             );
           }
 
+          noteLocalStoreMutation();
           return updates;
         }, replace);
       };
@@ -167,11 +169,13 @@ export const useHabitStore = create<HabitStore>()(
         dirtyMiniMissionIds: [],
         clearDirtyState: (habitIds, miniIds) => {
           rawSet((state) => {
+            const clearedHabitIds = habitIds ? new Set(habitIds) : null;
+            const clearedMiniIds = miniIds ? new Set(miniIds) : null;
             const nextHabits = habitIds
-              ? (state.dirtyHabitIds ?? []).filter((id) => !habitIds.includes(id))
+              ? (state.dirtyHabitIds ?? []).filter((id) => !clearedHabitIds!.has(id))
               : state.dirtyHabitIds ?? [];
             const nextMinis = miniIds
-              ? (state.dirtyMiniMissionIds ?? []).filter((id) => !miniIds.includes(id))
+              ? (state.dirtyMiniMissionIds ?? []).filter((id) => !clearedMiniIds!.has(id))
               : state.dirtyMiniMissionIds ?? [];
             return { dirtyHabitIds: nextHabits, dirtyMiniMissionIds: nextMinis };
           });
@@ -742,7 +746,7 @@ export const useHabitStore = create<HabitStore>()(
   },
     {
       name: "habit-storage",
-      storage: createDeferredJsonPersistStorage({
+      storage: createChunkedHabitPersistStorage({
         delayMs: 250,
       }),
       partialize: (state) => ({

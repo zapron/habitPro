@@ -18,8 +18,11 @@ let syncGeneration = 0;
 type ScheduledInteractionTask = { cancel: () => void };
 const scheduledInteractionTasks = new Set<ScheduledInteractionTask>();
 let inFlightPushes = 0;
+let queuedSyncAfterInFlight = false;
 let failedSinceLastSuccess = false;
+let localMutationGeneration = 0;
 const DEFAULT_DEBOUNCE_MS = 450;
+const IMMEDIATE_DEBOUNCE_MS = 80;
 
 type SyncFailureListener = (error: unknown) => void;
 type SyncSuccessListener = () => void;
@@ -99,6 +102,14 @@ export function setRemoteSyncContext(uid: string | null, enabled: boolean) {
   }
 }
 
+export function noteLocalStoreMutation() {
+  localMutationGeneration += 1;
+}
+
+export function getLocalStoreMutationGeneration(): number {
+  return localMutationGeneration;
+}
+
 /** Disable remote sync and cancel any queued debounce before account state is reset. */
 export function disableAndCancelRemoteSync() {
   setRemoteSyncContext(null, false);
@@ -114,6 +125,10 @@ function canWriteRemote(): boolean {
 
 function flush() {
   if (!canPush()) return;
+  if (inFlightPushes > 0) {
+    queuedSyncAfterInFlight = true;
+    return;
+  }
   const flushUserId = userId;
   if (!flushUserId) return;
   const flushGeneration = syncGeneration;
@@ -148,6 +163,10 @@ function flush() {
       })
       .finally(() => {
         finishPush();
+        if (queuedSyncAfterInFlight) {
+          queuedSyncAfterInFlight = false;
+          requestRemoteSync({ immediate: false, debounceMs: DEFAULT_DEBOUNCE_MS });
+        }
       });
   });
   scheduledTask = {
@@ -161,7 +180,7 @@ function flush() {
 }
 
 export function hasPendingRemoteSync(): boolean {
-  return Boolean(debounceTimer || inFlightPushes > 0);
+  return Boolean(debounceTimer || inFlightPushes > 0 || queuedSyncAfterInFlight);
 }
 
 export function hasRemoteSyncFault(): boolean {
@@ -179,16 +198,13 @@ export function requestRemoteSync(options?: {
   if (!canPush()) return;
 
   const immediate = options?.immediate ?? false;
-  const debounceMs = options?.debounceMs ?? DEFAULT_DEBOUNCE_MS;
+  const debounceMs = immediate
+    ? Math.min(options?.debounceMs ?? IMMEDIATE_DEBOUNCE_MS, DEFAULT_DEBOUNCE_MS)
+    : options?.debounceMs ?? DEFAULT_DEBOUNCE_MS;
 
   if (debounceTimer) {
     clearTimeout(debounceTimer);
     debounceTimer = null;
-  }
-
-  if (immediate) {
-    flush();
-    return;
   }
 
   debounceTimer = setTimeout(() => {

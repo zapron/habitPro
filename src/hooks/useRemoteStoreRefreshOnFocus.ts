@@ -10,6 +10,7 @@ import {
   type RemoteSnapshot,
 } from "../lib/sync";
 import {
+  getLocalStoreMutationGeneration,
   hasPendingRemoteSync,
   hasRemoteSyncFault,
   requestRemoteSync,
@@ -106,6 +107,7 @@ export function useRemoteStoreRefreshOnFocus(enabled = true) {
       ) {
         return;
       }
+      const startedMutationGeneration = getLocalStoreMutationGeneration();
       let remoteWithLocalPeers: RemoteStoreSnapshot;
       if (!options?.force && lastRefreshAt > 0) {
         const delta = await pullFocusDeltaFromSupabase(userId, lastRefreshAt);
@@ -119,7 +121,18 @@ export function useRemoteStoreRefreshOnFocus(enabled = true) {
         const remote = await pullFromSupabase(userId, { includeCohortPeerHabits: false });
         remoteWithLocalPeers = { ...remote, cohortPeerHabits: local.cohortPeerHabits };
       }
-      const { snapshot, preserved } = preserveLocalMiniProgress(remoteWithLocalPeers, local);
+      const latestLocal = useHabitStore.getState();
+      if (
+        !options?.force &&
+        (hasPendingRemoteSync() ||
+          hasRemoteSyncFault() ||
+          getLocalStoreMutationGeneration() !== startedMutationGeneration ||
+          (latestLocal.dirtyHabitIds && latestLocal.dirtyHabitIds.length > 0) ||
+          (latestLocal.dirtyMiniMissionIds && latestLocal.dirtyMiniMissionIds.length > 0))
+      ) {
+        return;
+      }
+      const { snapshot, preserved } = preserveLocalMiniProgress(remoteWithLocalPeers, latestLocal);
       useHabitStore.setState(snapshot);
       void saveAccountSnapshotBackup(userId, snapshot, "focus-refresh");
       markRemoteFocusRefreshFresh(userId);

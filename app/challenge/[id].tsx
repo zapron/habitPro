@@ -83,6 +83,12 @@ import {
 } from "../../src/utils/missionDaySlots";
 import { levelFromTotalXp } from "../../src/utils/xpLevel";
 
+function runAfterCurrentInteractions(task: () => void) {
+  InteractionManager.runAfterInteractions(() => {
+    setTimeout(task, 0);
+  });
+}
+
 function parseGroupMissionDisplay(g: ChallengeGroupRow | null): { title: string; description?: string } {
   if (!g) return { title: "Group mission" };
   const tpl = g.habit_template as Record<string, unknown>;
@@ -1118,16 +1124,17 @@ export default function ChallengeDetailScreen() {
           showToast(error.message, "error");
           return;
         }
-        await deleteAllCommunityWinsForHabit(habitSnapshot);
         deleteHabit(habitId);
-        await loadStreakMembers({ reset: true, silent: true }).catch(() => {});
         showToast("Left group mission", "success");
         backOrReplace(router, "/(tabs)/compete");
+        runAfterCurrentInteractions(() => {
+          void deleteAllCommunityWinsForHabit(habitSnapshot);
+        });
       } finally {
         setLeaveBusy(false);
       }
     })();
-  }, [challengeId, myHabit, deleteHabit, loadStreakMembers, router, showToast]);
+  }, [challengeId, myHabit, deleteHabit, router, showToast]);
 
   useEffect(() => {
     if (!myHabit || myHabit.isCompleted) return;
