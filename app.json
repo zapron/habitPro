@@ -14,9 +14,9 @@
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/habitpro-logo-transparent-v3.png",
+      "image": "./assets/splash-wordmark.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#F8FAFC"
     },
     "ios": {
       "supportsTablet": true
@@ -39,6 +39,15 @@
     },
     "plugins": [
       "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-wordmark.png",
+          "imageWidth": 240,
+          "resizeMode": "contain",
+          "backgroundColor": "#F8FAFC"
+        }
+      ],
       "expo-web-browser",
       [
         "expo-notifications",

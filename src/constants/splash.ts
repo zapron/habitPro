@@ -1,4 +1,4 @@
-/** Must match `expo.splash` in app.json for a seamless native → JS handoff. */
+/** Must match the JS splash overlay background fallback. */
 export const SPLASH_BACKGROUND_COLOR = "#000000";
 
 /** Two-tone "habitPro" wordmark (matches brand splash styling). */
