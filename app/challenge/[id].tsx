@@ -28,6 +28,10 @@ import { CohortNudgeChips } from "../../src/components/CohortNudgeChips";
 import { CustomNudgeModal } from "../../src/components/CustomNudgeModal";
 import { Screen } from "../../src/components/Screen";
 import { ConfirmDialog } from "../../src/components/ConfirmDialog";
+import {
+  OperationProgressDialog,
+  type OperationProgressStep,
+} from "../../src/components/OperationProgressDialog";
 import { LazyMount } from "../../src/components/LazyMount";
 import {
   CohortParticipantTimelineLegend,
@@ -60,6 +64,8 @@ import {
 import { backOrReplace } from "../../src/lib/navigation";
 import { isSupabaseConfigured } from "../../src/lib/env";
 import { deleteAllCommunityWinsForHabit } from "../../src/lib/communityWinsApi";
+import { startJsStallProbe, traceSync } from "../../src/lib/jsThreadProbe";
+import { waitForHabitPersistIdle } from "../../src/lib/chunkedHabitPersistStorage";
 import { PlusBadge } from "../../src/components/PlusBadge";
 import {
   listChallengeStreakRepairsPage,
@@ -83,11 +89,36 @@ import {
 } from "../../src/utils/missionDaySlots";
 import { levelFromTotalXp } from "../../src/utils/xpLevel";
 
-function runAfterCurrentInteractions(task: () => void) {
-  InteractionManager.runAfterInteractions(() => {
-    setTimeout(task, 0);
-  });
+const OPERATION_STEP_DELAY_MS = 360;
+const OPERATION_FINAL_DELAY_MS = 220;
+const POST_OPERATION_BACKGROUND_DELAY_MS = 1600;
+
+function runAfterSettledInteractions(task: () => void, delayMs = POST_OPERATION_BACKGROUND_DELAY_MS) {
+  setTimeout(() => {
+    InteractionManager.runAfterInteractions(() => {
+      setTimeout(task, 0);
+    });
+  }, delayMs);
 }
+
+function waitForOperationStep(ms = OPERATION_STEP_DELAY_MS): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+type OperationProgressState = {
+  title: string;
+  message?: string;
+  steps: OperationProgressStep[];
+  activeStep: number;
+  error?: string | null;
+};
+
+const GROUP_LEAVE_PROGRESS_STEPS: OperationProgressStep[] = [
+  { label: "Leaving squad", description: "Removing you from this group mission." },
+  { label: "Removing mission", description: "Updating your active list." },
+  { label: "Syncing cloud", description: "Queueing related cleanup." },
+  { label: "Finalizing", description: "Returning you to Compete." },
+];
 
 function parseGroupMissionDisplay(g: ChallengeGroupRow | null): { title: string; description?: string } {
   if (!g) return { title: "Group mission" };
@@ -398,6 +429,7 @@ export default function ChallengeDetailScreen() {
   const [cohortNow, setCohortNow] = useState(() => Date.now());
   const [leaveBusy, setLeaveBusy] = useState(false);
   const [leaveDialogOpen, setLeaveDialogOpen] = useState(false);
+  const [operationProgress, setOperationProgress] = useState<OperationProgressState | null>(null);
   const [customNoteToUserId, setCustomNoteToUserId] = useState<string | null>(null);
   const [repairRows, setRepairRows] = useState<StreakRepairRow[]>([]);
   const [repairVotes, setRepairVotes] = useState<StreakRepairVoteRow[]>([]);
@@ -1114,6 +1146,13 @@ export default function ChallengeDetailScreen() {
   const confirmLeaveMission = useCallback(() => {
     if (!challengeId || !myHabit?.id) return;
     setLeaveDialogOpen(false);
+    setOperationProgress({
+      title: "Leaving group mission",
+      message: "Keep this open while HabitPro updates your squad membership.",
+      steps: GROUP_LEAVE_PROGRESS_STEPS,
+      activeStep: 0,
+    });
+    startJsStallProbe(`challenge.leaveGroup.${myHabit.id}`);
     void (async () => {
       setLeaveBusy(true);
       try {
@@ -1121,15 +1160,25 @@ export default function ChallengeDetailScreen() {
         const habitSnapshot = myHabit;
         const { error } = await leaveChallengeGroup(challengeId);
         if (error) {
+          setOperationProgress(null);
           showToast(error.message, "error");
           return;
         }
-        deleteHabit(habitId);
-        showToast("Left group mission", "success");
+        await waitForOperationStep();
+        setOperationProgress((prev) => (prev ? { ...prev, activeStep: 1 } : prev));
+        traceSync("challenge.leaveGroup.deleteHabit", () => deleteHabit(habitId));
+        await waitForHabitPersistIdle();
+        await waitForOperationStep();
+        setOperationProgress((prev) => (prev ? { ...prev, activeStep: 2 } : prev));
+        await waitForOperationStep();
+        setOperationProgress((prev) => (prev ? { ...prev, activeStep: 3 } : prev));
+        await waitForOperationStep(OPERATION_FINAL_DELAY_MS);
+        setOperationProgress((prev) => (prev ? { ...prev, activeStep: GROUP_LEAVE_PROGRESS_STEPS.length } : prev));
+        await waitForOperationStep(120);
         backOrReplace(router, "/(tabs)/compete");
-        runAfterCurrentInteractions(() => {
+        runAfterSettledInteractions(() => {
           void deleteAllCommunityWinsForHabit(habitSnapshot);
-        });
+        }, 9000);
       } finally {
         setLeaveBusy(false);
       }
@@ -2261,6 +2310,15 @@ export default function ChallengeDetailScreen() {
           onSend={(t) => void onSubmitCustomNote(t)}
         />
       </LazyMount>
+
+      <OperationProgressDialog
+        visible={operationProgress !== null}
+        title={operationProgress?.title ?? ""}
+        message={operationProgress?.message}
+        steps={operationProgress?.steps ?? []}
+        activeStep={operationProgress?.activeStep ?? 0}
+        error={operationProgress?.error}
+      />
 
       <LazyMount visible={leaveDialogOpen} unmountOnExit>
         <ConfirmDialog

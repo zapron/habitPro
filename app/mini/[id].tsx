@@ -50,6 +50,10 @@ import {
 } from "../../src/utils/miniMissionNotifications";
 import { Screen } from "../../src/components/Screen";
 import { ConfirmDialog } from "../../src/components/ConfirmDialog";
+import {
+  OperationProgressDialog,
+  type OperationProgressStep,
+} from "../../src/components/OperationProgressDialog";
 import { Button } from "../../src/components/Button";
 import { CoachMarkTarget, useCoachMark } from "../../src/context/CoachMarkContext";
 import { MissionDetailsSheet } from "../../src/components/MissionDetailsSheet";
@@ -92,14 +96,41 @@ import {
 import { syncLiveMiniFromLocalMission } from "../../src/lib/liveMiniMissionProgress";
 import { backOrReplace } from "../../src/lib/navigation";
 import { showAppAlert } from "../../src/context/AppDialogContext";
+import { startJsStallProbe, traceSync } from "../../src/lib/jsThreadProbe";
+import { waitForHabitPersistIdle } from "../../src/lib/chunkedHabitPersistStorage";
 
 // Notification handler is configured globally in _layout.tsx via setupNotifications()
 
-function runAfterCurrentInteractions(task: () => void) {
-  InteractionManager.runAfterInteractions(() => {
-    setTimeout(task, 0);
-  });
+const OPERATION_STEP_DELAY_MS = 360;
+const OPERATION_FINAL_DELAY_MS = 220;
+const POST_OPERATION_BACKGROUND_DELAY_MS = 1600;
+
+function runAfterSettledInteractions(task: () => void, delayMs = POST_OPERATION_BACKGROUND_DELAY_MS) {
+  setTimeout(() => {
+    InteractionManager.runAfterInteractions(() => {
+      setTimeout(task, 0);
+    });
+  }, delayMs);
 }
+
+function waitForOperationStep(ms = OPERATION_STEP_DELAY_MS): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+type OperationProgressState = {
+  title: string;
+  message?: string;
+  steps: OperationProgressStep[];
+  activeStep: number;
+  error?: string | null;
+};
+
+const MINI_DELETE_STEPS: OperationProgressStep[] = [
+  { label: "Removing mini mission", description: "Taking it out of your list." },
+  { label: "Saving changes", description: "Updating this device safely." },
+  { label: "Syncing cloud", description: "Queueing backend cleanup." },
+  { label: "Finalizing", description: "Returning you to Minis." },
+];
 
 const QUOTES = [
   {
@@ -1123,6 +1154,7 @@ export default function MiniMissionDetail() {
   /** Avoid not-found flash after delete; mission is removed before navigation finishes. */
   const [pendingExitAfterRemove, setPendingExitAfterRemove] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [operationProgress, setOperationProgress] = useState<OperationProgressState | null>(null);
   const [missionDetailsOpen, setMissionDetailsOpen] = useState(false);
   const [completionImageAspect, setCompletionImageAspect] = useState<number | null>(null);
   const [completionImageOpen, setCompletionImageOpen] = useState(false);
@@ -1345,12 +1377,33 @@ export default function MiniMissionDetail() {
       return;
     }
     const id = mission.id;
-    setPendingExitAfterRemove(true);
-    useHabitStore.getState().deleteMiniMission(id);
-    router.replace("/mini");
-    runAfterCurrentInteractions(() => {
-      void deleteCommunityWin(id);
+    setOperationProgress({
+      title: "Deleting mini mission",
+      message: "Keep this open while HabitPro safely removes this mini mission.",
+      steps: MINI_DELETE_STEPS,
+      activeStep: 0,
     });
+    startJsStallProbe(`mini.delete.${id}`);
+    void (async () => {
+      await waitForOperationStep();
+      setPendingExitAfterRemove(true);
+      traceSync("mini.delete.deleteMiniMission", () => {
+        useHabitStore.getState().deleteMiniMission(id);
+      });
+      await waitForHabitPersistIdle();
+      setOperationProgress((prev) => (prev ? { ...prev, activeStep: 1 } : prev));
+      await waitForOperationStep();
+      setOperationProgress((prev) => (prev ? { ...prev, activeStep: 2 } : prev));
+      await waitForOperationStep();
+      setOperationProgress((prev) => (prev ? { ...prev, activeStep: 3 } : prev));
+      await waitForOperationStep(OPERATION_FINAL_DELAY_MS);
+      setOperationProgress((prev) => (prev ? { ...prev, activeStep: MINI_DELETE_STEPS.length } : prev));
+      await waitForOperationStep(120);
+      router.replace("/mini");
+      runAfterSettledInteractions(() => {
+        void deleteCommunityWin(id);
+      }, 9000);
+    })();
   }, [mission, router]);
 
   useCoachMark(
@@ -1382,6 +1435,15 @@ export default function MiniMissionDetail() {
   if (!mission) {
     return (
       <Screen>
+        <OperationProgressDialog
+          visible={operationProgress !== null}
+          title={operationProgress?.title ?? ""}
+          message={operationProgress?.message}
+          steps={operationProgress?.steps ?? []}
+          activeStep={operationProgress?.activeStep ?? 0}
+          error={operationProgress?.error}
+        />
+
         <View style={styles.header}>
           <TouchableOpacity
             style={[
@@ -1691,6 +1753,15 @@ export default function MiniMissionDetail() {
 
   return (
     <Screen>
+      <OperationProgressDialog
+        visible={operationProgress !== null}
+        title={operationProgress?.title ?? ""}
+        message={operationProgress?.message}
+        steps={operationProgress?.steps ?? []}
+        activeStep={operationProgress?.activeStep ?? 0}
+        error={operationProgress?.error}
+      />
+
       <ConfirmDialog
         visible={deleteDialogOpen}
         onRequestClose={() => setDeleteDialogOpen(false)}

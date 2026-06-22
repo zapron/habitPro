@@ -32,6 +32,10 @@ import { Timer } from '../../src/components/Timer';
 import { QuoteCard } from '../../src/components/QuoteCard';
 import { Screen } from '../../src/components/Screen';
 import { ConfirmDialog } from '../../src/components/ConfirmDialog';
+import {
+    OperationProgressDialog,
+    type OperationProgressStep,
+} from '../../src/components/OperationProgressDialog';
 import { useTheme } from '../../src/context/ThemeContext';
 import { useToast } from '../../src/context/ToastContext';
 import { useReducedMotion } from '../../src/hooks/useReducedMotion';
@@ -78,7 +82,6 @@ import { isSupabaseConfigured } from '../../src/lib/env';
 import {
   leaveChallengeGroup,
   listChallengeMembers,
-  refreshCohortPeerHabits,
 } from '../../src/lib/groupChallengesApi';
 import {
   postCommunityWin,
@@ -88,14 +91,26 @@ import {
 } from '../../src/lib/communityWinsApi';
 import { getMyStreakRepairStatusForDay } from "../../src/lib/streakRepairApi";
 import { requestRemoteSync } from "../../src/lib/syncQueue";
+import { startJsStallProbe, traceSync } from "../../src/lib/jsThreadProbe";
+import { waitForHabitPersistIdle } from "../../src/lib/chunkedHabitPersistStorage";
 
 const LOCKED_CHECKIN_MSG =
     'You can only check in for the current mission day. Each day unlocks 24 hours after the mission started (day 2 after the first 24 hours, and so on).';
 
-function runAfterCurrentInteractions(task: () => void) {
-    InteractionManager.runAfterInteractions(() => {
-        setTimeout(task, 0);
-    });
+const OPERATION_STEP_DELAY_MS = 360;
+const OPERATION_FINAL_DELAY_MS = 220;
+const POST_OPERATION_BACKGROUND_DELAY_MS = 1600;
+
+function runAfterSettledInteractions(task: () => void, delayMs = POST_OPERATION_BACKGROUND_DELAY_MS) {
+    setTimeout(() => {
+        InteractionManager.runAfterInteractions(() => {
+            setTimeout(task, 0);
+        });
+    }, delayMs);
+}
+
+function waitForOperationStep(ms = OPERATION_STEP_DELAY_MS): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 type MissionDialogState =
@@ -105,6 +120,28 @@ type MissionDialogState =
     | { kind: 'leaveGroup' }
     | { kind: 'blockedReset' }
     | { kind: 'signInRequired' };
+
+type OperationProgressState = {
+    title: string;
+    message?: string;
+    steps: OperationProgressStep[];
+    activeStep: number;
+    error?: string | null;
+};
+
+const MISSION_DELETE_STEPS: OperationProgressStep[] = [
+    { label: 'Removing mission', description: 'Taking it out of your active list.' },
+    { label: 'Saving changes', description: 'Updating this device safely.' },
+    { label: 'Syncing cloud', description: 'Queueing backend cleanup.' },
+    { label: 'Finalizing', description: 'Returning you to Home.' },
+];
+
+const GROUP_LEAVE_STEPS: OperationProgressStep[] = [
+    { label: 'Leaving squad', description: 'Removing you from the group mission.' },
+    { label: 'Removing mission', description: 'Taking it out of your active list.' },
+    { label: 'Syncing cloud', description: 'Queueing related cleanup.' },
+    { label: 'Finalizing', description: 'Returning you to Home.' },
+];
 
 function getMilestones(totalDays: number, _mode: string): number[] {
     const days = Math.max(1, Math.floor(totalDays));
@@ -450,6 +487,7 @@ export default function HabitDetail() {
     const [groupSheetOpen, setGroupSheetOpen] = useState(false);
     const [missionDetailsOpen, setMissionDetailsOpen] = useState(false);
     const [missionDialog, setMissionDialog] = useState<MissionDialogState>({ kind: 'none' });
+    const [operationProgress, setOperationProgress] = useState<OperationProgressState | null>(null);
     const [habitCommunityBusy, setHabitCommunityBusy] = useState(false);
     /** Keeps the Community Switch visually ON while publish is in flight (controlled `posted` is still false). */
     const [habitCommunityPublishPending, setHabitCommunityPublishPending] = useState(false);
@@ -981,6 +1019,15 @@ export default function HabitDetail() {
     if (!habit) {
         return (
             <Screen>
+                <OperationProgressDialog
+                    visible={operationProgress !== null}
+                    title={operationProgress?.title ?? ""}
+                    message={operationProgress?.message}
+                    steps={operationProgress?.steps ?? []}
+                    activeStep={operationProgress?.activeStep ?? 0}
+                    error={operationProgress?.error}
+                />
+
                 <View style={styles.header}>
                     <TouchableOpacity
                         style={[styles.iconButton, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}
@@ -1537,6 +1584,15 @@ export default function HabitDetail() {
                 <StreakMemoryGallery entries={memoryGalleryEntries} />
             </ScrollView>
 
+            <OperationProgressDialog
+                visible={operationProgress !== null}
+                title={operationProgress?.title ?? ''}
+                message={operationProgress?.message}
+                steps={operationProgress?.steps ?? []}
+                activeStep={operationProgress?.activeStep ?? 0}
+                error={operationProgress?.error}
+            />
+
             <ConfirmDialog
                 visible={missionDialog.kind !== 'none'}
                 onRequestClose={() => setMissionDialog({ kind: 'none' })}
@@ -1592,15 +1648,34 @@ export default function HabitDetail() {
                                       label: 'Delete',
                                       variant: 'danger',
                                       onPress: () => {
+                                          const habitSnapshot = habit;
                                           setMissionDialog({ kind: 'none' });
-                                          setPendingExitAfterRemove(true);
-                                          deleteHabit(habit.id);
-                                          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                                          showToast('Mission deleted', 'success');
-                                          backOrReplace(router, "/");
-                                          runAfterCurrentInteractions(() => {
-                                              void deleteAllCommunityWinsForHabit(habit);
+                                          setOperationProgress({
+                                              title: 'Deleting mission',
+                                              message: 'Keep this open while HabitPro safely removes this mission.',
+                                              steps: MISSION_DELETE_STEPS,
+                                              activeStep: 0,
                                           });
+                                          startJsStallProbe(`habit.delete.${habitSnapshot.id}`);
+                                          void (async () => {
+                                              await waitForOperationStep();
+                                              setPendingExitAfterRemove(true);
+                                              traceSync("habit.delete.deleteHabit", () => deleteHabit(habitSnapshot.id));
+                                              await waitForHabitPersistIdle();
+                                              setOperationProgress((prev) => (prev ? { ...prev, activeStep: 1 } : prev));
+                                              void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                                              await waitForOperationStep();
+                                              setOperationProgress((prev) => (prev ? { ...prev, activeStep: 2 } : prev));
+                                              await waitForOperationStep();
+                                              setOperationProgress((prev) => (prev ? { ...prev, activeStep: 3 } : prev));
+                                              await waitForOperationStep(OPERATION_FINAL_DELAY_MS);
+                                              setOperationProgress((prev) => (prev ? { ...prev, activeStep: MISSION_DELETE_STEPS.length } : prev));
+                                              await waitForOperationStep(120);
+                                              backOrReplace(router, "/");
+                                              runAfterSettledInteractions(() => {
+                                                  void deleteAllCommunityWinsForHabit(habitSnapshot);
+                                              }, 9000);
+                                          })();
                                       },
                                   },
                               ]
@@ -1612,23 +1687,40 @@ export default function HabitDetail() {
                                         variant: 'danger',
                                         onPress: () => {
                                             const challengeId = habit.challengeGroupId;
+                                            const habitSnapshot = habit;
                                             setMissionDialog({ kind: 'none' });
                                             if (!challengeId) return;
+                                            setOperationProgress({
+                                                title: 'Leaving group mission',
+                                                message: 'Keep this open while HabitPro updates your squad membership.',
+                                                steps: GROUP_LEAVE_STEPS,
+                                                activeStep: 0,
+                                            });
+                                            startJsStallProbe(`habit.leaveGroup.${habitSnapshot.id}`);
                                             void (async () => {
                                                 const { error } = await leaveChallengeGroup(challengeId);
                                                 if (error) {
+                                                    setOperationProgress(null);
                                                     showToast(error.message, 'error');
                                                     return;
                                                 }
+                                                await waitForOperationStep();
+                                                setOperationProgress((prev) => (prev ? { ...prev, activeStep: 1 } : prev));
                                                 setPendingExitAfterRemove(true);
-                                                deleteHabit(habit.id);
-                                                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-                                                showToast('Left group mission', 'success');
+                                                traceSync("habit.leaveGroup.deleteHabit", () => deleteHabit(habitSnapshot.id));
+                                                await waitForHabitPersistIdle();
+                                                void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+                                                await waitForOperationStep();
+                                                setOperationProgress((prev) => (prev ? { ...prev, activeStep: 2 } : prev));
+                                                await waitForOperationStep();
+                                                setOperationProgress((prev) => (prev ? { ...prev, activeStep: 3 } : prev));
+                                                await waitForOperationStep(OPERATION_FINAL_DELAY_MS);
+                                                setOperationProgress((prev) => (prev ? { ...prev, activeStep: GROUP_LEAVE_STEPS.length } : prev));
+                                                await waitForOperationStep(120);
                                                 backOrReplace(router, "/");
-                                                runAfterCurrentInteractions(() => {
-                                                    void deleteAllCommunityWinsForHabit(habit);
-                                                    void refreshCohortPeerHabits().catch(() => {});
-                                                });
+                                                runAfterSettledInteractions(() => {
+                                                    void deleteAllCommunityWinsForHabit(habitSnapshot);
+                                                }, 9000);
                                             })();
                                         },
                                     },

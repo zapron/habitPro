@@ -21,7 +21,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { FlashList } from "@shopify/flash-list";
 const DynamicFlashList = FlashList as any;
-import { useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect, useIsFocused } from "@react-navigation/native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { ChevronRight, Crown, Eye, Medal, Radio, RefreshCw, Swords, Trophy, Clock, X, Zap } from "lucide-react-native";
 import { Screen } from "../../src/components/Screen";
@@ -57,12 +57,13 @@ import {
   getChallengeGroupsByIds,
   getProfileLabelsForIds,
   listInvitesForMePage,
-  refreshCohortPeerHabits,
   type ProfileLabel,
 } from "../../src/lib/groupChallengesApi";
 import { subscribeSyncSuccess } from "../../src/lib/syncQueue";
 import { upsertRemoteHabit } from "../../src/lib/sync";
 import { traceAsync } from "../../src/lib/perfTrace";
+import { startJsStallProbe, traceSync } from "../../src/lib/jsThreadProbe";
+import { waitForHabitPersistIdle } from "../../src/lib/chunkedHabitPersistStorage";
 import { PlusBadge } from "../../src/components/PlusBadge";
 import { ShimmerBlock } from "../../src/components/ShimmerBlock";
 import { useRefreshPremiumAccess } from "../../src/hooks/useRefreshPremiumAccess";
@@ -85,6 +86,53 @@ const WEEKLY_RANK_PAGE_SIZE = 20;
 const COMPETE_INVITES_PAGE_SIZE = 20;
 const COMPETE_INVITES_RELOAD_TTL_MS = 30_000;
 const COMPETE_LEAGUE_RELOAD_TTL_MS = 60_000;
+const EMPTY_HABITS: Habit[] = [];
+const EMPTY_MINI_MISSIONS: MiniMission[] = [];
+const LINK_ROW_SEP = "\u001e";
+const LINK_VALUE_SEP = "\u001f";
+
+function encodeGroupHabitLinks(habits: Habit[]): string {
+  const rows: string[] = [];
+  for (const habit of habits) {
+    if (!habit.challengeGroupId) continue;
+    rows.push(`${habit.challengeGroupId}${LINK_VALUE_SEP}${habit.id}`);
+  }
+  return rows.sort().join(LINK_ROW_SEP);
+}
+
+function decodeGroupHabitLinks(key: string): Map<string, string> {
+  const map = new Map<string, string>();
+  if (!key) return map;
+  for (const row of key.split(LINK_ROW_SEP)) {
+    const [challengeId, habitId] = row.split(LINK_VALUE_SEP);
+    if (challengeId && habitId) map.set(challengeId, habitId);
+  }
+  return map;
+}
+
+function encodeLiveMiniLinks(miniMissions: MiniMission[]): string {
+  const rows: string[] = [];
+  for (const mission of miniMissions) {
+    if (!mission.liveSquadId) continue;
+    rows.push(`${mission.liveSquadId}${LINK_VALUE_SEP}${mission.id}${LINK_VALUE_SEP}${mission.estimatedMinutes}`);
+  }
+  return rows.sort().join(LINK_ROW_SEP);
+}
+
+function decodeLiveMiniLinks(key: string): Map<string, Pick<MiniMission, "id" | "estimatedMinutes">> {
+  const map = new Map<string, Pick<MiniMission, "id" | "estimatedMinutes">>();
+  if (!key) return map;
+  for (const row of key.split(LINK_ROW_SEP)) {
+    const [squadId, missionId, minutes] = row.split(LINK_VALUE_SEP);
+    if (!squadId || !missionId) continue;
+    const estimatedMinutes = Number(minutes);
+    map.set(squadId, {
+      id: missionId,
+      estimatedMinutes: Number.isFinite(estimatedMinutes) ? estimatedMinutes : 0,
+    });
+  }
+  return map;
+}
 
 type CompeteSegment = "leaderboard" | "challenges";
 
@@ -523,6 +571,7 @@ export default function CompeteScreen() {
   const reduceMotion = useReducedMotion();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const isFocused = useIsFocused();
   const params = useLocalSearchParams<{
     inviteId?: string;
     challengeId?: string;
@@ -629,11 +678,15 @@ export default function CompeteScreen() {
     return () => loop.stop();
   }, [hasAwaitingInvite, invitePulse, reduceMotion]);
 
-  const { xp, habits, miniMissions, addHabit, deleteHabit } = useHabitStore(
+  const needsFullLocalData = isFocused && (segment === "leaderboard" || challengesSubTab === "missions");
+  const needsInviteLocalLinks = isFocused && segment === "challenges" && challengesSubTab === "invites";
+  const { xp, habits, miniMissions, groupHabitLinksKey, liveMiniLinksKey, addHabit, deleteHabit } = useHabitStore(
     useShallow((s) => ({
-      xp: s.xp,
-      habits: s.habits,
-      miniMissions: s.miniMissions,
+      xp: isFocused ? s.xp : 0,
+      habits: needsFullLocalData ? s.habits : EMPTY_HABITS,
+      miniMissions: needsFullLocalData ? s.miniMissions : EMPTY_MINI_MISSIONS,
+      groupHabitLinksKey: needsInviteLocalLinks ? encodeGroupHabitLinks(s.habits) : "",
+      liveMiniLinksKey: needsInviteLocalLinks ? encodeLiveMiniLinks(s.miniMissions) : "",
       addHabit: s.addHabit,
       deleteHabit: s.deleteHabit,
     })),
@@ -651,9 +704,10 @@ export default function CompeteScreen() {
   }, []);
 
   useEffect(() => {
+    if (!needsFullLocalData || segment !== "challenges" || challengesSubTab !== "missions") return undefined;
     const t = setTimeout(() => reconcile(habits, miniMissions), 200);
     return () => clearTimeout(t);
-  }, [habits, miniMissions, reconcile]);
+  }, [challengesSubTab, habits, miniMissions, needsFullLocalData, reconcile, segment]);
 
   const loadInvites = useCallback(async (options?: { force?: boolean }) => {
     const requestedUserId = userId;
@@ -981,6 +1035,7 @@ export default function CompeteScreen() {
       return;
     }
     setInviteBusy(invite.id);
+    startJsStallProbe(`compete.acceptInvite.${invite.id}`);
     try {
       if (!isPremium || premiumLoading) {
         const freshPremium = await refreshPremiumAccess({ serverOnly: true, cachedAccessOk: true });
@@ -1011,24 +1066,25 @@ export default function CompeteScreen() {
       const createdLocalHabit = !existingHabit;
       const newHabitId =
         existingHabit?.id ??
-        addHabit({
-          title,
-          description,
-          mode,
-          totalDays: mode === "manual" ? totalDays : undefined,
-          challengeGroupId: group.id,
-          challengeCreatorTimezone: group.creator_timezone,
-          missionTimezone: group.creator_timezone,
-          startDate: startIso,
-          endDate: mode === "manual" ? tplEnd : undefined,
-        });
+        traceSync("compete.acceptInvite.addHabit", () =>
+          addHabit({
+            title,
+            description,
+            mode,
+            totalDays: mode === "manual" ? totalDays : undefined,
+            challengeGroupId: group.id,
+            challengeCreatorTimezone: group.creator_timezone,
+            missionTimezone: group.creator_timezone,
+            startDate: startIso,
+            endDate: mode === "manual" ? tplEnd : undefined,
+            requestRemoteSync: false,
+          }),
+        );
 
       const habit = useHabitStore.getState().habits.find((h) => h.id === newHabitId);
       if (!habit) {
         throw new Error("Could not create the mission on this device.");
       }
-
-      showToast("Joining group mission...", "success", 900);
 
       let joinedOnServer = false;
       try {
@@ -1050,7 +1106,19 @@ export default function CompeteScreen() {
             throw error;
           }
           joinedOnServer = true;
-          useHabitStore.getState().synchronizeHabitWithChallengeGroup(newHabitId, group);
+          if (!createdLocalHabit) {
+            traceSync("compete.acceptInvite.synchronizeHabitWithChallengeGroup", () => {
+              useHabitStore.getState().synchronizeHabitWithChallengeGroup(newHabitId, group);
+            });
+          }
+          const optimisticGroupInvites = groupInvitesRef.current.map((row) =>
+            row.id === invite.id ? { ...row, status: "accepted" as const } : row,
+          );
+          setGroupInvites(optimisticGroupInvites);
+          syncInviteBadgeCount(
+            optimisticGroupInvites.filter((row) => row.status === "pending").length +
+              liveMiniInvitesRef.current.filter((row) => isLiveMiniInviteActionable(row.participant)).length,
+          );
           const alignedHabit = useHabitStore.getState().habits.find((h) => h.id === newHabitId);
           if (alignedHabit) {
             await traceAsync(
@@ -1058,15 +1126,21 @@ export default function CompeteScreen() {
               () => upsertRemoteHabit(userId, alignedHabit),
               { slowMs: 900 },
             );
+            if (createdLocalHabit) {
+              useHabitStore.getState().clearDirtyState([newHabitId]);
+            }
           }
-          void refreshCohortPeerHabits();
-          void loadInvites({ force: true });
-          if (mountedRef.current) showToast("Joined the group mission. Start it from Home.", "success", 1400);
+          await waitForHabitPersistIdle();
+          if (mountedRef.current) {
+            showToast("Joined the group mission. Start it from Home.", "success", 1800);
+          }
           setTimeout(() => {
             if (mountedRef.current) void suggestNotifications("invite_accept");
-          }, 450);
+          }, 2200);
       } catch (joinErr) {
-        if (!joinedOnServer && createdLocalHabit) deleteHabit(newHabitId);
+        if (!joinedOnServer && createdLocalHabit) {
+          traceSync("compete.acceptInvite.rollbackDeleteHabit", () => deleteHabit(newHabitId));
+        }
         throw joinErr;
       }
     } catch (e: unknown) {
@@ -1088,11 +1162,10 @@ export default function CompeteScreen() {
     openUpsell,
     addHabit,
     deleteHabit,
-    loadInvites,
+    syncInviteBadgeCount,
     suggestNotifications,
     isPremium,
     premiumLoading,
-    router,
   ]);
 
   const handleDeclineGroupInvite = useCallback(async (invite: ChallengeInviteRow) => {
@@ -1167,17 +1240,24 @@ export default function CompeteScreen() {
   const bottomPad = Math.max(insets.bottom, 16) + 8;
 
   const localWeeklyScore = useMemo(
-    () => weeklyCompeteScore(habits, miniMissions, level),
-    [habits, miniMissions, level],
+    () => (segment === "leaderboard" ? weeklyCompeteScore(habits, miniMissions, level) : 0),
+    [habits, miniMissions, level, segment],
   );
-  const localHabitCheckInsWeek = useMemo(() => countHabitCheckInsThisWeek(habits), [habits]);
-  const localMinisWeek = useMemo(() => countMiniCompletionsThisWeek(miniMissions), [miniMissions]);
+  const localHabitCheckInsWeek = useMemo(
+    () => (segment === "leaderboard" ? countHabitCheckInsThisWeek(habits) : 0),
+    [habits, segment],
+  );
+  const localMinisWeek = useMemo(
+    () => (segment === "leaderboard" ? countMiniCompletionsThisWeek(miniMissions) : 0),
+    [miniMissions, segment],
+  );
   const weeklyScore = myWeeklyRank?.points ?? localWeeklyScore;
   const habitCheckInsWeek = myWeeklyRank?.habitCheckIns ?? localHabitCheckInsWeek;
   const minisWeek = myWeeklyRank?.miniCompletions ?? localMinisWeek;
 
   /** Map group challenge id → local habit id (accepted group missions). */
   const habitIdByChallengeId = useMemo(() => {
+    if (needsInviteLocalLinks) return decodeGroupHabitLinks(groupHabitLinksKey);
     const m = new Map<string, string>();
     for (const h of habits) {
       if (h.challengeGroupId) {
@@ -1185,15 +1265,16 @@ export default function CompeteScreen() {
       }
     }
     return m;
-  }, [habits]);
+  }, [groupHabitLinksKey, habits, needsInviteLocalLinks]);
 
   const miniMissionByLiveSquadId = useMemo(() => {
-    const m = new Map<string, MiniMission>();
+    if (needsInviteLocalLinks) return decodeLiveMiniLinks(liveMiniLinksKey);
+    const m = new Map<string, Pick<MiniMission, "id" | "estimatedMinutes">>();
     for (const mission of miniMissions) {
       if (mission.liveSquadId) m.set(mission.liveSquadId, mission);
     }
     return m;
-  }, [miniMissions]);
+  }, [liveMiniLinksKey, miniMissions, needsInviteLocalLinks]);
 
   const mixedInvites = useMemo<MixedInviteItem[]>(
     () =>
@@ -1410,6 +1491,7 @@ export default function CompeteScreen() {
 
   const renderGroupInviteCard = (inv: ChallengeInviteRow) => {
     const pending = inv.status === "pending";
+    const accepting = inviteBusy === inv.id;
     const meta = inviteCardMeta[inv.id];
     const requesterLabel = inviteRequesterLabels[inv.inviter_id];
     const missionTitle = meta?.challengeName ?? "Group mission";
@@ -1496,11 +1578,13 @@ export default function CompeteScreen() {
           <InviteMissionHeader meta={meta} theme={theme} isDark={isDark} />
           <InviteRequesterLine username={requesterLabel?.username} theme={theme} />
           <View style={styles.inviteStatusRow}>
-            <InviteStatusPill variant="pending" label="Action needed" theme={theme} />
+            <InviteStatusPill variant="pending" label={accepting ? "Joining..." : "Action needed"} theme={theme} />
           </View>
           {groupStreaksButton}
           <Text style={[styles.inviteHint, { color: theme.colors.textSecondary }]}>
-            Accept to add a matching mission and join everyone on this mission.
+            {accepting
+              ? "Adding this mission to your list and joining the squad."
+              : "Accept to add a matching mission and join everyone on this mission."}
           </Text>
           {inviteNeedsCommunityForAccept ? (
             <Text style={[styles.invitePlusHint, { color: theme.colors.textMuted }]}>
@@ -2098,11 +2182,11 @@ const styles = StyleSheet.create({
   },
   awaitingInvitePulse: {
     position: "absolute",
-    top: -3,
-    right: -3,
-    bottom: -3,
-    left: -3,
-    borderRadius: 19,
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    borderRadius: 16,
     borderWidth: 2,
   },
   cardTitle: { fontWeight: "800", fontSize: 17, marginBottom: 10 },
