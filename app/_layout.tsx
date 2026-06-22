@@ -17,7 +17,6 @@ import { PremiumProvider } from "../src/context/PremiumContext";
 import { UsernameGateProvider } from "../src/context/UsernameGateContext";
 import { NotificationGateProvider } from "../src/context/NotificationGateContext";
 import { PlusUpsellProvider } from "../src/context/PlusUpsellContext";
-import { CoachMarkProvider } from "../src/context/CoachMarkContext";
 import { AppVersionProvider, useAppVersion } from "../src/context/AppVersionContext";
 import { InviteBadgeProvider } from "../src/context/InviteBadgeContext";
 import { ForceUpdateModal } from "../src/components/ForceUpdateModal";
@@ -353,13 +352,11 @@ export default function Layout() {
                   <BillingProvider>
                     <PremiumProvider>
                       <PlusUpsellProvider>
-                        <CoachMarkProvider>
-                          <AppVersionProvider>
-                            <SplashGate>
-                              <RootLayoutNav />
-                            </SplashGate>
-                          </AppVersionProvider>
-                        </CoachMarkProvider>
+                        <AppVersionProvider>
+                          <SplashGate>
+                            <RootLayoutNav />
+                          </SplashGate>
+                        </AppVersionProvider>
                       </PlusUpsellProvider>
                     </PremiumProvider>
                   </BillingProvider>

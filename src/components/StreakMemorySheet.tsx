@@ -26,7 +26,6 @@ import * as ImagePicker from "expo-image-picker";
 import { Flag, Globe, ImageIcon, Lock, Quote, Users, X } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import { useTheme } from "../context/ThemeContext";
-import { CoachMarkTarget, useCoachMark } from "../context/CoachMarkContext";
 import type { StreakMemory } from "../types/habit";
 import { showAppAlert } from "../context/AppDialogContext";
 
@@ -146,17 +145,6 @@ export const StreakMemorySheet = React.memo(function StreakMemorySheet({
       setImgLoading(false);
     }
   }, [visible, isView, viewMemory?.imageUrl, viewMemory?.imageUri]);
-
-  useCoachMark(
-    "mini_complete_memory",
-    {
-      title: "Save the win",
-      body: "Add a photo or note when the moment is worth remembering.",
-      placement: "above",
-    },
-    visible && !isView && isMini,
-    760,
-  );
 
   const pickerOptions = {
     mediaTypes: ["images"] satisfies ImagePicker.MediaType[],
@@ -934,39 +922,34 @@ export const StreakMemorySheet = React.memo(function StreakMemorySheet({
                         {isMini ? "Just Mark Complete" : "Just mark done"}
                       </Text>
                     </Pressable>
-                    <CoachMarkTarget
-                      id="mini_complete_memory"
-                      style={[styles.memoryCoachTarget, stackMemoryActions && styles.memoryCoachTargetStacked]}
+                    <Pressable
+                      onPress={() => void handleSave()}
+                      disabled={submitting}
+                      style={[
+                        styles.btnPrimary,
+                        styles.btnPrimaryMemory,
+                        stackMemoryActions && styles.btnMemoryStacked,
+                        { backgroundColor: theme.colors.indigo[600], ...theme.shadow.glow, opacity: submitting ? 0.92 : 1 },
+                      ]}
                     >
-                      <Pressable
-                        onPress={() => void handleSave()}
-                        disabled={submitting}
-                        style={[
-                          styles.btnPrimary,
-                          styles.btnPrimaryMemory,
-                          stackMemoryActions && styles.btnMemoryStacked,
-                          { backgroundColor: theme.colors.indigo[600], ...theme.shadow.glow, opacity: submitting ? 0.92 : 1 },
-                        ]}
-                      >
-                        {submitting ? (
-                          <ActivityIndicator color={theme.colors.white} />
-                        ) : (
-                          <Text
-                            style={[
-                              styles.btnPrimaryText,
-                              styles.btnPrimaryTextMemory,
-                              { color: theme.colors.white },
-                              Platform.OS === "android" ? styles.btnMemoryTextAndroid : null,
-                            ]}
-                            numberOfLines={2}
-                            adjustsFontSizeToFit
-                            minimumFontScale={0.8}
-                          >
-                            {isMini ? "Complete with Memory" : "Save moment"}
-                          </Text>
-                        )}
-                      </Pressable>
-                    </CoachMarkTarget>
+                      {submitting ? (
+                        <ActivityIndicator color={theme.colors.white} />
+                      ) : (
+                        <Text
+                          style={[
+                            styles.btnPrimaryText,
+                            styles.btnPrimaryTextMemory,
+                            { color: theme.colors.white },
+                            Platform.OS === "android" ? styles.btnMemoryTextAndroid : null,
+                          ]}
+                          numberOfLines={2}
+                          adjustsFontSizeToFit
+                          minimumFontScale={0.8}
+                        >
+                          {isMini ? "Complete with Memory" : "Save moment"}
+                        </Text>
+                      )}
+                    </Pressable>
                   </View>
                 </View>
               )}
@@ -1219,11 +1202,6 @@ const styles = StyleSheet.create({
   },
   actionsMemoryStacked: {
     flexDirection: "column",
-  },
-  memoryCoachTarget: { flex: 1, minHeight: 58 },
-  memoryCoachTargetStacked: {
-    flex: 0,
-    width: "100%",
   },
   btnSecondary: {
     flex: 1,

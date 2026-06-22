@@ -28,7 +28,6 @@ import type { CommunityWinFeedItem } from "../lib/communityWinsApi";
 import { buildStreakCelebrationKicker } from "../lib/communityStreakFeedCopy";
 import { formatCompletedAt, formatRelativeTime } from "../lib/communityWinFeedFormat";
 import type { AppTheme } from "../styles/theme";
-import { CoachMarkTarget, type CoachMarkId } from "../context/CoachMarkContext";
 import { levelFromTotalXp } from "../utils/xpLevel";
 import { playerLeagueForLevel } from "../utils/playerLeague";
 
@@ -56,7 +55,6 @@ type Props = {
   canCheer?: boolean;
   /** Optional; parent may already handle via `onCheer`. Used for accessibility copy. */
   onCheerBlocked?: () => void;
-  cheerCoachId?: CoachMarkId | null;
 };
 
 function CheerBurstOverlay({
@@ -132,7 +130,6 @@ export const CommunityWinFeedPost = memo(function CommunityWinFeedPost({
   onOpenCheerers,
   canCheer = true,
   onCheerBlocked,
-  cheerCoachId,
 }: Props) {
   const isOwn = sessionUserId === win.user_id;
   const handle = win.username ? `@${win.username}` : "Someone";
@@ -492,7 +489,7 @@ export const CommunityWinFeedPost = memo(function CommunityWinFeedPost({
 
           <View style={styles.postActionRow}>
             <View style={styles.cheerIconRow}>
-              {cheerCoachId ? <CoachMarkTarget id={cheerCoachId}>{cheerButton}</CoachMarkTarget> : cheerButton}
+              {cheerButton}
               <Pressable
                 onPress={() => onOpenCheerers?.(win)}
                 disabled={win.cheerCount < 1}
