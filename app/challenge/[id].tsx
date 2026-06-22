@@ -1880,7 +1880,7 @@ export default function ChallengeDetailScreen() {
                           <Text style={[styles.repairCompactTitle, { color: theme.colors.textPrimary }]} numberOfLines={1}>
                             {actionableRepairRows.length === 1
                               ? `${statusLabel} streak repair`
-                              : `Repair ${repairIndex + 1} of ${actionableRepairRows.length}`}
+                              : `Repair ${actionableRepairRows.length - repairIndex} of ${actionableRepairRows.length}`}
                           </Text>
                           <View
                             style={[
