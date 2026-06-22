@@ -21,7 +21,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect, useIsFocused } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
 import Svg, { Defs, LinearGradient as SvgLinearGradient, Stop, Text as SvgText } from "react-native-svg";
 import { FlashList } from "@shopify/flash-list";
@@ -67,12 +67,16 @@ import {
   needsMainMissionOutcome,
 } from "../../src/utils/mainMissionUi";
 import { getHabitActiveMissionDateKey } from "../../src/utils/missionDaySlots";
+import type { Habit, MiniMission } from "../../src/types/habit";
 import {
   XP_PER_LEVEL,
   levelFromTotalXp,
   xpInCurrentLevel,
   xpProgressInCurrentLevel,
 } from "../../src/utils/xpLevel";
+
+const EMPTY_HABITS: Habit[] = [];
+const EMPTY_MINI_MISSIONS: MiniMission[] = [];
 
 function getGreeting(): string {
   const hour = new Date().getHours();
@@ -276,11 +280,17 @@ export default function Home() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { theme, isDark } = useTheme();
+  const isFocused = useIsFocused();
   const { session, syncReady, syncError, retryHydrate } = useAuth();
   const { softUpdateAvailable, latestVersion, softUpdateUrl, softUpdateMessage } = useAppVersion();
   const reduceMotion = useReducedMotion();
   const { habits, cohortPeerHabits, miniMissions, xp } = useHabitStore(
-    useShallow((s) => ({ habits: s.habits, cohortPeerHabits: s.cohortPeerHabits, miniMissions: s.miniMissions, xp: s.xp })),
+    useShallow((s) => ({
+      habits: isFocused ? s.habits : EMPTY_HABITS,
+      cohortPeerHabits: isFocused ? s.cohortPeerHabits : EMPTY_HABITS,
+      miniMissions: isFocused ? s.miniMissions : EMPTY_MINI_MISSIONS,
+      xp: isFocused ? s.xp : 0,
+    })),
   );
   const [activeTab, setActiveTab] = useState<"missions" | "reports">(
     "missions",

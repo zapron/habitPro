@@ -22,7 +22,7 @@ import {
 import type { ImageStyle } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect, useIsFocused } from "@react-navigation/native";
 import {
   Activity,
   BarChart3,
@@ -78,6 +78,9 @@ import { PlusBadge } from "../../src/components/PlusBadge";
 import { useRefreshPremiumAccess } from "../../src/hooks/useRefreshPremiumAccess";
 import { XP_PER_LEVEL, levelFromTotalXp, xpInCurrentLevel } from "../../src/utils/xpLevel";
 import { showAppAlert } from "../../src/context/AppDialogContext";
+
+const EMPTY_HABITS: Habit[] = [];
+const EMPTY_MINI_MISSIONS: MiniMission[] = [];
 
 type HubSheetState =
   | null
@@ -871,6 +874,7 @@ function ProfileInfoSheet({
 
 export default function ProfileScreen() {
   const { theme, isDark } = useTheme();
+  const isFocused = useIsFocused();
   const { showToast } = useToast();
   const insets = useSafeAreaInsets();
   const { session, signOut, syncReady, syncError, retryHydrate } = useAuth();
@@ -889,10 +893,10 @@ export default function ProfileScreen() {
   const [restoringBackupAt, setRestoringBackupAt] = useState<string | null>(null);
   const { rawXp, rawUsername, rawHabits, rawMiniMissions } = useHabitStore(
     useShallow((s) => ({
-      rawXp: s.xp,
-      rawUsername: s.username,
-      rawHabits: s.habits,
-      rawMiniMissions: s.miniMissions,
+      rawXp: isFocused ? s.xp : 0,
+      rawUsername: isFocused ? s.username : null,
+      rawHabits: isFocused ? s.habits : EMPTY_HABITS,
+      rawMiniMissions: isFocused ? s.miniMissions : EMPTY_MINI_MISSIONS,
     })),
   );
   const showAccount = isSupabaseConfigured();
