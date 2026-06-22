@@ -205,7 +205,7 @@ export const useHabitStore = create<HabitStore>()(
         }));
         requestRemoteSync({ immediate: true });
       },
-      synchronizeHabitWithChallengeGroup: (habitId, group: ChallengeGroupRow) => {
+      synchronizeHabitWithChallengeGroup: (habitId, group: ChallengeGroupRow, options) => {
         set((state) => ({
           habits: state.habits.map((h) => {
             if (h.id !== habitId) return h;
@@ -222,7 +222,9 @@ export const useHabitStore = create<HabitStore>()(
             );
           }),
         }));
-        requestRemoteSync({ immediate: true });
+        if (options?.requestRemoteSync !== false) {
+          requestRemoteSync({ immediate: true });
+        }
       },
       resetStore: () =>
         set({ habits: [], miniMissions: [], xp: 0, username: null, cohortPeerHabits: [] }),
@@ -237,6 +239,7 @@ export const useHabitStore = create<HabitStore>()(
         startDate: startDateOverride,
         endDate: endDateOverride,
         missionTimezone: missionTimezoneOverride,
+        requestRemoteSync: shouldRequestRemoteSync = true,
       }) => {
         const now = startDateOverride ?? new Date().toISOString();
         const totalDays =
@@ -276,7 +279,9 @@ export const useHabitStore = create<HabitStore>()(
             : {}),
         };
         set((state) => ({ habits: [...state.habits, newHabit] }));
-        requestRemoteSync({ immediate: true });
+        if (shouldRequestRemoteSync) {
+          requestRemoteSync({ immediate: true });
+        }
         return newHabit.id;
       },
       toggleCompletion: (id, date) => {

@@ -35,7 +35,6 @@ import {
 import { syncMiniMissionNotifications } from "../utils/miniMissionNotifications";
 import { markRemoteFocusRefreshFresh } from "../lib/remoteFocusRefreshCache";
 
-const PERSIST_KEY = "habit-storage";
 const CHALLENGE_STORAGE_KEY = "challenge-storage";
 
 type AuthContextValue = {
@@ -86,7 +85,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setPasswordRecoveryPending(false);
 
     await Promise.allSettled([
-      AsyncStorage.multiRemove([PERSIST_KEY, CHALLENGE_STORAGE_KEY]),
+      useHabitStore.persist.clearStorage(),
+      AsyncStorage.removeItem(CHALLENGE_STORAGE_KEY),
       syncMiniMissionNotifications([]),
     ]);
   }, []);

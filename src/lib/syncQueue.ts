@@ -21,8 +21,9 @@ let inFlightPushes = 0;
 let queuedSyncAfterInFlight = false;
 let failedSinceLastSuccess = false;
 let localMutationGeneration = 0;
-const DEFAULT_DEBOUNCE_MS = 450;
-const IMMEDIATE_DEBOUNCE_MS = 80;
+const DEFAULT_DEBOUNCE_MS = 900;
+const IMMEDIATE_DEBOUNCE_MS = 700;
+const REMOTE_DELETE_DELAY_MS = 4500;
 
 type SyncFailureListener = (error: unknown) => void;
 type SyncSuccessListener = () => void;
@@ -123,6 +124,25 @@ function canWriteRemote(): boolean {
   return Boolean(syncEnabled && userId);
 }
 
+function runAfterIdle(task: () => void, delayMs = 0) {
+  let interactionTask: ReturnType<typeof InteractionManager.runAfterInteractions> | null = null;
+  let scheduledTask: ScheduledInteractionTask;
+  const timer = setTimeout(() => {
+    interactionTask = InteractionManager.runAfterInteractions(() => {
+      scheduledInteractionTasks.delete(scheduledTask);
+      task();
+    });
+  }, delayMs);
+  scheduledTask = {
+    cancel: () => {
+      clearTimeout(timer);
+      interactionTask?.cancel();
+      scheduledInteractionTasks.delete(scheduledTask);
+    },
+  };
+  scheduledInteractionTasks.add(scheduledTask);
+}
+
 function flush() {
   if (!canPush()) return;
   if (inFlightPushes > 0) {
@@ -215,32 +235,42 @@ export function requestRemoteSync(options?: {
 
 export function requestRemoteHabitDelete(habitId: string) {
   if (!canWriteRemote() || !habitId) return;
-  inFlightPushes += 1;
-  void deleteRemoteHabit(userId!, habitId)
-    .then(() => {
-      notifySyncSuccess();
-    })
-    .catch((e) => {
-      console.warn("[habitPro] remote habit delete failed", e);
-      notifySyncFailure(e);
-    })
-    .finally(() => {
-      inFlightPushes = Math.max(0, inFlightPushes - 1);
-    });
+  const deleteUserId = userId!;
+  const deleteGeneration = syncGeneration;
+  runAfterIdle(() => {
+    if (!syncEnabled || userId !== deleteUserId || syncGeneration !== deleteGeneration) return;
+    inFlightPushes += 1;
+    void deleteRemoteHabit(deleteUserId, habitId)
+      .then(() => {
+        notifySyncSuccess();
+      })
+      .catch((e) => {
+        console.warn("[habitPro] remote habit delete failed", e);
+        notifySyncFailure(e);
+      })
+      .finally(() => {
+        inFlightPushes = Math.max(0, inFlightPushes - 1);
+      });
+  }, REMOTE_DELETE_DELAY_MS);
 }
 
 export function requestRemoteMiniMissionDelete(miniMissionId: string) {
   if (!canWriteRemote() || !miniMissionId) return;
-  inFlightPushes += 1;
-  void deleteRemoteMiniMission(userId!, miniMissionId)
-    .then(() => {
-      notifySyncSuccess();
-    })
-    .catch((e) => {
-      console.warn("[habitPro] remote mini mission delete failed", e);
-      notifySyncFailure(e);
-    })
-    .finally(() => {
-      inFlightPushes = Math.max(0, inFlightPushes - 1);
-    });
+  const deleteUserId = userId!;
+  const deleteGeneration = syncGeneration;
+  runAfterIdle(() => {
+    if (!syncEnabled || userId !== deleteUserId || syncGeneration !== deleteGeneration) return;
+    inFlightPushes += 1;
+    void deleteRemoteMiniMission(deleteUserId, miniMissionId)
+      .then(() => {
+        notifySyncSuccess();
+      })
+      .catch((e) => {
+        console.warn("[habitPro] remote mini mission delete failed", e);
+        notifySyncFailure(e);
+      })
+      .finally(() => {
+        inFlightPushes = Math.max(0, inFlightPushes - 1);
+      });
+  }, REMOTE_DELETE_DELAY_MS);
 }

@@ -35,6 +35,40 @@ type Options = {
 };
 
 const SCHEMA_VERSION = 2;
+const PROCESS_YIELD_EVERY = 6;
+const STORAGE_BATCH_SIZE = 12;
+const DEFAULT_IDLE_WAIT_TIMEOUT_MS = 2500;
+
+const pendingWriteNames = new Set<string>();
+let activeFlushes = 0;
+const idleWaiters = new Set<() => void>();
+
+function notifyPersistIdleIfReady() {
+  if (pendingWriteNames.size > 0 || activeFlushes > 0) return;
+  const waiters = Array.from(idleWaiters);
+  idleWaiters.clear();
+  waiters.forEach((resolve) => resolve());
+}
+
+export function waitForHabitPersistIdle(timeoutMs = DEFAULT_IDLE_WAIT_TIMEOUT_MS): Promise<void> {
+  if (pendingWriteNames.size === 0 && activeFlushes === 0) {
+    return Promise.resolve();
+  }
+
+  return new Promise((resolve) => {
+    let done = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      idleWaiters.delete(finish);
+      resolve();
+    };
+    timer = setTimeout(finish, timeoutMs);
+    idleWaiters.add(finish);
+  });
+}
 
 function manifestKey(name: string): string {
   return `${name}:v2:manifest`;
@@ -88,6 +122,24 @@ function parseJson<T>(raw: string | null): T | null {
 
 function manifestContent(manifest: Omit<Manifest, "updatedAt">): string {
   return JSON.stringify(manifest);
+}
+
+function yieldToJs(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+async function multiSetInBatches(entries: [string, string][]): Promise<void> {
+  for (let i = 0; i < entries.length; i += STORAGE_BATCH_SIZE) {
+    await AsyncStorage.multiSet(entries.slice(i, i + STORAGE_BATCH_SIZE));
+    if (i + STORAGE_BATCH_SIZE < entries.length) await yieldToJs();
+  }
+}
+
+async function multiRemoveInBatches(keys: string[]): Promise<void> {
+  for (let i = 0; i < keys.length; i += STORAGE_BATCH_SIZE) {
+    await AsyncStorage.multiRemove(keys.slice(i, i + STORAGE_BATCH_SIZE));
+    if (i + STORAGE_BATCH_SIZE < keys.length) await yieldToJs();
+  }
 }
 
 export function createChunkedHabitPersistStorage<S extends PersistedHabitState>(
@@ -195,6 +247,8 @@ export function createChunkedHabitPersistStorage<S extends PersistedHabitState>(
     const job = pending.get(name);
     if (!job) return;
     pending.delete(name);
+    pendingWriteNames.delete(name);
+    activeFlushes += 1;
 
     try {
       const state = (job.value.state ?? {}) as PersistedHabitState;
@@ -208,6 +262,7 @@ export function createChunkedHabitPersistStorage<S extends PersistedHabitState>(
       const nextKnownMemoryDates = new Map<string, Set<string>>();
       const writes: [string, string][] = [];
       const removals: string[] = [];
+      let processedItems = 0;
 
       for (const habit of habits) {
         if (!habit?.id) continue;
@@ -240,6 +295,8 @@ export function createChunkedHabitPersistStorage<S extends PersistedHabitState>(
               serializedByKey.set(memoryKey, serializedMemory);
             }
             objectRefByKey.set(memoryKey, memory);
+            processedItems += 1;
+            if (processedItems % PROCESS_YIELD_EVERY === 0) await yieldToJs();
           }
         }
 
@@ -251,6 +308,8 @@ export function createChunkedHabitPersistStorage<S extends PersistedHabitState>(
           serializedByKey.delete(memoryKey);
           objectRefByKey.delete(memoryKey);
         }
+        processedItems += 1;
+        if (processedItems % PROCESS_YIELD_EVERY === 0) await yieldToJs();
       }
 
       for (const mission of miniMissions) {
@@ -263,6 +322,8 @@ export function createChunkedHabitPersistStorage<S extends PersistedHabitState>(
           serializedByKey.set(key, serialized);
         }
         objectRefByKey.set(key, mission);
+        processedItems += 1;
+        if (processedItems % PROCESS_YIELD_EVERY === 0) await yieldToJs();
       }
 
       for (const id of knownHabitIdsByName.get(name) ?? []) {
@@ -288,8 +349,8 @@ export function createChunkedHabitPersistStorage<S extends PersistedHabitState>(
         objectRefByKey.delete(key);
       }
 
-      if (writes.length > 0) await AsyncStorage.multiSet(writes);
-      if (removals.length > 0) await AsyncStorage.multiRemove(removals);
+      if (writes.length > 0) await multiSetInBatches(writes);
+      if (removals.length > 0) await multiRemoveInBatches(removals);
 
       const manifestBody: Omit<Manifest, "updatedAt"> = {
         schema: SCHEMA_VERSION,
@@ -322,6 +383,9 @@ export function createChunkedHabitPersistStorage<S extends PersistedHabitState>(
       job.resolve.forEach((resolve) => resolve());
     } catch (error) {
       job.reject.forEach((reject) => reject(error));
+    } finally {
+      activeFlushes = Math.max(0, activeFlushes - 1);
+      notifyPersistIdleIfReady();
     }
   }
 
@@ -342,6 +406,7 @@ export function createChunkedHabitPersistStorage<S extends PersistedHabitState>(
         const timer = setTimeout(() => {
           void flush(name);
         }, delayMs);
+        pendingWriteNames.add(name);
         pending.set(name, {
           value,
           timer,
@@ -355,7 +420,9 @@ export function createChunkedHabitPersistStorage<S extends PersistedHabitState>(
       if (queued) {
         clearTimeout(queued.timer);
         pending.delete(name);
+        pendingWriteNames.delete(name);
         queued.resolve.forEach((resolve) => resolve());
+        notifyPersistIdleIfReady();
       }
       const rawManifest = await AsyncStorage.getItem(manifestKey(name));
       const manifest = parseJson<Manifest>(rawManifest);

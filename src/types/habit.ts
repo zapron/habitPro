@@ -112,6 +112,8 @@ export type AddHabitInput = {
   endDate?: string;
   /** IANA timezone for calendar-day missions; defaults to device timezone. */
   missionTimezone?: string | null;
+  /** Advanced: skip automatic full-state sync when the caller performs an explicit server write. */
+  requestRemoteSync?: boolean;
 };
 
 export type HabitStore = {
@@ -191,6 +193,7 @@ export type HabitStore = {
   synchronizeHabitWithChallengeGroup: (
     habitId: string,
     group: import("./groupChallenge").ChallengeGroupRow,
+    options?: { requestRemoteSync?: boolean },
   ) => void;
   clearDirtyState: (habitIds?: string[], miniIds?: string[]) => void;
 };

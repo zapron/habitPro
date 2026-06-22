@@ -1,6 +1,6 @@
 import { Text } from "./AppText";
 import { useEffect, useRef, useState } from "react";
-import { Platform, StyleSheet, ToastAndroid, View } from "react-native";
+import { Platform, StyleSheet, View } from "react-native";
 import { useToastBottomPadding } from "../hooks/useToastBottomPadding";
 import { useTheme } from "../context/ThemeContext";
 import { subscribeSyncFailure } from "../lib/syncQueue";
@@ -24,10 +24,6 @@ export function SyncToast() {
       const now = Date.now();
       if (now - lastToastAt.current < TOAST_COOLDOWN_MS) return;
       lastToastAt.current = now;
-      if (Platform.OS === "android") {
-        ToastAndroid.show(SYNC_FAILURE_MESSAGE, ToastAndroid.LONG);
-        return;
-      }
       if (hideTimer.current) clearTimeout(hideTimer.current);
       setVisible(true);
       hideTimer.current = setTimeout(() => {

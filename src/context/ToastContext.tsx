@@ -9,7 +9,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { Platform, StyleSheet, ToastAndroid, View } from "react-native";
+import { Platform, StyleSheet, View } from "react-native";
 import { useTheme } from "./ThemeContext";
 import { useToastBottomPadding } from "../hooks/useToastBottomPadding";
 
@@ -112,15 +112,6 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     (message: string, variant: ToastVariant = "info", durationMs?: number) => {
       if (hideTimer.current) clearTimeout(hideTimer.current);
       const ms = durationMs ?? (message.length > 90 ? LONG_MS : DEFAULT_MS);
-      if (Platform.OS === "android") {
-        setPayload(null);
-        hideTimer.current = null;
-        ToastAndroid.show(
-          message,
-          ms > DEFAULT_MS ? ToastAndroid.LONG : ToastAndroid.SHORT,
-        );
-        return;
-      }
       setPayload({ message, variant });
       hideTimer.current = setTimeout(() => {
         setPayload(null);
