@@ -44,7 +44,11 @@ import {
   type ChallengeMemoryDetail,
   type ChallengeMemoryStatus,
 } from "../src/lib/challengeMemoryDetail";
-import { sendChallengeCustomNudge, sendChallengeNudge } from "../src/lib/challengeCohort";
+import {
+  listSentPresetNudgeKindsToday,
+  sendChallengeCustomNudge,
+  sendChallengeNudge,
+} from "../src/lib/challengeCohort";
 import { toggleCheer } from "../src/lib/communityWinsApi";
 import { markNotificationRead } from "../src/lib/groupChallengesApi";
 import { backOrReplace } from "../src/lib/navigation";
@@ -144,6 +148,7 @@ export default function ChallengeMemoryScreen() {
   const [imageFailed, setImageFailed] = useState(false);
   const [imageViewerOpen, setImageViewerOpen] = useState(false);
   const [nudgeBusyKey, setNudgeBusyKey] = useState<string | null>(null);
+  const [sentPresetNudgeKindsToday, setSentPresetNudgeKindsToday] = useState<Set<PresetChallengeNudgeKind>>(() => new Set());
   const [customNoteOpen, setCustomNoteOpen] = useState(false);
   const [cheerBusy, setCheerBusy] = useState(false);
   const [cheerersOpen, setCheerersOpen] = useState(false);
@@ -171,6 +176,7 @@ export default function ChallengeMemoryScreen() {
         setLoading(true);
       }
       setError(null);
+      setSentPresetNudgeKindsToday(new Set());
       try {
         const result = await fetchChallengeMemoryDetail({
           challengeId,
@@ -183,6 +189,15 @@ export default function ChallengeMemoryScreen() {
           setError(result.error);
         } else {
           setDetail(result.detail);
+          if (result.detail.canSendSquadNudge) {
+            void listSentPresetNudgeKindsToday(result.detail.challengeId, [result.detail.subjectUserId])
+              .then((sentByUser) => {
+                setSentPresetNudgeKindsToday(new Set(sentByUser[result.detail.subjectUserId] ?? []));
+              })
+              .catch((e) => {
+                if (__DEV__) console.warn("[challenge-memory] listSentPresetNudgeKindsToday", e);
+              });
+          }
         }
       } finally {
         setLoading(false);
@@ -230,6 +245,7 @@ export default function ChallengeMemoryScreen() {
   const handleSendNudge = useCallback(
     async (kind: PresetChallengeNudgeKind) => {
       if (!detail?.canSendSquadNudge || actionInFlightRef.current) return;
+      if (sentPresetNudgeKindsToday.has(kind)) return;
       actionInFlightRef.current = true;
       setNudgeBusyKey(`${detail.subjectUserId}-${kind}`);
       try {
@@ -248,16 +264,32 @@ export default function ChallengeMemoryScreen() {
             await handleServerPremiumRequired("squad_nudge");
             return;
           }
+          if (nudgeError.message.toLowerCase().includes("already sent")) {
+            setSentPresetNudgeKindsToday((prev) => {
+              if (prev.has(kind)) return prev;
+              const next = new Set(prev);
+              next.add(kind);
+              return next;
+            });
+            showToast("You already sent that today.", "info");
+            return;
+          }
           showToast(nudgeError.message, "error");
           return;
         }
+        setSentPresetNudgeKindsToday((prev) => {
+          if (prev.has(kind)) return prev;
+          const next = new Set(prev);
+          next.add(kind);
+          return next;
+        });
         showToast("Sent to the squad.", "success");
       } finally {
         actionInFlightRef.current = false;
         setNudgeBusyKey(null);
       }
     },
-    [detail, handleServerPremiumRequired, openUpsell, refreshPremiumAccess, showToast],
+    [detail, handleServerPremiumRequired, openUpsell, refreshPremiumAccess, sentPresetNudgeKindsToday, showToast],
   );
 
   const handleOpenCustomNote = useCallback(() => {
@@ -598,7 +630,9 @@ export default function ChallengeMemoryScreen() {
                   {SQUAD_ACTIONS.map(({ kind, label, subtitle, icon: Icon, glyph }) => {
                     const isCustom = kind === "custom_note";
                     const busy = nudgeBusyKey === `${detail.subjectUserId}-${kind}`;
-                    const disabled = busy || (isCustom && detail.customNoteSentToday);
+                    const presetSentToday = !isCustom && sentPresetNudgeKindsToday.has(kind);
+                    const customSentToday = isCustom && detail.customNoteSentToday;
+                    const disabled = busy || customSentToday || presetSentToday;
                     const accent =
                       kind === "cheer"
                         ? theme.colors.indigo[400]
@@ -651,7 +685,7 @@ export default function ChallengeMemoryScreen() {
                           },
                         ]}
                         accessibilityRole="button"
-                        accessibilityLabel={isCustom && detail.customNoteSentToday ? "Note already sent" : label}
+                        accessibilityLabel={customSentToday || presetSentToday ? `${label} sent today` : label}
                       >
                         {busy ? (
                           <ActivityIndicator size="small" color={accent} />
@@ -664,14 +698,11 @@ export default function ChallengeMemoryScreen() {
                                 <Icon size={17} color={accent} strokeWidth={2.2} />
                               ) : null}
                               <Text style={[styles.actionLabel, { color: theme.colors.textPrimary }]} numberOfLines={1}>
-                                {isCustom && detail.customNoteSentToday ? "Note sent" : label}
+                                {customSentToday ? "Note sent" : label}
                               </Text>
-                              {isCustom && socialLocked ? (
-                                <Text style={[styles.actionPlus, { color: accent }]}>Plus</Text>
-                              ) : null}
                             </View>
                             <Text style={[styles.actionSubtitle, { color: theme.colors.textMuted }]} numberOfLines={1}>
-                              {subtitle}
+                              {customSentToday || presetSentToday ? "Sent today" : subtitle}
                             </Text>
                           </>
                         )}
@@ -1002,12 +1033,6 @@ const styles = StyleSheet.create({
     lineHeight: 17,
     fontWeight: "900",
     letterSpacing: 0,
-  },
-  actionPlus: {
-    fontSize: 9,
-    lineHeight: 12,
-    fontWeight: "900",
-    marginLeft: "auto",
   },
   actionSubtitle: {
     fontSize: 9,

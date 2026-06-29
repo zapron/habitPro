@@ -48,6 +48,8 @@ import { usePremium } from "../../src/context/PremiumContext";
 import { usePlusUpsell } from "../../src/context/PlusUpsellContext";
 import { useHabitStore } from "../../src/store/habitStore";
 import {
+  challengeNudgeSentTodayKey,
+  listSentPresetNudgeKindsToday,
   listChallengeActivityPage,
   listRecentNudgesPage,
   sendChallengeCustomNudge,
@@ -154,6 +156,23 @@ function repairRequesterName(label: ProfileLabel | undefined): string {
   return "Member";
 }
 
+function isDailyPresetNudgeKind(kind: unknown): kind is PresetChallengeNudgeKind {
+  return kind === "cheer" || kind === "ping" || kind === "fire";
+}
+
+function addPresetNudgeKind(
+  map: Map<string, Set<PresetChallengeNudgeKind>>,
+  toUserId: string,
+  kind: PresetChallengeNudgeKind,
+) {
+  const existing = map.get(toUserId);
+  if (existing) {
+    existing.add(kind);
+  } else {
+    map.set(toUserId, new Set([kind]));
+  }
+}
+
 async function getRepairProfileLabels(
   rows: StreakRepairRow[],
   votes: StreakRepairVoteRow[],
@@ -176,6 +195,7 @@ const REPAIR_BADGE_PEEK_LIMIT = 3;
 const STREAK_MEMBERS_INITIAL_PAGE_SIZE = 3;
 const STREAK_MEMBERS_NEXT_PAGE_SIZE = 5;
 const STREAK_SKELETON_CARD_COUNT = 3;
+const EMPTY_SENT_PRESET_NUDGE_KINDS = new Set<PresetChallengeNudgeKind>();
 
 type ChallengeDetailTab = "streaks" | "activity" | "repairs";
 
@@ -189,6 +209,7 @@ type ParticipantCardProps = {
   squadNudgeActionsEnabled: boolean;
   nudgeBusyKey: string | null;
   socialLocked: boolean;
+  sentPresetNudgeKindsToday: ReadonlySet<PresetChallengeNudgeKind>;
   customNoteSentToday: boolean;
   onSendNudge: (toUserId: string, kind: PresetChallengeNudgeKind) => Promise<void>;
   openUpsell: (reason: any) => void;
@@ -253,6 +274,7 @@ const ParticipantCard = memo(function ParticipantCard({
   squadNudgeActionsEnabled,
   nudgeBusyKey,
   socialLocked,
+  sentPresetNudgeKindsToday,
   customNoteSentToday,
   onSendNudge,
   openUpsell,
@@ -368,6 +390,7 @@ const ParticipantCard = memo(function ParticipantCard({
           onPress={handleNudgePress}
           plusLocked={socialLocked}
           onPlusLocked={handlePlusLocked}
+          sentPresetNudgeKindsToday={sentPresetNudgeKindsToday}
           customNoteSentToday={customNoteSentToday}
           onCustomNotePress={handleCustomNotePress}
         />
@@ -414,6 +437,7 @@ export default function ChallengeDetailScreen() {
   const [feedActivity, setFeedActivity] = useState<ChallengeActivityRow[]>([]);
   const [feedNudges, setFeedNudges] = useState<ChallengeNudgeRow[]>([]);
   const [nudgeBusyKey, setNudgeBusyKey] = useState<string | null>(null);
+  const [sentPresetNudgeKeys, setSentPresetNudgeKeys] = useState<Set<string>>(() => new Set());
   const [optimisticCongratsActivityIds, setOptimisticCongratsActivityIds] = useState<Set<string>>(() => new Set());
   const [refreshing, setRefreshing] = useState(false);
   const [secondaryLoading, setSecondaryLoading] = useState(false);
@@ -636,6 +660,23 @@ export default function ChallengeDetailScreen() {
         }
         return next;
       });
+      const loadedMemberIds = page.items.map((item) => item.memberId);
+      void listSentPresetNudgeKindsToday(challengeId, loadedMemberIds)
+        .then((sentByUser) => {
+          if (!screenActiveRef.current) return;
+          setSentPresetNudgeKeys((prev) => {
+            const next = new Set(prev);
+            for (const [toUserId, kinds] of Object.entries(sentByUser)) {
+              for (const kind of kinds) {
+                next.add(challengeNudgeSentTodayKey(toUserId, kind));
+              }
+            }
+            return next;
+          });
+        })
+        .catch((e) => {
+          if (__DEV__) console.warn("[challenge] listSentPresetNudgeKindsToday", e);
+        });
       streakNextOffsetRef.current = page.nextOffset;
       setStreakNextOffset(page.nextOffset);
       setStreakHydrated(true);
@@ -697,6 +738,7 @@ export default function ChallengeDetailScreen() {
   useEffect(() => {
     setFeedActivity([]);
     setFeedNudges([]);
+    setSentPresetNudgeKeys(new Set());
     setOptimisticCongratsActivityIds(new Set());
     setRepairRows([]);
     setRepairVotes([]);
@@ -923,6 +965,8 @@ export default function ChallengeDetailScreen() {
   const onSendNudge = useCallback(
     async (toUserId: string, kind: PresetChallengeNudgeKind) => {
       if (!challengeId || !myUserId || toUserId === myUserId) return;
+      const sentKey = challengeNudgeSentTodayKey(toUserId, kind);
+      if (sentPresetNudgeKeys.has(sentKey)) return;
       if (socialActionInFlightRef.current) return;
       socialActionInFlightRef.current = true;
       const key = `${toUserId}-${kind}`;
@@ -946,16 +990,32 @@ export default function ChallengeDetailScreen() {
             await handleServerPremiumRequired("squad_nudge");
             return;
           }
+          if (error.message.toLowerCase().includes("already sent")) {
+            setSentPresetNudgeKeys((prev) => {
+              if (prev.has(sentKey)) return prev;
+              const next = new Set(prev);
+              next.add(sentKey);
+              return next;
+            });
+            showToast("You already sent that today.", "info");
+            return;
+          }
           showToast(error.message, "error");
           return;
         }
+        setSentPresetNudgeKeys((prev) => {
+          if (prev.has(sentKey)) return prev;
+          const next = new Set(prev);
+          next.add(sentKey);
+          return next;
+        });
         await load({ silent: true });
       } finally {
         socialActionInFlightRef.current = false;
         setNudgeBusyKey(null);
       }
     },
-    [challengeId, myUserId, load, myHabit, showToast, openUpsell, refreshPremiumAccess, handleServerPremiumRequired],
+    [challengeId, myUserId, sentPresetNudgeKeys, load, myHabit, showToast, openUpsell, refreshPremiumAccess, handleServerPremiumRequired],
   );
 
   const onCongrats = useCallback(
@@ -1305,6 +1365,30 @@ export default function ChallengeDetailScreen() {
     }
     return s;
   }, [feedNudges, myUserId]);
+
+  const sentPresetNudgeKindsTodayByUserId = useMemo(() => {
+    const map = new Map<string, Set<PresetChallengeNudgeKind>>();
+    if (!myUserId) return map;
+    const todayUtc = new Date().toISOString().slice(0, 10);
+    for (const n of feedNudges) {
+      if (
+        n.from_user_id === myUserId &&
+        isDailyPresetNudgeKind(n.kind) &&
+        typeof n.created_at === "string" &&
+        n.created_at.slice(0, 10) === todayUtc
+      ) {
+        addPresetNudgeKind(map, n.to_user_id, n.kind);
+      }
+    }
+    for (const key of sentPresetNudgeKeys) {
+      const separator = key.lastIndexOf(":");
+      if (separator <= 0) continue;
+      const toUserId = key.slice(0, separator);
+      const kind = key.slice(separator + 1);
+      if (isDailyPresetNudgeKind(kind)) addPresetNudgeKind(map, toUserId, kind);
+    }
+    return map;
+  }, [feedNudges, myUserId, sentPresetNudgeKeys]);
 
   const onOpenCustomNote = useCallback(
     (toUserId: string) => {
@@ -2314,6 +2398,7 @@ export default function ChallengeDetailScreen() {
                       nudgeBusyKey?.startsWith(`${memberId}-`) ? nudgeBusyKey : null
                     }
                     socialLocked={socialLocked}
+                    sentPresetNudgeKindsToday={sentPresetNudgeKindsTodayByUserId.get(memberId) ?? EMPTY_SENT_PRESET_NUDGE_KINDS}
                     customNoteSentToday={customNoteSentTodayToUserIds.has(memberId)}
                     onSendNudge={onSendNudge}
                     openUpsell={openUpsell}

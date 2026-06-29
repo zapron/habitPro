@@ -56,6 +56,8 @@ type Props = {
   /** When true, preset + custom nudges are locked (HabitPro Community). */
   plusLocked: boolean;
   onPlusLocked?: () => void;
+  /** Preset nudge kinds already sent to this member today (UTC). */
+  sentPresetNudgeKindsToday?: ReadonlySet<PresetChallengeNudgeKind>;
   /** True after viewer already sent a custom note to this member today (UTC) in this challenge. */
   customNoteSentToday: boolean;
   onCustomNotePress: () => void;
@@ -69,6 +71,7 @@ export const CohortNudgeChips = memo(function CohortNudgeChips({
   onPress,
   plusLocked,
   onPlusLocked,
+  sentPresetNudgeKindsToday,
   customNoteSentToday,
   onCustomNotePress,
 }: Props) {
@@ -90,6 +93,7 @@ export const CohortNudgeChips = memo(function CohortNudgeChips({
       {NUDGE_SPECS.map(({ kind, label, subtitle, Icon, glyph, suffixGlyph, bgLight, bgDark }) => {
         const busy = nudgeBusyKey === `${memberId}-${kind}`;
         const presetLocked = plusLocked;
+        const sentToday = sentPresetNudgeKindsToday?.has(kind) === true;
         const bg = isDark ? bgDark : bgLight;
         const iconColor =
           kind === "cheer"
@@ -101,7 +105,7 @@ export const CohortNudgeChips = memo(function CohortNudgeChips({
         return (
           <Pressable
             key={kind}
-            disabled={busy}
+            disabled={busy || sentToday}
             onPress={() => {
               if (presetLocked) {
                 onPlusLocked?.();
@@ -125,10 +129,12 @@ export const CohortNudgeChips = memo(function CohortNudgeChips({
                       : isDark
                         ? "rgba(251, 191, 36, 0.22)"
                         : "rgba(217, 119, 6, 0.22)",
-                opacity: presetLocked ? 0.55 : busy ? 0.5 : pressed ? 0.92 : 1,
-                transform: [{ scale: pressed ? 0.98 : 1 }],
+                opacity: presetLocked || sentToday ? 0.55 : busy ? 0.5 : pressed ? 0.92 : 1,
+                transform: [{ scale: pressed && !busy && !sentToday ? 0.98 : 1 }],
               },
             ]}
+            accessibilityRole="button"
+            accessibilityLabel={sentToday ? `${label} sent today` : label}
           >
             {busy ? (
               <ActivityIndicator size="small" color={iconColor} />
@@ -148,7 +154,7 @@ export const CohortNudgeChips = memo(function CohortNudgeChips({
                   </Text>
                 </View>
                 <Text style={[styles.chipSubtitle, { color: theme.colors.textMuted }]} numberOfLines={1}>
-                  {subtitle}
+                  {sentToday ? "Sent today" : subtitle}
                 </Text>
               </View>
             )}
@@ -185,10 +191,9 @@ export const CohortNudgeChips = memo(function CohortNudgeChips({
               <Text style={[styles.chipLabel, { color: theme.colors.textPrimary }]} numberOfLines={1}>
                 {customNoteSentToday ? "Note sent" : "Note"}
               </Text>
-              {plusLocked ? <Text style={[styles.proBadge, { color: customIcon }]}>Plus</Text> : null}
             </View>
             <Text style={[styles.chipSubtitle, { color: theme.colors.textMuted }]} numberOfLines={1}>
-              Send a note
+              {customNoteSentToday ? "Sent today" : "Send a note"}
             </Text>
           </View>
         )}
@@ -230,12 +235,6 @@ const styles = StyleSheet.create({
   },
   customChip: {
     borderWidth: 1,
-  },
-  proBadge: {
-    fontSize: 9,
-    fontWeight: "900",
-    letterSpacing: 0.4,
-    marginLeft: 2,
   },
   glyph: {
     fontSize: 12,

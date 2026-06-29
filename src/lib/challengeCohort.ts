@@ -10,10 +10,28 @@ import { getSupabase } from "./supabase";
 
 const MISSION_DAY_MILESTONES = [7, 14, 21] as const;
 const STREAK_MILESTONES = [7, 14, 21, 30] as const;
+const DAILY_PRESET_NUDGE_KINDS = ["cheer", "ping", "fire"] as const;
 
 type ChallengeActionResult = { error: Error | null; reason?: "premium_required" };
 type Cursor = { createdAt: string; id: string };
 const challengeActivityCursorByOffset = new Map<string, Cursor | null>();
+
+export function challengeNudgeSentTodayKey(toUserId: string, kind: PresetChallengeNudgeKind): string {
+  return `${toUserId}:${kind}`;
+}
+
+function isDailyPresetNudgeKind(value: unknown): value is PresetChallengeNudgeKind {
+  return value === "cheer" || value === "ping" || value === "fire";
+}
+
+function utcTodayBounds(now = new Date()): { startIso: string; endIso: string } {
+  const day = now.toISOString().slice(0, 10);
+  const startMs = Date.parse(`${day}T00:00:00.000Z`);
+  return {
+    startIso: new Date(startMs).toISOString(),
+    endIso: new Date(startMs + 24 * 60 * 60 * 1000).toISOString(),
+  };
+}
 
 function isDuplicateKeyError(err: { code?: string; message?: string } | null): boolean {
   if (!err) return false;
@@ -159,6 +177,46 @@ export async function sendChallengeNudge(
   if (nErr && __DEV__) console.warn("[notifications] challenge_nudge", nErr.message);
 
   return { error: null };
+}
+
+/** Preset squad nudges are limited per kind, per recipient, per UTC day. */
+export async function listSentPresetNudgeKindsToday(
+  challengeId: string,
+  toUserIds: string[],
+): Promise<Record<string, PresetChallengeNudgeKind[]>> {
+  const supabase = getSupabase();
+  if (!supabase) return {};
+  const uniqueToUserIds = [...new Set(toUserIds.map((id) => id.trim()).filter(Boolean))];
+  if (uniqueToUserIds.length === 0) return {};
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return {};
+
+  const { startIso, endIso } = utcTodayBounds();
+  const { data, error } = await supabase
+    .from("challenge_nudges")
+    .select("to_user_id, kind")
+    .eq("challenge_id", challengeId)
+    .eq("from_user_id", user.id)
+    .in("to_user_id", uniqueToUserIds)
+    .in("kind", [...DAILY_PRESET_NUDGE_KINDS])
+    .gte("created_at", startIso)
+    .lt("created_at", endIso);
+  if (error) throw error;
+
+  const byUser: Record<string, Set<PresetChallengeNudgeKind>> = {};
+  for (const row of data ?? []) {
+    const toUserId = typeof row.to_user_id === "string" ? row.to_user_id : "";
+    const kind = isDailyPresetNudgeKind(row.kind) ? row.kind : null;
+    if (!toUserId || !kind) continue;
+    byUser[toUserId] ??= new Set<PresetChallengeNudgeKind>();
+    byUser[toUserId].add(kind);
+  }
+
+  return Object.fromEntries(
+    Object.entries(byUser).map(([toUserId, kinds]) => [toUserId, [...kinds]]),
+  );
 }
 
 /** Premium: one custom note per squad member per 24h (UTC day) — enforced server-side. */
