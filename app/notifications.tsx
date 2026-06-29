@@ -1,8 +1,10 @@
 import { Text } from "../src/components/AppText";
 import {
+  memo,
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState } from "react";
 import {
@@ -22,10 +24,13 @@ import { Screen } from "../src/components/Screen";
 import { useTheme } from "../src/context/ThemeContext";
 import { useAuth } from "../src/context/AuthContext";
 import { listNotificationsPage, markAllNotificationsRead, markNotificationRead } from "../src/lib/groupChallengesApi";
+import { challengeMemoryRouteParamsFromPayload } from "../src/lib/challengeMemoryDetail";
 import { parseCommunityWinCheerPayload } from "../src/lib/notificationPayloads";
 import { backOrReplace } from "../src/lib/navigation";
 import type { ChallengeNudgeKind, NotificationRow } from "../src/types/groupChallenge";
 import { ShimmerBlock } from "../src/components/ShimmerBlock";
+import type { AppTheme } from "../src/styles/theme";
+import { formatDateDisplay, formatDateTimeDisplay } from "../src/utils/dateDisplay";
 
 const NOTIFICATION_PAGE_SIZE = 20;
 
@@ -206,7 +211,7 @@ function notificationSubtitle(n: NotificationRow): string | null {
     }
     case "streak_repair_request": {
       const dateStr = typeof p.date_str === "string" ? p.date_str : "a missed day";
-      return `A squadmate needs approval to repair ${dateStr} · Tap to review`;
+      return `A squadmate needs approval to repair ${formatDateDisplay(dateStr, dateStr)} · Tap to review`;
     }
     case "streak_repair_result": {
       const status = typeof p.status === "string" ? p.status : "";
@@ -218,6 +223,49 @@ function notificationSubtitle(n: NotificationRow): string | null {
       return null;
   }
 }
+
+const NotificationListItem = memo(function NotificationListItem({
+  item,
+  theme,
+  onPress,
+}: {
+  item: NotificationRow;
+  theme: AppTheme;
+  onPress: (item: NotificationRow) => void;
+}) {
+  const title = useMemo(() => notificationTitle(item.type, item.payload), [item.payload, item.type]);
+  const subtitle = useMemo(() => notificationSubtitle(item), [item.payload, item.type]);
+  const createdAt = useMemo(() => formatDateTimeDisplay(item.created_at, item.created_at), [item.created_at]);
+
+  return (
+    <TouchableOpacity
+      style={[
+        styles.row,
+        {
+          borderColor: theme.colors.border,
+          backgroundColor: theme.colors.surface,
+          opacity: item.read_at ? 0.72 : 1,
+        },
+      ]}
+      onPress={() => onPress(item)}
+    >
+      <View style={styles.rowInner}>
+        {!item.read_at ? (
+          <View style={[styles.unreadDot, { backgroundColor: theme.colors.indigo[500] }]} />
+        ) : (
+          <View style={styles.unreadSpacer} />
+        )}
+        <View style={styles.rowTextCol}>
+          <Text style={[styles.rowTitle, { color: theme.colors.textPrimary }]}>{title}</Text>
+          {subtitle ? (
+            <Text style={[styles.rowSubtitle, { color: theme.colors.cyan[400] }]}>{subtitle}</Text>
+          ) : null}
+          <Text style={[styles.rowTime, { color: theme.colors.textSecondary }]}>{createdAt}</Text>
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
+});
 
 export default function NotificationsScreen() {
   const router = useRouter();
@@ -327,7 +375,7 @@ export default function NotificationsScreen() {
     }, [load]),
   );
 
-  const onPressRow = (n: NotificationRow) => {
+  const onPressRow = useCallback((n: NotificationRow) => {
     if (!n.read_at) {
       const readAt = new Date().toISOString();
       setItems((prev) => prev.map((x) => (x.id === n.id ? { ...x, read_at: readAt } : x)));
@@ -382,7 +430,19 @@ export default function NotificationsScreen() {
       return;
     }
 
-    if ((n.type === "challenge_nudge" || n.type === "challenge_squad_checkin" || n.type === "streak_repair_request") && challengeId) {
+    if (n.type === "challenge_squad_checkin") {
+      const params = challengeMemoryRouteParamsFromPayload(p, n.id);
+      if (params) {
+        router.push({ pathname: "/challenge-memory", params });
+      } else if (challengeId) {
+        router.push(`/challenge/${challengeId}`);
+      } else {
+        router.push("/(tabs)/compete");
+      }
+      return;
+    }
+
+    if ((n.type === "challenge_nudge" || n.type === "streak_repair_request") && challengeId) {
       router.push(`/challenge/${challengeId}`);
       return;
     }
@@ -416,7 +476,7 @@ export default function NotificationsScreen() {
         router.push(`/habit/${hid}`);
       }
     }
-  };
+  }, [router]);
 
   const hasUnread = items.some((n) => !n.read_at);
 
@@ -435,6 +495,44 @@ export default function NotificationsScreen() {
       setMarkingAll(false);
     }
   };
+
+  const onRefreshList = useCallback(() => {
+    void load({ force: true });
+  }, [load]);
+
+  const onEndReachedList = useCallback(() => {
+    void loadMore();
+  }, [loadMore]);
+
+  const renderNotificationItem = useCallback(
+    ({ item }: { item: NotificationRow }) => (
+      <NotificationListItem item={item} theme={theme} onPress={onPressRow} />
+    ),
+    [onPressRow, theme],
+  );
+
+  const emptyList = useMemo(
+    () => (
+      <View style={[styles.emptyCard, { borderColor: theme.colors.border, backgroundColor: theme.colors.surface }]}>
+        <Bell size={28} color={theme.colors.indigo[400]} />
+        <Text style={[styles.emptyTitle, { color: theme.colors.textPrimary }]}>No notifications yet</Text>
+        <Text style={[styles.emptyBody, { color: theme.colors.textSecondary }]}>
+          Invites, approvals, cheers, and reminders will show up here.
+        </Text>
+      </View>
+    ),
+    [theme],
+  );
+
+  const listFooter = useMemo(
+    () =>
+      loadingMore ? (
+        <View style={styles.footerLoader}>
+          <ActivityIndicator size="small" color={theme.colors.indigo[400]} />
+        </View>
+      ) : null,
+    [loadingMore, theme.colors.indigo],
+  );
 
   return (
     <Screen>
@@ -532,61 +630,14 @@ export default function NotificationsScreen() {
         <FlatList
           data={items}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={{ paddingBottom: 32, flexGrow: 1 }}
+          contentContainerStyle={styles.listContent}
           refreshing={loading && items.length > 0}
-          onRefresh={() => void load({ force: true })}
-          onEndReached={() => void loadMore()}
+          onRefresh={onRefreshList}
+          onEndReached={onEndReachedList}
           onEndReachedThreshold={0.45}
-          ListEmptyComponent={
-            <View style={[styles.emptyCard, { borderColor: theme.colors.border, backgroundColor: theme.colors.surface }]}>
-              <Bell size={28} color={theme.colors.indigo[400]} />
-              <Text style={[styles.emptyTitle, { color: theme.colors.textPrimary }]}>No notifications yet</Text>
-              <Text style={[styles.emptyBody, { color: theme.colors.textSecondary }]}>
-                Invites, approvals, cheers, and reminders will show up here.
-              </Text>
-            </View>
-          }
-          ListFooterComponent={
-            loadingMore ? (
-              <View style={styles.footerLoader}>
-                <ActivityIndicator size="small" color={theme.colors.indigo[400]} />
-              </View>
-            ) : null
-          }
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={[
-                styles.row,
-                {
-                  borderColor: theme.colors.border,
-                  backgroundColor: theme.colors.surface,
-                  opacity: item.read_at ? 0.72 : 1,
-                },
-              ]}
-              onPress={() => void onPressRow(item)}
-            >
-              <View style={styles.rowInner}>
-                {!item.read_at ? (
-                  <View style={[styles.unreadDot, { backgroundColor: theme.colors.indigo[500] }]} />
-                ) : (
-                  <View style={styles.unreadSpacer} />
-                )}
-                <View style={{ flex: 1 }}>
-                  <Text style={{ color: theme.colors.textPrimary, fontWeight: "700" }}>
-                    {notificationTitle(item.type, item.payload)}
-                  </Text>
-                  {notificationSubtitle(item) ? (
-                    <Text style={{ color: theme.colors.cyan[400], fontSize: 13, marginTop: 4, fontWeight: "600" }}>
-                      {notificationSubtitle(item)}
-                    </Text>
-                  ) : null}
-                  <Text style={{ color: theme.colors.textSecondary, fontSize: 13, marginTop: 4 }}>
-                    {new Date(item.created_at).toLocaleString()}
-                  </Text>
-                </View>
-              </View>
-            </TouchableOpacity>
-          )}
+          ListEmptyComponent={emptyList}
+          ListFooterComponent={listFooter}
+          renderItem={renderNotificationItem}
         />
       )}
     </Screen>
@@ -613,8 +664,13 @@ const styles = StyleSheet.create({
   },
   markAllGlow: { ...StyleSheet.absoluteFillObject, borderRadius: 9999, borderWidth: 1 },
   markAllText: { fontWeight: "800", fontSize: 11, letterSpacing: 0.2 },
+  listContent: { paddingBottom: 32, flexGrow: 1 },
   row: { borderRadius: 12, borderWidth: 1, padding: 14, marginBottom: 10 },
   rowInner: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
+  rowTextCol: { flex: 1 },
+  rowTitle: { fontWeight: "700" },
+  rowSubtitle: { fontSize: 13, marginTop: 4, fontWeight: "600" },
+  rowTime: { fontSize: 13, marginTop: 4 },
   unreadDot: { width: 10, height: 10, borderRadius: 9999, marginTop: 5 },
   unreadSpacer: { width: 10, marginTop: 5 },
   footerLoader: { paddingVertical: 18, alignItems: "center", justifyContent: "center" },

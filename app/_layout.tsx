@@ -31,6 +31,7 @@ import { isSupabaseConfigured } from "../src/lib/env";
 import { tryCompleteAuthFromUrl } from "../src/lib/oauthExchange";
 import { isPasswordRecoverySession } from "../src/lib/passwordRecovery";
 import { getSupabase } from "../src/lib/supabase";
+import { challengeMemoryRouteParamsFromPayload } from "../src/lib/challengeMemoryDetail";
 
 function RootLayoutNav() {
   const { session, initializing, passwordRecoveryPending } = useAuth();
@@ -127,7 +128,21 @@ function RootLayoutNav() {
         return;
       }
 
-      if (type === "challenge_nudge" || type === "challenge_squad_checkin") {
+      if (type === "challenge_squad_checkin") {
+        const challengeId = typeof data.challenge_id === "string" ? data.challenge_id : "";
+        const notificationId = typeof data.notification_id === "string" ? data.notification_id : undefined;
+        const params = challengeMemoryRouteParamsFromPayload(data, notificationId);
+        if (params) {
+          router.push({ pathname: "/challenge-memory", params });
+        } else if (challengeId) {
+          router.push(`/challenge/${challengeId}`);
+        } else {
+          router.push("/(tabs)/compete");
+        }
+        return;
+      }
+
+      if (type === "challenge_nudge") {
         const challengeId = typeof data.challenge_id === "string" ? data.challenge_id : "";
         if (challengeId) {
           router.push(`/challenge/${challengeId}`);

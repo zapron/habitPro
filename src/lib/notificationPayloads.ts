@@ -13,6 +13,8 @@ export type ChallengeSquadCheckinPayload = {
   challenge_id: string;
   actor_user_id: string;
   actor_username: string | null;
+  /** Newer notifications include this, but old rows still resolve from challenge + actor + date. */
+  habit_id?: string;
   habit_title: string;
   date_str: string;
 };
