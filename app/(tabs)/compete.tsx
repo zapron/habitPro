@@ -17,13 +17,14 @@ import {
   Platform,
   Animated,
   Easing,
+  TextInput,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { FlashList } from "@shopify/flash-list";
 const DynamicFlashList = FlashList as any;
 import { useFocusEffect, useIsFocused } from "@react-navigation/native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { ChevronRight, Crown, Eye, Medal, Radio, RefreshCw, Swords, Trophy, Clock, X, Zap } from "lucide-react-native";
+import { ChevronRight, Crown, Eye, Medal, Radio, RefreshCw, Search, Swords, Trophy, Clock, X, Zap } from "lucide-react-native";
 import { Screen } from "../../src/components/Screen";
 import { Button } from "../../src/components/Button";
 import { ConfirmDialog } from "../../src/components/ConfirmDialog";
@@ -71,6 +72,7 @@ import { useReducedMotion } from "../../src/hooks/useReducedMotion";
 import { LevelXpRing } from "../../src/components/LevelXpRing";
 import {
   fetchWeeklyLeaderboard,
+  searchWeeklyLeaderboard,
   type WeeklyLeaderboardEntry,
 } from "../../src/lib/weeklyLeaderboardApi";
 import {
@@ -608,6 +610,11 @@ export default function CompeteScreen() {
   const [leagueLoadingMore, setLeagueLoadingMore] = useState(false);
   const [leagueHasMore, setLeagueHasMore] = useState(false);
   const [leagueError, setLeagueError] = useState<string | null>(null);
+  const [leagueSearch, setLeagueSearch] = useState("");
+  const [leagueSearchRows, setLeagueSearchRows] = useState<WeeklyLeaderboardEntry[]>([]);
+  const [leagueSearchLoading, setLeagueSearchLoading] = useState(false);
+  const [leagueSearchError, setLeagueSearchError] = useState<string | null>(null);
+  const [leagueSearchReady, setLeagueSearchReady] = useState(false);
   const deepLinkHandledRef = useRef(false);
   const userIdRef = useRef<string | null>(userId);
   const invitesLoadInFlightRef = useRef(false);
@@ -645,6 +652,11 @@ export default function CompeteScreen() {
     setLeagueLoadingMore(false);
     setLeagueHasMore(false);
     setLeagueError(userId ? null : "Sign in to view Weekly Ranks.");
+    setLeagueSearch("");
+    setLeagueSearchRows([]);
+    setLeagueSearchLoading(false);
+    setLeagueSearchError(null);
+    setLeagueSearchReady(false);
     invitesLoadInFlightRef.current = false;
     invitesLoadMoreInFlightRef.current = false;
     leagueLoadInFlightRef.current = false;
@@ -952,6 +964,63 @@ export default function CompeteScreen() {
     }
   }, [leagueHasMore, leagueLoading, leagueLoadingMore, leagueRows.length, userId]);
 
+  useEffect(() => {
+    if (segment !== "leaderboard") return undefined;
+    const query = leagueSearch.trim().replace(/^@+/, "");
+    if (!query) {
+      setLeagueSearchRows([]);
+      setLeagueSearchLoading(false);
+      setLeagueSearchError(null);
+      setLeagueSearchReady(false);
+      return undefined;
+    }
+    if (!isSupabaseConfigured() || !userId) {
+      setLeagueSearchRows([]);
+      setLeagueSearchLoading(false);
+      setLeagueSearchError("Sign in to search Weekly Ranks.");
+      setLeagueSearchReady(true);
+      return undefined;
+    }
+
+    let cancelled = false;
+    setLeagueSearchLoading(true);
+    setLeagueSearchError(null);
+    setLeagueSearchReady(false);
+    const timer = setTimeout(() => {
+      void traceAsync(
+        "compete.league.search",
+        () => searchWeeklyLeaderboard(query, 15),
+        { slowMs: 700, meta: { length: query.length } },
+      )
+        .then((res) => {
+          if (cancelled) return;
+          if (res.ok === true) {
+            setLeagueSearchRows(res.items);
+            setLeagueSearchError(null);
+          } else {
+            setLeagueSearchRows([]);
+            setLeagueSearchError(res.error);
+          }
+          setLeagueSearchReady(true);
+        })
+        .catch((e: unknown) => {
+          if (cancelled) return;
+          console.warn("[habitPro] searchWeeklyLeaderboard", e);
+          setLeagueSearchRows([]);
+          setLeagueSearchError("Couldn't search Weekly Ranks.");
+          setLeagueSearchReady(true);
+        })
+        .finally(() => {
+          if (!cancelled) setLeagueSearchLoading(false);
+        });
+    }, 260);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [leagueSearch, segment, userId]);
+
   useFocusEffect(
     useCallback(() => {
       if (segment === "challenges" && challengesSubTab === "invites") {
@@ -1237,6 +1306,11 @@ export default function CompeteScreen() {
   const level = levelFromTotalXp(xp);
   const xpInLevel = xpInCurrentLevel(xp);
   const myWeeklyRank = useMemo(() => leagueRows.find((row) => row.isMe) ?? null, [leagueRows]);
+  const isLeagueSearching = leagueSearch.trim().length > 0;
+  const displayedLeagueRows = isLeagueSearching ? leagueSearchRows : leagueRows;
+  const showLeagueInitialLoader =
+    (isLeagueSearching ? leagueSearchLoading : leagueLoading) && displayedLeagueRows.length === 0;
+  const leagueListError = isLeagueSearching ? leagueSearchError : leagueError;
 
   const bottomPad = Math.max(insets.bottom, 16) + 8;
 
@@ -1768,7 +1842,7 @@ export default function CompeteScreen() {
 
       {segment === "leaderboard" ? (
         <DynamicFlashList
-          data={leagueRows}
+          data={displayedLeagueRows}
           estimatedItemSize={82}
           keyExtractor={(item) => item.userId}
           showsVerticalScrollIndicator={false}
@@ -1834,30 +1908,67 @@ export default function CompeteScreen() {
 
               <View style={styles.leagueToolbar}>
                 <Text style={[styles.sectionLabel, { color: theme.colors.textMuted, marginBottom: 0 }]}>
-                  THIS WEEK
+                  {isLeagueSearching ? "SEARCH RESULTS" : "THIS WEEK"}
                 </Text>
-                <TouchableOpacity
-                  onPress={() => void loadLeague({ force: true })}
-                  disabled={leagueLoading || leagueLoadingMore}
-                  activeOpacity={0.85}
-                  style={[
-                    styles.leagueRefresh,
-                    {
-                      borderColor: theme.colors.border,
-                      backgroundColor: theme.colors.surface,
-                      opacity: leagueLoading || leagueLoadingMore ? 0.72 : 1,
-                    },
-                  ]}
-                >
-                  {leagueLoading ? (
-                    <ActivityIndicator size="small" color={theme.colors.indigo[400]} />
-                  ) : (
-                    <RefreshCw size={15} color={theme.colors.textSecondary} />
+                <View style={styles.leagueSearchRow}>
+                  <View
+                    style={[
+                      styles.leagueSearchBox,
+                      {
+                        backgroundColor: theme.colors.surface,
+                        borderColor: theme.colors.border,
+                        ...theme.shadow.card,
+                      },
+                    ]}
+                  >
+                    <Search size={15} color={theme.colors.textMuted} />
+                    <TextInput
+                      value={leagueSearch}
+                      onChangeText={setLeagueSearch}
+                      placeholder="Search username"
+                      placeholderTextColor={theme.colors.textMuted}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      returnKeyType="search"
+                      style={[styles.leagueSearchInput, { color: theme.colors.textPrimary }]}
+                    />
+                    {leagueSearch.length > 0 ? (
+                      <TouchableOpacity
+                        onPress={() => setLeagueSearch("")}
+                        activeOpacity={0.75}
+                        accessibilityRole="button"
+                        accessibilityLabel="Clear leaderboard search"
+                        style={[styles.leagueSearchClear, { backgroundColor: theme.colors.background }]}
+                      >
+                        <X size={13} color={theme.colors.textSecondary} />
+                      </TouchableOpacity>
+                    ) : null}
+                  </View>
+                  {isLeagueSearching ? null : (
+                    <TouchableOpacity
+                      onPress={() => void loadLeague({ force: true })}
+                      disabled={leagueLoading || leagueLoadingMore}
+                      activeOpacity={0.85}
+                      style={[
+                        styles.leagueRefresh,
+                        {
+                          borderColor: theme.colors.border,
+                          backgroundColor: theme.colors.surface,
+                          opacity: leagueLoading || leagueLoadingMore ? 0.72 : 1,
+                        },
+                      ]}
+                    >
+                      {leagueLoading ? (
+                        <ActivityIndicator size="small" color={theme.colors.indigo[400]} />
+                      ) : (
+                        <RefreshCw size={15} color={theme.colors.textSecondary} />
+                      )}
+                    </TouchableOpacity>
                   )}
-                </TouchableOpacity>
+                </View>
               </View>
 
-              {leagueLoading && leagueRows.length === 0 ? (
+              {showLeagueInitialLoader ? (
                 <View style={{ gap: 10, marginBottom: 10 }}>
                   {Array.from({ length: 6 }, (_, i) => (
                     <View
@@ -1881,7 +1992,7 @@ export default function CompeteScreen() {
                     </View>
                   ))}
                 </View>
-              ) : leagueError ? (
+              ) : leagueListError ? (
                 <View
                   style={[
                     styles.card,
@@ -1889,9 +2000,21 @@ export default function CompeteScreen() {
                   ]}
                 >
                   <Text style={[styles.emptyTitle, { color: theme.colors.textPrimary }]}>Weekly Ranks unavailable</Text>
-                  <Text style={[styles.emptyBody, { color: theme.colors.textSecondary }]}>{leagueError}</Text>
+                  <Text style={[styles.emptyBody, { color: theme.colors.textSecondary }]}>{leagueListError}</Text>
                 </View>
-              ) : leagueRows.length === 0 ? (
+              ) : isLeagueSearching && leagueSearchReady && leagueSearchRows.length === 0 ? (
+                <View
+                  style={[
+                    styles.card,
+                    { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, ...theme.shadow.card, marginBottom: 10 },
+                  ]}
+                >
+                  <Text style={[styles.emptyTitle, { color: theme.colors.textPrimary }]}>No such user available</Text>
+                  <Text style={[styles.emptyBody, { color: theme.colors.textSecondary }]}>
+                    Try another username or clear search to return to the weekly ranks.
+                  </Text>
+                </View>
+              ) : !isLeagueSearching && leagueRows.length === 0 ? (
                 <View
                   style={[
                     styles.card,
@@ -1916,7 +2039,7 @@ export default function CompeteScreen() {
           )}
           ListFooterComponent={
             <>
-              {leagueHasMore && leagueRows.length > 0 ? (
+              {!isLeagueSearching && leagueHasMore && leagueRows.length > 0 ? (
                 <TouchableOpacity
                   onPress={() => void loadMoreLeague()}
                   disabled={leagueLoadingMore}
@@ -2133,7 +2256,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "800",
     letterSpacing: 1.2,
-    marginBottom: 10,
+    marginBottom: 4,
   },
   segmentWrap: {
     flexDirection: "row",
@@ -2290,12 +2413,40 @@ const styles = StyleSheet.create({
   },
   leagueHeroLevel: { fontSize: 24, fontWeight: "900", fontVariant: ["tabular-nums"], lineHeight: 27 },
   leagueHeroLevelLabel: { fontSize: 9, fontWeight: "900", letterSpacing: 1 },
-  leagueToolbar: {
+  leagueSearchBox: {
+    flex: 1,
+    minHeight: 40,
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 12,
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
+    gap: 8,
+  },
+  leagueSearchInput: {
+    flex: 1,
+    minWidth: 0,
+    paddingVertical: 8,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: "700",
+  },
+  leagueSearchClear: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  leagueToolbar: {
     marginTop: 2,
-    marginBottom: 10,
+    marginBottom: 14,
+  },
+  leagueSearchRow: {
+    marginTop: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
   },
   leagueRefresh: {
     width: 36,
@@ -2317,6 +2468,7 @@ const styles = StyleSheet.create({
     minHeight: 74,
     borderRadius: 16,
     borderWidth: 0,
+    marginBottom: 6,
     paddingHorizontal: 12,
     paddingVertical: 12,
     flexDirection: "row",
