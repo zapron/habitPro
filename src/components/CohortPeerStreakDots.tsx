@@ -99,6 +99,8 @@ export function CohortParticipantTimelineLegend({
 
 type Props = {
   habit: Habit;
+  /** Challenge route id from the current group screen; preferred over habit metadata for detail fetches. */
+  challengeId?: string | null;
   /** Lowercase @handle when known */
   peerUsername: string | null;
   /** Cohort viewer: only http(s) images load */
@@ -116,6 +118,7 @@ function uriLoadsForRemoteViewer(uri: string | undefined): boolean {
 
 export const CohortPeerStreakDots = memo(function CohortPeerStreakDots({
   habit,
+  challengeId: challengeIdOverride,
   peerUsername,
   remotePeer = true,
   showIdentityRow = true,
@@ -164,8 +167,8 @@ export const CohortPeerStreakDots = memo(function CohortPeerStreakDots({
   const handle = peerUsername ? `@${peerUsername}` : "Member";
 
   const openRemoteMemory = useCallback(
-    async (dateStr: string, fallbackMemory?: StreakMemory) => {
-      const challengeId = habit.challengeGroupId;
+    async (dateStr: string, fallbackMemory?: StreakMemory, expectedMemory?: "photo" | "text") => {
+      const challengeId = challengeIdOverride || habit.challengeGroupId;
       const actorUserId = habit.ownerUserId;
       if (!challengeId || !actorUserId) {
         if (fallbackMemory) {
@@ -200,7 +203,15 @@ export const CohortPeerStreakDots = memo(function CohortPeerStreakDots({
         setOpen({ dateStr, isPrivate: true });
         return;
       }
-      if (detail.status === "check_in_only" || detail.status === "not_found") {
+      if (detail.status === "not_found" || (detail.status === "check_in_only" && expectedMemory)) {
+        setOpen({
+          dateStr,
+          memory: fallbackMemory,
+          error: "This memory could not be loaded. Please try again.",
+        });
+        return;
+      }
+      if (detail.status === "check_in_only") {
         setOpen({ dateStr, isCheckInOnly: true });
         return;
       }
@@ -214,7 +225,7 @@ export const CohortPeerStreakDots = memo(function CohortPeerStreakDots({
       setImgLoading(hasImg);
       setOpen({ dateStr, memory, photoSyncState: detail.photoSyncState });
     },
-    [habit.challengeGroupId, habit.id, habit.ownerUserId],
+    [challengeIdOverride, habit.challengeGroupId, habit.id, habit.ownerUserId],
   );
 
   const dots = (
@@ -266,7 +277,7 @@ export const CohortPeerStreakDots = memo(function CohortPeerStreakDots({
                 if (!isPublic) {
                   setOpen({ dateStr, isPrivate: true });
                 } else if (hasMemory) {
-                  void openRemoteMemory(dateStr, memory);
+                  void openRemoteMemory(dateStr, memory, hasPhoto ? "photo" : "text");
                 } else if (isCheckInOnly) {
                   setOpen({ dateStr, isCheckInOnly: true });
                 }

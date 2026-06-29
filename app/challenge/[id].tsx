@@ -16,9 +16,8 @@ import {
   ActivityIndicator,
   RefreshControl,
   InteractionManager,
-  type NativeScrollEvent,
-  type NativeSyntheticEvent,
 } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
 import * as Haptics from "expo-haptics";
@@ -107,10 +106,6 @@ function waitForOperationStep(ms = OPERATION_STEP_DELAY_MS): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function formatRepairCreatedDate(iso: string): string {
-  return `Requested ${formatDateDisplay(iso, "recently")}`;
-}
-
 type OperationProgressState = {
   title: string;
   message?: string;
@@ -153,6 +148,12 @@ function participantDisplayName(label: ProfileLabel | undefined): string {
   return "Member";
 }
 
+function repairRequesterName(label: ProfileLabel | undefined): string {
+  if (label?.displayName) return label.displayName;
+  if (label?.username) return label.username;
+  return "Member";
+}
+
 async function getRepairProfileLabels(
   rows: StreakRepairRow[],
   votes: StreakRepairVoteRow[],
@@ -173,12 +174,13 @@ const CHALLENGE_ACTIVITY_PAGE_SIZE = 20;
 const CHALLENGE_REPAIR_PAGE_SIZE = 20;
 const REPAIR_BADGE_PEEK_LIMIT = 3;
 const STREAK_MEMBERS_INITIAL_PAGE_SIZE = 3;
-const STREAK_MEMBERS_NEXT_PAGE_SIZE = 1;
+const STREAK_MEMBERS_NEXT_PAGE_SIZE = 5;
 const STREAK_SKELETON_CARD_COUNT = 3;
 
 type ChallengeDetailTab = "streaks" | "activity" | "repairs";
 
 type ParticipantCardProps = {
+  challengeId: string;
   memberId: string;
   label: ProfileLabel | undefined;
   habit: Habit | undefined;
@@ -242,6 +244,7 @@ const ParticipantCardSkeleton = memo(function ParticipantCardSkeleton({
 ParticipantCardSkeleton.displayName = "ParticipantCardSkeleton";
 
 const ParticipantCard = memo(function ParticipantCard({
+  challengeId,
   memberId,
   label,
   habit,
@@ -345,6 +348,7 @@ const ParticipantCard = memo(function ParticipantCard({
       {habit ? (
         <CohortPeerStreakDots
           habit={habit}
+          challengeId={challengeId}
           peerUsername={label?.username ?? null}
           showIdentityRow={false}
           nowMs={nowMs}
@@ -816,19 +820,6 @@ export default function ChallengeDetailScreen() {
       if (screenActiveRef.current) setRefreshing(false);
     }
   }, [activeTab, load, loadRepairRequests, loadSecondary, loadStreakMembers]);
-
-  const onMainScroll = useCallback(
-    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-      if (activeTabRef.current !== "streaks") return;
-      if (streakLoadInFlightRef.current || streakNextOffsetRef.current == null) return;
-      const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
-      const distanceFromBottom = contentSize.height - (contentOffset.y + layoutMeasurement.height);
-      if (distanceFromBottom <= 520) {
-        void loadStreakMembers({ reset: false });
-      }
-    },
-    [loadStreakMembers],
-  );
 
   const loadMoreSquadActivity = useCallback(async () => {
     if (
@@ -1547,8 +1538,6 @@ export default function ChallengeDetailScreen() {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
           {...({ delaysContentTouches: false } as object)}
-          onScroll={onMainScroll}
-          scrollEventThrottle={160}
           contentContainerStyle={{ paddingBottom: bottomPad }}
           refreshControl={
             <RefreshControl
@@ -1758,6 +1747,7 @@ export default function ChallengeDetailScreen() {
             ) : actionableRepairRows.map((r) => {
               const requester = profileLabels[r.user_id];
               const name = participantDisplayName(requester);
+              const compactName = repairRequesterName(requester);
               const votes = repairVotesByRepairId.get(r.id) ?? [];
               const approves = votes.filter((v) => v.vote === "approve").length;
               const declines = votes.filter((v) => v.vote === "decline").length;
@@ -1825,18 +1815,49 @@ export default function ChallengeDetailScreen() {
                   ? "Ready"
                   : `${approvalsLeft} more`
                 : statusLabel;
+              const repairHeadline =
+                r.status === "applied"
+                  ? "Streak restored"
+                  : r.status === "declined"
+                    ? "Request declined"
+                    : approvalsLeft === 0
+                      ? "Ready to restore"
+                      : "Needs squad approval";
               const repairToneBg = isDark ? "rgba(34, 211, 238, 0.10)" : "rgba(6, 182, 212, 0.10)";
               const repairToneBorder = isDark ? "rgba(34, 211, 238, 0.24)" : "rgba(6, 182, 212, 0.22)";
+              const repairStatusBg =
+                r.status === "declined"
+                  ? isDark ? "rgba(239, 68, 68, 0.12)" : "rgba(220, 38, 38, 0.08)"
+                  : r.status === "pending"
+                    ? repairToneBg
+                    : isDark ? "rgba(34, 197, 94, 0.12)" : "rgba(22, 163, 74, 0.10)";
+              const repairStatusBorder =
+                r.status === "declined"
+                  ? isDark ? "rgba(239, 68, 68, 0.32)" : "rgba(220, 38, 38, 0.24)"
+                  : r.status === "pending"
+                    ? repairToneBorder
+                    : isDark ? "rgba(34, 197, 94, 0.28)" : "rgba(22, 163, 74, 0.22)";
               const approveBg = isDark ? "rgba(34, 211, 238, 0.14)" : "rgba(6, 182, 212, 0.08)";
               const approveSelectedBg = isDark ? "rgba(34, 211, 238, 0.22)" : "rgba(6, 182, 212, 0.13)";
               const approveBorder = isDark ? "rgba(34, 211, 238, 0.38)" : "rgba(6, 182, 212, 0.26)";
+              const approvalChipBg =
+                approves >= approvalsRequired
+                  ? isDark ? "rgba(34, 197, 94, 0.16)" : "rgba(16, 185, 129, 0.12)"
+                  : approveBg;
+              const approvalChipBorder =
+                approves >= approvalsRequired
+                  ? isDark ? "rgba(34, 197, 94, 0.34)" : "rgba(16, 185, 129, 0.24)"
+                  : approveBorder;
+              const approvalChipColor =
+                approves >= approvalsRequired
+                  ? isDark ? theme.colors.green[500] : "#059669"
+                  : statusAccent;
               const declineBg = theme.colors.surfaceElevated;
               const declineSelectedBg = isDark ? "rgba(239, 68, 68, 0.14)" : "rgba(220, 38, 38, 0.08)";
               const declineBorder = theme.colors.border;
               const declineSelectedBorder = isDark ? "rgba(239, 68, 68, 0.32)" : "rgba(220, 38, 38, 0.24)";
               const actionDisabled = Boolean(!isPendingRepair || !myUserId || isRequester || declines !== 0 || busyVote || myVote);
               const expanded = expandedRepairId === r.id;
-              const repairCreatedLabel = formatRepairCreatedDate(r.created_at);
               const missedDateLabel = formatDateDisplay(r.date_str, r.date_str);
               const requestedDateLabel = formatDateDisplay(r.created_at, "Recently");
               const approvalCountLabel = `${approves}/${approvalsRequired} approvals`;
@@ -1864,8 +1885,8 @@ export default function ChallengeDetailScreen() {
                         style={[
                           styles.repairIconBadgeCompact,
                           {
-                            backgroundColor: repairToneBg,
-                            borderColor: repairToneBorder,
+                            backgroundColor: repairStatusBg,
+                            borderColor: repairStatusBorder,
                           },
                         ]}
                       >
@@ -1880,11 +1901,17 @@ export default function ChallengeDetailScreen() {
                       <View style={styles.repairCompactCopy}>
                         <View style={styles.repairCompactTitleRow}>
                           <Text style={[styles.repairCompactTitle, { color: theme.colors.textPrimary }]} numberOfLines={1}>
-                            {`${statusLabel} streak repair`}
+                            {repairHeadline}
                           </Text>
                         </View>
                         <Text style={[styles.repairCompactMeta, { color: theme.colors.textSecondary }]} numberOfLines={2}>
-                          {name} missed {missedDateLabel}
+                          <Text style={[styles.repairCompactStrong, { color: theme.colors.textPrimary }]}>
+                            {compactName}
+                          </Text>
+                          <Text> missed </Text>
+                          <Text style={[styles.repairCompactStrong, { color: theme.colors.textPrimary }]}>
+                            {missedDateLabel}
+                          </Text>
                         </Text>
                         <View style={styles.repairCompactMetaChips}>
                           <View
@@ -1897,19 +1924,19 @@ export default function ChallengeDetailScreen() {
                             ]}
                           >
                             <Text style={[styles.repairCompactMetaChipText, { color: theme.colors.textMuted }]} numberOfLines={1}>
-                              {repairCreatedLabel}
+                              Asked {requestedDateLabel}
                             </Text>
                           </View>
                           <View
                             style={[
                               styles.repairCompactMetaChip,
                               {
-                                backgroundColor: repairToneBg,
-                                borderColor: repairToneBorder,
+                                backgroundColor: approvalChipBg,
+                                borderColor: approvalChipBorder,
                               },
                             ]}
                           >
-                            <Text style={[styles.repairCompactMetaChipText, { color: statusAccent }]} numberOfLines={1}>
+                            <Text style={[styles.repairCompactMetaChipText, { color: approvalChipColor }]} numberOfLines={1}>
                               {approvalCountLabel}
                             </Text>
                           </View>
@@ -2276,6 +2303,7 @@ export default function ChallengeDetailScreen() {
                 visibleSortedMemberIds.map((memberId) => (
                   <ParticipantCard
                     key={memberId}
+                    challengeId={challengeId}
                     memberId={memberId}
                     label={profileLabels[memberId]}
                     habit={habitForMember(memberId)}
@@ -2306,19 +2334,26 @@ export default function ChallengeDetailScreen() {
                   style={[
                     styles.loadMoreSecondaryBtn,
                     {
-                      backgroundColor: theme.colors.surfaceElevated,
-                      borderColor: theme.colors.border,
+                      borderColor: isDark ? "rgba(165, 180, 252, 0.42)" : "rgba(79, 70, 229, 0.2)",
                       opacity: streakLoadingMore ? 0.72 : 1,
                     },
                   ]}
                 >
-                  {streakLoadingMore ? (
-                    <ActivityIndicator size="small" color={theme.colors.indigo[400]} />
-                  ) : (
-                    <Text style={[styles.loadMoreSecondaryText, { color: theme.colors.textSecondary }]}>
+                  <LinearGradient
+                    colors={
+                      isDark
+                        ? (["rgba(79, 70, 229, 0.82)", "rgba(6, 182, 212, 0.62)"] as const)
+                        : ([theme.colors.indigo[500], theme.colors.cyan[500]] as const)
+                    }
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.loadMoreSecondaryGradient}
+                  >
+                    {streakLoadingMore ? <ActivityIndicator size="small" color={theme.colors.white} /> : null}
+                    <Text style={[styles.loadMoreSecondaryText, { color: theme.colors.white }]}>
                       Load more members
                     </Text>
-                  )}
+                  </LinearGradient>
                 </TouchableOpacity>
               ) : null}
             </>
@@ -2535,28 +2570,28 @@ const styles = StyleSheet.create({
   repairCompactCard: {
     borderWidth: 1,
     borderRadius: 16,
-    padding: 10,
-    marginBottom: 10,
+    padding: 12,
+    marginBottom: 12,
   },
   repairCompactCardExpanded: {
     paddingBottom: 12,
   },
   repairCompactHead: {
-    minHeight: 54,
+    minHeight: 58,
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: 12,
   },
   repairCompactHeadPress: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: 12,
   },
   repairIconBadgeCompact: {
-    width: 34,
-    height: 34,
-    borderRadius: 11,
+    width: 40,
+    height: 40,
+    borderRadius: 13,
     borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
@@ -2575,15 +2610,18 @@ const styles = StyleSheet.create({
   repairCompactTitle: {
     flex: 1,
     minWidth: 0,
-    fontSize: 14,
-    lineHeight: 18,
+    fontSize: 15,
+    lineHeight: 19,
     fontWeight: "900",
   },
   repairCompactMeta: {
-    marginTop: 3,
-    fontSize: 11,
-    lineHeight: 15,
+    marginTop: 4,
+    fontSize: 12,
+    lineHeight: 16,
     fontWeight: "800",
+  },
+  repairCompactStrong: {
+    fontWeight: "900",
   },
   repairCompactMetaChips: {
     flexDirection: "row",
@@ -2744,9 +2782,19 @@ const styles = StyleSheet.create({
     minHeight: 46,
     borderRadius: 14,
     borderWidth: 1,
+    overflow: "hidden",
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 14,
+  },
+  loadMoreSecondaryGradient: {
+    minHeight: 46,
+    width: "100%",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingHorizontal: 16,
   },
   loadMoreSecondaryText: { fontSize: 13, fontWeight: "900" },
   repairBtn: {
