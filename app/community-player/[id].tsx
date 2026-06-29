@@ -61,6 +61,7 @@ import {
 } from "../../src/lib/communityWinsApi";
 import { formatRelativeTime } from "../../src/lib/communityWinFeedFormat";
 import { formatDateDisplay } from "../../src/utils/dateDisplay";
+import { getJourneyMiniGridLayout } from "../../src/utils/journeyMiniGrid";
 import { levelFromTotalXp, xpInCurrentLevel } from "../../src/utils/xpLevel";
 import { playerLeagueForLevel } from "../../src/utils/playerLeague";
 import type { AppTheme } from "../../src/styles/theme";
@@ -1597,7 +1598,10 @@ export default function CommunityPlayerStoryScreen() {
   const activeVisible = activeTab === "missions" ? visibleMissionStories.length : visibleMiniPosts.length;
   const hasMoreVisibleStory = activeVisible < activeTotal || storyHasMore;
 
-  const miniTileWidth = Math.max(132, Math.floor((width - 38) / 2));
+  const {
+    gap: miniGridGap,
+    tileWidth: miniTileWidth,
+  } = getJourneyMiniGridLayout(Math.max(0, width - 38));
   const publicMomentPhotoSize = Math.min(104, Math.max(82, Math.floor((width - 96) / 3)));
   const missionPreviewPhotoSize = Math.min(96, Math.max(78, Math.floor((width - 88) / 4)));
   const bottomPad = Math.max(insets.bottom, 18) + 18;
@@ -1882,7 +1886,7 @@ export default function CommunityPlayerStoryScreen() {
           </View>
         ) : story && story.miniPosts.length > 0 ? (
           <View style={styles.miniSection}>
-            <View style={styles.miniGrid}>
+            <View style={[styles.miniGrid, { gap: miniGridGap }]}>
               {visibleMiniPosts.map((post) => (
                 <MiniPostTile
                   key={post.id}
@@ -2188,7 +2192,7 @@ const styles = StyleSheet.create({
   },
   textOnlyCopy: { flex: 1, minWidth: 0, fontSize: 12, lineHeight: 16, fontWeight: "800" },
   miniSection: { gap: 14 },
-  miniGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  miniGrid: { flexDirection: "row", flexWrap: "wrap" },
   miniTile: { borderRadius: 16, borderWidth: 1, overflow: "hidden" },
   miniImageFrame: { width: "100%", aspectRatio: 0.9, overflow: "hidden" },
   miniImagePressable: { width: "100%", height: "100%" },

@@ -59,6 +59,7 @@ import {
 } from "../src/lib/communityWinsApi";
 import { formatRelativeTime } from "../src/lib/communityWinFeedFormat";
 import { formatDateDisplay } from "../src/utils/dateDisplay";
+import { getJourneyMiniGridLayout } from "../src/utils/journeyMiniGrid";
 import { levelFromTotalXp, xpInCurrentLevel } from "../src/utils/xpLevel";
 import { playerLeagueForLevel } from "../src/utils/playerLeague";
 
@@ -1370,10 +1371,12 @@ export default function MyJourneyScreen() {
   const contentPad = 0;
   const contentRightPad = 0;
   const measuredListWidth = listWidth > 0 ? listWidth : width;
-  const miniColumnCount = measuredListWidth >= 680 ? 3 : 2;
-  const miniGridGap = 9;
   const miniAvailableWidth = Math.max(0, measuredListWidth - contentPad - contentRightPad - 4);
-  const miniTileWidth = Math.floor((miniAvailableWidth - miniGridGap * (miniColumnCount - 1)) / miniColumnCount);
+  const {
+    columnCount: miniColumnCount,
+    gap: miniGridGap,
+    tileWidth: miniTileWidth,
+  } = getJourneyMiniGridLayout(miniAvailableWidth, { gap: 9 });
   const shownProfile: CommunityPlayerProfile | null = publicStory?.profile ?? (userId ? {
     userId,
     username,
