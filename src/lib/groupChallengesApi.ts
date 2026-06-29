@@ -589,6 +589,31 @@ function streakMemories(value: unknown): Habit["streakMemories"] | undefined {
   return value as Habit["streakMemories"];
 }
 
+function streakMemoryMarkers(value: unknown): Habit["streakMemoryMarkers"] | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const out: NonNullable<Habit["streakMemoryMarkers"]> = {};
+  for (const [dateStr, raw] of Object.entries(value as Record<string, unknown>)) {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) continue;
+    const row = raw as Record<string, unknown>;
+    const hasPhoto =
+      row.hasPhoto === true ||
+      (typeof row.imageUrl === "string" && row.imageUrl.trim().length > 0) ||
+      (typeof row.imageUri === "string" && row.imageUri.trim().length > 0);
+    const hasNote =
+      row.hasNote === true ||
+      (typeof row.note === "string" && row.note.trim().length > 0);
+    const checkInOnly = row.checkInOnly === true;
+    const createdAt =
+      typeof row.createdAt === "string" && row.createdAt.trim().length > 0
+        ? row.createdAt.trim()
+        : null;
+    if (hasPhoto || hasNote || checkInOnly || createdAt) {
+      out[dateStr] = { hasPhoto, hasNote, checkInOnly, createdAt };
+    }
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
 function lightweightHabitFromRpc(
   raw: unknown,
   challengeId: string,
@@ -629,6 +654,7 @@ function lightweightHabitFromRpc(
       typeof row.challenge_creator_timezone === "string" ? row.challenge_creator_timezone : null,
     missionTimezone: typeof row.mission_timezone === "string" ? row.mission_timezone : null,
     streakMemories: streakMemories(row.streak_memories),
+    streakMemoryMarkers: streakMemoryMarkers(row.streak_memory_markers) ?? streakMemoryMarkers(row.streak_memories),
     repairedDates: [],
     reminderEnabled: false,
     reminderTimeLocal: null,

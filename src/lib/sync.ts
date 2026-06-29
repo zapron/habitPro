@@ -205,6 +205,7 @@ function habitFromRow(row: {
   is_completed: boolean;
   status: string;
   streak_memories?: unknown;
+  streak_memory_markers?: unknown;
   challenge_group_id?: string | null;
   challenge_creator_timezone?: string | null;
   mission_timezone?: string | null;
@@ -261,6 +262,8 @@ function habitFromRow(row: {
   const streakMemoriesMigrated = canonicalizeStreakMemoryKeys(row.start_date, streakMemoriesRaw, tdRow, stableTimeZone);
   const streakMemories =
     streakMemoriesMigrated === undefined ? undefined : (streakMemoriesMigrated as Habit["streakMemories"]);
+  const streakMemoryMarkers =
+    streakMemoryMarkersFromRow(row.streak_memory_markers) ?? streakMemoryMarkersFromRow(row.streak_memories);
   return {
     ownerUserId: row.user_id,
     id: row.id,
@@ -278,6 +281,7 @@ function habitFromRow(row: {
     missionReport: effectiveReport,
     missionReportAt,
     streakMemories,
+    streakMemoryMarkers,
     repairedDates,
     reminderEnabled: row.reminder_enabled ?? false,
     reminderTimeLocal: row.reminder_time_local ?? null,
@@ -454,6 +458,31 @@ function miniToRow(sessionUserId: string, m: MiniMission) {
     live_squad_id: m.liveSquadId ?? null,
     live_squad_role: m.liveSquadRole ?? null,
   };
+}
+
+function streakMemoryMarkersFromRow(value: unknown): Habit["streakMemoryMarkers"] | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const out: NonNullable<Habit["streakMemoryMarkers"]> = {};
+  for (const [dateStr, raw] of Object.entries(value as Record<string, unknown>)) {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) continue;
+    const row = raw as Record<string, unknown>;
+    const hasPhoto =
+      row.hasPhoto === true ||
+      (typeof row.imageUrl === "string" && row.imageUrl.trim().length > 0) ||
+      (typeof row.imageUri === "string" && row.imageUri.trim().length > 0);
+    const hasNote =
+      row.hasNote === true ||
+      (typeof row.note === "string" && row.note.trim().length > 0);
+    const checkInOnly = row.checkInOnly === true;
+    const createdAt =
+      typeof row.createdAt === "string" && row.createdAt.trim().length > 0
+        ? row.createdAt.trim()
+        : null;
+    if (hasPhoto || hasNote || checkInOnly || createdAt) {
+      out[dateStr] = { hasPhoto, hasNote, checkInOnly, createdAt };
+    }
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
 }
 
 async function pullCohortPeerHabitsViaRpc(

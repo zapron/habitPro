@@ -16,6 +16,8 @@ import {
   ActivityIndicator,
   RefreshControl,
   InteractionManager,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
@@ -170,7 +172,8 @@ async function getRepairProfileLabels(
 const CHALLENGE_ACTIVITY_PAGE_SIZE = 20;
 const CHALLENGE_REPAIR_PAGE_SIZE = 20;
 const REPAIR_BADGE_PEEK_LIMIT = 3;
-const STREAK_MEMBERS_PAGE_SIZE = 5;
+const STREAK_MEMBERS_INITIAL_PAGE_SIZE = 3;
+const STREAK_MEMBERS_NEXT_PAGE_SIZE = 1;
 const STREAK_SKELETON_CARD_COUNT = 3;
 
 type ChallengeDetailTab = "streaks" | "activity" | "repairs";
@@ -601,7 +604,7 @@ export default function ChallengeDetailScreen() {
     try {
       const page = await listChallengeStreakMembersPage(challengeId, {
         offset: offset ?? 0,
-        limit: STREAK_MEMBERS_PAGE_SIZE,
+        limit: reset ? STREAK_MEMBERS_INITIAL_PAGE_SIZE : STREAK_MEMBERS_NEXT_PAGE_SIZE,
       });
       if (!screenActiveRef.current) return;
       setStreakMemberIds((prev) => {
@@ -813,6 +816,19 @@ export default function ChallengeDetailScreen() {
       if (screenActiveRef.current) setRefreshing(false);
     }
   }, [activeTab, load, loadRepairRequests, loadSecondary, loadStreakMembers]);
+
+  const onMainScroll = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      if (activeTabRef.current !== "streaks") return;
+      if (streakLoadInFlightRef.current || streakNextOffsetRef.current == null) return;
+      const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+      const distanceFromBottom = contentSize.height - (contentOffset.y + layoutMeasurement.height);
+      if (distanceFromBottom <= 520) {
+        void loadStreakMembers({ reset: false });
+      }
+    },
+    [loadStreakMembers],
+  );
 
   const loadMoreSquadActivity = useCallback(async () => {
     if (
@@ -1531,6 +1547,8 @@ export default function ChallengeDetailScreen() {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
           {...({ delaysContentTouches: false } as object)}
+          onScroll={onMainScroll}
+          scrollEventThrottle={160}
           contentContainerStyle={{ paddingBottom: bottomPad }}
           refreshControl={
             <RefreshControl

@@ -27,6 +27,14 @@ export interface StreakMemory {
   checkInOnly?: boolean;
 }
 
+/** Lightweight cohort-only badge flags. Actual note/photo data is fetched on tap. */
+export interface StreakMemoryMarker {
+  hasPhoto?: boolean;
+  hasNote?: boolean;
+  checkInOnly?: boolean;
+  createdAt?: string | null;
+}
+
 export interface Habit {
   /** Supabase auth user id who owns this mission (set on create / hydrate). */
   ownerUserId?: string | null;
@@ -48,6 +56,8 @@ export interface Habit {
   missionReportAt?: string;
   /** YYYY-MM-DD → memory for that check-in */
   streakMemories?: Record<string, StreakMemory>;
+  /** YYYY-MM-DD -> lightweight marker flags for remote cohort timelines. */
+  streakMemoryMarkers?: Record<string, StreakMemoryMarker>;
   /** When set, this habit is part of a Supabase-backed group mission. */
   challengeGroupId?: string | null;
   /** IANA timezone of the challenge creator; used for which calendar day counts. */

@@ -3,7 +3,8 @@ import {
   memo,
   useMemo,
   useState,
-  useCallback } from "react";
+  useCallback,
+  useRef } from "react";
 import {
   View,
   Pressable,
@@ -16,6 +17,7 @@ import {
 } from "react-native";
 import { X, Camera, MessageSquare, Lock, Check } from "lucide-react-native";
 import { useTheme } from "../context/ThemeContext";
+import { fetchChallengeMemoryDetail, type PhotoSyncState } from "../lib/challengeMemoryDetail";
 import type { AppTheme } from "../styles/theme";
 import type { Habit, StreakMemory } from "../types/habit";
 import { formatDateDisplay } from "../utils/dateDisplay";
@@ -145,16 +147,75 @@ export const CohortPeerStreakDots = memo(function CohortPeerStreakDots({
     memory?: StreakMemory;
     isPrivate?: boolean;
     isCheckInOnly?: boolean;
+    isLoading?: boolean;
+    error?: string;
+    photoSyncState?: PhotoSyncState;
   } | null>(null);
   const [imgLoading, setImgLoading] = useState(false);
+  const detailRequestRef = useRef(0);
   const viewerUri = open?.memory?.imageUrl || open?.memory?.imageUri;
 
   const handleClose = useCallback(() => {
+    detailRequestRef.current += 1;
     setOpen(null);
     setImgLoading(false);
   }, []);
 
   const handle = peerUsername ? `@${peerUsername}` : "Member";
+
+  const openRemoteMemory = useCallback(
+    async (dateStr: string, fallbackMemory?: StreakMemory) => {
+      const challengeId = habit.challengeGroupId;
+      const actorUserId = habit.ownerUserId;
+      if (!challengeId || !actorUserId) {
+        if (fallbackMemory) {
+          const hasImg = Boolean(fallbackMemory.imageUrl || fallbackMemory.imageUri);
+          setImgLoading(hasImg);
+          setOpen({ dateStr, memory: fallbackMemory });
+        } else {
+          setOpen({ dateStr, isCheckInOnly: true });
+        }
+        return;
+      }
+
+      const requestId = detailRequestRef.current + 1;
+      detailRequestRef.current = requestId;
+      setImgLoading(false);
+      setOpen({ dateStr, memory: fallbackMemory, isLoading: true });
+      const result = await fetchChallengeMemoryDetail({
+        challengeId,
+        actorUserId,
+        dateStr,
+        habitId: habit.id,
+      });
+      if (detailRequestRef.current !== requestId) return;
+
+      if (result.ok === false) {
+        setOpen({ dateStr, memory: fallbackMemory, error: result.error });
+        return;
+      }
+
+      const detail = result.detail;
+      if (detail.status === "private") {
+        setOpen({ dateStr, isPrivate: true });
+        return;
+      }
+      if (detail.status === "check_in_only" || detail.status === "not_found") {
+        setOpen({ dateStr, isCheckInOnly: true });
+        return;
+      }
+
+      const memory: StreakMemory = {
+        createdAt: detail.createdAt ?? new Date().toISOString(),
+      };
+      if (detail.note) memory.note = detail.note;
+      if (detail.imageUrl) memory.imageUrl = detail.imageUrl;
+      const hasImg = Boolean(memory.imageUrl);
+      setImgLoading(hasImg);
+      setOpen({ dateStr, memory, photoSyncState: detail.photoSyncState });
+    },
+    [habit.challengeGroupId, habit.id, habit.ownerUserId],
+  );
 
   const dots = (
     <>
@@ -169,8 +230,9 @@ export const CohortPeerStreakDots = memo(function CohortPeerStreakDots({
         {days.map(({ dayNum, dateStr, completed, memory }) => {
           const isCurrentSlot = activeSlot === dayNum;
           const isPublic = (habit.visibility ?? "solo") === "public";
-          const hasPhoto = completed && isPublic && Boolean(memory?.imageUrl || memory?.imageUri);
-          const hasNoteOnly = completed && isPublic && !hasPhoto && Boolean(memory?.note?.trim());
+          const marker = habit.streakMemoryMarkers?.[dateStr];
+          const hasPhoto = completed && isPublic && Boolean(marker?.hasPhoto || memory?.imageUrl || memory?.imageUri);
+          const hasNoteOnly = completed && isPublic && !hasPhoto && Boolean(marker?.hasNote || memory?.note?.trim());
           const hasMemory = hasPhoto || hasNoteOnly;
           const isCheckInOnly = completed && isPublic && !hasMemory;
           const tappable = completed;
@@ -203,10 +265,8 @@ export const CohortPeerStreakDots = memo(function CohortPeerStreakDots({
                 if (!completed) return;
                 if (!isPublic) {
                   setOpen({ dateStr, isPrivate: true });
-                } else if (memory && hasMemory) {
-                  const hasImg = Boolean(memory.imageUrl || memory.imageUri);
-                  setImgLoading(hasImg);
-                  setOpen({ dateStr, memory });
+                } else if (hasMemory) {
+                  void openRemoteMemory(dateStr, memory);
                 } else if (isCheckInOnly) {
                   setOpen({ dateStr, isCheckInOnly: true });
                 }
@@ -249,7 +309,30 @@ export const CohortPeerStreakDots = memo(function CohortPeerStreakDots({
       <Modal visible={open !== null} transparent animationType="fade" onRequestClose={handleClose}>
         <Pressable style={[styles.viewerBackdrop, { backgroundColor: "rgba(0,0,0,0.85)" }]} onPress={handleClose}>
           <Pressable style={styles.viewerInner} onPress={(e) => e.stopPropagation()}>
-            {open?.isPrivate ? (
+            {open?.isLoading ? (
+              <View style={[styles.privateContainer, { backgroundColor: theme.colors.surfaceElevated, borderColor: theme.colors.border }]}>
+                <ActivityIndicator size="small" color={theme.colors.indigo[500]} />
+                <Text style={[styles.privateTitle, { color: theme.colors.textPrimary, marginTop: 14 }]}>
+                  Loading moment
+                </Text>
+              </View>
+            ) : open?.error ? (
+              <View style={[styles.privateContainer, { backgroundColor: theme.colors.surfaceElevated, borderColor: theme.colors.border }]}>
+                <Text style={[styles.privateTitle, { color: theme.colors.textPrimary }]}>
+                  Memory unavailable
+                </Text>
+                <Text style={[styles.privateBody, { color: theme.colors.textSecondary }]}>
+                  {open.error}
+                </Text>
+                <TouchableOpacity
+                  activeOpacity={0.86}
+                  onPress={handleClose}
+                  style={[styles.privateCloseBtn, { backgroundColor: theme.colors.indigo[600] }]}
+                >
+                  <Text style={styles.privateCloseText}>Got it</Text>
+                </TouchableOpacity>
+              </View>
+            ) : open?.isPrivate ? (
               <View style={[styles.privateContainer, { backgroundColor: theme.colors.surfaceElevated, borderColor: theme.colors.border }]}>
                 <View style={[styles.privateIconOrb, { backgroundColor: isDark ? "rgba(99, 102, 241, 0.16)" : "rgba(99, 102, 241, 0.08)", borderColor: theme.colors.indigo[500] }]}>
                   <Lock size={28} color={theme.colors.indigo[500]} />
@@ -312,7 +395,7 @@ export const CohortPeerStreakDots = memo(function CohortPeerStreakDots({
                   </Text>
                   {open?.memory?.note ? (
                     <Text style={[styles.viewerNote, { color: theme.colors.textPrimary }]}>{open.memory.note}</Text>
-                  ) : open?.memory?.imageUri && remotePeer && !open.memory.imageUrl && !uriLoadsForRemoteViewer(open.memory.imageUri) ? (
+                  ) : (open?.photoSyncState === "local_only" || (open?.memory?.imageUri && remotePeer && !open.memory.imageUrl && !uriLoadsForRemoteViewer(open.memory.imageUri))) ? (
                     <Text style={[styles.viewerNote, { color: theme.colors.textMuted, fontStyle: "italic" }]}>
                       Photo not synced to cloud yet.
                     </Text>
