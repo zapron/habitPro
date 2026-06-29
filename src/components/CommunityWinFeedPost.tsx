@@ -162,6 +162,13 @@ export const CommunityWinFeedPost = memo(function CommunityWinFeedPost({
             missionLine: `on ${legacyMissionTitle.length > 0 ? legacyMissionTitle : win.title}`,
           }
         : null;
+  const streakDayLabel =
+    win.feed_source === "habit_streak" &&
+    typeof win.streak_mission_day === "number" &&
+    Number.isFinite(win.streak_mission_day) &&
+    win.streak_mission_day > 0
+      ? `Day ${win.streak_mission_day}`
+      : null;
   const level = levelFromTotalXp(win.xp);
   const playerLeague = playerLeagueForLevel(level, theme, isDark);
   const showMissionTitle = !streakKicker;
@@ -401,12 +408,31 @@ export const CommunityWinFeedPost = memo(function CommunityWinFeedPost({
           accessibilityRole="text"
           accessibilityLabel={`${streakKicker.line1}. ${streakKicker.missionLine}`}
         >
-          <Text style={[styles.streakLine1, { color: isDark ? theme.colors.textPrimary : theme.colors.cyan[500] }]}>
-            {streakKicker.line1}
-          </Text>
-          <Text style={[styles.streakMission, { color: isDark ? theme.colors.cyan[400] : theme.colors.indigo[600] }]} numberOfLines={2}>
-            {streakKicker.missionLine}
-          </Text>
+          <View style={styles.streakBannerRow}>
+            <View style={styles.streakBannerCopy}>
+              <Text style={[styles.streakLine1, { color: isDark ? theme.colors.textPrimary : theme.colors.cyan[500] }]}>
+                {streakKicker.line1}
+              </Text>
+              <Text style={[styles.streakMission, { color: isDark ? theme.colors.cyan[400] : theme.colors.indigo[600] }]} numberOfLines={2}>
+                {streakKicker.missionLine}
+              </Text>
+            </View>
+            {streakDayLabel ? (
+              <View
+                style={[
+                  styles.streakDayPill,
+                  {
+                    backgroundColor: isDark ? "rgba(15, 23, 42, 0.58)" : "rgba(255, 255, 255, 0.76)",
+                    borderColor: isDark ? "rgba(34, 211, 238, 0.28)" : "rgba(79, 70, 229, 0.2)",
+                  },
+                ]}
+              >
+                <Text style={[styles.streakDayPillText, { color: isDark ? theme.colors.cyan[400] : theme.colors.indigo[600] }]}>
+                  {streakDayLabel}
+                </Text>
+              </View>
+            ) : null}
+          </View>
         </LinearGradient>
       ) : null}
 
@@ -675,6 +701,16 @@ const styles = StyleSheet.create({
     borderLeftWidth: 4,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
+  streakBannerRow: {
+    minHeight: 36,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  streakBannerCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
   streakLine1: {
     fontSize: 13,
     fontWeight: "700",
@@ -687,6 +723,20 @@ const styles = StyleSheet.create({
     marginTop: 1,
     lineHeight: 16,
     letterSpacing: 0.1,
+  },
+  streakDayPill: {
+    flexShrink: 0,
+    minHeight: 23,
+    justifyContent: "center",
+    borderRadius: 9999,
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  streakDayPillText: {
+    fontSize: 10,
+    lineHeight: 12,
+    fontWeight: "900",
   },
   miniMissionBanner: {
     paddingTop: 8,

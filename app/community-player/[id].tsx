@@ -40,6 +40,7 @@ import { useTheme } from "../../src/context/ThemeContext";
 import { useAuth } from "../../src/context/AuthContext";
 import { useToast } from "../../src/context/ToastContext";
 import { showAppAlert } from "../../src/context/AppDialogContext";
+import { usePlusUpsell } from "../../src/context/PlusUpsellContext";
 import { useUsernameGate } from "../../src/context/UsernameGateContext";
 import { CommunityWinImageLightbox } from "../../src/components/CommunityWinImageLightbox";
 import { LevelXpRing } from "../../src/components/LevelXpRing";
@@ -810,6 +811,7 @@ function MissionGalleryModal({
   const { width } = useWindowDimensions();
   const { session } = useAuth();
   const { showToast } = useToast();
+  const { openUpsell } = usePlusUpsell();
   const { requireUsername } = useUsernameGate();
   const [journeyPosts, setJourneyPosts] = useState<CommunityPlayerStoryPost[]>([]);
   const [journeyHasMore, setJourneyHasMore] = useState(false);
@@ -913,7 +915,11 @@ function MissionGalleryModal({
                 : item,
             ),
           );
-          showToast(result.error, "error");
+          if (result.reason === "premium_required") {
+            openUpsell("community");
+          } else {
+            showToast(result.error, "error");
+          }
         }
       } catch (e) {
         setJourneyPosts((current) =>
@@ -936,7 +942,7 @@ function MissionGalleryModal({
         });
       }
     },
-    [cheeringIds, requireUsername, session?.user, showToast, viewerOwnsJourney],
+    [cheeringIds, openUpsell, requireUsername, session?.user, showToast, viewerOwnsJourney],
   );
 
   const loadMoreJourney = useCallback(async () => {
@@ -1276,6 +1282,7 @@ export default function CommunityPlayerStoryScreen() {
   const { width } = useWindowDimensions();
   const { session } = useAuth();
   const { showToast } = useToast();
+  const { openUpsell } = usePlusUpsell();
   const { requireUsername } = useUsernameGate();
   const userId = paramString(params.id);
   const routeTab = paramString(params.tab) === "minis" ? "minis" : "missions";
@@ -1491,7 +1498,11 @@ export default function CommunityPlayerStoryScreen() {
                 }
               : current,
           );
-          showToast(result.error, "error");
+          if (result.reason === "premium_required") {
+            openUpsell("community");
+          } else {
+            showToast(result.error, "error");
+          }
         }
       } catch (e) {
         setStory((current) =>
@@ -1523,7 +1534,7 @@ export default function CommunityPlayerStoryScreen() {
         });
       }
     },
-    [miniCheeringIds, requireUsername, session?.user, showToast, viewerOwnsProfile],
+    [miniCheeringIds, openUpsell, requireUsername, session?.user, showToast, viewerOwnsProfile],
   );
 
   const shown = story?.profile ?? seedProfile;

@@ -16,6 +16,7 @@ import { CommunityWinCheerersModal } from "../../src/components/CommunityWinChee
 import { CommunityWinImageLightbox } from "../../src/components/CommunityWinImageLightbox";
 import { Screen } from "../../src/components/Screen";
 import { useAuth } from "../../src/context/AuthContext";
+import { usePlusUpsell } from "../../src/context/PlusUpsellContext";
 import { useTheme } from "../../src/context/ThemeContext";
 import { useToast } from "../../src/context/ToastContext";
 import { useUsernameGate } from "../../src/context/UsernameGateContext";
@@ -81,6 +82,7 @@ export default function JourneyMomentScreen() {
   const { width } = useWindowDimensions();
   const { session } = useAuth();
   const { showToast } = useToast();
+  const { openUpsell } = usePlusUpsell();
   const { requireUsername } = useUsernameGate();
   const id = paramString(params.id);
   const [moment, setMoment] = useState<CommunityWinFeedItem | null>(null);
@@ -146,11 +148,15 @@ export default function JourneyMomentScreen() {
     setCheerBusy(true);
     const res = await toggleCheer(before.id, before.viewerHasCheered);
     setCheerBusy(false);
-    if (!res.ok) {
+    if (res.ok === false) {
       setMoment(before);
-      showToast("error" in res ? res.error : "Could not update like.", "error");
+      if (res.reason === "premium_required") {
+        openUpsell("community");
+      } else {
+        showToast("error" in res ? res.error : "Could not update like.", "error");
+      }
     }
-  }, [cheerBusy, isOwnMoment, moment, requireUsername, session?.user, showToast]);
+  }, [cheerBusy, isOwnMoment, moment, openUpsell, requireUsername, session?.user, showToast]);
 
   const openJourney = useCallback(() => {
     if (!moment) return;
