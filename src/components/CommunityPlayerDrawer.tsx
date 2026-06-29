@@ -115,6 +115,7 @@ export function CommunityPlayerDrawer({ visible, player, onClose }: Props) {
       miniWins: 0,
       habitStreakWins: 0,
       cheersReceived: 0,
+      journeyViews: 0,
       recentWins: [],
     } satisfies CommunityPlayerProfile;
   }, [player]);

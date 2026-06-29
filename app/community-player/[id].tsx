@@ -1,6 +1,6 @@
 import { Text } from "../../src/components/AppText";
 import type { ReactNode } from "react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Image,
@@ -43,12 +43,14 @@ import { showAppAlert } from "../../src/context/AppDialogContext";
 import { usePlusUpsell } from "../../src/context/PlusUpsellContext";
 import { useUsernameGate } from "../../src/context/UsernameGateContext";
 import { CommunityWinImageLightbox } from "../../src/components/CommunityWinImageLightbox";
+import { AnimatedCountText } from "../../src/components/AnimatedCountText";
 import { LevelXpRing } from "../../src/components/LevelXpRing";
 import {
   fetchCommunityPlayerStory,
   fetchCommunityPlayerMissionJourneyPage,
   fetchCommunityPlayerStoryPage,
   mergeCommunityPlayerStoryPosts,
+  recordCommunityJourneyView,
   toggleCheer,
   type CommunityPlayerMissionStory,
   type CommunityPlayerProfile,
@@ -1300,6 +1302,7 @@ export default function CommunityPlayerStoryScreen() {
   const [selectedMission, setSelectedMission] = useState<CommunityPlayerMissionStory | null>(null);
   const [imagesEnabled, setImagesEnabled] = useState(false);
   const [miniCheeringIds, setMiniCheeringIds] = useState<Set<string>>(() => new Set());
+  const recordedJourneyViewForRef = useRef<string | null>(null);
 
   const seedProfile = useMemo<CommunityPlayerProfile | null>(() => {
     if (!userId) return null;
@@ -1315,6 +1318,7 @@ export default function CommunityPlayerStoryScreen() {
       miniWins: 0,
       habitStreakWins: 0,
       cheersReceived: 0,
+      journeyViews: 0,
       recentWins: [],
     };
   }, [params.displayName, params.username, params.xp, userId]);
@@ -1435,6 +1439,29 @@ export default function CommunityPlayerStoryScreen() {
   }, [activeTab, story?.profile.userId]);
 
   const viewerOwnsProfile = Boolean(session?.user?.id && userId && session.user.id === userId);
+
+  useEffect(() => {
+    const profileUserId = story?.profile.userId;
+    if (!profileUserId || !session?.user?.id || viewerOwnsProfile) return;
+    if (recordedJourneyViewForRef.current === profileUserId) return;
+    recordedJourneyViewForRef.current = profileUserId;
+    void recordCommunityJourneyView(profileUserId)
+      .then((res) => {
+        if (res.ok === false) return;
+        setStory((current) =>
+          current?.profile.userId === profileUserId
+            ? {
+                ...current,
+                profile: {
+                  ...current.profile,
+                  journeyViews: res.journeyViews,
+                },
+              }
+            : current,
+        );
+      })
+      .catch(() => undefined);
+  }, [session?.user?.id, story?.profile.userId, viewerOwnsProfile]);
 
   const handleMiniCheer = useCallback(
     async (post: CommunityPlayerStoryPost) => {
@@ -1642,6 +1669,18 @@ export default function CommunityPlayerStoryScreen() {
               >
                 <Text style={[styles.levelPillText, { color: theme.colors.indigo[400] }]} numberOfLines={1}>
                   Level {level}
+                </Text>
+              </View>
+              <View
+                style={styles.viewsMetric}
+                accessibilityLabel={`${shown?.journeyViews ?? 0} journey views`}
+              >
+                <AnimatedCountText
+                  value={shown?.journeyViews ?? 0}
+                  style={[styles.viewsMetricNumber, { color: theme.colors.textSecondary }]}
+                />
+                <Text style={[styles.viewsMetricLabel, { color: theme.colors.textMuted }]} numberOfLines={1}>
+                  views
                 </Text>
               </View>
             </View>
@@ -1991,6 +2030,17 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   levelPillText: { fontSize: 11, lineHeight: 14, fontWeight: "900" },
+  viewsMetric: {
+    alignSelf: "flex-start",
+    minHeight: 28,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 3,
+    paddingVertical: 5,
+    gap: 4,
+  },
+  viewsMetricNumber: { fontSize: 17, lineHeight: 20, fontWeight: "800" },
+  viewsMetricLabel: { fontSize: 11, lineHeight: 14, fontWeight: "700", textTransform: "lowercase" },
   statPanel: {
     borderWidth: 1,
     borderRadius: 16,

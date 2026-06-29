@@ -39,6 +39,7 @@ import { useShallow } from "zustand/react/shallow";
 
 import { Screen } from "../src/components/Screen";
 import { CommunityWinImageLightbox } from "../src/components/CommunityWinImageLightbox";
+import { AnimatedCountText } from "../src/components/AnimatedCountText";
 import { LevelXpRing } from "../src/components/LevelXpRing";
 import { useAuth } from "../src/context/AuthContext";
 import { useTheme } from "../src/context/ThemeContext";
@@ -1382,6 +1383,7 @@ export default function MyJourneyScreen() {
     miniWins: publicMinis.length,
     habitStreakWins: publicMissions.reduce((total, story) => total + story.postCount, 0),
     cheersReceived: 0,
+    journeyViews: 0,
     recentWins: [],
   } : null);
   const weeklyRank: CommunityPlayerWeeklyRank | null = publicStory?.weeklyRank ?? null;
@@ -1516,16 +1518,32 @@ export default function MyJourneyScreen() {
           <Text style={[styles.handle, { color: theme.colors.textPrimary }]} numberOfLines={1}>
             {handle}
           </Text>
-          <View style={[styles.leaguePill, { borderColor: league.color, backgroundColor: league.color + "18" }]}>
-            <Text style={[styles.leaguePillText, { color: league.color }]} numberOfLines={1}>
-              {league.label}
-            </Text>
-          </View>
-          <View style={[styles.levelPill, { borderColor: theme.colors.border, backgroundColor: theme.colors.surface }]}>
-            <User size={12} color={theme.colors.indigo[400]} />
-            <Text style={[styles.levelPillText, { color: theme.colors.indigo[400] }]} numberOfLines={1}>
-              Level {level}
-            </Text>
+          <View style={styles.profilePillRow}>
+            <View style={[styles.leaguePill, { borderColor: league.color, backgroundColor: league.color + "18" }]}>
+              <Text style={[styles.leaguePillText, { color: league.color }]} numberOfLines={1}>
+                {league.label}
+              </Text>
+            </View>
+            <View style={[styles.levelPill, { borderColor: theme.colors.border, backgroundColor: theme.colors.surface }]}>
+              <User size={12} color={theme.colors.indigo[400]} />
+              <Text style={[styles.levelPillText, { color: theme.colors.indigo[400] }]} numberOfLines={1}>
+                Level {level}
+              </Text>
+            </View>
+            {journeyMode === "public" ? (
+              <View
+                style={styles.viewsMetric}
+                accessibilityLabel={`${shownProfile?.journeyViews ?? 0} public journey views`}
+              >
+                <AnimatedCountText
+                  value={shownProfile?.journeyViews ?? 0}
+                  style={[styles.viewsMetricNumber, { color: theme.colors.textSecondary }]}
+                />
+                <Text style={[styles.viewsMetricLabel, { color: theme.colors.textMuted }]} numberOfLines={1}>
+                  views
+                </Text>
+              </View>
+            ) : null}
           </View>
         </View>
       </View>
@@ -1635,6 +1653,7 @@ export default function MyJourneyScreen() {
     activeTab,
     handle,
     imagesEnabled,
+    isDark,
     journeyMode,
     league.color,
     league.label,
@@ -1646,6 +1665,7 @@ export default function MyJourneyScreen() {
     recentProofSize,
     router,
     shownProfile?.cheersReceived,
+    shownProfile?.journeyViews,
     shownProfile?.publicWins,
     theme,
     totalPublicPhotos,
@@ -1811,6 +1831,12 @@ const styles = StyleSheet.create({
   levelRingInner: { width: 84, height: 84, borderRadius: 42 },
   profileTextBlock: { flex: 1, minWidth: 0, gap: 7 },
   handle: { fontSize: 27, lineHeight: 33, fontWeight: "900" },
+  profilePillRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 6,
+  },
   leaguePill: {
     alignSelf: "flex-start",
     borderWidth: 1,
@@ -1830,6 +1856,17 @@ const styles = StyleSheet.create({
     gap: 5,
   },
   levelPillText: { fontSize: 11, lineHeight: 14, fontWeight: "900" },
+  viewsMetric: {
+    alignSelf: "flex-start",
+    minHeight: 26,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 3,
+    paddingVertical: 4,
+    gap: 4,
+  },
+  viewsMetricNumber: { fontSize: 16, lineHeight: 19, fontWeight: "800" },
+  viewsMetricLabel: { fontSize: 11, lineHeight: 14, fontWeight: "700", textTransform: "lowercase" },
   statPanel: { borderWidth: 1, borderRadius: 16, overflow: "hidden" },
   statPanelRow: { minHeight: 48, flexDirection: "row" },
   statPanelDivider: { borderBottomWidth: 1 },

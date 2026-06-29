@@ -52,6 +52,7 @@ export type CommunityPlayerProfile = {
   miniWins: number;
   habitStreakWins: number;
   cheersReceived: number;
+  journeyViews: number;
   recentWins: CommunityPlayerRecentWin[];
 };
 
@@ -1047,6 +1048,7 @@ export async function fetchCommunityPlayerProfile(
     miniWinsRes,
     habitStreakWinsRes,
     cheersReceivedCount,
+    journeyViewsCount,
   ] = await Promise.all([
     supabase
       .from("profiles")
@@ -1074,6 +1076,7 @@ export async function fetchCommunityPlayerProfile(
       .eq("user_id", userId)
       .eq("feed_source", "habit_streak"),
     countCheersReceivedForUser(userId),
+    countCommunityJourneyViews(userId),
   ]);
 
   if (profileErr) return { ok: false, error: profileErr.message };
@@ -1111,6 +1114,7 @@ export async function fetchCommunityPlayerProfile(
       miniWins,
       habitStreakWins,
       cheersReceived: cheersReceivedCount,
+      journeyViews: journeyViewsCount,
       recentWins: winRows.map((w) => ({
         id: w.id,
         title: w.title,
@@ -1135,6 +1139,34 @@ async function countCheersReceivedForUser(userId: string): Promise<number> {
 
   if (error) return 0;
   return count ?? 0;
+}
+
+async function countCommunityJourneyViews(userId: string): Promise<number> {
+  const supabase = getSupabase();
+  if (!supabase) return 0;
+
+  const { data, error } = await supabase.rpc("rpc_community_journey_view_count_v1", {
+    p_profile_user_id: userId,
+  });
+  if (error) return 0;
+  return typeof data === "number" && Number.isFinite(data) ? Math.max(0, Math.floor(data)) : 0;
+}
+
+export async function recordCommunityJourneyView(
+  profileUserId: string,
+): Promise<{ ok: true; journeyViews: number } | { ok: false; error: string }> {
+  const supabase = getSupabase();
+  if (!supabase) return { ok: false, error: "Cloud sync not configured." };
+
+  const { data, error } = await supabase.rpc("rpc_record_community_journey_view_v1", {
+    p_profile_user_id: profileUserId,
+  });
+  if (error) return { ok: false, error: error.message };
+
+  return {
+    ok: true,
+    journeyViews: typeof data === "number" && Number.isFinite(data) ? Math.max(0, Math.floor(data)) : 0,
+  };
 }
 
 export async function listCommunityWinCheerers(
