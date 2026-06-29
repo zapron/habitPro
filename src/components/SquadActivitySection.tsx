@@ -189,6 +189,7 @@ export const SquadActivitySection = memo(function SquadActivitySection({
   onScrollToSection,
 }: Props) {
   const [expanded, setExpanded] = useState(false);
+  const [milestonesExpanded, setMilestonesExpanded] = useState(false);
   const isExpanded = alwaysExpanded || expanded;
 
   // Dedupe: when a check-in triggers both mission_day and streak_milestone at the same value
@@ -367,98 +368,159 @@ export const SquadActivitySection = memo(function SquadActivitySection({
         ) : null}
 
         {effectiveActivity.length > 0 ? (
-          <>
-            <View style={styles.subsectionHeader}>
-              <Flag size={theme.icon.sm} color={theme.colors.green[500]} strokeWidth={2.2} />
-              <Text style={[styles.subsectionTitle, { color: theme.colors.textMuted }]}>Milestones</Text>
-            </View>
-            {effectiveActivity.map((row, index) => {
-              const { title, subtitle } = milestoneCopy(row, profileLabels);
-              const isMission = row.kind === "mission_day";
-              const isCongratsBusy = nudgeBusyKey === `congrats:${row.id}`;
-              const alreadyCongratulated = congratsSentActivityIds?.has(row.id) === true;
-              const accent = isMission ? theme.colors.green[500] : theme.colors.cyan[400];
-              const tintBg = isMission
-                ? isDark
-                  ? "rgba(34, 197, 94, 0.12)"
-                  : "rgba(22, 163, 74, 0.1)"
-                : isDark
-                  ? "rgba(34, 211, 238, 0.12)"
-                  : "rgba(8, 145, 178, 0.1)";
-
-              return (
+          <View
+            style={[
+              styles.milestoneAccordion,
+              {
+                borderColor: border,
+                backgroundColor: isDark ? "rgba(15, 23, 42, 0.16)" : "rgba(248, 250, 252, 0.8)",
+              },
+            ]}
+          >
+            <Pressable
+              accessibilityRole="button"
+              accessibilityState={{ expanded: milestonesExpanded }}
+              accessibilityLabel={milestonesExpanded ? "Collapse milestones" : "Expand milestones"}
+              onPress={() => setMilestonesExpanded((v) => !v)}
+              style={({ pressed }) => [
+                styles.milestoneAccordionTrigger,
+                {
+                  backgroundColor: pressed
+                    ? isDark
+                      ? "rgba(255,255,255,0.04)"
+                      : "rgba(15,23,42,0.03)"
+                    : "transparent",
+                },
+              ]}
+            >
+              <View style={styles.milestoneAccordionTitle}>
                 <View
-                  key={row.id}
                   style={[
-                    styles.milestoneRow,
-                    index > 0 && effectiveActivity.length > 1 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: border },
+                    styles.milestoneAccordionIcon,
+                    {
+                      backgroundColor: isDark
+                        ? "rgba(34, 197, 94, 0.12)"
+                        : "rgba(22, 163, 74, 0.1)",
+                    },
                   ]}
                 >
-                  <View style={[styles.accentBar, { backgroundColor: accent }]} />
-                  <View style={[styles.milestoneIconCircle, { backgroundColor: tintBg }]}>
-                    {isMission ? (
-                      <Flag size={theme.icon.sm} color={accent} strokeWidth={2.4} />
-                    ) : (
-                      <Flame size={theme.icon.sm} color={accent} strokeWidth={2.4} />
-                    )}
-                  </View>
-                  <View style={styles.milestoneBody}>
-                    <Text style={[styles.milestoneTitle, { color: theme.colors.textPrimary }]} numberOfLines={1}>
-                      {title}
-                    </Text>
-                    <Text style={[styles.milestoneSub, { color: theme.colors.textSecondary }]} numberOfLines={2}>
-                      {subtitle}
-                    </Text>
-                    {row.created_at ? (
-                      <Text style={[styles.rowTimestamp, { color: theme.colors.textMuted }]}>
-                        {formatActivityTimestamp(row.created_at)}
-                      </Text>
-                    ) : null}
-                  </View>
-                  {allowNudgeActions && myUserId && row.actor_user_id !== myUserId ? (
-                    <Pressable
-                      disabled={nudgeBusyKey !== null || alreadyCongratulated}
-                      onPress={() => onCongrats(row.actor_user_id, row.id)}
-                      style={({ pressed }) => [
-                        styles.congratsPill,
-                        {
-                          backgroundColor: isDark ? "rgba(129, 140, 248, 0.22)" : "rgba(99, 102, 241, 0.12)",
-                          opacity:
-                            pressed
-                              ? 0.85
-                              : alreadyCongratulated
-                                ? 0.55
-                                : nudgeBusyKey !== null
-                                  ? 0.5
-                                  : 1,
-                        },
+                  <Flag size={theme.icon.sm} color={theme.colors.green[500]} strokeWidth={2.2} />
+                </View>
+                <View style={styles.milestoneAccordionCopy}>
+                  <Text style={[styles.subsectionTitle, { color: theme.colors.textMuted }]}>Milestones</Text>
+                  <Text style={[styles.milestoneAccordionMeta, { color: theme.colors.textSecondary }]} numberOfLines={1}>
+                    {mCount} achievement{mCount === 1 ? "" : "s"}
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.milestoneAccordionHint}>
+                <Text style={[styles.milestoneAccordionHintText, { color: theme.colors.textMuted }]}>
+                  Click to view
+                </Text>
+                <ChevronDown
+                  size={theme.icon.md}
+                  color={theme.colors.textMuted}
+                  strokeWidth={2.2}
+                  style={{ transform: [{ rotate: milestonesExpanded ? "180deg" : "0deg" }] }}
+                />
+              </View>
+            </Pressable>
+            {milestonesExpanded ? (
+              <View
+                style={[
+                  styles.milestoneAccordionBody,
+                  { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: border },
+                ]}
+              >
+                {effectiveActivity.map((row, index) => {
+                  const { title, subtitle } = milestoneCopy(row, profileLabels);
+                  const isMission = row.kind === "mission_day";
+                  const isCongratsBusy = nudgeBusyKey === `congrats:${row.id}`;
+                  const alreadyCongratulated = congratsSentActivityIds?.has(row.id) === true;
+                  const accent = isMission ? theme.colors.green[500] : theme.colors.cyan[400];
+                  const tintBg = isMission
+                    ? isDark
+                      ? "rgba(34, 197, 94, 0.12)"
+                      : "rgba(22, 163, 74, 0.1)"
+                    : isDark
+                      ? "rgba(34, 211, 238, 0.12)"
+                      : "rgba(8, 145, 178, 0.1)";
+
+                  return (
+                    <View
+                      key={row.id}
+                      style={[
+                        styles.milestoneRow,
+                        index > 0 && effectiveActivity.length > 1 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: border },
                       ]}
                     >
-                      {isCongratsBusy ? (
-                        <ActivityIndicator size="small" color={theme.colors.indigo[400]} />
-                      ) : alreadyCongratulated ? (
-                        <Text style={[styles.congratsPillText, { color: theme.colors.indigo[400] }]}>
-                          Congratulated
+                      <View style={[styles.accentBar, { backgroundColor: accent }]} />
+                      <View style={[styles.milestoneIconCircle, { backgroundColor: tintBg }]}>
+                        {isMission ? (
+                          <Flag size={theme.icon.sm} color={accent} strokeWidth={2.4} />
+                        ) : (
+                          <Flame size={theme.icon.sm} color={accent} strokeWidth={2.4} />
+                        )}
+                      </View>
+                      <View style={styles.milestoneBody}>
+                        <Text style={[styles.milestoneTitle, { color: theme.colors.textPrimary }]} numberOfLines={1}>
+                          {title}
                         </Text>
-                      ) : (
-                        <>
-                          <Trophy size={theme.icon.xs} color={theme.colors.indigo[400]} strokeWidth={2.2} />
-                          <Text style={[styles.congratsPillText, { color: theme.colors.indigo[400] }]}>Congrats</Text>
-                        </>
-                      )}
-                    </Pressable>
-                  ) : null}
-                </View>
-              );
-            })}
-          </>
+                        <Text style={[styles.milestoneSub, { color: theme.colors.textSecondary }]} numberOfLines={2}>
+                          {subtitle}
+                        </Text>
+                        {row.created_at ? (
+                          <Text style={[styles.rowTimestamp, { color: theme.colors.textMuted }]}>
+                            {formatActivityTimestamp(row.created_at)}
+                          </Text>
+                        ) : null}
+                      </View>
+                      {allowNudgeActions && myUserId && row.actor_user_id !== myUserId ? (
+                        <Pressable
+                          disabled={nudgeBusyKey !== null || alreadyCongratulated}
+                          onPress={() => onCongrats(row.actor_user_id, row.id)}
+                          style={({ pressed }) => [
+                            styles.congratsPill,
+                            {
+                              backgroundColor: isDark ? "rgba(129, 140, 248, 0.22)" : "rgba(99, 102, 241, 0.12)",
+                              opacity:
+                                pressed
+                                  ? 0.85
+                                  : alreadyCongratulated
+                                    ? 0.55
+                                    : nudgeBusyKey !== null
+                                      ? 0.5
+                                      : 1,
+                            },
+                          ]}
+                        >
+                          {isCongratsBusy ? (
+                            <ActivityIndicator size="small" color={theme.colors.indigo[400]} />
+                          ) : alreadyCongratulated ? (
+                            <Text style={[styles.congratsPillText, { color: theme.colors.indigo[400] }]}>
+                              Congratulated
+                            </Text>
+                          ) : (
+                            <>
+                              <Trophy size={theme.icon.xs} color={theme.colors.indigo[400]} strokeWidth={2.2} />
+                              <Text style={[styles.congratsPillText, { color: theme.colors.indigo[400] }]}>Congrats</Text>
+                            </>
+                          )}
+                        </Pressable>
+                      ) : null}
+                    </View>
+                  );
+                })}
+              </View>
+            ) : null}
+          </View>
         ) : null}
 
         {feedNudges.length > 0 ? (
           <View
             style={
               effectiveActivity.length > 0
-                ? [styles.nudgeBlock, { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: border }]
+                ? styles.nudgeBlockAfterMilestones
                 : { paddingTop: 4 }
             }
           >
@@ -727,6 +789,60 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     textTransform: "uppercase",
   },
+  milestoneAccordion: {
+    borderWidth: 1,
+    borderRadius: 14,
+    marginHorizontal: 4,
+    marginBottom: 8,
+    overflow: "hidden",
+  },
+  milestoneAccordionTrigger: {
+    minHeight: 54,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  milestoneAccordionTitle: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  milestoneAccordionIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  milestoneAccordionCopy: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
+  },
+  milestoneAccordionHint: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    flexShrink: 0,
+  },
+  milestoneAccordionHintText: {
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 0.1,
+  },
+  milestoneAccordionMeta: {
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  milestoneAccordionBody: {
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+  },
   milestoneRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -794,9 +910,9 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "900",
   },
-  nudgeBlock: {
-    marginTop: 4,
-    paddingTop: 8,
+  nudgeBlockAfterMilestones: {
+    marginTop: 6,
+    paddingTop: 0,
   },
   nudgeRow: {
     flexDirection: "row",
