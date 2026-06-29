@@ -11,6 +11,7 @@ import { Clock3, Gamepad2, Plane, X } from "lucide-react-native";
 import { MAX_RESERVE_FUEL_MINUTES } from "../constants/miniMission";
 import type { Habit, MiniMission } from "../types/habit";
 import { useTheme } from "../context/ThemeContext";
+import { formatDateDisplay, formatDateTimeDisplay } from "../utils/dateDisplay";
 
 export type MissionDetailsSheetProps =
   | {
@@ -38,30 +39,12 @@ export type MissionDetailsSheetProps =
     };
 
 function formatShortDate(iso: string): string {
-  try {
-    const d = new Date(iso);
-    if (Number.isNaN(d.getTime())) return iso;
-    return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
-  } catch {
-    return iso;
-  }
+  return formatDateDisplay(iso, iso);
 }
 
 function formatShortDateTime(iso?: string | null): string {
   if (!iso) return "Not set";
-  try {
-    const d = new Date(iso);
-    if (Number.isNaN(d.getTime())) return iso;
-    return d.toLocaleString(undefined, {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    });
-  } catch {
-    return iso;
-  }
+  return formatDateTimeDisplay(iso, iso);
 }
 
 function getMiniStatusLabel(mission: MiniMission): string {

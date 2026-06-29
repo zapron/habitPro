@@ -17,6 +17,7 @@ import {
   REPAIR_MEMORY_NOTE_SOLO,
   REPAIR_MEMORY_NOTE_SQUAD,
 } from "../utils/repairStreakMemoryMerge";
+import { formatDateDisplay } from "../utils/dateDisplay";
 
 type Entry = { dateStr: string; memory: StreakMemory; missionDay?: number | null };
 
@@ -156,7 +157,7 @@ export function StreakMemoryGallery({
                 )}
                 <View style={styles.cardMetaRow}>
                   <Text style={[styles.cardDate, { color: theme.colors.textSecondary }]} numberOfLines={1}>
-                    {dateStr}
+                    {formatDateDisplay(dateStr, dateStr)}
                   </Text>
                   {dayLabel ? (
                     <Text style={[styles.cardDay, { color: theme.colors.indigo[400] }]} numberOfLines={1}>
@@ -240,7 +241,9 @@ export function StreakMemoryGallery({
             ) : null}
             <View style={[styles.viewerMeta, { backgroundColor: memoryMetaBg, borderColor: memoryBorder }]}>
               <View style={styles.viewerMetaTop}>
-                <Text style={[styles.viewerDate, { color: memoryKickerColor }]}>{open?.dateStr}</Text>
+                <Text style={[styles.viewerDate, { color: memoryKickerColor }]}>
+                  {formatDateDisplay(open?.dateStr, open?.dateStr ?? "")}
+                </Text>
                 {openDayLabel ? (
                   <Text style={[styles.viewerDay, { color: theme.colors.indigo[400] }]}>{openDayLabel}</Text>
                 ) : null}

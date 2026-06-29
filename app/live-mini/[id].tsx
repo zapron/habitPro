@@ -49,6 +49,7 @@ import type {
   LiveMiniProfileLabel,
   LiveMiniSquadSnapshot,
 } from "../../src/types/liveMiniMission";
+import { formatDateTimeDisplay } from "../../src/utils/dateDisplay";
 import { levelFromTotalXp } from "../../src/utils/xpLevel";
 
 const QUICK_MINUTES = [
@@ -113,19 +114,7 @@ function withImageVersion(url: string, version: string | null | undefined): stri
 
 function formatShortDateTime(iso?: string | null): string {
   if (!iso) return "Not set";
-  try {
-    const d = new Date(iso);
-    if (Number.isNaN(d.getTime())) return iso;
-    return d.toLocaleString(undefined, {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    });
-  } catch {
-    return iso;
-  }
+  return formatDateTimeDisplay(iso, iso);
 }
 
 function formatInviteExpiry(expiresAt: string | null | undefined): string | null {

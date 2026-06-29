@@ -1,5 +1,6 @@
 import type { Habit, MiniMission } from "../types/habit";
 import { startOfWeekMonday } from "./weekStats";
+import { formatDateDisplay } from "./dateDisplay";
 
 export type DayCheckInPoint = {
   /** YYYY-MM-DD local */
@@ -102,7 +103,7 @@ export function miniCompletionsByWeekBuckets(
 
     const weekStartKey = formatLocalDateKey(start);
     const isCurrentWeek = w === 0;
-    const label = isCurrentWeek ? "This wk" : `${start.getMonth() + 1}/${start.getDate()}`;
+    const label = isCurrentWeek ? "This wk" : formatDateDisplay(start, weekStartKey);
 
     let count = 0;
     for (const m of missions) {

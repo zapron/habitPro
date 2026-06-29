@@ -76,6 +76,7 @@ import { buildProfileIntelligence } from "../../src/utils/profileIntelligence";
 import { isMiniMissionOpen, isMiniMissionRunning } from "../../src/utils/miniMissionTime";
 import { PlusBadge } from "../../src/components/PlusBadge";
 import { useRefreshPremiumAccess } from "../../src/hooks/useRefreshPremiumAccess";
+import { formatDateTimeDisplay } from "../../src/utils/dateDisplay";
 import { XP_PER_LEVEL, levelFromTotalXp, xpInCurrentLevel } from "../../src/utils/xpLevel";
 import { showAppAlert } from "../../src/context/AppDialogContext";
 
@@ -107,14 +108,7 @@ function FigureLabel({ color, children }: { color: string; children: string }) {
 }
 
 function formatBackupSavedAt(savedAt: string): string {
-  const d = new Date(savedAt);
-  if (Number.isNaN(d.getTime())) return "Recent snapshot";
-  return d.toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  return formatDateTimeDisplay(savedAt, "Recent snapshot");
 }
 
 function backupReasonLabel(reason: string): string {

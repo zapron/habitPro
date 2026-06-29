@@ -19,6 +19,18 @@ type NotificationRow = {
   payload: Record<string, unknown>;
 };
 
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] as const;
+
+function formatDateDisplay(value: string, fallback: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
+  if (!match) return fallback;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  if (!Number.isFinite(year) || month < 1 || month > 12 || day < 1 || day > 31) return fallback;
+  return `${String(day).padStart(2, "0")}-${MONTHS[month - 1]}-${String(year % 100).padStart(2, "0")}`;
+}
+
 function textPayloadValue(payload: Record<string, unknown>, key: string): string | null {
   const value = payload[key];
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
@@ -230,7 +242,7 @@ function buildMessage(
       const dateStr = typeof payload.date_str === "string" ? payload.date_str : "a missed day";
       return {
         title: "Streak repair request",
-        body: `${requesterName} is asking to repair ${dateStr}. Tap to review.`,
+        body: `${requesterName} is asking to repair ${formatDateDisplay(dateStr, dateStr)}. Tap to review.`,
         data,
       };
     }

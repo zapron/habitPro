@@ -15,6 +15,7 @@ import type {
   ChallengeNudgeRow,
 } from "../types/groupChallenge";
 import type { ProfileLabel } from "../lib/groupChallengesApi";
+import { formatDateTimeDisplay } from "../utils/dateDisplay";
 
 /** Calm header: indigo “Squad” + neutral “activity”. */
 function SquadActivityTitle({
@@ -47,18 +48,8 @@ function participantDisplayName(label: ProfileLabel | undefined): string {
   return "Member";
 }
 
-/** Locale-aware date + time from ISO string (Supabase `timestamptz`). */
 function formatActivityTimestamp(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  try {
-    return new Intl.DateTimeFormat(undefined, {
-      dateStyle: "medium",
-      timeStyle: "short",
-    }).format(d);
-  } catch {
-    return d.toLocaleString();
-  }
+  return formatDateTimeDisplay(iso);
 }
 
 function milestoneCopy(row: ChallengeActivityRow, labels: Record<string, ProfileLabel>): { title: string; subtitle: string } {

@@ -18,6 +18,7 @@ import { X, Camera, MessageSquare, Lock, Check } from "lucide-react-native";
 import { useTheme } from "../context/ThemeContext";
 import type { AppTheme } from "../styles/theme";
 import type { Habit, StreakMemory } from "../types/habit";
+import { formatDateDisplay } from "../utils/dateDisplay";
 import { calendarDateForHabitMissionDayIndex, getHabitActiveMissionDaySlot } from "../utils/missionDaySlots";
 
 /** Dot timeline key: Completed / Today / Upcoming. Use once beside the cohort participants heading. */
@@ -306,7 +307,9 @@ export const CohortPeerStreakDots = memo(function CohortPeerStreakDots({
                   </View>
                 ) : null}
                 <View style={[styles.viewerMeta, { backgroundColor: theme.colors.surfaceElevated, borderColor: theme.colors.border }]}>
-                  <Text style={[styles.viewerDate, { color: theme.colors.cyan[400] }]}>{open?.dateStr}</Text>
+                  <Text style={[styles.viewerDate, { color: theme.colors.cyan[400] }]}>
+                    {formatDateDisplay(open?.dateStr, open?.dateStr ?? "")}
+                  </Text>
                   {open?.memory?.note ? (
                     <Text style={[styles.viewerNote, { color: theme.colors.textPrimary }]}>{open.memory.note}</Text>
                   ) : open?.memory?.imageUri && remotePeer && !open.memory.imageUrl && !uriLoadsForRemoteViewer(open.memory.imageUri) ? (

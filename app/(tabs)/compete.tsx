@@ -80,6 +80,7 @@ import {
   listLiveMiniInvitesForMePage,
   type LiveMiniInviteForMe,
 } from "../../src/lib/liveMiniMissionsApi";
+import { formatDateDisplay } from "../../src/utils/dateDisplay";
 import { levelFromTotalXp, xpInCurrentLevel } from "../../src/utils/xpLevel";
 
 const WEEKLY_RANK_PAGE_SIZE = 20;
@@ -2079,7 +2080,6 @@ export default function CompeteScreen() {
                   >
                     {completed.slice(0, 6).map((c, i) => {
                       const tpl = getChallengeTemplate(c.templateId);
-                      const d = new Date(c.completedAt);
                       return (
                         <View
                           key={`${c.templateId}-${c.completedAt}`}
@@ -2088,7 +2088,7 @@ export default function CompeteScreen() {
                           <Medal size={16} color={theme.colors.amber[500]} />
                           <Text style={[styles.winTitle, { color: theme.colors.textPrimary }]}>{tpl?.title ?? c.templateId}</Text>
                           <Text style={[styles.winDate, { color: theme.colors.textMuted }]}>
-                            {d.toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                            {formatDateDisplay(c.completedAt, c.completedAt)}
                           </Text>
                         </View>
                       );

@@ -1,3 +1,5 @@
+import { formatDateDisplay, formatDateTimeDisplay } from "../utils/dateDisplay";
+
 export function formatRelativeTime(iso: string): string {
   const t = new Date(iso).getTime();
   const diff = Date.now() - t;
@@ -8,18 +10,9 @@ export function formatRelativeTime(iso: string): string {
   if (hrs < 24) return `${hrs}h ago`;
   const days = Math.floor(hrs / 24);
   if (days < 7) return `${days}d ago`;
-  return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return formatDateDisplay(iso, iso);
 }
 
 export function formatCompletedAt(iso: string): string {
-  try {
-    return new Date(iso).toLocaleString(undefined, {
-      month: "short",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    });
-  } catch {
-    return iso;
-  }
+  return formatDateTimeDisplay(iso, iso);
 }

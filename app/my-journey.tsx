@@ -57,6 +57,7 @@ import {
   type CommunityPlayerWeeklyRank,
 } from "../src/lib/communityWinsApi";
 import { formatRelativeTime } from "../src/lib/communityWinFeedFormat";
+import { formatDateDisplay } from "../src/utils/dateDisplay";
 import { levelFromTotalXp, xpInCurrentLevel } from "../src/utils/xpLevel";
 import { playerLeagueForLevel } from "../src/utils/playerLeague";
 
@@ -134,7 +135,7 @@ function storyDayLabel(post: CommunityPlayerStoryPost): string {
   if (typeof day === "number" && Number.isFinite(day) && day > 0) return `Day ${day}`;
 
   const completedAt = safeDate(post.completedAt || post.createdAt);
-  if (completedAt) return completedAt.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  if (completedAt) return formatDateDisplay(completedAt, "Moment");
   return "Moment";
 }
 

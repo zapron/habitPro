@@ -1,5 +1,6 @@
 import type { CustomerInfo, PurchasesEntitlementInfo } from "react-native-purchases";
 import { HABITPRO_COMMUNITY_ENTITLEMENT_ID } from "../constants/revenueCat";
+import { formatDateDisplay } from "../utils/dateDisplay";
 
 export type MembershipPlanKind = "monthly" | "yearly" | "unknown";
 
@@ -92,9 +93,6 @@ export function storeDisplayName(store: string): string {
 
 export function formatMembershipDate(d: Date | null, locale?: string): string {
   if (!d) return "—";
-  try {
-    return d.toLocaleDateString(locale, { year: "numeric", month: "short", day: "numeric" });
-  } catch {
-    return d.toISOString().slice(0, 10);
-  }
+  void locale;
+  return formatDateDisplay(d, "â€”");
 }
