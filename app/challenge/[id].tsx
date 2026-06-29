@@ -17,7 +17,6 @@ import {
   RefreshControl,
   InteractionManager,
 } from "react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
 import * as Haptics from "expo-haptics";
@@ -87,6 +86,7 @@ import { isHabitMissionWindowClosed } from "../../src/utils/habitMissionWindow";
 import {
   getHabitActiveMissionDaySlot,
 } from "../../src/utils/missionDaySlots";
+import { formatDateDisplay } from "../../src/utils/dateDisplay";
 import { levelFromTotalXp } from "../../src/utils/xpLevel";
 
 const OPERATION_STEP_DELAY_MS = 360;
@@ -103,6 +103,10 @@ function runAfterSettledInteractions(task: () => void, delayMs = POST_OPERATION_
 
 function waitForOperationStep(ms = OPERATION_STEP_DELAY_MS): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function formatRepairCreatedDate(iso: string): string {
+  return `Requested ${formatDateDisplay(iso, "recently")}`;
 }
 
 type OperationProgressState = {
@@ -168,13 +172,8 @@ const CHALLENGE_REPAIR_PAGE_SIZE = 20;
 const REPAIR_BADGE_PEEK_LIMIT = 3;
 const STREAK_MEMBERS_PAGE_SIZE = 5;
 const STREAK_SKELETON_CARD_COUNT = 3;
-const REPAIR_DISMISS_STORAGE_PREFIX = "challenge-repair-dismissed";
 
 type ChallengeDetailTab = "streaks" | "activity" | "repairs";
-
-function repairDismissStorageKey(userId: string, challengeId: string): string {
-  return `${REPAIR_DISMISS_STORAGE_PREFIX}:${userId}:${challengeId}`;
-}
 
 type ParticipantCardProps = {
   memberId: string;
@@ -419,7 +418,6 @@ export default function ChallengeDetailScreen() {
   const [activityNextOffset, setActivityNextOffset] = useState<number | null>(null);
   const [nudgeNextOffset, setNudgeNextOffset] = useState<number | null>(null);
   const [repairNextOffset, setRepairNextOffset] = useState<number | null>(null);
-  const [repairPreviewHasMore, setRepairPreviewHasMore] = useState(false);
   const [streakMemberIds, setStreakMemberIds] = useState<string[]>([]);
   const [streakHabitByMemberId, setStreakHabitByMemberId] = useState<Record<string, Habit>>({});
   const [streakNextOffset, setStreakNextOffset] = useState<number | null>(null);
@@ -434,7 +432,6 @@ export default function ChallengeDetailScreen() {
   const [repairRows, setRepairRows] = useState<StreakRepairRow[]>([]);
   const [repairVotes, setRepairVotes] = useState<StreakRepairVoteRow[]>([]);
   const [expandedRepairId, setExpandedRepairId] = useState<string | null>(null);
-  const [dismissedRepairIds, setDismissedRepairIds] = useState<Set<string>>(() => new Set());
   const [repairBusyAction, setRepairBusyAction] = useState<{
     id: string;
     vote: "approve" | "decline";
@@ -547,7 +544,6 @@ export default function ChallengeDetailScreen() {
       setRepairRows(res.page.items);
       setRepairVotes(res.votes);
       setRepairNextOffset(res.page.nextOffset);
-      setRepairPreviewHasMore(res.page.nextOffset != null);
       const labels = await getRepairProfileLabels(res.page.items, res.votes, res.profileLabels);
       if (!screenActiveRef.current) return;
       setProfileLabels((prev) => ({ ...prev, ...labels }));
@@ -572,13 +568,13 @@ export default function ChallengeDetailScreen() {
       const res = await listChallengeStreakRepairsPage(challengeId, {
         offset: 0,
         limit: REPAIR_BADGE_PEEK_LIMIT,
+        status: "pending",
       });
       if (!res.ok) return;
       if (!screenActiveRef.current || repairHydratedRef.current) return;
       setRepairRows(res.page.items);
       setRepairVotes(res.votes);
       setRepairNextOffset(res.page.nextOffset);
-      setRepairPreviewHasMore(res.page.nextOffset != null);
       const labels = await getRepairProfileLabels(res.page.items, res.votes, res.profileLabels);
       if (!screenActiveRef.current || repairHydratedRef.current) return;
       setProfileLabels((prev) => ({ ...prev, ...labels }));
@@ -698,12 +694,10 @@ export default function ChallengeDetailScreen() {
     setRepairRows([]);
     setRepairVotes([]);
     setExpandedRepairId(null);
-    setDismissedRepairIds(new Set());
     setSecondaryHydrated(false);
     setSecondaryLoading(false);
     setRepairHydrated(false);
     setRepairInitialLoading(false);
-    setRepairPreviewHasMore(false);
     setStreakMemberIds([]);
     setStreakHabitByMemberId({});
     setStreakNextOffset(null);
@@ -726,25 +720,6 @@ export default function ChallengeDetailScreen() {
     activeTabRef.current = "streaks";
     setActiveTab("streaks");
   }, [challengeId]);
-
-  useEffect(() => {
-    if (!challengeId || !myUserId) {
-      setDismissedRepairIds(new Set());
-      return;
-    }
-    let cancelled = false;
-    void AsyncStorage.getItem(repairDismissStorageKey(myUserId, challengeId))
-      .then((raw) => {
-        if (cancelled) return;
-        const parsed = raw ? JSON.parse(raw) : [];
-        if (!Array.isArray(parsed)) return;
-        setDismissedRepairIds(new Set(parsed.filter((id): id is string => typeof id === "string" && id.length > 0)));
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, [challengeId, myUserId]);
 
   useFocusEffect(
     useCallback(() => {
@@ -1039,22 +1014,6 @@ export default function ChallengeDetailScreen() {
     }
     return s;
   }, [feedNudges, myUserId, optimisticCongratsActivityIds]);
-
-  const persistDismissedRepairIds = useCallback((next: Set<string>) => {
-    if (!challengeId || !myUserId) return;
-    const ids = Array.from(next).slice(-120);
-    void AsyncStorage.setItem(repairDismissStorageKey(myUserId, challengeId), JSON.stringify(ids)).catch(() => {});
-  }, [challengeId, myUserId]);
-
-  const dismissRepairRequest = useCallback((repairId: string) => {
-    setDismissedRepairIds((prev) => {
-      if (prev.has(repairId)) return prev;
-      const next = new Set(prev);
-      next.add(repairId);
-      persistDismissedRepairIds(next);
-      return next;
-    });
-  }, [persistDismissedRepairIds]);
 
   const onRepairVote = useCallback(
     async (repair: StreakRepairRow, vote: "approve" | "decline") => {
@@ -1420,20 +1379,23 @@ export default function ChallengeDetailScreen() {
     return map;
   }, [repairVotes]);
 
-  const actionableRepairRows = useMemo(
-    () =>
-      repairRows.filter((repair) => !dismissedRepairIds.has(repair.id)),
-    [dismissedRepairIds, repairRows],
-  );
+  const actionableRepairRows = repairRows;
+  const repairNeedsViewerAttention = useMemo(() => {
+    if (!myUserId) return false;
+    return actionableRepairRows.some((repair) => {
+      if (repair.status !== "pending" || repair.user_id === myUserId) return false;
+      const votes = repairVotesByRepairId.get(repair.id) ?? [];
+      if (votes.some((v) => v.voter_id === myUserId)) return false;
+      if (votes.some((v) => v.vote === "decline")) return false;
+      const approvalsRequired = Math.max(1, repair.approvals_required);
+      const approves = votes.filter((v) => v.vote === "approve").length;
+      return approves < approvalsRequired;
+    });
+  }, [actionableRepairRows, myUserId, repairVotesByRepairId]);
   const showRepairSkeleton = repairInitialLoading && !repairHydrated && actionableRepairRows.length === 0;
   const showRepairSlot = showRepairSkeleton || actionableRepairRows.length > 0;
   const activityTabCount = secondaryHydrated ? feedActivity.length + feedNudges.length : null;
-  const repairTabCount =
-    repairHydrated || actionableRepairRows.length > 0
-      ? repairNextOffset != null || (!repairHydrated && repairPreviewHasMore)
-        ? `${actionableRepairRows.length}+`
-        : actionableRepairRows.length
-      : null;
+  const repairTabCount = repairNeedsViewerAttention ? "!" : null;
   const detailTabs: { key: ChallengeDetailTab; label: string; count: number | string | null }[] = [
     { key: "streaks", label: "Streaks", count: memberIdsOrdered.length },
     { key: "activity", label: "Activity", count: activityTabCount },
@@ -1663,12 +1625,17 @@ export default function ChallengeDetailScreen() {
           >
             {detailTabs.map((tab) => {
               const active = activeTab === tab.key;
+              const attentionBadge = tab.key === "repairs" && tab.count === "!";
               return (
                 <TouchableOpacity
                   key={tab.key}
                   activeOpacity={0.86}
                   accessibilityRole="button"
-                  accessibilityLabel={`Show ${tab.label}`}
+                  accessibilityLabel={
+                    attentionBadge
+                      ? "Show Repairs, pending repair needs approval"
+                      : `Show ${tab.label}`
+                  }
                   onPress={() => setActiveTab(tab.key)}
                   style={[
                     styles.detailTab,
@@ -1695,11 +1662,19 @@ export default function ChallengeDetailScreen() {
                         {
                           backgroundColor: active
                             ? "rgba(255,255,255,0.18)"
+                            : attentionBadge
+                              ? isDark
+                                ? "rgba(245, 158, 11, 0.16)"
+                                : "rgba(245, 158, 11, 0.12)"
                             : isDark
                               ? "rgba(148, 163, 184, 0.14)"
                               : theme.colors.surfaceElevated,
                           borderColor: active
                             ? "rgba(255,255,255,0.26)"
+                            : attentionBadge
+                              ? isDark
+                                ? "rgba(245, 158, 11, 0.42)"
+                                : "rgba(217, 119, 6, 0.34)"
                             : theme.colors.border,
                         },
                       ]}
@@ -1707,7 +1682,13 @@ export default function ChallengeDetailScreen() {
                       <Text
                         style={[
                           styles.detailTabBadgeText,
-                          { color: active ? theme.colors.white : theme.colors.textMuted },
+                          {
+                            color: active
+                              ? theme.colors.white
+                              : attentionBadge
+                                ? theme.colors.amber[500]
+                                : theme.colors.textMuted,
+                          },
                         ]}
                       >
                         {tab.count}
@@ -1756,7 +1737,7 @@ export default function ChallengeDetailScreen() {
                     </View>
                   </View>
                 </View>
-            ) : actionableRepairRows.map((r, repairIndex) => {
+            ) : actionableRepairRows.map((r) => {
               const requester = profileLabels[r.user_id];
               const name = participantDisplayName(requester);
               const votes = repairVotesByRepairId.get(r.id) ?? [];
@@ -1837,7 +1818,10 @@ export default function ChallengeDetailScreen() {
               const declineSelectedBorder = isDark ? "rgba(239, 68, 68, 0.32)" : "rgba(220, 38, 38, 0.24)";
               const actionDisabled = Boolean(!isPendingRepair || !myUserId || isRequester || declines !== 0 || busyVote || myVote);
               const expanded = expandedRepairId === r.id;
-              const extraCount = Math.max(0, actionableRepairRows.length - repairIndex - 1);
+              const repairCreatedLabel = formatRepairCreatedDate(r.created_at);
+              const missedDateLabel = formatDateDisplay(r.date_str, r.date_str);
+              const requestedDateLabel = formatDateDisplay(r.created_at, "Recently");
+              const approvalCountLabel = `${approves}/${approvalsRequired} approvals`;
               return (
                 <View
                   key={r.id}
@@ -1878,10 +1862,39 @@ export default function ChallengeDetailScreen() {
                       <View style={styles.repairCompactCopy}>
                         <View style={styles.repairCompactTitleRow}>
                           <Text style={[styles.repairCompactTitle, { color: theme.colors.textPrimary }]} numberOfLines={1}>
-                            {actionableRepairRows.length === 1
-                              ? `${statusLabel} streak repair`
-                              : `Repair ${actionableRepairRows.length - repairIndex} of ${actionableRepairRows.length}`}
+                            {`${statusLabel} streak repair`}
                           </Text>
+                        </View>
+                        <Text style={[styles.repairCompactMeta, { color: theme.colors.textSecondary }]} numberOfLines={2}>
+                          {name} missed {missedDateLabel}
+                        </Text>
+                        <View style={styles.repairCompactMetaChips}>
+                          <View
+                            style={[
+                              styles.repairCompactMetaChip,
+                              {
+                                backgroundColor: theme.colors.surfaceElevated,
+                                borderColor: theme.colors.border,
+                              },
+                            ]}
+                          >
+                            <Text style={[styles.repairCompactMetaChipText, { color: theme.colors.textMuted }]} numberOfLines={1}>
+                              {repairCreatedLabel}
+                            </Text>
+                          </View>
+                          <View
+                            style={[
+                              styles.repairCompactMetaChip,
+                              {
+                                backgroundColor: repairToneBg,
+                                borderColor: repairToneBorder,
+                              },
+                            ]}
+                          >
+                            <Text style={[styles.repairCompactMetaChipText, { color: statusAccent }]} numberOfLines={1}>
+                              {approvalCountLabel}
+                            </Text>
+                          </View>
                           <View
                             style={[
                               styles.repairXpChip,
@@ -1891,32 +1904,13 @@ export default function ChallengeDetailScreen() {
                               },
                             ]}
                           >
-                            <Text style={[styles.repairXpChipText, { color: theme.colors.yellow[400] }]}>
+                            <Text style={[styles.repairXpChipText, { color: theme.colors.yellow[400] }]} numberOfLines={1}>
                               {r.xp_cost} XP
                             </Text>
                           </View>
                         </View>
-                        <Text style={[styles.repairCompactMeta, { color: theme.colors.textMuted }]} numberOfLines={1}>
-                          {name} missed {r.date_str} · {approves}/{approvalsRequired} approvals{extraCount > 0 ? ` · +${extraCount} more` : ""}
-                        </Text>
                       </View>
                     </Pressable>
-                    <TouchableOpacity
-                      activeOpacity={0.75}
-                      hitSlop={8}
-                      accessibilityRole="button"
-                      accessibilityLabel="Do not show this repair request again"
-                      onPress={() => dismissRepairRequest(r.id)}
-                      style={[
-                        styles.repairDismissButtonCompact,
-                        {
-                          backgroundColor: theme.colors.surfaceElevated,
-                          borderColor: theme.colors.border,
-                        },
-                      ]}
-                    >
-                      <X size={14} color={theme.colors.textMuted} />
-                    </TouchableOpacity>
                   </View>
 
                   {expanded ? (
@@ -1947,7 +1941,21 @@ export default function ChallengeDetailScreen() {
                         >
                           <Text style={[styles.repairFactLabel, { color: theme.colors.textMuted }]}>Missed</Text>
                           <Text style={[styles.repairFactValue, { color: theme.colors.textPrimary }]} numberOfLines={1}>
-                            {r.date_str}
+                            {missedDateLabel}
+                          </Text>
+                        </View>
+                        <View
+                          style={[
+                            styles.repairFactChip,
+                            {
+                              backgroundColor: theme.colors.surfaceElevated,
+                              borderColor: theme.colors.border,
+                            },
+                          ]}
+                        >
+                          <Text style={[styles.repairFactLabel, { color: theme.colors.textMuted }]}>Requested</Text>
+                          <Text style={[styles.repairFactValue, { color: theme.colors.textPrimary }]} numberOfLines={1}>
+                            {requestedDateLabel}
                           </Text>
                         </View>
                       </View>
@@ -2510,6 +2518,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 16,
     padding: 10,
+    marginBottom: 10,
   },
   repairCompactCardExpanded: {
     paddingBottom: 12,
@@ -2557,6 +2566,25 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 15,
     fontWeight: "800",
+  },
+  repairCompactMetaChips: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    marginTop: 7,
+  },
+  repairCompactMetaChip: {
+    minHeight: 23,
+    borderRadius: 9999,
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  repairCompactMetaChipText: {
+    fontSize: 10,
+    lineHeight: 13,
+    fontWeight: "900",
   },
   repairExpandedBody: {
     marginTop: 4,
@@ -2606,24 +2634,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  repairDismissButton: {
-    width: 30,
-    height: 30,
-    borderRadius: 9999,
-    borderWidth: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    flexShrink: 0,
-  },
-  repairDismissButtonCompact: {
-    width: 30,
-    height: 30,
-    borderRadius: 9999,
-    borderWidth: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    flexShrink: 0,
-  },
   repairEyebrowRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -2639,9 +2649,9 @@ const styles = StyleSheet.create({
   },
   repairXpChipText: { fontSize: 10, fontWeight: "900" },
   repairTitle: { fontSize: 16, fontWeight: "900" },
-  repairFactsRow: { flexDirection: "row", gap: 8, marginTop: 12 },
+  repairFactsRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 12 },
   repairFactChip: {
-    flex: 1,
+    width: "48.6%",
     minWidth: 0,
     borderRadius: 12,
     borderWidth: 1,
