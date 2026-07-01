@@ -937,12 +937,13 @@ export default function ProfileScreen() {
   const level = levelFromTotalXp(xp);
   const xpInLevel = xpInCurrentLevel(xp);
   const recoveryBackups = useMemo(() => {
+    if (!isFocused || accountHydrating) return [];
     if (cloudSyncBlocked) return backups.slice(0, 3);
     return backups
       .filter((backup) => hasRecoverableMissionData(backup, rawHabits, rawMiniMissions, deletedMissionIds))
       .slice(0, 3);
-  }, [backups, cloudSyncBlocked, deletedMissionIds, rawHabits, rawMiniMissions]);
-  const showRecoveryBackups = Boolean(showAccount && session?.user && recoveryBackups.length > 0);
+  }, [accountHydrating, backups, cloudSyncBlocked, deletedMissionIds, isFocused, rawHabits, rawMiniMissions]);
+  const showRecoveryBackups = Boolean(isFocused && showAccount && session?.user && recoveryBackups.length > 0);
 
   const restoreBackup = useCallback(
     async (backup: AccountBackupSnapshot) => {
