@@ -199,6 +199,11 @@ const EMPTY_SENT_PRESET_NUDGE_KINDS = new Set<PresetChallengeNudgeKind>();
 
 type ChallengeDetailTab = "streaks" | "activity" | "repairs";
 
+function normalizeChallengeDetailTab(value: string | string[] | undefined): ChallengeDetailTab {
+  const raw = Array.isArray(value) ? value[0] : value;
+  return raw === "activity" || raw === "repairs" ? raw : "streaks";
+}
+
 type ParticipantCardProps = {
   challengeId: string;
   memberId: string;
@@ -402,8 +407,9 @@ const ParticipantCard = memo(function ParticipantCard({
 ParticipantCard.displayName = "ParticipantCard";
 
 export default function ChallengeDetailScreen() {
-  const { id } = useLocalSearchParams<{ id?: string | string[] }>();
+  const { id, tab } = useLocalSearchParams<{ id?: string | string[]; tab?: string | string[] }>();
   const challengeId = Array.isArray(id) ? id[0] : id;
+  const requestedTab = normalizeChallengeDetailTab(tab);
   const router = useRouter();
   const { theme, isDark } = useTheme();
   const { showToast } = useToast();
@@ -468,7 +474,7 @@ export default function ChallengeDetailScreen() {
     vote: "approve" | "decline";
   } | null>(null);
   const [missionDetailsOpen, setMissionDetailsOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<ChallengeDetailTab>("streaks");
+  const [activeTab, setActiveTab] = useState<ChallengeDetailTab>(requestedTab);
 
   const themedStyles = useMemo(() => {
     return {
@@ -696,6 +702,12 @@ export default function ChallengeDetailScreen() {
   }, [activeTab]);
 
   useEffect(() => {
+    if (activeTabRef.current === requestedTab) return;
+    activeTabRef.current = requestedTab;
+    setActiveTab(requestedTab);
+  }, [requestedTab]);
+
+  useEffect(() => {
     if (!screenActiveRef.current) return undefined;
     const shouldLoadActivity =
       activeTab === "activity" &&
@@ -719,6 +731,20 @@ export default function ChallengeDetailScreen() {
       hydrationTasksRef.current = hydrationTasksRef.current.filter((item) => item !== task);
     };
   }, [activeTab, loadRepairRequests, loadSecondary]);
+
+  const hydrateFocusedTab = useCallback(() => {
+    const tab = activeTabRef.current;
+    const shouldLoadActivity =
+      tab === "activity" &&
+      !secondaryHydratedRef.current &&
+      !secondaryLoadInFlightRef.current;
+    const shouldLoadRepairs =
+      tab === "repairs" &&
+      !repairHydratedRef.current &&
+      !repairInitialLoadInFlightRef.current;
+    if (shouldLoadActivity) void loadSecondary({ silent: false });
+    if (shouldLoadRepairs) void loadRepairRequests({ silent: false });
+  }, [loadRepairRequests, loadSecondary]);
 
   const load = useCallback(async (opts?: { silent?: boolean }) => {
     if (!challengeId) return;
@@ -766,9 +792,9 @@ export default function ChallengeDetailScreen() {
     repairLoadMoreInFlightRef.current = false;
     streakLoadInFlightRef.current = false;
     streakNextOffsetRef.current = null;
-    activeTabRef.current = "streaks";
-    setActiveTab("streaks");
-  }, [challengeId]);
+    activeTabRef.current = requestedTab;
+    setActiveTab(requestedTab);
+  }, [challengeId, requestedTab]);
 
   useFocusEffect(
     useCallback(() => {
@@ -778,6 +804,12 @@ export default function ChallengeDetailScreen() {
       focusOnceRef.current = true;
       void load({ silent });
       void loadStreakMembers({ reset: true, silent });
+      const focusedTabTask = InteractionManager.runAfterInteractions(() => {
+        hydrationTasksRef.current = hydrationTasksRef.current.filter((item) => item !== focusedTabTask);
+        if (!screenActiveRef.current) return;
+        hydrateFocusedTab();
+      });
+      hydrationTasksRef.current.push(focusedTabTask);
       void refreshPremiumAccess({ serverOnly: true, cachedAccessOk: true, background: true });
       const repairBadgeTask = InteractionManager.runAfterInteractions(() => {
         hydrationTasksRef.current = hydrationTasksRef.current.filter((item) => item !== repairBadgeTask);
@@ -790,7 +822,7 @@ export default function ChallengeDetailScreen() {
         hydrationTasksRef.current.forEach((task) => task.cancel?.());
         hydrationTasksRef.current = [];
       };
-    }, [load, loadRepairBadgeHint, loadStreakMembers, refreshPremiumAccess]),
+    }, [hydrateFocusedTab, load, loadRepairBadgeHint, loadStreakMembers, refreshPremiumAccess]),
   );
 
   useEffect(() => {

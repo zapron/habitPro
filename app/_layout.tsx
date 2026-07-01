@@ -145,7 +145,7 @@ function RootLayoutNav() {
       if (type === "challenge_nudge") {
         const challengeId = typeof data.challenge_id === "string" ? data.challenge_id : "";
         if (challengeId) {
-          router.push(`/challenge/${challengeId}`);
+          router.push({ pathname: "/challenge/[id]", params: { id: challengeId, tab: "activity" } });
         } else {
           router.push("/(tabs)/compete");
         }
@@ -185,8 +185,8 @@ function RootLayoutNav() {
         const repairId = typeof data.repair_id === "string" ? data.repair_id : "";
         if (challengeId) {
           router.push({
-            pathname: `/challenge/${challengeId}`,
-            params: repairId ? { repairId } : {},
+            pathname: "/challenge/[id]",
+            params: { id: challengeId, tab: "repairs", ...(repairId ? { repairId } : {}) },
           });
         } else {
           router.push("/(tabs)/compete");
@@ -197,10 +197,14 @@ function RootLayoutNav() {
       if (type === "streak_repair_result") {
         const habitId = typeof data.habit_id === "string" ? data.habit_id : "";
         const challengeId = typeof data.challenge_id === "string" ? data.challenge_id : "";
-        if (habitId) {
+        const repairId = typeof data.repair_id === "string" ? data.repair_id : "";
+        if (challengeId) {
+          router.push({
+            pathname: "/challenge/[id]",
+            params: { id: challengeId, tab: "repairs", ...(repairId ? { repairId } : {}) },
+          });
+        } else if (habitId) {
           router.push(`/habit/${habitId}`);
-        } else if (challengeId) {
-          router.push(`/challenge/${challengeId}`);
         } else {
           router.push("/(tabs)/compete");
         }
