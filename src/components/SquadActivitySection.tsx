@@ -15,7 +15,7 @@ import type {
   ChallengeNudgeRow,
 } from "../types/groupChallenge";
 import type { ProfileLabel } from "../lib/groupChallengesApi";
-import { formatDateTimeDisplay } from "../utils/dateDisplay";
+import { formatDateDisplay, formatDateTimeDisplay } from "../utils/dateDisplay";
 
 /** Calm header: indigo “Squad” + neutral “activity”. */
 function SquadActivityTitle({
@@ -50,6 +50,17 @@ function participantDisplayName(label: ProfileLabel | undefined): string {
 
 function formatActivityTimestamp(iso: string): string {
   return formatDateTimeDisplay(iso);
+}
+
+function nudgeDayContext(row: ChallengeNudgeRow): string | null {
+  const parts: string[] = [];
+  if (typeof row.target_mission_day === "number" && Number.isFinite(row.target_mission_day)) {
+    parts.push(`Day ${row.target_mission_day}`);
+  }
+  if (typeof row.target_date_str === "string" && row.target_date_str.trim().length > 0) {
+    parts.push(formatDateDisplay(row.target_date_str, row.target_date_str));
+  }
+  return parts.length > 0 ? parts.join(" · ") : null;
 }
 
 function milestoneCopy(row: ChallengeActivityRow, labels: Record<string, ProfileLabel>): { title: string; subtitle: string } {
@@ -541,6 +552,14 @@ export const SquadActivitySection = memo(function SquadActivitySection({
                   <NudgeKindIcon kind={row.kind} theme={theme} />
                 </View>
                 <View style={styles.nudgeTextWrap}>
+                  {(() => {
+                    const context = nudgeDayContext(row);
+                    return context ? (
+                      <Text style={[styles.nudgeContext, { color: theme.colors.textMuted }]} numberOfLines={1}>
+                        {context}
+                      </Text>
+                    ) : null;
+                  })()}
                   <NudgeActivityLine row={row} labels={profileLabels} theme={theme} />
                   {row.created_at ? (
                     <Text style={[styles.rowTimestamp, { color: theme.colors.textMuted }]}>
@@ -937,5 +956,13 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 19,
     fontWeight: "600",
+  },
+  nudgeContext: {
+    fontSize: 10,
+    lineHeight: 13,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: 2,
   },
 });

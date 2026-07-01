@@ -36,6 +36,19 @@ function textPayloadValue(payload: Record<string, unknown>, key: string): string
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 }
 
+function nudgeDayContext(payload: Record<string, unknown>): string {
+  const parts: string[] = [];
+  const missionDay = payload.target_mission_day;
+  const dateStr = textPayloadValue(payload, "target_date_str");
+  if (typeof missionDay === "number" && Number.isFinite(missionDay)) {
+    parts.push(`Day ${missionDay}`);
+  }
+  if (dateStr) {
+    parts.push(formatDateDisplay(dateStr, dateStr));
+  }
+  return parts.length > 0 ? ` (${parts.join(" - ")})` : "";
+}
+
 function buildMessage(
   type: string | undefined | null,
   payload: Record<string, unknown>,
@@ -126,11 +139,12 @@ function buildMessage(
         typeof payload.from_username === "string" ? payload.from_username : "Someone";
       const kind = typeof payload.kind === "string" ? payload.kind : "nudge";
       const fromHandle = String(from).toLowerCase();
+      const context = nudgeDayContext(payload);
       if (kind === "custom_note") {
         const msg = typeof payload.message === "string" ? payload.message.trim() : "";
         const preview = msg.length > 100 ? `${msg.slice(0, 97)}…` : msg;
         return {
-          title: "Squad note",
+          title: `Squad note${context}`,
           body:
             preview.length > 0
               ? `@${fromHandle}: “${preview}”`
@@ -140,7 +154,7 @@ function buildMessage(
       }
       return {
         title: "Squad nudge",
-        body: `@${fromHandle} sent ${kind}`,
+        body: `@${fromHandle} sent ${kind}${context}`,
         data,
       };
     }

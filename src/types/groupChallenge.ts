@@ -56,6 +56,9 @@ export type ChallengeNudgeRow = {
   kind: ChallengeNudgeKind;
   /** For milestone congrats: which challenge_activity row was congratulated. */
   activity_id?: string | null;
+  /** Optional day context when a nudge was sent from a specific streak-memory post. */
+  target_date_str?: string | null;
+  target_mission_day?: number | null;
   /** Set when `kind === "custom_note"`. */
   message: string | null;
   created_at: string;

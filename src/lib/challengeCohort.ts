@@ -105,7 +105,7 @@ export async function sendChallengeNudge(
   challengeId: string,
   toUserId: string,
   kind: PresetChallengeNudgeKind,
-  opts?: { activityId?: string },
+  opts?: { activityId?: string; targetDateStr?: string | null; targetMissionDay?: number | null },
 ): Promise<ChallengeActionResult> {
   const supabase = getSupabase();
   if (!supabase) return { error: new Error("Supabase not configured") };
@@ -122,6 +122,8 @@ export async function sendChallengeNudge(
       p_to_user_id: toUserId,
       p_kind: kind,
       p_activity_id: kind === "congrats" ? opts?.activityId ?? null : null,
+      p_target_date_str: opts?.targetDateStr ?? null,
+      p_target_mission_day: opts?.targetMissionDay ?? null,
     });
     rpcError = error;
   } catch (error) {
@@ -137,6 +139,8 @@ export async function sendChallengeNudge(
       to_user_id: toUserId,
       kind,
       ...(kind === "congrats" && opts?.activityId ? { activity_id: opts.activityId } : {}),
+      ...(opts?.targetDateStr ? { target_date_str: opts.targetDateStr } : {}),
+      ...(typeof opts?.targetMissionDay === "number" ? { target_mission_day: opts.targetMissionDay } : {}),
     })
     .select("id")
     .single();
@@ -172,6 +176,8 @@ export async function sendChallengeNudge(
       from_user_id: user.id,
       from_username: fromUsername,
       kind,
+      ...(opts?.targetDateStr ? { target_date_str: opts.targetDateStr } : {}),
+      ...(typeof opts?.targetMissionDay === "number" ? { target_mission_day: opts.targetMissionDay } : {}),
     },
   });
   if (nErr && __DEV__) console.warn("[notifications] challenge_nudge", nErr.message);
@@ -224,6 +230,7 @@ export async function sendChallengeCustomNudge(
   challengeId: string,
   toUserId: string,
   message: string,
+  opts?: { targetDateStr?: string | null; targetMissionDay?: number | null },
 ): Promise<ChallengeActionResult> {
   const supabase = getSupabase();
   if (!supabase) return { error: new Error("Supabase not configured") };
@@ -242,6 +249,8 @@ export async function sendChallengeCustomNudge(
     p_challenge_id: challengeId,
     p_to_user_id: toUserId,
     p_message: trimmed,
+    p_target_date_str: opts?.targetDateStr ?? null,
+    p_target_mission_day: opts?.targetMissionDay ?? null,
   });
 
   if (error) {
@@ -270,7 +279,7 @@ export async function listRecentNudges(
   if (!supabase) return [];
   const { data, error } = await supabase
     .from("challenge_nudges")
-    .select("id, challenge_id, from_user_id, to_user_id, kind, activity_id, message, created_at")
+    .select("id, challenge_id, from_user_id, to_user_id, kind, activity_id, target_date_str, target_mission_day, message, created_at")
     .eq("challenge_id", challengeId)
     .order("created_at", { ascending: false })
     .limit(limit);
@@ -288,7 +297,7 @@ export async function listRecentNudgesPage(
   const limit = Math.max(1, Math.floor(request.limit));
   const { data, error } = await supabase
     .from("challenge_nudges")
-    .select("id, challenge_id, from_user_id, to_user_id, kind, activity_id, message, created_at")
+    .select("id, challenge_id, from_user_id, to_user_id, kind, activity_id, target_date_str, target_mission_day, message, created_at")
     .eq("challenge_id", challengeId)
     .order("created_at", { ascending: false })
     .range(offset, offset + limit);

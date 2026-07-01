@@ -258,6 +258,10 @@ export default function ChallengeMemoryScreen() {
           detail.challengeId,
           detail.subjectUserId,
           kind,
+          {
+            targetDateStr: detail.dateStr,
+            targetMissionDay: detail.missionDay,
+          },
         );
         if (nudgeError) {
           if (reason === "premium_required") {
@@ -318,6 +322,10 @@ export default function ChallengeMemoryScreen() {
           detail.challengeId,
           detail.subjectUserId,
           message,
+          {
+            targetDateStr: detail.dateStr,
+            targetMissionDay: detail.missionDay,
+          },
         );
         if (noteError) {
           if (reason === "premium_required") {

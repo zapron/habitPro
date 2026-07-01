@@ -66,6 +66,19 @@ function textPayloadValue(payload: Record<string, unknown> | undefined, key: str
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 }
 
+function nudgeDayContext(payload: Record<string, unknown>): string | null {
+  const parts: string[] = [];
+  const missionDay = payload.target_mission_day;
+  const dateStr = textPayloadValue(payload, "target_date_str");
+  if (typeof missionDay === "number" && Number.isFinite(missionDay)) {
+    parts.push(`Day ${missionDay}`);
+  }
+  if (dateStr) {
+    parts.push(formatDateDisplay(dateStr, dateStr));
+  }
+  return parts.length > 0 ? parts.join(" - ") : null;
+}
+
 function formatReminderMinutesLeft(value: unknown): string | null {
   if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return null;
   const minutes = Math.max(1, Math.round(value));
@@ -176,14 +189,16 @@ function notificationSubtitle(n: NotificationRow): string | null {
       const who =
         typeof from === "string" && from.trim().length > 0 ? `@${from.trim().toLowerCase()}` : "Someone";
       const kind = p.kind;
+      const context = nudgeDayContext(p);
+      const suffix = context ? ` · ${context} · Tap to open squad` : " · Tap to open squad";
       if (kind === "custom_note") {
         const msg = typeof p.message === "string" ? p.message.trim() : "";
-        const preview = msg.length > 80 ? `${msg.slice(0, 77)}…` : msg;
+        const preview = msg.length > 80 ? `${msg.slice(0, 77)}...` : msg;
         return preview.length > 0
-          ? `${who}: “${preview}” · Tap to open squad`
-          : `${who} sent you a note · Tap to open squad`;
+          ? `${who}: "${preview}"${suffix}`
+          : `${who} sent you a note${suffix}`;
       }
-      return `${who} sent you ${nudgeKindLabel(p.kind)} · Tap to open squad`;
+      return `${who} sent you ${nudgeKindLabel(p.kind)}${suffix}`;
     }
     case "challenge_squad_checkin": {
       const from = p.actor_username;
@@ -442,17 +457,30 @@ export default function NotificationsScreen() {
       return;
     }
 
-    if ((n.type === "challenge_nudge" || n.type === "streak_repair_request") && challengeId) {
-      router.push(`/challenge/${challengeId}`);
+    if (n.type === "challenge_nudge" && challengeId) {
+      router.push({ pathname: "/challenge/[id]", params: { id: challengeId, tab: "activity" } });
+      return;
+    }
+
+    if (n.type === "streak_repair_request" && challengeId) {
+      const repairId = typeof p.repair_id === "string" ? p.repair_id : "";
+      router.push({
+        pathname: "/challenge/[id]",
+        params: { id: challengeId, tab: "repairs", ...(repairId ? { repairId } : {}) },
+      });
       return;
     }
 
     if (n.type === "streak_repair_result") {
       const hid = typeof p.habit_id === "string" ? p.habit_id : "";
-      if (hid) {
+      const repairId = typeof p.repair_id === "string" ? p.repair_id : "";
+      if (challengeId) {
+        router.push({
+          pathname: "/challenge/[id]",
+          params: { id: challengeId, tab: "repairs", ...(repairId ? { repairId } : {}) },
+        });
+      } else if (hid) {
         router.push(`/habit/${hid}`);
-      } else if (challengeId) {
-        router.push(`/challenge/${challengeId}`);
       } else {
         router.push("/(tabs)/compete");
       }
