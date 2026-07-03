@@ -211,11 +211,11 @@ const ShimmerTile = memo(function ShimmerTile({
       Animated.sequence([
         Animated.timing(shimmerX, {
           toValue: w,
-          duration: 1150,
-          easing: Easing.inOut(Easing.quad),
+          duration: 780,
+          easing: Easing.out(Easing.cubic),
           useNativeDriver: true,
         }),
-        Animated.delay(250),
+        Animated.delay(70),
       ]),
       { resetBeforeIteration: true },
     );
@@ -225,8 +225,9 @@ const ShimmerTile = memo(function ShimmerTile({
 
   const shimmerAlpha = reduceMotion ? 0 : 1;
   // Light mode needs a darker sheen to be visible on light surfaces.
-  const sheen = isDark ? "rgba(255,255,255,0.22)" : "rgba(0,0,0,0.08)";
+  const sheen = isDark ? "rgba(255,255,255,0.3)" : "rgba(0,0,0,0.12)";
   const sheer = "rgba(255,255,255,0)";
+  const trailingX = Animated.add(shimmerX, -Math.max(120, w * 0.5));
 
   return (
     <View
@@ -256,6 +257,24 @@ const ShimmerTile = memo(function ShimmerTile({
           style={skeletonStyles.shimmerGrad}
         />
       </Animated.View>
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          skeletonStyles.shimmer,
+          skeletonStyles.shimmerTrailing,
+          {
+            opacity: shimmerAlpha * 0.62,
+            transform: [{ translateX: trailingX }],
+          },
+        ]}
+      >
+        <LinearGradient
+          colors={[sheer, sheen, sheer]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={skeletonStyles.shimmerGrad}
+        />
+      </Animated.View>
     </View>
   );
 });
@@ -271,7 +290,7 @@ function ListSkeleton({
 }) {
   return (
     <View style={skeletonStyles.wrap}>
-      {[0, 1, 2, 3, 4].map((i) => (
+      {[0, 1, 2, 3, 4, 5].map((i) => (
         <ShimmerTile key={i} theme={theme} isDark={isDark} reduceMotion={reduceMotion} />
       ))}
     </View>
@@ -1598,7 +1617,8 @@ const skeletonStyles = StyleSheet.create({
     top: -2,
     bottom: -2,
     left: 0,
-    width: "55%",
+    width: "46%",
   },
+  shimmerTrailing: { width: "34%" },
   shimmerGrad: { flex: 1 },
 });
