@@ -22,6 +22,7 @@ import { InviteBadgeProvider } from "../src/context/InviteBadgeContext";
 import { ForceUpdateModal } from "../src/components/ForceUpdateModal";
 import { SplashGate } from "../src/components/SplashGate";
 import { AppLaunchNotificationNudge } from "../src/components/AppLaunchNotificationNudge";
+import { OtaUpdateManager } from "../src/components/OtaUpdateManager";
 import { SyncManager } from "../src/components/SyncManager";
 import { SyncToast } from "../src/components/SyncToast";
 import { setupNotifications } from "../src/utils/notifications";
@@ -340,6 +341,7 @@ function RootLayoutNav() {
   return (
     <View style={{ flex: 1 }}>
       <AppLaunchNotificationNudge />
+      <OtaUpdateManager />
       <SyncManager />
       <Stack screenOptions={{ headerShown: false }} />
       <ToastHost />
