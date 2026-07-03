@@ -100,6 +100,10 @@ const LOCKED_CHECKIN_MSG =
 const OPERATION_STEP_DELAY_MS = 360;
 const OPERATION_FINAL_DELAY_MS = 220;
 const POST_OPERATION_BACKGROUND_DELAY_MS = 1600;
+const INITIAL_GRID_RENDER_DAYS = 49;
+const GRID_RENDER_BATCH_DAYS = 35;
+const GRID_RENDER_BATCH_DELAY_MS = 70;
+const HEAVY_MOMENTS_THRESHOLD = 12;
 
 function runAfterSettledInteractions(task: () => void, delayMs = POST_OPERATION_BACKGROUND_DELAY_MS) {
     setTimeout(() => {
@@ -493,6 +497,8 @@ export default function HabitDetail() {
     const [habitCommunityPublishPending, setHabitCommunityPublishPending] = useState(false);
     /** Avoid Mission not found flash after delete/leave; store clears before navigation finishes. */
     const [pendingExitAfterRemove, setPendingExitAfterRemove] = useState(false);
+    const [detailHeavyContentReady, setDetailHeavyContentReady] = useState(false);
+    const [visibleGridDayCount, setVisibleGridDayCount] = useState(INITIAL_GRID_RENDER_DAYS);
 
     const [reminderEditorOpen, setReminderEditorOpen] = useState(false);
     const [reminderDraft, setReminderDraft] = useState("21:00");
@@ -579,12 +585,65 @@ export default function HabitDetail() {
     useFocusEffect(
         useCallback(() => {
             setNow(Date.now());
-            void refreshPremiumAccess({ serverOnly: true, cachedAccessOk: true, background: true });
+            let timer: ReturnType<typeof setTimeout> | null = null;
+            const task = InteractionManager.runAfterInteractions(() => {
+                timer = setTimeout(() => {
+                    void refreshPremiumAccess({ serverOnly: true, cachedAccessOk: true, background: true });
+                }, 300);
+            });
+            return () => {
+                if (timer) clearTimeout(timer);
+                task.cancel?.();
+            };
         }, [refreshPremiumAccess]),
     );
 
+    const completedDateSet = useMemo(() => new Set(habit?.completedDates ?? []), [habit?.completedDates]);
+    const milestoneSet = useMemo(() => new Set(milestones), [milestones]);
+    const repairedDateSet = useMemo(() => new Set(habit?.repairedDates ?? []), [habit?.repairedDates]);
+    const streakMemoryCount = useMemo(() => Object.keys(habit?.streakMemories ?? {}).length, [habit?.streakMemories]);
+    const shouldDeferHeavyMissionContent =
+        totalDays > INITIAL_GRID_RENDER_DAYS || streakMemoryCount > HEAVY_MOMENTS_THRESHOLD;
+    const initialGridDayCount = Math.min(totalDays, shouldDeferHeavyMissionContent ? INITIAL_GRID_RENDER_DAYS : totalDays);
+
+    useFocusEffect(
+        useCallback(() => {
+            let cancelled = false;
+            let task: { cancel?: () => void } | null = null;
+
+            setVisibleGridDayCount(initialGridDayCount);
+
+            if (!shouldDeferHeavyMissionContent) {
+                setDetailHeavyContentReady(true);
+                return () => {
+                    cancelled = true;
+                };
+            }
+
+            setDetailHeavyContentReady(false);
+            task = InteractionManager.runAfterInteractions(() => {
+                if (cancelled) return;
+                setVisibleGridDayCount(initialGridDayCount);
+                setDetailHeavyContentReady(true);
+            });
+
+            return () => {
+                cancelled = true;
+                task?.cancel?.();
+            };
+        }, [habitId, initialGridDayCount, shouldDeferHeavyMissionContent]),
+    );
+
+    useEffect(() => {
+        if (!detailHeavyContentReady || visibleGridDayCount >= totalDays) return undefined;
+        const timer = setTimeout(() => {
+            setVisibleGridDayCount((prev) => Math.min(totalDays, prev + GRID_RENDER_BATCH_DAYS));
+        }, GRID_RENDER_BATCH_DELAY_MS);
+        return () => clearTimeout(timer);
+    }, [detailHeavyContentReady, totalDays, visibleGridDayCount]);
+
     const memoryGalleryEntries = useMemo(() => {
-        if (!habit) return [];
+        if (!habit || !detailHeavyContentReady || visibleGridDayCount < totalDays) return [];
         const raw = habit.streakMemories ?? {};
         return Object.entries(raw)
             .filter(([, memory]) => {
@@ -599,7 +658,7 @@ export default function HabitDetail() {
                 missionDay: missionDayNumberForCalendarDate(habit, dateStr),
             }))
             .sort((a, b) => (a.dateStr < b.dateStr ? 1 : -1));
-    }, [habit]);
+    }, [detailHeavyContentReady, habit, totalDays, visibleGridDayCount]);
 
     const showMissionReportInsteadOfTimer = useMemo(() => {
         if (!habit) return false;
@@ -972,7 +1031,11 @@ export default function HabitDetail() {
         setMissionDialog({ kind: 'delete' });
     };
 
-    const days = Array.from({ length: totalDays }, (_, i) => i + 1);
+    const days = useMemo(() => Array.from({ length: totalDays }, (_, i) => i + 1), [totalDays]);
+    const visibleDays = useMemo(
+        () => days.slice(0, detailHeavyContentReady ? Math.min(visibleGridDayCount, totalDays) : 0),
+        [days, detailHeavyContentReady, totalDays, visibleGridDayCount],
+    );
 
     const getDayDate = useCallback((dayIndex: number) => {
         if (!habit) return "";
@@ -1536,10 +1599,23 @@ export default function HabitDetail() {
                 <View style={styles.grid} ref={gridRef} onLayout={(e: LayoutChangeEvent) => { setGridLayout({ x: e.nativeEvent.layout.x, y: e.nativeEvent.layout.y }); }}>
                     {confetti.active && <ConfettiBurst active={confetti.active} isMilestone={confetti.milestone} originX={confetti.x} originY={confetti.y} />}
 
-                    {days.map((day, index) => {
+                    {!detailHeavyContentReady
+                        ? Array.from({ length: Math.min(14, totalDays) }, (_, i) => (
+                            <View
+                                key={`grid-warmup-${i}`}
+                                style={[
+                                    styles.dayButtonPlaceholder,
+                                    styles.dayButtonWarmup,
+                                    { backgroundColor: theme.colors.surfaceElevated, borderColor: theme.colors.border },
+                                ]}
+                            />
+                        ))
+                        : null}
+
+                    {visibleDays.map((day, index) => {
                         const dateStr = getDayDate(index);
-                        const isCompleted = habit.completedDates.includes(dateStr);
-                        const isMilestone = milestones.includes(day);
+                        const isCompleted = completedDateSet.has(dateStr);
+                        const isMilestone = milestoneSet.has(day);
                         const canInteract = activeMissionDaySlot !== null && day === activeMissionDaySlot;
                         const locked = !isCompleted && !canInteract;
                         const isCurrentMissionDay = canInteract && !isCompleted;
@@ -1551,7 +1627,7 @@ export default function HabitDetail() {
                                     streakMem.imageUrl ||
                                     streakMem.imageUri),
                         );
-                        const repaired = Boolean(habit.repairedDates?.includes(dateStr));
+                        const repaired = repairedDateSet.has(dateStr);
                         const repairSource = streakMem?.repairSource;
 
                         return (
@@ -1575,13 +1651,14 @@ export default function HabitDetail() {
                     })}
 
                     {(() => {
-                        const remainder = totalDays % 7;
+                        const renderedDayCount = detailHeavyContentReady ? visibleDays.length : Math.min(14, totalDays);
+                        const remainder = renderedDayCount % 7;
                         if (remainder === 0) return null;
                         return Array.from({ length: 7 - remainder }, (_, i) => <View key={`ph-${i}`} style={styles.dayButtonPlaceholder} />);
                     })()}
                 </View>
 
-                <StreakMemoryGallery entries={memoryGalleryEntries} />
+                {memoryGalleryEntries.length > 0 ? <StreakMemoryGallery entries={memoryGalleryEntries} /> : null}
             </ScrollView>
 
             <OperationProgressDialog
@@ -1874,6 +1951,7 @@ const styles = StyleSheet.create({
     brandRingDayTextTwoDigit: { fontSize: 12 },
     brandRingAccent: { position: 'absolute', top: 2, right: 2 },
     dayButtonPlaceholder: { width: '13%', aspectRatio: 1, marginBottom: 14 },
+    dayButtonWarmup: { borderWidth: 1, borderRadius: 12, opacity: 0.56 },
     missionTimerSlot: {
         padding: 20,
         marginBottom: 32,

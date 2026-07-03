@@ -50,7 +50,7 @@ export function StreakMemoryGallery({
   if (entries.length === 0) return null;
 
   const w = Dimensions.get("window").width;
-  const cardW = Math.min(160, (w - 48) / 2.2);
+  const cardW = Math.min(168, (w - 48) / 2.1);
   const viewerUri =
     open?.memory?.imageUrl || open?.memory?.imageUri;
   const modalHasRenderableImage = Boolean(
@@ -279,12 +279,13 @@ const styles = StyleSheet.create({
   sectionHead: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 6 },
   sectionTitle: { fontSize: 17, fontWeight: "800" },
   sectionHint: { fontSize: 12, marginBottom: 12, lineHeight: 17 },
-  row: { gap: 12, paddingRight: 8 },
+  row: { paddingRight: 10 },
   card: {
     borderRadius: 14,
     borderWidth: 1,
     overflow: "hidden",
     paddingBottom: 10,
+    marginRight: 2,
   },
   thumb: { width: "100%", aspectRatio: 4 / 5, backgroundColor: "#111" },
   thumbPlaceholder: {

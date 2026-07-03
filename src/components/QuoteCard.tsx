@@ -1,7 +1,6 @@
 import { Text } from "./AppText";
 import {
-  useState,
-  useEffect } from 'react';
+  useMemo } from 'react';
 import { View,
   StyleSheet,
 } from "react-native";
@@ -11,12 +10,7 @@ import { Quote } from 'lucide-react-native';
 
 export function QuoteCard() {
     const { theme } = useTheme();
-    const [quote, setQuote] = useState('');
-
-    useEffect(() => {
-        const randomQuote = quotes[Math.floor(Math.random() * quotes.length)];
-        setQuote(randomQuote);
-    }, []);
+    const quote = useMemo(() => quotes[Math.floor(Math.random() * quotes.length)], []);
 
     return (
         <View
