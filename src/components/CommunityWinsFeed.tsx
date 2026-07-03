@@ -12,6 +12,7 @@ import {
   StyleSheet,
   ActivityIndicator,
   RefreshControl,
+  InteractionManager,
 } from "react-native";
 import { FlashList, type ListRenderItem } from "@shopify/flash-list";
 import type { ReactElement } from "react";
@@ -164,7 +165,16 @@ export function CommunityWinsFeed({
 
   useFocusEffect(
     useCallback(() => {
-      void loadInitial();
+      if (itemsRef.current.length === 0) {
+        void loadInitial();
+        return undefined;
+      }
+      const task = InteractionManager.runAfterInteractions(() => {
+        void loadInitial();
+      });
+      return () => {
+        task.cancel?.();
+      };
     }, [loadInitial]),
   );
 
@@ -374,6 +384,7 @@ export function CommunityWinsFeed({
         data={listRows}
         keyExtractor={(row) => (row.kind === "skeleton" ? row.id : row.win.id)}
         renderItem={renderItem}
+        getItemType={(row) => row.kind}
         contentContainerStyle={{ paddingBottom: contentPaddingBottom, flexGrow: 1 }}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.indigo[400]} />

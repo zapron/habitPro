@@ -18,6 +18,7 @@ import {
   StyleSheet,
   StatusBar,
   Image,
+  InteractionManager,
 } from "react-native";
 import type { ImageStyle } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
@@ -923,8 +924,20 @@ export default function ProfileScreen() {
   useFocusEffect(
     useCallback(() => {
       setMiniClockNow(Date.now());
-      void refreshPremiumAccess({ serverOnly: true, cachedAccessOk: true, background: true });
-      void loadBackups();
+      let premiumTimer: ReturnType<typeof setTimeout> | null = null;
+      const premiumTask = InteractionManager.runAfterInteractions(() => {
+        premiumTimer = setTimeout(() => {
+          void refreshPremiumAccess({ serverOnly: true, cachedAccessOk: true, background: true });
+        }, 300);
+      });
+      const backupTask = InteractionManager.runAfterInteractions(() => {
+        void loadBackups();
+      });
+      return () => {
+        if (premiumTimer) clearTimeout(premiumTimer);
+        premiumTask.cancel?.();
+        backupTask.cancel?.();
+      };
     }, [loadBackups, refreshPremiumAccess]),
   );
 

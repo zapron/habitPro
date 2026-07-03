@@ -1,5 +1,5 @@
 import { Text } from "../../src/components/AppText";
-import { StatusBar, StyleSheet, TouchableOpacity, View } from "react-native";
+import { InteractionManager, StatusBar, StyleSheet, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Screen } from "../../src/components/Screen";
 import { CommunityWinsFeed } from "../../src/components/CommunityWinsFeed";
@@ -22,7 +22,16 @@ export default function CommunityScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      void refreshPremiumAccess({ serverOnly: true, cachedAccessOk: true, background: true });
+      let timer: ReturnType<typeof setTimeout> | null = null;
+      const task = InteractionManager.runAfterInteractions(() => {
+        timer = setTimeout(() => {
+          void refreshPremiumAccess({ serverOnly: true, cachedAccessOk: true, background: true });
+        }, 300);
+      });
+      return () => {
+        if (timer) clearTimeout(timer);
+        task.cancel?.();
+      };
     }, [refreshPremiumAccess]),
   );
 

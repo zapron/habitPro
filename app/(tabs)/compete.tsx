@@ -18,6 +18,7 @@ import {
   Animated,
   Easing,
   TextInput,
+  InteractionManager,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { FlashList } from "@shopify/flash-list";
@@ -984,10 +985,10 @@ export default function CompeteScreen() {
     }
 
     let cancelled = false;
-    setLeagueSearchLoading(true);
     setLeagueSearchError(null);
     setLeagueSearchReady(false);
     const timer = setTimeout(() => {
+      setLeagueSearchLoading(true);
       void traceAsync(
         "compete.league.search",
         () => searchWeeklyLeaderboard(query, 15),
@@ -1024,20 +1025,34 @@ export default function CompeteScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      if (segment === "challenges" && challengesSubTab === "invites") {
-        void loadInvites();
-      }
-      if (segment === "leaderboard") {
-        void loadLeague();
-      }
+      const task = InteractionManager.runAfterInteractions(() => {
+        if (segment === "challenges" && challengesSubTab === "invites") {
+          void loadInvites();
+        }
+        if (segment === "leaderboard") {
+          void loadLeague();
+        }
+      });
+      return () => {
+        task.cancel?.();
+      };
     }, [challengesSubTab, loadInvites, loadLeague, segment]),
   );
 
   useFocusEffect(
     useCallback(() => {
-      if (!isPremium || premiumLoading) {
-        void refreshPremiumAccess({ serverOnly: true, cachedAccessOk: true, background: true });
-      }
+      let timer: ReturnType<typeof setTimeout> | null = null;
+      const task = InteractionManager.runAfterInteractions(() => {
+        timer = setTimeout(() => {
+          if (!isPremium || premiumLoading) {
+            void refreshPremiumAccess({ serverOnly: true, cachedAccessOk: true, background: true });
+          }
+        }, 300);
+      });
+      return () => {
+        if (timer) clearTimeout(timer);
+        task.cancel?.();
+      };
     }, [isPremium, premiumLoading, refreshPremiumAccess]),
   );
 

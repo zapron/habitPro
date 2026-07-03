@@ -2,6 +2,7 @@ import { Text } from "./AppText";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
+  InteractionManager,
   Modal,
   Platform,
   Pressable,
@@ -92,21 +93,28 @@ export function CommunityWinCheerersModal({ visible, winId, totalLikes, onClose 
   useEffect(() => {
     if (!visible || !winId) return;
     let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
     setLoading(true);
     setError(null);
-    void (async () => {
-      const res = await listCommunityWinCheerers(winId, 60);
-      if (cancelled) return;
-      if (res.ok === false) {
-        setError(res.error);
-        setItems([]);
-      } else {
-        setItems(res.items);
-      }
-      setLoading(false);
-    })();
+    const task = InteractionManager.runAfterInteractions(() => {
+      timer = setTimeout(() => {
+        void (async () => {
+          const res = await listCommunityWinCheerers(winId, 60);
+          if (cancelled) return;
+          if (res.ok === false) {
+            setError(res.error);
+            setItems([]);
+          } else {
+            setItems(res.items);
+          }
+          setLoading(false);
+        })();
+      }, 120);
+    });
     return () => {
       cancelled = true;
+      task.cancel?.();
+      if (timer) clearTimeout(timer);
     };
   }, [visible, winId]);
 

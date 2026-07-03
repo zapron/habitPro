@@ -16,6 +16,7 @@ import {
   StatusBar,
   ActivityIndicator,
   Easing,
+  InteractionManager,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
@@ -33,6 +34,33 @@ import type { AppTheme } from "../src/styles/theme";
 import { formatDateDisplay, formatDateTimeDisplay } from "../src/utils/dateDisplay";
 
 const NOTIFICATION_PAGE_SIZE = 20;
+const NOTIFICATION_FIRST_PAGE_CACHE_TTL_MS = 45_000;
+
+type NotificationFirstPageCache = {
+  userId: string;
+  items: NotificationRow[];
+  hasMore: boolean;
+  nextOffset: number | null;
+  fetchedAt: number;
+};
+
+let notificationFirstPageCache: NotificationFirstPageCache | null = null;
+let notificationFirstPageInFlight: Promise<{
+  items: NotificationRow[];
+  hasMore: boolean;
+  nextOffset: number | null;
+}> | null = null;
+
+function updateNotificationFirstPageCache(
+  userId: string | null,
+  updater: (items: NotificationRow[]) => NotificationRow[],
+) {
+  if (!userId || notificationFirstPageCache?.userId !== userId) return;
+  notificationFirstPageCache = {
+    ...notificationFirstPageCache,
+    items: updater(notificationFirstPageCache.items),
+  };
+}
 
 function groupMissionInviteSubtitle(n: NotificationRow): string {
   const p = n.payload ?? {};
@@ -341,12 +369,43 @@ export default function NotificationsScreen() {
       setNextOffset(null);
       return;
     }
+
+    const cache = notificationFirstPageCache;
+    const now = Date.now();
+    const canUseCache =
+      !options?.force &&
+      cache?.userId === requestedUserId &&
+      cache.items.length > 0 &&
+      now - cache.fetchedAt < NOTIFICATION_FIRST_PAGE_CACHE_TTL_MS;
+
+    if (canUseCache) {
+      setItems(cache.items);
+      setHasMore(cache.hasMore);
+      setNextOffset(cache.nextOffset);
+      setLoading(false);
+      return;
+    }
+
     if (itemsRef.current.length === 0 || options?.force) {
       setLoading(true);
     }
     try {
-      const page = await listNotificationsPage({ offset: 0, limit: NOTIFICATION_PAGE_SIZE });
+      const request =
+        !options?.force && notificationFirstPageInFlight
+          ? notificationFirstPageInFlight
+          : listNotificationsPage({ offset: 0, limit: NOTIFICATION_PAGE_SIZE }).finally(() => {
+              notificationFirstPageInFlight = null;
+            });
+      notificationFirstPageInFlight = request;
+      const page = await request;
       if (userIdRef.current !== requestedUserId) return;
+      notificationFirstPageCache = {
+        userId: requestedUserId,
+        items: page.items,
+        hasMore: page.hasMore,
+        nextOffset: page.nextOffset,
+        fetchedAt: Date.now(),
+      };
       setItems(page.items);
       setHasMore(page.hasMore);
       setNextOffset(page.nextOffset);
@@ -376,17 +435,35 @@ export default function NotificationsScreen() {
 
   useLayoutEffect(() => {
     userIdRef.current = userId;
-    setItems([]);
+    const cache = notificationFirstPageCache;
+    if (userId && cache?.userId === userId && cache.items.length > 0) {
+      setItems(cache.items);
+      setHasMore(cache.hasMore);
+      setNextOffset(cache.nextOffset);
+      setLoading(false);
+    } else {
+      setItems([]);
+      setHasMore(false);
+      setNextOffset(null);
+      setLoading(Boolean(userId));
+    }
     setMarkingAll(false);
     setLoadingMore(false);
-    setHasMore(false);
-    setNextOffset(null);
-    setLoading(Boolean(userId));
   }, [userId]);
 
   useFocusEffect(
     useCallback(() => {
-      void load();
+      const hasRows = itemsRef.current.length > 0;
+      if (!hasRows) {
+        void load();
+        return undefined;
+      }
+      const task = InteractionManager.runAfterInteractions(() => {
+        void load();
+      });
+      return () => {
+        task.cancel?.();
+      };
     }, [load]),
   );
 
@@ -394,6 +471,9 @@ export default function NotificationsScreen() {
     if (!n.read_at) {
       const readAt = new Date().toISOString();
       setItems((prev) => prev.map((x) => (x.id === n.id ? { ...x, read_at: readAt } : x)));
+      updateNotificationFirstPageCache(userIdRef.current, (prev) =>
+        prev.map((x) => (x.id === n.id ? { ...x, read_at: readAt } : x)),
+      );
       void markNotificationRead(n.id).catch(() => undefined);
     }
     const p = n.payload ?? {};
@@ -512,12 +592,20 @@ export default function NotificationsScreen() {
     if (!hasUnread || markingAll) return;
     setMarkingAll(true);
     const previous = itemsRef.current;
+    const previousCacheItems =
+      notificationFirstPageCache?.userId === userIdRef.current ? notificationFirstPageCache.items : null;
     const nowIso = new Date().toISOString();
     setItems((prev) => prev.map((n) => (n.read_at ? n : { ...n, read_at: nowIso })));
+    updateNotificationFirstPageCache(userIdRef.current, (prev) =>
+      prev.map((n) => (n.read_at ? n : { ...n, read_at: nowIso })),
+    );
     try {
       await markAllNotificationsRead();
     } catch (e) {
       setItems(previous);
+      if (previousCacheItems) {
+        updateNotificationFirstPageCache(userIdRef.current, () => previousCacheItems);
+      }
       if (__DEV__) console.warn("[notifications] markAllNotificationsRead", e);
     } finally {
       setMarkingAll(false);
