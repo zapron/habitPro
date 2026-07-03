@@ -503,7 +503,8 @@ const LeagueRow = memo(function LeagueRow({
 }) {
   const accent = leaderboardAccent(entry.rankPosition, theme);
   const xpInLevel = xpInCurrentLevel(entry.xp);
-  const displayName = entry.displayName ?? `@${entry.username}`;
+  const usernameLabel = entry.username.replace(/^@+/, "");
+  const displayName = (entry.displayName?.trim() || usernameLabel).replace(/^@+/, "");
   const showHandle = Boolean(entry.displayName);
   const playerLeague = lifetimeLeagueForLevel(entry.level, theme, isDark);
   return (
@@ -551,7 +552,7 @@ const LeagueRow = memo(function LeagueRow({
           </Text>
           {showHandle ? (
             <Text style={[styles.leagueHandle, { color: theme.colors.textMuted }]} numberOfLines={1}>
-              - @{entry.username}
+              - {usernameLabel}
             </Text>
           ) : null}
         </View>
