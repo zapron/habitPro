@@ -524,6 +524,8 @@ async function fetchChallengePrimarySnapshotViaRpc(
  */
 const primarySnapshotCache = new Map<string, ChallengePrimarySnapshot>();
 const primarySnapshotInFlight = new Map<string, Promise<ChallengePrimarySnapshot>>();
+const streakMembersPageCache = new Map<string, PageResult<ChallengeStreakMemberPageItem>>();
+const streakMembersPageInFlight = new Map<string, Promise<PageResult<ChallengeStreakMemberPageItem>>>();
 let challengeStreakMembersPageRpcUnavailable = false;
 let challengeStreakMembersPageRpcWarned = false;
 
@@ -532,6 +534,19 @@ export function getCachedChallengePrimarySnapshot(
   challengeId: string,
 ): ChallengePrimarySnapshot | null {
   return primarySnapshotCache.get(challengeId) ?? null;
+}
+
+function streakMembersPageCacheKey(challengeId: string, offset: number, limit: number): string {
+  return `${challengeId}:${offset}:${limit}`;
+}
+
+export function getCachedChallengeStreakMembersPage(
+  challengeId: string,
+  request: PageRequest,
+): PageResult<ChallengeStreakMemberPageItem> | null {
+  const offset = Math.max(0, Math.floor(request.offset));
+  const limit = Math.max(1, Math.floor(request.limit));
+  return streakMembersPageCache.get(streakMembersPageCacheKey(challengeId, offset, limit)) ?? null;
 }
 
 export async function loadChallengePrimarySnapshot(
@@ -744,88 +759,114 @@ const PAGE_HABIT_ROW_SELECT = `${LIGHTWEIGHT_HABIT_ROW_SELECT}, streak_memories`
 
 export async function listChallengeStreakMembersPage(
   challengeId: string,
-  request: PageRequest,
+  request: PageRequest & { cache?: "prefer" | "bypass" },
 ): Promise<PageResult<ChallengeStreakMemberPageItem>> {
   const supabase = getSupabase();
   const offset = Math.max(0, Math.floor(request.offset));
   const limit = Math.max(1, Math.floor(request.limit));
   if (!supabase) return { items: [], hasMore: false, nextOffset: null };
-
-  const viaRpc = await listChallengeStreakMembersPageViaRpc(challengeId, { offset, limit });
-  if (viaRpc) return viaRpc;
-
-  const group = await getChallengeGroup(challengeId);
-  const members = await listChallengeMembers(challengeId);
-  const habitIds = [...new Set(members.map((m) => m.habit_id).filter((id): id is string => Boolean(id)))];
-  const labels = await getProfileLabelsForIds(members.map((m) => m.user_id));
-  const habitRows =
-    habitIds.length > 0
-      ? await supabase
-          .from("habits")
-          .select(LIGHTWEIGHT_HABIT_ROW_SELECT)
-          .in("id", habitIds)
-      : { data: [] as unknown[], error: null };
-  if (habitRows.error) throw habitRows.error;
-  const habitByOwnerAndId = new Map<string, Habit>();
-  for (const raw of habitRows.data ?? []) {
-    if (!raw || typeof raw !== "object") continue;
-    const row = raw as Record<string, unknown>;
-    const owner = typeof row.user_id === "string" ? row.user_id : "";
-    const hid = typeof row.id === "string" ? row.id : "";
-    const habit = lightweightHabitFromRpc(row, challengeId, {
-      startDate: group?.start_date,
-      habitTemplate: group?.habit_template,
-    });
-    if (owner && hid && habit) habitByOwnerAndId.set(`${owner}:${hid}`, habit);
+  const cacheKey = streakMembersPageCacheKey(challengeId, offset, limit);
+  if (request.cache !== "bypass") {
+    const cached = streakMembersPageCache.get(cacheKey);
+    if (cached) return cached;
+    const inFlight = streakMembersPageInFlight.get(cacheKey);
+    if (inFlight) return inFlight;
   }
-  const allItems = members.map((member) => {
-    const habit = member.habit_id ? habitByOwnerAndId.get(`${member.user_id}:${member.habit_id}`) : undefined;
-    return { memberId: member.user_id, label: labels[member.user_id], habit };
-  }).sort((a, b) => {
-    const sa = a.habit?.streak ?? -1;
-    const sb = b.habit?.streak ?? -1;
-    if (sb !== sa) return sb - sa;
-    const ca = a.habit?.completedDates.length ?? 0;
-    const cb = b.habit?.completedDates.length ?? 0;
-    if (cb !== ca) return cb - ca;
-    return a.memberId.localeCompare(b.memberId);
-  });
-  const slicedRows = allItems.slice(offset, offset + limit + 1);
-  const hasMore = slicedRows.length > limit;
-  const pageRows = hasMore ? slicedRows.slice(0, limit) : slicedRows;
-  const pageHabitIds = [
-    ...new Set(pageRows.map((item) => item.habit?.id).filter((id): id is string => Boolean(id))),
-  ];
-  const pageHabitRows =
-    pageHabitIds.length > 0
-      ? await supabase
-          .from("habits")
-          .select(PAGE_HABIT_ROW_SELECT)
-          .in("id", pageHabitIds)
-      : { data: [] as unknown[], error: null };
-  if (pageHabitRows.error) throw pageHabitRows.error;
-  const pageHabitByOwnerAndId = new Map<string, Habit>();
-  for (const raw of pageHabitRows.data ?? []) {
-    if (!raw || typeof raw !== "object") continue;
-    const row = raw as Record<string, unknown>;
-    const owner = typeof row.user_id === "string" ? row.user_id : "";
-    const hid = typeof row.id === "string" ? row.id : "";
-    const habit = lightweightHabitFromRpc(row, challengeId, {
-      startDate: group?.start_date,
-      habitTemplate: group?.habit_template,
+
+  const requestPromise = (async () => {
+    const viaRpc = await listChallengeStreakMembersPageViaRpc(challengeId, { offset, limit });
+    if (viaRpc) {
+      streakMembersPageCache.set(cacheKey, viaRpc);
+      return viaRpc;
+    }
+
+    const group = await getChallengeGroup(challengeId);
+    const members = await listChallengeMembers(challengeId);
+    const habitIds = [...new Set(members.map((m) => m.habit_id).filter((id): id is string => Boolean(id)))];
+    const labels = await getProfileLabelsForIds(members.map((m) => m.user_id));
+    const habitRows =
+      habitIds.length > 0
+        ? await supabase
+            .from("habits")
+            .select(LIGHTWEIGHT_HABIT_ROW_SELECT)
+            .in("id", habitIds)
+        : { data: [] as unknown[], error: null };
+    if (habitRows.error) throw habitRows.error;
+    const habitByOwnerAndId = new Map<string, Habit>();
+    for (const raw of habitRows.data ?? []) {
+      if (!raw || typeof raw !== "object") continue;
+      const row = raw as Record<string, unknown>;
+      const owner = typeof row.user_id === "string" ? row.user_id : "";
+      const hid = typeof row.id === "string" ? row.id : "";
+      const habit = lightweightHabitFromRpc(row, challengeId, {
+        startDate: group?.start_date,
+        habitTemplate: group?.habit_template,
+      });
+      if (owner && hid && habit) habitByOwnerAndId.set(`${owner}:${hid}`, habit);
+    }
+    const allItems = members.map((member) => {
+      const habit = member.habit_id ? habitByOwnerAndId.get(`${member.user_id}:${member.habit_id}`) : undefined;
+      return { memberId: member.user_id, label: labels[member.user_id], habit };
+    }).sort((a, b) => {
+      const sa = a.habit?.streak ?? -1;
+      const sb = b.habit?.streak ?? -1;
+      if (sb !== sa) return sb - sa;
+      const ca = a.habit?.completedDates.length ?? 0;
+      const cb = b.habit?.completedDates.length ?? 0;
+      if (cb !== ca) return cb - ca;
+      return a.memberId.localeCompare(b.memberId);
     });
-    if (owner && hid && habit) pageHabitByOwnerAndId.set(`${owner}:${hid}`, habit);
-  }
-  const hydratedPageRows = pageRows.map((item) => {
-    if (!item.habit?.ownerUserId) return item;
-    const habit = pageHabitByOwnerAndId.get(`${item.habit.ownerUserId}:${item.habit.id}`);
-    return habit ? { ...item, habit } : item;
+    const slicedRows = allItems.slice(offset, offset + limit + 1);
+    const hasMore = slicedRows.length > limit;
+    const pageRows = hasMore ? slicedRows.slice(0, limit) : slicedRows;
+    const pageHabitIds = [
+      ...new Set(pageRows.map((item) => item.habit?.id).filter((id): id is string => Boolean(id))),
+    ];
+    const pageHabitRows =
+      pageHabitIds.length > 0
+        ? await supabase
+            .from("habits")
+            .select(PAGE_HABIT_ROW_SELECT)
+            .in("id", pageHabitIds)
+        : { data: [] as unknown[], error: null };
+    if (pageHabitRows.error) throw pageHabitRows.error;
+    const pageHabitByOwnerAndId = new Map<string, Habit>();
+    for (const raw of pageHabitRows.data ?? []) {
+      if (!raw || typeof raw !== "object") continue;
+      const row = raw as Record<string, unknown>;
+      const owner = typeof row.user_id === "string" ? row.user_id : "";
+      const hid = typeof row.id === "string" ? row.id : "";
+      const habit = lightweightHabitFromRpc(row, challengeId, {
+        startDate: group?.start_date,
+        habitTemplate: group?.habit_template,
+      });
+      if (owner && hid && habit) pageHabitByOwnerAndId.set(`${owner}:${hid}`, habit);
+    }
+    const hydratedPageRows = pageRows.map((item) => {
+      if (!item.habit?.ownerUserId) return item;
+      const habit = pageHabitByOwnerAndId.get(`${item.habit.ownerUserId}:${item.habit.id}`);
+      return habit ? { ...item, habit } : item;
+    });
+    const result = {
+      items: hydratedPageRows,
+      hasMore,
+      nextOffset: hasMore ? offset + limit : null,
+    };
+    streakMembersPageCache.set(cacheKey, result);
+    return result;
+  })().finally(() => {
+    streakMembersPageInFlight.delete(cacheKey);
   });
-  return {
-    items: hydratedPageRows,
-    hasMore,
-    nextOffset: hasMore ? offset + limit : null,
-  };
+
+  streakMembersPageInFlight.set(cacheKey, requestPromise);
+  return requestPromise;
+}
+
+export async function prewarmChallengeStreaks(challengeId: string, initialLimit = 3): Promise<void> {
+  await Promise.all([
+    loadChallengePrimarySnapshot(challengeId),
+    listChallengeStreakMembersPage(challengeId, { offset: 0, limit: initialLimit }),
+  ]);
 }
 
 export async function getChallengeGroup(id: string): Promise<ChallengeGroupRow | null> {

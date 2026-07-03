@@ -11,10 +11,10 @@ import {
   StyleSheet,
   Modal,
   Image,
-  ScrollView,
   ActivityIndicator,
   TouchableOpacity,
 } from "react-native";
+import { FlashList } from "@shopify/flash-list";
 import { X, Camera, MessageSquare, Lock, Check } from "lucide-react-native";
 import { useTheme } from "../context/ThemeContext";
 import { fetchChallengeMemoryDetail, type PhotoSyncState } from "../lib/challengeMemoryDetail";
@@ -22,6 +22,10 @@ import type { AppTheme } from "../styles/theme";
 import type { Habit, StreakMemory } from "../types/habit";
 import { formatDateDisplay } from "../utils/dateDisplay";
 import { calendarDateForHabitMissionDayIndex, getHabitActiveMissionDaySlot } from "../utils/missionDaySlots";
+
+const DOT_SIZE = 36;
+const DOT_GAP = 8;
+const DOT_STEP = DOT_SIZE + DOT_GAP;
 
 /** Dot timeline key: Completed / Today / Upcoming. Use once beside the cohort participants heading. */
 export function CohortParticipantTimelineLegend({
@@ -128,6 +132,7 @@ export const CohortPeerStreakDots = memo(function CohortPeerStreakDots({
   const total = Math.max(1, habit.totalDays ?? 21);
   const nowMs = nowMsProp ?? Date.now();
   const activeSlot = getHabitActiveMissionDaySlot(habit, nowMs);
+  const completedDateSet = useMemo(() => new Set(habit.completedDates), [habit.completedDates]);
 
   const days = useMemo(() => {
     const out: {
@@ -138,12 +143,12 @@ export const CohortPeerStreakDots = memo(function CohortPeerStreakDots({
     }[] = [];
     for (let i = 0; i < total; i++) {
       const dateStr = calendarDateForHabitMissionDayIndex(habit, i, nowMs);
-      const completed = habit.completedDates.includes(dateStr);
+      const completed = completedDateSet.has(dateStr);
       const memory = habit.streakMemories?.[dateStr];
       out.push({ dayNum: i + 1, dateStr, completed, memory });
     }
     return out;
-  }, [habit, nowMs, total]);
+  }, [completedDateSet, habit, nowMs, total]);
 
   const [open, setOpen] = useState<{
     dateStr: string;
@@ -228,94 +233,103 @@ export const CohortPeerStreakDots = memo(function CohortPeerStreakDots({
     [challengeIdOverride, habit.challengeGroupId, habit.id, habit.ownerUserId],
   );
 
+  const renderDot = useCallback(
+    ({ item }: { item: (typeof days)[number] }) => {
+      const { dayNum, dateStr, completed, memory } = item;
+      const isCurrentSlot = activeSlot === dayNum;
+      const isPublic = (habit.visibility ?? "solo") === "public";
+      const marker = habit.streakMemoryMarkers?.[dateStr];
+      const hasPhoto = completed && isPublic && Boolean(marker?.hasPhoto || memory?.imageUrl || memory?.imageUri);
+      const hasNoteOnly = completed && isPublic && !hasPhoto && Boolean(marker?.hasNote || memory?.note?.trim());
+      const hasMemory = hasPhoto || hasNoteOnly;
+      const isCheckInOnly = completed && isPublic && !hasMemory;
+      const tappable = completed;
+
+      // Completed days share the same indigo circle; memory days add camera/text badges.
+      let dotBg = theme.colors.surfaceElevated;
+      let dotBorder = isCurrentSlot ? theme.colors.amber[500] : theme.colors.border;
+      let dotText = theme.colors.textMuted;
+      let extraStyle = {};
+
+      if (completed) {
+        dotBg = isDark ? "#23274e" : "#eef2ff";
+        dotBorder = isCurrentSlot
+          ? isDark ? "rgba(245, 158, 11, 0.72)" : "rgba(217, 119, 6, 0.58)"
+          : isDark ? "rgba(99, 102, 241, 0.62)" : "rgba(79, 70, 229, 0.42)";
+        dotText = isDark ? theme.colors.white : theme.colors.indigo[600];
+        extraStyle = {
+          shadowColor: theme.colors.indigo[500],
+          shadowOffset: { width: 0, height: 1.2 },
+          shadowOpacity: 0.22,
+          shadowRadius: 2.2,
+          elevation: 2,
+        };
+      }
+
+      return (
+        <Pressable
+          onPress={() => {
+            if (!completed) return;
+            if (!isPublic) {
+              setOpen({ dateStr, isPrivate: true });
+            } else if (hasMemory) {
+              void openRemoteMemory(dateStr, memory, hasPhoto ? "photo" : "text");
+            } else if (isCheckInOnly) {
+              setOpen({ dateStr, isCheckInOnly: true });
+            }
+          }}
+          disabled={!tappable}
+          style={[
+            styles.dot,
+            {
+              borderColor: dotBorder,
+              backgroundColor: dotBg,
+              opacity: tappable ? 1 : completed ? 0.95 : 0.45,
+              ...extraStyle,
+            },
+          ]}
+        >
+          <Text
+            style={[
+              styles.dotNum,
+              { color: dotText },
+            ]}
+          >
+            {dayNum}
+          </Text>
+
+          {isPublic && hasPhoto ? (
+            <View style={[styles.floatingBadge, { backgroundColor: theme.colors.amber[500], borderColor: theme.colors.surfaceElevated }]}>
+              <Camera size={7.5} color="#111827" strokeWidth={2.5} />
+            </View>
+          ) : isPublic && hasNoteOnly ? (
+            <View style={[styles.floatingBadge, { backgroundColor: theme.colors.indigo[500], borderColor: theme.colors.surfaceElevated }]}>
+              <MessageSquare size={7.5} color="#ffffff" strokeWidth={2.5} />
+            </View>
+          ) : null}
+        </Pressable>
+      );
+    },
+    [activeSlot, habit.streakMemoryMarkers, habit.visibility, isDark, openRemoteMemory, theme],
+  );
+
   const dots = (
     <>
-      <ScrollView
+      <FlashList
+        data={days}
         horizontal
+        drawDistance={DOT_STEP * 8}
         showsHorizontalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
         directionalLockEnabled
         canCancelContentTouches={false}
+        keyExtractor={(item) => item.dateStr}
+        renderItem={renderDot}
+        ItemSeparatorComponent={() => <View style={styles.dotSeparator} />}
+        removeClippedSubviews
+        style={styles.dotsList}
         contentContainerStyle={styles.dotsRow}
-      >
-        {days.map(({ dayNum, dateStr, completed, memory }) => {
-          const isCurrentSlot = activeSlot === dayNum;
-          const isPublic = (habit.visibility ?? "solo") === "public";
-          const marker = habit.streakMemoryMarkers?.[dateStr];
-          const hasPhoto = completed && isPublic && Boolean(marker?.hasPhoto || memory?.imageUrl || memory?.imageUri);
-          const hasNoteOnly = completed && isPublic && !hasPhoto && Boolean(marker?.hasNote || memory?.note?.trim());
-          const hasMemory = hasPhoto || hasNoteOnly;
-          const isCheckInOnly = completed && isPublic && !hasMemory;
-          const tappable = completed;
-
-          // Completed days share the same indigo circle; memory days add camera/text badges.
-          let dotBg = theme.colors.surfaceElevated;
-          let dotBorder = isCurrentSlot ? theme.colors.amber[500] : theme.colors.border;
-          let dotText = theme.colors.textMuted;
-          let extraStyle = {};
-
-          if (completed) {
-            dotBg = isDark ? "#23274e" : "#eef2ff";
-            dotBorder = isCurrentSlot
-              ? isDark ? "rgba(245, 158, 11, 0.72)" : "rgba(217, 119, 6, 0.58)"
-              : isDark ? "rgba(99, 102, 241, 0.62)" : "rgba(79, 70, 229, 0.42)";
-            dotText = isDark ? theme.colors.white : theme.colors.indigo[600];
-            extraStyle = {
-              shadowColor: theme.colors.indigo[500],
-              shadowOffset: { width: 0, height: 1.2 },
-              shadowOpacity: 0.22,
-              shadowRadius: 2.2,
-              elevation: 2,
-            };
-          }
-
-          return (
-            <Pressable
-              key={dateStr}
-              onPress={() => {
-                if (!completed) return;
-                if (!isPublic) {
-                  setOpen({ dateStr, isPrivate: true });
-                } else if (hasMemory) {
-                  void openRemoteMemory(dateStr, memory, hasPhoto ? "photo" : "text");
-                } else if (isCheckInOnly) {
-                  setOpen({ dateStr, isCheckInOnly: true });
-                }
-              }}
-              disabled={!tappable}
-              style={[
-                styles.dot,
-                {
-                  borderColor: dotBorder,
-                  backgroundColor: dotBg,
-                  opacity: tappable ? 1 : completed ? 0.95 : 0.45,
-                  ...extraStyle,
-                },
-              ]}
-            >
-              <Text
-                style={[
-                  styles.dotNum,
-                  { color: dotText },
-                ]}
-              >
-                {dayNum}
-              </Text>
-              
-              {/* Option A Micro-badges (Only rendered for public streaks with memory) */}
-              {isPublic && hasPhoto ? (
-                <View style={[styles.floatingBadge, { backgroundColor: theme.colors.amber[500], borderColor: theme.colors.surfaceElevated }]}>
-                  <Camera size={7.5} color="#111827" strokeWidth={2.5} />
-                </View>
-              ) : isPublic && hasNoteOnly ? (
-                <View style={[styles.floatingBadge, { backgroundColor: theme.colors.indigo[500], borderColor: theme.colors.surfaceElevated }]}>
-                  <MessageSquare size={7.5} color="#ffffff" strokeWidth={2.5} />
-                </View>
-              ) : null}
-            </Pressable>
-          );
-        })}
-      </ScrollView>
+      />
 
       <Modal visible={open !== null} transparent animationType="fade" onRequestClose={handleClose}>
         <Pressable style={[styles.viewerBackdrop, { backgroundColor: "rgba(0,0,0,0.85)" }]} onPress={handleClose}>
@@ -472,10 +486,12 @@ const styles = StyleSheet.create({
   headRow: { marginBottom: 10 },
   handle: { fontWeight: "800", fontSize: 15 },
   meta: { fontSize: 13, marginTop: 4 },
-  dotsRow: { flexDirection: "row", gap: 8, paddingVertical: 4, paddingRight: 12 },
+  dotsList: { height: DOT_SIZE + 8 },
+  dotsRow: { paddingVertical: 4, paddingRight: 12 },
+  dotSeparator: { width: DOT_GAP },
   dot: {
-    width: 36,
-    height: 36,
+    width: DOT_SIZE,
+    height: DOT_SIZE,
     borderRadius: 9999,
     borderWidth: 2,
     alignItems: "center",

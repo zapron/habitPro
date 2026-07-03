@@ -7,6 +7,7 @@ import {
   StyleSheet,
   Animated,
   Easing,
+  InteractionManager,
 } from "react-native";
 import { useRouter } from 'expo-router';
 import { Flame, Check, CircleX, Plane, Gamepad2, Globe, Swords, Users } from 'lucide-react-native';
@@ -19,6 +20,9 @@ import { getEligibleStreakRepair } from "../utils/streakRepairEligibility";
 import { calendarDateForHabitMissionDayIndex, getHabitActiveMissionDaySlot } from "../utils/missionDaySlots";
 import { useReducedMotion } from "../hooks/useReducedMotion";
 import Svg, { Circle, G } from "react-native-svg";
+import { prewarmChallengeStreaks } from "../lib/groupChallengesApi";
+
+const prewarmedGroupStreakIds = new Set<string>();
 
 function clamp(n: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, n));
@@ -226,12 +230,32 @@ export const HabitCard = memo(({ item, nowMs }: HabitCardProps) => {
       };
     }, [streakCheckinAvailable, reduceMotion, pulse]);
 
+    useEffect(() => {
+      const challengeId = item.challengeGroupId;
+      if (!challengeId || prewarmedGroupStreakIds.has(challengeId)) return undefined;
+      prewarmedGroupStreakIds.add(challengeId);
+      let started = false;
+      const task = InteractionManager.runAfterInteractions(() => {
+        started = true;
+        void prewarmChallengeStreaks(challengeId).catch((error) => {
+          prewarmedGroupStreakIds.delete(challengeId);
+          if (__DEV__) console.warn("[habitCard] prewarmChallengeStreaks", error);
+        });
+      });
+      return () => {
+        if (!started) prewarmedGroupStreakIds.delete(challengeId);
+        task.cancel?.();
+      };
+    }, [item.challengeGroupId]);
+
     const pulseScale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.22] });
     const pulseOpacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.22, 0.62] });
 
     const openHabit = () => {
-        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         router.push(`/habit/${item.id}`);
+        setTimeout(() => {
+          void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        }, 0);
     };
 
     return (
@@ -346,7 +370,10 @@ export const HabitCard = memo(({ item, nowMs }: HabitCardProps) => {
                           ) : null}
                           {item.challengeGroupId ? (
                             <TouchableOpacity
-                                onPress={() => router.push(`/challenge/${item.challengeGroupId}`)}
+                                onPress={(event) => {
+                                    event.stopPropagation();
+                                    router.push(`/challenge/${item.challengeGroupId}`);
+                                }}
                                 activeOpacity={0.82}
                                 style={[
                                     styles.groupStreakPill,

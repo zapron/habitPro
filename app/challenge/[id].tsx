@@ -57,6 +57,7 @@ import {
 } from "../../src/lib/challengeCohort";
 import {
   getCachedChallengePrimarySnapshot,
+  getCachedChallengeStreakMembersPage,
   getProfileLabelsForIds,
   leaveChallengeGroup,
   listChallengeStreakMembersPage,
@@ -432,14 +433,24 @@ export default function ChallengeDetailScreen() {
   // Seed from the in-memory snapshot cache so revisits paint instantly instead of
   // blocking on a network round trip behind a spinner. Refresh still runs on focus.
   const cachedSnapshot = challengeId ? getCachedChallengePrimarySnapshot(challengeId) : null;
+  const cachedStreakMembersPage = challengeId
+    ? getCachedChallengeStreakMembersPage(challengeId, {
+        offset: 0,
+        limit: STREAK_MEMBERS_INITIAL_PAGE_SIZE,
+      })
+    : null;
   const [group, setGroup] = useState<ChallengeGroupRow | null>(cachedSnapshot?.group ?? null);
   const [loading, setLoading] = useState(!cachedSnapshot);
   const [memberIdsOrdered, setMemberIdsOrdered] = useState<string[]>(
     cachedSnapshot?.memberIdsOrdered ?? [],
   );
-  const [profileLabels, setProfileLabels] = useState<Record<string, ProfileLabel>>(
-    cachedSnapshot?.profileLabels ?? {},
-  );
+  const [profileLabels, setProfileLabels] = useState<Record<string, ProfileLabel>>(() => {
+    const next: Record<string, ProfileLabel> = { ...(cachedSnapshot?.profileLabels ?? {}) };
+    for (const item of cachedStreakMembersPage?.items ?? []) {
+      if (item.label) next[item.memberId] = item.label;
+    }
+    return next;
+  });
   const [feedActivity, setFeedActivity] = useState<ChallengeActivityRow[]>([]);
   const [feedNudges, setFeedNudges] = useState<ChallengeNudgeRow[]>([]);
   const [nudgeBusyKey, setNudgeBusyKey] = useState<string | null>(null);
@@ -455,12 +466,22 @@ export default function ChallengeDetailScreen() {
   const [activityNextOffset, setActivityNextOffset] = useState<number | null>(null);
   const [nudgeNextOffset, setNudgeNextOffset] = useState<number | null>(null);
   const [repairNextOffset, setRepairNextOffset] = useState<number | null>(null);
-  const [streakMemberIds, setStreakMemberIds] = useState<string[]>([]);
-  const [streakHabitByMemberId, setStreakHabitByMemberId] = useState<Record<string, Habit>>({});
-  const [streakNextOffset, setStreakNextOffset] = useState<number | null>(null);
+  const [streakMemberIds, setStreakMemberIds] = useState<string[]>(
+    cachedStreakMembersPage?.items.map((item) => item.memberId) ?? [],
+  );
+  const [streakHabitByMemberId, setStreakHabitByMemberId] = useState<Record<string, Habit>>(() => {
+    const next: Record<string, Habit> = {};
+    for (const item of cachedStreakMembersPage?.items ?? []) {
+      if (item.habit) next[item.memberId] = item.habit;
+    }
+    return next;
+  });
+  const [streakNextOffset, setStreakNextOffset] = useState<number | null>(
+    cachedStreakMembersPage?.nextOffset ?? null,
+  );
   const [streakInitialLoading, setStreakInitialLoading] = useState(false);
   const [streakLoadingMore, setStreakLoadingMore] = useState(false);
-  const [streakHydrated, setStreakHydrated] = useState(false);
+  const [streakHydrated, setStreakHydrated] = useState(Boolean(cachedStreakMembersPage));
   const [cohortNow, setCohortNow] = useState(() => Date.now());
   const [leaveBusy, setLeaveBusy] = useState(false);
   const [leaveDialogOpen, setLeaveDialogOpen] = useState(false);
@@ -475,6 +496,7 @@ export default function ChallengeDetailScreen() {
   } | null>(null);
   const [missionDetailsOpen, setMissionDetailsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<ChallengeDetailTab>(requestedTab);
+  const [streakContentReady, setStreakContentReady] = useState(false);
 
   const themedStyles = useMemo(() => {
     return {
@@ -514,7 +536,8 @@ export default function ChallengeDetailScreen() {
   const activityLoadMoreInFlightRef = useRef(false);
   const repairLoadMoreInFlightRef = useRef(false);
   const streakLoadInFlightRef = useRef(false);
-  const streakNextOffsetRef = useRef<number | null>(null);
+  const streakSeededFromCacheRef = useRef(Boolean(cachedStreakMembersPage));
+  const streakNextOffsetRef = useRef<number | null>(cachedStreakMembersPage?.nextOffset ?? null);
   const socialActionInFlightRef = useRef(false);
   const activeTabRef = useRef<ChallengeDetailTab>("streaks");
 
@@ -639,7 +662,9 @@ export default function ChallengeDetailScreen() {
       const page = await listChallengeStreakMembersPage(challengeId, {
         offset: offset ?? 0,
         limit: reset ? STREAK_MEMBERS_INITIAL_PAGE_SIZE : STREAK_MEMBERS_NEXT_PAGE_SIZE,
+        cache: reset && streakSeededFromCacheRef.current ? "bypass" : "prefer",
       });
+      if (reset) streakSeededFromCacheRef.current = false;
       if (!screenActiveRef.current) return;
       setStreakMemberIds((prev) => {
         if (reset) return page.items.map((item) => item.memberId);
@@ -762,6 +787,13 @@ export default function ChallengeDetailScreen() {
   }, [challengeId]);
 
   useEffect(() => {
+    const seededStreakPage = challengeId
+      ? getCachedChallengeStreakMembersPage(challengeId, {
+          offset: 0,
+          limit: STREAK_MEMBERS_INITIAL_PAGE_SIZE,
+        })
+      : null;
+    setStreakContentReady(false);
     setFeedActivity([]);
     setFeedNudges([]);
     setSentPresetNudgeKeys(new Set());
@@ -773,12 +805,18 @@ export default function ChallengeDetailScreen() {
     setSecondaryLoading(false);
     setRepairHydrated(false);
     setRepairInitialLoading(false);
-    setStreakMemberIds([]);
-    setStreakHabitByMemberId({});
-    setStreakNextOffset(null);
+    setStreakMemberIds(seededStreakPage?.items.map((item) => item.memberId) ?? []);
+    setStreakHabitByMemberId(() => {
+      const next: Record<string, Habit> = {};
+      for (const item of seededStreakPage?.items ?? []) {
+        if (item.habit) next[item.memberId] = item.habit;
+      }
+      return next;
+    });
+    setStreakNextOffset(seededStreakPage?.nextOffset ?? null);
     setStreakInitialLoading(false);
     setStreakLoadingMore(false);
-    setStreakHydrated(false);
+    setStreakHydrated(Boolean(seededStreakPage));
     setActivityNextOffset(null);
     setNudgeNextOffset(null);
     setRepairNextOffset(null);
@@ -791,7 +829,8 @@ export default function ChallengeDetailScreen() {
     activityLoadMoreInFlightRef.current = false;
     repairLoadMoreInFlightRef.current = false;
     streakLoadInFlightRef.current = false;
-    streakNextOffsetRef.current = null;
+    streakSeededFromCacheRef.current = Boolean(seededStreakPage);
+    streakNextOffsetRef.current = seededStreakPage?.nextOffset ?? null;
     activeTabRef.current = requestedTab;
     setActiveTab(requestedTab);
   }, [challengeId, requestedTab]);
@@ -799,18 +838,30 @@ export default function ChallengeDetailScreen() {
   useFocusEffect(
     useCallback(() => {
       screenActiveRef.current = true;
+      setStreakContentReady(false);
       setCohortNow(Date.now());
       const silent = focusOnceRef.current;
       focusOnceRef.current = true;
-      void load({ silent });
-      void loadStreakMembers({ reset: true, silent });
+      const primaryTask = InteractionManager.runAfterInteractions(() => {
+        hydrationTasksRef.current = hydrationTasksRef.current.filter((item) => item !== primaryTask);
+        if (!screenActiveRef.current) return;
+        setStreakContentReady(true);
+        void load({ silent });
+        void loadStreakMembers({ reset: true, silent });
+      });
+      hydrationTasksRef.current.push(primaryTask);
       const focusedTabTask = InteractionManager.runAfterInteractions(() => {
         hydrationTasksRef.current = hydrationTasksRef.current.filter((item) => item !== focusedTabTask);
         if (!screenActiveRef.current) return;
         hydrateFocusedTab();
       });
       hydrationTasksRef.current.push(focusedTabTask);
-      void refreshPremiumAccess({ serverOnly: true, cachedAccessOk: true, background: true });
+      const premiumTask = InteractionManager.runAfterInteractions(() => {
+        hydrationTasksRef.current = hydrationTasksRef.current.filter((item) => item !== premiumTask);
+        if (!screenActiveRef.current) return;
+        void refreshPremiumAccess({ serverOnly: true, cachedAccessOk: true, background: true });
+      });
+      hydrationTasksRef.current.push(premiumTask);
       const repairBadgeTask = InteractionManager.runAfterInteractions(() => {
         hydrationTasksRef.current = hydrationTasksRef.current.filter((item) => item !== repairBadgeTask);
         if (!screenActiveRef.current || activeTabRef.current === "repairs") return;
@@ -819,6 +870,7 @@ export default function ChallengeDetailScreen() {
       hydrationTasksRef.current.push(repairBadgeTask);
       return () => {
         screenActiveRef.current = false;
+        setStreakContentReady(false);
         hydrationTasksRef.current.forEach((task) => task.cancel?.());
         hydrationTasksRef.current = [];
       };
@@ -830,8 +882,9 @@ export default function ChallengeDetailScreen() {
     const supabase = getSupabase();
     if (!supabase) return undefined;
 
+    const channelName = `challenge_repairs_${challengeId}_${Date.now()}_${Math.random().toString(36).slice(2)}`;
     const channel = supabase
-      .channel(`challenge_repairs_${challengeId}`)
+      .channel(channelName)
       .on(
         "postgres_changes",
         {
@@ -1277,6 +1330,7 @@ export default function ChallengeDetailScreen() {
   );
 
   const visibleSortedMemberIds = useMemo(() => {
+    if (!streakContentReady) return [];
     const visibleCount = streakMemberIds.length;
     if (visibleCount === 0) return streakMemberIds;
 
@@ -1307,13 +1361,14 @@ export default function ChallengeDetailScreen() {
         return (indexById.get(a) ?? Number.MAX_SAFE_INTEGER) - (indexById.get(b) ?? Number.MAX_SAFE_INTEGER);
       })
       .slice(0, visibleCount);
-  }, [habitForMember, myHabit, myUserId, streakMemberIds]);
+  }, [habitForMember, myHabit, myUserId, streakContentReady, streakMemberIds]);
 
   const cohortBoard = useMemo((): {
     model: CohortMastheadModel;
     spotlight: { userId: string; habit: Habit; name: string } | null;
     rankedMembers: { userId: string; habit: Habit; name: string }[];
   } | null => {
+    if (!streakContentReady) return null;
     if (memberIdsOrdered.length === 0) return null;
     const rows = memberIdsOrdered.map((id) => ({
       id,
@@ -1354,7 +1409,7 @@ export default function ChallengeDetailScreen() {
       spotlight: { userId: top.id, habit: top.habit, name: top.name },
       rankedMembers,
     };
-  }, [memberIdsOrdered, profileLabels, habitForMember]);
+  }, [memberIdsOrdered, profileLabels, habitForMember, streakContentReady]);
 
   const missionTotalDays = useMemo(() => {
     if (myHabit) return Math.max(1, myHabit.totalDays ?? 21);
@@ -2403,7 +2458,7 @@ export default function ChallengeDetailScreen() {
                 <CohortParticipantTimelineLegend theme={theme} isDark={isDark} />
               </View>
 
-              {!streakHydrated && (streakInitialLoading || memberIdsOrdered.length > 0) ? (
+              {!streakContentReady || (!streakHydrated && (streakInitialLoading || memberIdsOrdered.length > 0)) ? (
                 Array.from({ length: STREAK_SKELETON_CARD_COUNT }, (_, index) => (
                   <ParticipantCardSkeleton
                     key={`streak-skeleton-${index}`}
