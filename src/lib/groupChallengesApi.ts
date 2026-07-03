@@ -17,6 +17,7 @@ import {
   invalidateCohortPeerHabitsCache,
   ensureCohortCacheInvalidatesOnSyncSuccess,
 } from "./remoteRefreshCoordinator";
+import { fetchCommunityAccessStatusForCurrentUser } from "./communityAccessApi";
 
 ensureCohortCacheInvalidatesOnSyncSuccess();
 
@@ -227,7 +228,7 @@ export async function getProfileUsernamesForIds(userIds: string[]): Promise<Reco
 export type ProfileLabel = { username: string; displayName: string | null; xp: number | null };
 
 /** Usernames + optional display names for challenge participant cards. */
-/** `profiles.is_premium` — set server-side (billing / admin). Used for squad custom note gate. */
+/** Effective Community access: paid subscription/admin grant OR active backend trial. */
 export async function getProfileIsPremiumForUser(userId: string): Promise<boolean> {
   const supabase = getSupabase();
   if (!supabase || !userId) return false;
@@ -235,9 +236,8 @@ export async function getProfileIsPremiumForUser(userId: string): Promise<boolea
     data: { user },
   } = await supabase.auth.getUser();
   if (!user || user.id !== userId) return false;
-  const { data, error } = await supabase.from("profiles").select("is_premium").eq("id", userId).maybeSingle();
-  if (error || !data) return false;
-  return Boolean((data as { is_premium?: boolean }).is_premium);
+  const status = await fetchCommunityAccessStatusForCurrentUser();
+  return status?.hasAccess === true;
 }
 
 export async function getMyProfileIsPremium(): Promise<boolean> {
