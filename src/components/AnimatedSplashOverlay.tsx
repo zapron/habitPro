@@ -12,7 +12,6 @@ import {
 
 import {
   SPLASH_BACKGROUND_COLOR,
-  SPLASH_WORDMARK_HABIT_COLOR,
   SPLASH_WORDMARK_PRO_COLOR,
 } from "../constants/splash";
 import { useTheme } from "../context/ThemeContext";
@@ -124,6 +123,7 @@ export function AnimatedSplashOverlay({ onFirstLayout, dismiss, onDismissed }: P
     inputRange: [0, 1],
     outputRange: [-26, 0],
   });
+  const wordmarkHabitColor = isDark ? theme.colors.slate[400] : theme.colors.textSecondary;
 
   const handleLayout = (_e: LayoutChangeEvent) => {
     if (layoutReported.current) return;
@@ -160,7 +160,7 @@ export function AnimatedSplashOverlay({ onFirstLayout, dismiss, onDismissed }: P
           accessibilityElementsHidden
           importantForAccessibility="no-hide-descendants"
         >
-          <Text style={[styles.wordmarkHabit, { color: isDark ? "#FFFFFF" : "#000000" }]}>habit</Text>
+          <Text style={[styles.wordmarkHabit, { color: wordmarkHabitColor }]}>habit</Text>
           <Text style={[styles.wordmarkPro, { color: SPLASH_WORDMARK_PRO_COLOR }]}>Pr</Text>
         </AnimatedText>
         <Animated.View
@@ -233,7 +233,6 @@ const styles = StyleSheet.create({
     textAlign: "right",
   },
   wordmarkHabit: {
-    color: SPLASH_WORDMARK_HABIT_COLOR,
     fontWeight: "700",
   },
   wordmarkPro: {

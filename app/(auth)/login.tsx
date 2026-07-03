@@ -17,10 +17,7 @@ import { useTheme } from "../../src/context/ThemeContext";
 import { useAuth } from "../../src/context/AuthContext";
 import { Button } from "../../src/components/Button";
 import { GoogleGIcon } from "../../src/components/GoogleGIcon";
-import {
-  SPLASH_WORDMARK_HABIT_COLOR,
-  SPLASH_WORDMARK_PRO_COLOR,
-} from "../../src/constants/splash";
+import { SPLASH_WORDMARK_PRO_COLOR } from "../../src/constants/splash";
 import { showAppAlert } from "../../src/context/AppDialogContext";
 
 type FocusKey = "email" | "password" | "confirmPassword" | null;
@@ -133,6 +130,7 @@ export default function LoginScreen() {
   const fieldMutedColor = isDark ? "rgba(203,213,225,0.62)" : "rgba(71,85,105,0.62)";
   const labelColor = isDark ? "rgba(226,232,240,0.8)" : theme.colors.textSecondary;
   const linkColor = isDark ? "#A5B4FC" : theme.colors.indigo[500];
+  const wordmarkHabitColor = isDark ? theme.colors.slate[400] : theme.colors.textSecondary;
   const borderFor = (key: Exclude<FocusKey, null>) => (focused === key ? focusedBorder : glassBorder);
 
   return (
@@ -168,7 +166,7 @@ export default function LoginScreen() {
                 />
               </View>
               <Text style={styles.titleWordmark}>
-                <Text style={{ color: isDark ? SPLASH_WORDMARK_HABIT_COLOR : "#000000", fontWeight: "900" }}>habit</Text>
+                <Text style={{ color: wordmarkHabitColor, fontWeight: "900" }}>habit</Text>
                 <Text style={{ color: SPLASH_WORDMARK_PRO_COLOR, fontWeight: "900" }}>Pro</Text>
               </Text>
             </View>
