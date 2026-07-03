@@ -1,6 +1,6 @@
 import { Text } from "../../src/components/AppText";
 import { useEffect, useRef, useState } from "react";
-import { View, TextInput, TouchableOpacity, ScrollView, StyleSheet, StatusBar, Platform } from "react-native";
+import { View, TextInput, TouchableOpacity, ScrollView, StyleSheet, StatusBar, Platform, InteractionManager } from "react-native";
 import { useRouter } from "expo-router";
 import { ArrowLeft, Plane } from "lucide-react-native";
 import { Screen } from "../../src/components/Screen";
@@ -52,11 +52,20 @@ export default function CreateMiniMission() {
   const [focused, setFocused] = useState<"title" | "objective" | "minutes" | null>(null);
   const [creating, setCreating] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
+  const titleInputRef = useRef<TextInput>(null);
   const objectiveInputYRef = useRef(0);
   const keyboardScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
+    let focusTimer: ReturnType<typeof setTimeout> | null = null;
+    const task = InteractionManager.runAfterInteractions(() => {
+      focusTimer = setTimeout(() => {
+        titleInputRef.current?.focus();
+      }, 180);
+    });
     return () => {
+      task.cancel?.();
+      if (focusTimer) clearTimeout(focusTimer);
       if (keyboardScrollTimerRef.current) {
         clearTimeout(keyboardScrollTimerRef.current);
         keyboardScrollTimerRef.current = null;
@@ -168,6 +177,7 @@ export default function CreateMiniMission() {
 
         <Text style={[styles.label, { color: theme.colors.textSecondary, fontSize: theme.typography.caption }]}>Mission</Text>
         <TextInput
+          ref={titleInputRef}
           style={[
             styles.input,
             {
@@ -184,7 +194,6 @@ export default function CreateMiniMission() {
           onChangeText={setTitle}
           onFocus={() => setFocused("title")}
           onBlur={() => setFocused(null)}
-          autoFocus
         />
 
         <Text style={[styles.label, { color: theme.colors.textSecondary, fontSize: theme.typography.caption }]}>Objective (Optional)</Text>

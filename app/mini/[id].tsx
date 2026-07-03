@@ -1160,6 +1160,7 @@ export default function MiniMissionDetail() {
   const [keepScreenOn, setKeepScreenOn] = useState(false);
   const [focusModeOpen, setFocusModeOpen] = useState(false);
   const [liveMiniSheetOpen, setLiveMiniSheetOpen] = useState(false);
+  const [liveMiniSheetPrimed, setLiveMiniSheetPrimed] = useState(false);
 
   const completionImageUri = useMemo(() => {
     return mission?.completionMemory?.imageUrl ?? mission?.completionMemory?.imageUri ?? null;
@@ -1170,6 +1171,21 @@ export default function MiniMissionDetail() {
     setCompletionImageAspect(null);
     setCompletionImageOpen(false);
   }, [completionImageUri]);
+
+  useEffect(() => {
+    setLiveMiniSheetPrimed(false);
+    if (!mission || mission.status === "completed" || mission.status === "cancelled") return undefined;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const task = InteractionManager.runAfterInteractions(() => {
+      timer = setTimeout(() => {
+        setLiveMiniSheetPrimed(true);
+      }, 650);
+    });
+    return () => {
+      task.cancel?.();
+      if (timer) clearTimeout(timer);
+    };
+  }, [mission?.id, mission?.status]);
 
   useEffect(() => {
     const unsubFail = subscribeSyncFailure(() => {
@@ -1195,7 +1211,16 @@ export default function MiniMissionDetail() {
 
   useFocusEffect(
     useCallback(() => {
-      void refreshPremiumAccess({ serverOnly: true, cachedAccessOk: true, background: true });
+      let timer: ReturnType<typeof setTimeout> | null = null;
+      const task = InteractionManager.runAfterInteractions(() => {
+        timer = setTimeout(() => {
+          void refreshPremiumAccess({ serverOnly: true, cachedAccessOk: true, background: true });
+        }, 300);
+      });
+      return () => {
+        if (timer) clearTimeout(timer);
+        task.cancel?.();
+      };
     }, [refreshPremiumAccess]),
   );
 
@@ -1754,7 +1779,7 @@ export default function MiniMissionDetail() {
         />
       </LazyMount>
 
-      <LazyMount visible={liveMiniSheetOpen} unmountOnExit>
+      <LazyMount visible={liveMiniSheetOpen || liveMiniSheetPrimed} unmountOnExit={false}>
         <LiveMiniInviteSheet
           visible={liveMiniSheetOpen}
           mission={mission}

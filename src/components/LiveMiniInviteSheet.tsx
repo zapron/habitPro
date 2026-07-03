@@ -105,6 +105,11 @@ export function LiveMiniInviteSheet({ visible, mission, onClose }: Props) {
     if (visible) setSquadId(mission.liveSquadId ?? null);
   }, [mission.liveSquadId, visible]);
 
+  useEffect(() => {
+    if (!visible || squadId || !configured || !signedIn) return;
+    void refreshPremiumAccess({ serverOnly: true, cachedAccessOk: true, background: true });
+  }, [configured, refreshPremiumAccess, signedIn, squadId, visible]);
+
   const loadStatuses = useCallback(async (id: string, options?: { silent?: boolean }) => {
     if (!options?.silent) setStatusesLoading(true);
     try {
