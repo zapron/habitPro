@@ -7,6 +7,8 @@ import {
   StyleSheet,
   Pressable,
   ScrollView,
+  InteractionManager,
+  Linking,
 } from "react-native";
 import { Bell, ExternalLink, X, Monitor, Sun, Moon, type LucideIcon } from 'lucide-react-native';
 import { useTheme, type ThemePreference } from '../context/ThemeContext';
@@ -14,7 +16,6 @@ import { useAuth } from '../context/AuthContext';
 import { getPublicLinks, isSupabaseConfigured } from '../lib/env';
 import { useHabitStore } from '../store/habitStore';
 import { UsernameSetupFields } from './UsernameSetupFields';
-import { Linking } from "react-native";
 import { useRouter } from "expo-router";
 import { getRemotePushPermissionDetails, registerPushTokenForCurrentUser, requestRemotePushPermissionDetails } from "../lib/pushTokens";
 import { useEffect, useMemo, useState } from "react";
@@ -53,8 +54,18 @@ export function SettingsModal({ visible, onClose }: SettingsModalProps) {
     };
 
     useEffect(() => {
-        if (!visible) return;
-        void refreshNotifStatus();
+        if (!visible) return undefined;
+        if (!canShowNotifRow) {
+            setNotifStatus("unavailable");
+            return undefined;
+        }
+        setNotifStatus("loading");
+        const task = InteractionManager.runAfterInteractions(() => {
+            void refreshNotifStatus();
+        });
+        return () => {
+            task.cancel?.();
+        };
     }, [visible, uid]);
 
     const notifHint = useMemo(() => {
@@ -66,6 +77,7 @@ export function SettingsModal({ visible, onClose }: SettingsModalProps) {
 
     const onPressNotifications = async () => {
         if (!uid) return;
+        if (notifStatus === "on") return;
         const details = await getRemotePushPermissionDetails();
         if (details.status === "granted") {
             setNotifStatus("on");

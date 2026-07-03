@@ -396,16 +396,20 @@ export default function Home() {
   }, [habits, activeTab, reportsSegment, missionNow]);
 
   const stats = useMemo(() => {
-    const missionsCount = habits.filter((h) =>
-      isMainMissionPlayableOnHome(h, missionNow),
-    ).length;
-    const pending = habits.filter((h) =>
-      needsMainMissionOutcome(h, missionNow),
-    ).length;
-    const accomplished = habits.filter(
-      (h) => h.missionReport === "accomplished",
-    ).length;
-    const failed = habits.filter((h) => h.missionReport === "failed").length;
+    let missionsCount = 0;
+    let pending = 0;
+    let accomplished = 0;
+    let failed = 0;
+    let hasIncomplete = false;
+
+    for (const habit of habits) {
+      if (isMainMissionPlayableOnHome(habit, missionNow)) missionsCount += 1;
+      if (needsMainMissionOutcome(habit, missionNow)) pending += 1;
+      if (habit.missionReport === "accomplished") accomplished += 1;
+      if (habit.missionReport === "failed") failed += 1;
+      if (!habit.missionReport && habit.status === "active") hasIncomplete = true;
+    }
+
     const reportsCount = pending + accomplished + failed;
     const openMissionCount = missionsCount;
     return {
@@ -415,16 +419,24 @@ export default function Home() {
       pending,
       accomplished,
       failed,
+      hasIncomplete,
     };
   }, [habits, missionNow]);
 
-  const hasActiveMiniCountdown = useMemo(
-    () =>
-      miniMissions.some(
-        (m) => m.status === "in_progress" && getMiniRemainingMs(m, miniNow) > 0,
-      ),
-    [miniMissions, miniNow],
-  );
+  const miniMissionStats = useMemo(() => {
+    let live = 0;
+    let waiting = 0;
+    for (const mission of miniMissions) {
+      if (mission.status === "in_progress" && getMiniRemainingMs(mission, miniNow) > 0) {
+        live += 1;
+      } else if (mission.status === "pending" || mission.status === "scheduled") {
+        waiting += 1;
+      }
+    }
+    return { live, waiting, hasActiveCountdown: live > 0 };
+  }, [miniMissions, miniNow]);
+
+  const hasActiveMiniCountdown = miniMissionStats.hasActiveCountdown;
 
   useEffect(() => {
     if (!hasActiveMiniCountdown) return;
@@ -432,26 +444,13 @@ export default function Home() {
     return () => clearInterval(t);
   }, [hasActiveMiniCountdown]);
 
-  const hasIncompleteMission = useMemo(
-    () => habits.some((h) => !h.missionReport && h.status === "active"),
-    [habits],
-  );
+  const hasIncompleteMission = stats.hasIncomplete;
 
   useEffect(() => {
     if (!hasIncompleteMission) return;
     const t = setInterval(() => setMissionNow(Date.now()), 30_000);
     return () => clearInterval(t);
   }, [hasIncompleteMission]);
-
-  const miniMissionStats = useMemo(() => {
-    const live = miniMissions.filter(
-      (m) => m.status === "in_progress" && getMiniRemainingMs(m, miniNow) > 0,
-    ).length;
-    const waiting = miniMissions.filter(
-      (m) => m.status === "pending" || m.status === "scheduled",
-    ).length;
-    return { live, waiting };
-  }, [miniMissions, miniNow]);
 
   const miniCount =
     miniMissionStats.live > 0

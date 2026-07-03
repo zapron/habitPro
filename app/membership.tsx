@@ -1,6 +1,6 @@
 import { Text } from "../src/components/AppText";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { View, ScrollView, TouchableOpacity, StyleSheet, StatusBar, ActivityIndicator, Platform } from "react-native";
+import { View, ScrollView, TouchableOpacity, StyleSheet, StatusBar, ActivityIndicator, Platform, InteractionManager } from "react-native";
 import { useRouter, useFocusEffect } from "expo-router";
 import {
   ArrowLeft,
@@ -81,8 +81,13 @@ export default function MembershipScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      void refreshBilling({ forceNetwork: true });
-      void refreshPremium();
+      const task = InteractionManager.runAfterInteractions(() => {
+        void refreshBilling({ forceNetwork: false });
+        void refreshPremium();
+      });
+      return () => {
+        task.cancel?.();
+      };
     }, [refreshBilling, refreshPremium]),
   );
 
@@ -293,7 +298,7 @@ export default function MembershipScreen() {
           </View>
         ) : null}
 
-        {!billingLoading && !isPremium ? (
+        {!billingLoading && !premiumLoading && !isPremium ? (
           <View
             style={[
               styles.card,
