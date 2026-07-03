@@ -306,6 +306,13 @@ function shouldSkipNativePurchases(): boolean {
   return Constants.appOwnership === "expo";
 }
 
+function isUnsafeAndroidTestStoreKey(apiKey: string): boolean {
+  // RevenueCat intentionally closes release-style Android builds that use a
+  // Test Store key. Keep sideloaded preview APKs usable instead of configuring
+  // the native SDK with a known-bad key.
+  return Platform.OS === "android" && !__DEV__ && apiKey.startsWith("test_");
+}
+
 export function BillingProvider({ children }: { children: React.ReactNode }) {
   const { session } = useAuth();
   const [ready, setReady] = useState(false);
@@ -323,7 +330,8 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
   const isExpoGo = shouldSkipNativePurchases();
 
   const { androidApiKey, iosApiKey } = getRevenueCatConfig();
-  const apiKey = Platform.OS === "android" ? androidApiKey : iosApiKey;
+  const rawApiKey = Platform.OS === "android" ? androidApiKey : iosApiKey;
+  const apiKey = isUnsafeAndroidTestStoreKey(rawApiKey) ? "" : rawApiKey;
   const configured = Boolean(apiKey);
   const userId = session?.user?.id ?? null;
 
@@ -353,12 +361,12 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
       configured,
       ready,
       isExpoGo,
-      apiKeyKind: apiKeyKind(apiKey),
+      apiKeyKind: apiKeyKind(rawApiKey),
       plan,
       stage,
       recentLogs: logBufferRef.current.slice(-12),
     }),
-    [apiKey, configured, isExpoGo, ready, userId],
+    [configured, isExpoGo, rawApiKey, ready, userId],
   );
 
   const enrichDebugSnapshot = useCallback(
