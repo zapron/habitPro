@@ -7,6 +7,7 @@
     "development": {
       "developmentClient": true,
       "distribution": "internal",
+      "channel": "development",
       "env": {
         "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
         "EXPO_DOCTOR_SKIP_DEPENDENCY_VERSION_CHECK": "1"
@@ -16,6 +17,7 @@
       }
     },
     "apk": {
+      "channel": "preview",
       "env": {
         "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
         "EXPO_DOCTOR_SKIP_DEPENDENCY_VERSION_CHECK": "1"
@@ -25,6 +27,7 @@
       }
     },
     "preview": {
+      "channel": "preview",
       "env": {
         "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
         "EXPO_DOCTOR_SKIP_DEPENDENCY_VERSION_CHECK": "1"
@@ -34,6 +37,7 @@
       }
     },
     "production": {
+      "channel": "production",
       "env": {
         "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
         "EXPO_DOCTOR_SKIP_DEPENDENCY_VERSION_CHECK": "1"
