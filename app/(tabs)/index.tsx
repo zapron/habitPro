@@ -48,7 +48,8 @@ import { useAuth } from "../../src/context/AuthContext";
 import { useAppVersion } from "../../src/context/AppVersionContext";
 import { isSupabaseConfigured } from "../../src/lib/env";
 import {
-  countUnreadNotifications,
+  countUnreadNotificationsCached,
+  getCachedUnreadNotificationCount,
   getCachedChallengePrimarySnapshot,
   loadChallengePrimarySnapshot,
 } from "../../src/lib/groupChallengesApi";
@@ -76,6 +77,8 @@ import {
 
 const EMPTY_HABITS: Habit[] = [];
 const EMPTY_MINI_MISSIONS: MiniMission[] = [];
+const HOME_NOTIFICATION_COUNT_TTL_MS = 30_000;
+const HOME_NOTIFICATION_REFRESH_DELAY_MS = 600;
 
 function getGreeting(): string {
   const hour = new Date().getHours();
@@ -643,42 +646,52 @@ export default function Home() {
   }, []);
 
   const refreshNotificationCount = useCallback(async () => {
-    if (!session?.user || !showAccount) {
+    const userId = session?.user?.id;
+    if (!userId || !showAccount) {
       setUnreadNotifCount(0);
       return;
     }
     setNotifRefreshBusy(true);
     try {
-      const n = await countUnreadNotifications();
-      setUnreadNotifCount(n);
+      const n = await countUnreadNotificationsCached(userId, { force: true });
+      setUnreadNotifCount((current) => (current === n ? current : n));
     } catch {
       setUnreadNotifCount(0);
     } finally {
       setNotifRefreshBusy(false);
     }
-  }, [session?.user, showAccount]);
+  }, [session?.user?.id, showAccount]);
 
   useFocusEffect(
     useCallback(() => {
-      if (!session?.user || !showAccount) {
+      const userId = session?.user?.id;
+      if (!userId || !showAccount) {
         setUnreadNotifCount(0);
         return;
       }
       let cancelled = false;
+      let timer: ReturnType<typeof setTimeout> | null = null;
+      const cached = getCachedUnreadNotificationCount(userId, Number.POSITIVE_INFINITY);
+      if (cached != null) {
+        setUnreadNotifCount((current) => (current === cached ? current : cached));
+      }
       const task = InteractionManager.runAfterInteractions(() => {
-        void countUnreadNotifications()
-          .then((n) => {
-            if (!cancelled) setUnreadNotifCount(n);
-          })
-          .catch(() => {
-            if (!cancelled) setUnreadNotifCount(0);
-          });
+        timer = setTimeout(() => {
+          void countUnreadNotificationsCached(userId, { maxAgeMs: HOME_NOTIFICATION_COUNT_TTL_MS })
+            .then((n) => {
+              if (!cancelled) setUnreadNotifCount((current) => (current === n ? current : n));
+            })
+            .catch(() => {
+              if (!cancelled) setUnreadNotifCount(0);
+            });
+        }, cached == null ? 0 : HOME_NOTIFICATION_REFRESH_DELAY_MS);
       });
       return () => {
         cancelled = true;
+        if (timer) clearTimeout(timer);
         task.cancel();
       };
-    }, [session?.user, showAccount]),
+    }, [session?.user?.id, showAccount]),
   );
 
   useFocusEffect(

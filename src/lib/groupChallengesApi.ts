@@ -1047,6 +1047,34 @@ export async function listNotificationsPage(
   };
 }
 
+const UNREAD_NOTIFICATION_COUNT_CACHE_TTL_MS = 30_000;
+
+let unreadNotificationCountCache: { userId: string; count: number; fetchedAt: number } | null = null;
+let unreadNotificationCountInFlight: { userId: string | null; promise: Promise<number> } | null = null;
+
+export function getCachedUnreadNotificationCount(
+  userId: string | null | undefined,
+  maxAgeMs = UNREAD_NOTIFICATION_COUNT_CACHE_TTL_MS,
+): number | null {
+  if (!userId || unreadNotificationCountCache?.userId !== userId) return null;
+  if (Date.now() - unreadNotificationCountCache.fetchedAt > maxAgeMs) return null;
+  return unreadNotificationCountCache.count;
+}
+
+export function setCachedUnreadNotificationCount(userId: string | null | undefined, count: number): void {
+  if (!userId) return;
+  unreadNotificationCountCache = {
+    userId,
+    count: Math.max(0, Math.floor(count)),
+    fetchedAt: Date.now(),
+  };
+}
+
+export function adjustCachedUnreadNotificationCount(userId: string | null | undefined, delta: number): void {
+  if (!userId || unreadNotificationCountCache?.userId !== userId) return;
+  setCachedUnreadNotificationCount(userId, unreadNotificationCountCache.count + delta);
+}
+
 export async function countUnreadNotifications(): Promise<number> {
   const supabase = getSupabase();
   if (!supabase) return 0;
@@ -1060,7 +1088,32 @@ export async function countUnreadNotifications(): Promise<number> {
     .eq("user_id", user.id)
     .is("read_at", null);
   if (error) throw error;
-  return count ?? 0;
+  const unreadCount = count ?? 0;
+  setCachedUnreadNotificationCount(user.id, unreadCount);
+  return unreadCount;
+}
+
+export async function countUnreadNotificationsCached(
+  userId: string | null | undefined,
+  options?: { force?: boolean; maxAgeMs?: number },
+): Promise<number> {
+  if (!userId) return 0;
+  const cached = options?.force
+    ? null
+    : getCachedUnreadNotificationCount(userId, options?.maxAgeMs ?? UNREAD_NOTIFICATION_COUNT_CACHE_TTL_MS);
+  if (cached != null) return cached;
+  if (!options?.force && unreadNotificationCountInFlight?.userId === userId) {
+    return unreadNotificationCountInFlight.promise;
+  }
+
+  let request: Promise<number>;
+  request = countUnreadNotifications().finally(() => {
+    if (unreadNotificationCountInFlight?.promise === request) {
+      unreadNotificationCountInFlight = null;
+    }
+  });
+  unreadNotificationCountInFlight = { userId, promise: request };
+  return request;
 }
 
 export async function markNotificationRead(id: string): Promise<void> {

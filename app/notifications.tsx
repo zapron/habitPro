@@ -24,7 +24,14 @@ import { ArrowLeft, Bell } from "lucide-react-native";
 import { Screen } from "../src/components/Screen";
 import { useTheme } from "../src/context/ThemeContext";
 import { useAuth } from "../src/context/AuthContext";
-import { listNotificationsPage, markAllNotificationsRead, markNotificationRead } from "../src/lib/groupChallengesApi";
+import {
+  adjustCachedUnreadNotificationCount,
+  getCachedUnreadNotificationCount,
+  listNotificationsPage,
+  markAllNotificationsRead,
+  markNotificationRead,
+  setCachedUnreadNotificationCount,
+} from "../src/lib/groupChallengesApi";
 import { challengeMemoryRouteParamsFromPayload } from "../src/lib/challengeMemoryDetail";
 import { parseCommunityWinCheerPayload } from "../src/lib/notificationPayloads";
 import { backOrReplace } from "../src/lib/navigation";
@@ -474,6 +481,7 @@ export default function NotificationsScreen() {
       updateNotificationFirstPageCache(userIdRef.current, (prev) =>
         prev.map((x) => (x.id === n.id ? { ...x, read_at: readAt } : x)),
       );
+      adjustCachedUnreadNotificationCount(userIdRef.current, -1);
       void markNotificationRead(n.id).catch(() => undefined);
     }
     const p = n.payload ?? {};
@@ -592,6 +600,7 @@ export default function NotificationsScreen() {
     if (!hasUnread || markingAll) return;
     setMarkingAll(true);
     const previous = itemsRef.current;
+    const previousUnreadCount = getCachedUnreadNotificationCount(userIdRef.current, Number.POSITIVE_INFINITY);
     const previousCacheItems =
       notificationFirstPageCache?.userId === userIdRef.current ? notificationFirstPageCache.items : null;
     const nowIso = new Date().toISOString();
@@ -599,12 +608,16 @@ export default function NotificationsScreen() {
     updateNotificationFirstPageCache(userIdRef.current, (prev) =>
       prev.map((n) => (n.read_at ? n : { ...n, read_at: nowIso })),
     );
+    setCachedUnreadNotificationCount(userIdRef.current, 0);
     try {
       await markAllNotificationsRead();
     } catch (e) {
       setItems(previous);
       if (previousCacheItems) {
         updateNotificationFirstPageCache(userIdRef.current, () => previousCacheItems);
+      }
+      if (previousUnreadCount != null) {
+        setCachedUnreadNotificationCount(userIdRef.current, previousUnreadCount);
       }
       if (__DEV__) console.warn("[notifications] markAllNotificationsRead", e);
     } finally {

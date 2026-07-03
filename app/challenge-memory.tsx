@@ -50,7 +50,7 @@ import {
   sendChallengeNudge,
 } from "../src/lib/challengeCohort";
 import { toggleCheer } from "../src/lib/communityWinsApi";
-import { markNotificationRead } from "../src/lib/groupChallengesApi";
+import { adjustCachedUnreadNotificationCount, markNotificationRead } from "../src/lib/groupChallengesApi";
 import { backOrReplace } from "../src/lib/navigation";
 import { useRefreshPremiumAccess } from "../src/hooks/useRefreshPremiumAccess";
 import type { PresetChallengeNudgeKind } from "../src/types/groupChallenge";
@@ -213,8 +213,9 @@ export default function ChallengeMemoryScreen() {
 
   useEffect(() => {
     if (!notificationId) return;
+    adjustCachedUnreadNotificationCount(session?.user?.id, -1);
     void markNotificationRead(notificationId).catch(() => undefined);
-  }, [notificationId]);
+  }, [notificationId, session?.user?.id]);
 
   useEffect(() => {
     setImageFailed(false);
