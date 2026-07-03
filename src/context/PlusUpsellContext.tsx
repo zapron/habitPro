@@ -2,18 +2,22 @@ import React, {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
 } from "react";
 import { Linking, Modal, Platform, Pressable, ScrollView, Share, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Check } from "lucide-react-native";
 import { Text } from "../components/AppText";
 import { Button } from "../components/Button";
 import { PlusBadge } from "../components/PlusBadge";
 import { useTheme } from "./ThemeContext";
 import { useBilling, type BillingDebugSnapshot } from "./BillingContext";
+import { usePremium } from "./PremiumContext";
 import { useToast } from "./ToastContext";
 import { getPublicLinks } from "../lib/env";
+import { startCommunityTrial } from "../lib/communityAccessApi";
 import { useRefreshPremiumAccess } from "../hooks/useRefreshPremiumAccess";
 
 export type PlusUpsellReason =
@@ -29,22 +33,42 @@ export type PlusUpsellReason =
   | "profile";
 
 type PlusUpsellContextValue = {
-  /** Open the HabitPro Community upsell. Treat unknown loading as non‑Community at call sites. */
+  /** Open the HabitPro Community upsell. Treat unknown loading as non-Community at call sites. */
   openUpsell: (reason?: PlusUpsellReason) => void;
   closeUpsell: () => void;
 };
 
 const PlusUpsellContext = createContext<PlusUpsellContextValue | null>(null);
 
-const BULLETS = [
-  "Cheer and discover wins in Community",
-  "Public missions: visible to your squad on the mission",
-  "Group missions, invites, and cohort streaks",
-  "Live mini missions with a small squad board",
-  "Squad nudges (cheer, ping, fire, one-time note)",
-  "Publish streak moments and mini wins to Community",
-  "Streak repairs to protect momentum",
+const BENEFITS = [
+  "Share wins and cheer each other on",
+  "Join squads, invites, and group missions",
+  "Publish streak moments and protect momentum",
 ];
+
+type UpsellBusy = null | "trial" | "monthly" | "yearly" | "restore" | "diagnostics";
+type UpsellPhase =
+  | null
+  | "starting_trial"
+  | "opening_store"
+  | "restoring"
+  | "applying";
+
+function formatTrialDays(days: number): string {
+  if (days >= 30 && days % 30 === 0) {
+    const months = days / 30;
+    return months === 1 ? "1-month" : `${months}-month`;
+  }
+  return `${days}-day`;
+}
+
+function planButtonTitle(
+  label: "Monthly" | "Yearly",
+  priceString: string | null | undefined,
+): string {
+  if (!priceString) return `Subscribe ${label.toLowerCase()}`;
+  return `${label} - ${priceString}/${label === "Monthly" ? "month" : "year"}`;
+}
 
 function compactProduct(product: NonNullable<BillingDebugSnapshot["storeProducts"]>[number]): string {
   const options = product.subscriptionOptions?.map((o) => o.id).filter(Boolean).join(", ");
@@ -131,24 +155,24 @@ export function PlusUpsellProvider({
 
   const headline =
     reason === "community"
-      ? "Community is part of HabitPro Community"
+      ? "Unlock the social layer"
       : reason === "visibility"
-        ? "Public squad visibility is HabitPro Community"
+        ? "Make this mission public"
         : reason === "community_publish"
-          ? "Publishing to Community is HabitPro Community"
+          ? "Share this win"
           : reason === "group_mission"
-            ? "Group missions are HabitPro Community"
+            ? "Start group missions"
             : reason === "live_mini"
-              ? "Live mini missions are HabitPro Community"
+              ? "Host live mini missions"
             : reason === "invite_accept"
-              ? "Joining group missions is HabitPro Community"
+              ? "Join the squad mission"
               : reason === "squad_nudge"
-                ? "Squad nudges are HabitPro Community"
+                ? "Send squad nudges"
                 : reason === "streak_repair"
-                  ? "Streak repairs are HabitPro Community"
+                  ? "Protect your streak"
                   : reason === "profile"
-                    ? "HabitPro Community"
-                    : "Unlock HabitPro Community";
+                    ? "Manage your membership"
+                    : "Unlock the social layer";
 
   return (
     <PlusUpsellContext.Provider value={value}>
@@ -191,18 +215,32 @@ function BillingUpsellModal({
     configured,
     ready,
     isExpoGo,
+    communityPlans,
+    refreshCommunityPlans,
     purchaseCommunity,
     restore,
     billingDebug,
     runBillingDiagnostics,
   } = useBilling();
+  const { accessStatus, refresh: refreshPremium } = usePremium();
   const { showToast } = useToast();
   const refreshPremiumAccess = useRefreshPremiumAccess(1_000);
   const publicLinks = useMemo(() => getPublicLinks(), []);
-  const [busy, setBusy] = useState<
-    null | "monthly" | "yearly" | "restore" | "diagnostics"
-  >(null);
+  const [busy, setBusy] = useState<UpsellBusy>(null);
+  const [phase, setPhase] = useState<UpsellPhase>(null);
   const [purchaseError, setPurchaseError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!visible) return;
+    void refreshPremium();
+    if (!configured || !ready || isExpoGo) return;
+    void refreshCommunityPlans().catch((e) => {
+      if (__DEV__) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.warn("[habitPro] paywall plan refresh failed:", msg);
+      }
+    });
+  }, [configured, isExpoGo, ready, refreshCommunityPlans, refreshPremium, visible]);
 
   if (!visible) return null;
 
@@ -212,6 +250,16 @@ function BillingUpsellModal({
       ? "Purchase could not start. Make sure this app was installed from TestFlight or the App Store with a tester account."
       : "Purchase could not start. Make sure this app was installed from Google Play with a tester account.";
   const canBuy = configured && ready && busy === null;
+  const trialDays = accessStatus?.trialDays ?? 7;
+  const trialLabel = formatTrialDays(trialDays);
+  const trialAvailable = accessStatus?.trialAvailable === true;
+  const trialUsed = accessStatus?.trialUsed === true;
+  const canStartTrial = trialAvailable && busy === null;
+  const monthlyTitle = planButtonTitle("Monthly", communityPlans.monthly?.priceString);
+  const yearlyTitle = planButtonTitle("Yearly", communityPlans.yearly?.priceString);
+  const paidPlanHint = communityPlans.monthly?.priceString
+    ? `Then from ${communityPlans.monthly.priceString}/month.`
+    : "Plans are shown before purchase.";
   const showBillingDebug = __DEV__ && Boolean(purchaseError || billingDebug);
   const debugLines = showBillingDebug && billingDebug ? billingDebugLines(billingDebug) : [];
 
@@ -222,25 +270,63 @@ function BillingUpsellModal({
 
   const refreshBillingDebug = async () => {
     setBusy("diagnostics");
+    setPhase(null);
     try {
       await runBillingDiagnostics();
     } finally {
       setBusy(null);
+      setPhase(null);
+    }
+  };
+
+  const runTrial = async () => {
+    setBusy("trial");
+    setPhase("starting_trial");
+    setPurchaseError(null);
+    showToast(`Starting ${trialLabel} free trial...`, "info", 1400);
+    try {
+      const res = await startCommunityTrial();
+      if (res.ok && res.status?.hasAccess) {
+        setPhase("applying");
+        await refreshPremium();
+        await refreshPremiumAccess({ force: true, serverOnly: true });
+        showToast(`Community trial active for ${trialLabel}.`, "success", 2800);
+        onClose();
+        return;
+      }
+
+      const message =
+        res.reason === "trial_disabled"
+          ? "Free trial is not available right now."
+          : res.reason === "trial_already_used"
+            ? "This account already used its free trial."
+            : res.error?.message ?? "Could not start free trial.";
+      setPurchaseError(message);
+      showToast(message, "error");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setPurchaseError(msg.length <= 180 ? msg : "Could not start free trial.");
+      showToast("Could not start free trial.", "error");
+    } finally {
+      setBusy(null);
+      setPhase(null);
     }
   };
 
   const run = async (kind: "monthly" | "yearly" | "restore") => {
     setBusy(kind);
+    setPhase(kind === "restore" ? "restoring" : "opening_store");
     setPurchaseError(null);
     showToast(
-      kind === "restore" ? "Restoring…" : "Starting purchase…",
+      kind === "restore" ? "Restoring..." : "Starting purchase...",
       "info",
       1200,
     );
     try {
       if (kind === "restore") {
         await restore();
-        showToast("Activating membership...", "info", 1400);
+        setPhase("applying");
+        showToast("Applying membership...", "info", 1400);
         const serverReady = await waitForServerPremium();
         showToast(
           serverReady
@@ -254,7 +340,8 @@ function BillingUpsellModal({
       }
       const res = await purchaseCommunity(kind);
       if (!res.cancelled) {
-        showToast("Activating membership...", "info", 1400);
+        setPhase("applying");
+        showToast("Applying subscription...", "info", 1400);
         const serverReady = await waitForServerPremium();
         showToast(
           serverReady
@@ -284,6 +371,7 @@ function BillingUpsellModal({
       showToast(msg.length > 120 ? "Purchase failed to start." : msg, "error");
     } finally {
       setBusy(null);
+      setPhase(null);
     }
   };
 
@@ -306,6 +394,23 @@ function BillingUpsellModal({
   const onOpenTerms = async () => {
     await Linking.openURL(publicLinks.terms);
   };
+
+  const paidBusyTitle =
+    phase === "applying" ? "Applying subscription..." : `Opening ${storeName}...`;
+  const yearlyButtonTitle = busy === "yearly" ? paidBusyTitle : yearlyTitle;
+  const monthlyButtonTitle = busy === "monthly" ? paidBusyTitle : monthlyTitle;
+  const restoreButtonTitle =
+    busy === "restore"
+      ? phase === "applying"
+        ? "Applying membership..."
+        : "Restoring purchases..."
+      : "Restore purchases";
+  const trialButtonTitle =
+    busy === "trial"
+      ? phase === "applying"
+        ? "Activating trial..."
+        : "Starting trial..."
+      : `Start ${trialLabel} free trial`;
 
   return (
     <View style={styles.root} pointerEvents="box-none">
@@ -341,6 +446,10 @@ function BillingUpsellModal({
           showsVerticalScrollIndicator
         >
         <View style={styles.titleRow}>
+          <Text style={[styles.wordmark, { color: theme.colors.textPrimary }]}>
+            Habit
+            <Text style={{ color: theme.colors.indigo[400] }}>Pro</Text>
+          </Text>
           <PlusBadge withFlame size="md" />
         </View>
         <Text
@@ -352,20 +461,31 @@ function BillingUpsellModal({
           {headline}
         </Text>
         <Text style={[styles.sub, { color: theme.colors.textSecondary }]}>
-          Solo habits stay free. Social mode (post, cheer, squads, and invites)
-          is included with HabitPro Community.
+          Solo habits stay free. Community unlocks the social layer.
         </Text>
-        <View style={styles.list}>
-          {BULLETS.map((line) => (
-            <View key={line} style={styles.bulletRow}>
-              <Text
-                style={[styles.bulletDot, { color: theme.colors.indigo[400] }]}
+
+        <View
+          style={[
+            styles.benefitBox,
+            {
+              backgroundColor: theme.colors.surfaceElevated,
+              borderColor: theme.colors.border,
+            },
+          ]}
+        >
+          {BENEFITS.map((line) => (
+            <View key={line} style={styles.benefitRow}>
+              <View
+                style={[
+                  styles.checkDot,
+                  { backgroundColor: isDark ? "rgba(99, 102, 241, 0.22)" : "rgba(99, 102, 241, 0.10)" },
+                ]}
               >
-                {"\u2022"}
-              </Text>
+                <Check size={13} color={theme.colors.indigo[400]} strokeWidth={3} />
+              </View>
               <Text
                 style={[
-                  styles.bulletText,
+                  styles.benefitText,
                   { color: theme.colors.textSecondary },
                 ]}
               >
@@ -375,15 +495,36 @@ function BillingUpsellModal({
           ))}
         </View>
 
-        <Text style={[styles.disclaimer, { color: theme.colors.textMuted }]}>
-          Monthly and yearly plans are shown by {storeName} before purchase. Cancel anytime in {storeName}.
-        </Text>
+        <View
+          style={[
+            styles.notice,
+            {
+              backgroundColor: isDark ? "rgba(99, 102, 241, 0.12)" : "rgba(99, 102, 241, 0.07)",
+              borderColor: isDark ? "rgba(129, 140, 248, 0.28)" : "rgba(99, 102, 241, 0.16)",
+            },
+          ]}
+        >
+          <Text style={[styles.noticeTitle, { color: theme.colors.textPrimary }]}>
+            {trialAvailable ? `${trialLabel} free trial` : "Flexible plans"}
+          </Text>
+          <Text style={[styles.noticeText, { color: theme.colors.textSecondary }]}>
+            {trialAvailable
+              ? `No payment required. ${paidPlanHint}`
+              : `Shown by ${storeName} before purchase. Cancel anytime.`}
+          </Text>
+        </View>
+
+        {!trialAvailable && trialUsed ? (
+          <Text style={[styles.disclaimerHint, { color: theme.colors.textMuted }]}>
+            This account already used its free trial.
+          </Text>
+        ) : null}
 
         {!configured ? (
           <Text
             style={[styles.disclaimerHint, { color: theme.colors.textMuted }]}
           >
-            Billing isn’t configured yet on this build. Add your RevenueCat API
+            Billing isn't configured yet on this build. Add your RevenueCat API
             key to enable purchases.
           </Text>
         ) : isExpoGo ? (
@@ -453,33 +594,40 @@ function BillingUpsellModal({
           </View>
         ) : null}
 
+        {trialAvailable ? (
+          <Button
+            title={trialButtonTitle}
+            onPress={() => void runTrial()}
+            disabled={!canStartTrial}
+            style={{ marginTop: 8, opacity: canStartTrial ? 1 : 0.65 }}
+          />
+        ) : null}
         <Button
-          title={
-            busy === "yearly" ? `Opening ${storeName}…` : "Subscribe yearly"
-          }
+          title={yearlyButtonTitle}
           onPress={() => void run("yearly")}
           disabled={!canBuy}
-          style={{ marginTop: 8, opacity: canBuy ? 1 : 0.65 }}
+          style={{ marginTop: trialAvailable ? 10 : 8, opacity: canBuy ? 1 : 0.65 }}
         />
         <Button
-          title={
-            busy === "monthly" ? `Opening ${storeName}…` : "Subscribe monthly"
-          }
+          title={monthlyButtonTitle}
           variant="secondary"
           onPress={() => void run("monthly")}
           disabled={!canBuy}
           style={{ marginTop: 10, opacity: canBuy ? 1 : 0.65 }}
         />
-        <Button
-          title={busy === "restore" ? "Restoring…" : "Restore purchases"}
-          variant="secondary"
+        <Pressable
           onPress={() => void run("restore")}
           disabled={!configured || !ready || busy !== null}
-          style={{
-            marginTop: 10,
-            opacity: configured && ready && busy === null ? 1 : 0.65,
-          }}
-        />
+          accessibilityRole="button"
+          style={[
+            styles.restoreLink,
+            { opacity: configured && ready && busy === null ? 1 : 0.55 },
+          ]}
+        >
+          <Text style={[styles.restoreText, { color: theme.colors.indigo[400] }]}>
+            {restoreButtonTitle}
+          </Text>
+        </Pressable>
 
         <View style={styles.linkRow}>
           <Pressable
@@ -491,7 +639,7 @@ function BillingUpsellModal({
             </Text>
           </Pressable>
           <Text style={[styles.linkSep, { color: theme.colors.textMuted }]}>
-            ·
+            -
           </Text>
           <Pressable
             onPress={() => void onOpenPrivacy()}
@@ -501,14 +649,19 @@ function BillingUpsellModal({
               Privacy
             </Text>
           </Pressable>
+          <Text style={[styles.linkSep, { color: theme.colors.textMuted }]}>
+            -
+          </Text>
+          <Pressable
+            onPress={onClose}
+            accessibilityRole="button"
+          >
+            <Text style={[styles.link, { color: theme.colors.textMuted }]}>
+              Not now
+            </Text>
+          </Pressable>
         </View>
 
-        <Button
-          title="Not now"
-          variant="secondary"
-          onPress={onClose}
-          style={{ marginTop: 10 }}
-        />
         </ScrollView>
       </View>
     </View>
@@ -534,7 +687,7 @@ const styles = StyleSheet.create({
   },
   sheet: {
     borderWidth: 1,
-    maxHeight: "92%",
+    maxHeight: "86%",
     maxWidth: 440,
     width: "100%",
     alignSelf: "center",
@@ -542,31 +695,53 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   sheetScroll: { width: "100%" },
-  sheetScrollContent: { padding: 20, paddingBottom: 24 },
-  titleRow: { marginBottom: 10 },
-  title: { fontWeight: "800", letterSpacing: -0.3, marginBottom: 8 },
-  sub: { fontSize: 14, lineHeight: 20, marginBottom: 14, fontWeight: "500" },
-  list: { gap: 8, marginBottom: 4 },
-  bulletRow: { flexDirection: "row", alignItems: "flex-start", gap: 8 },
-  bulletDot: {
-    fontSize: 14,
+  sheetScrollContent: { padding: 18, paddingBottom: 18 },
+  titleRow: {
+    marginBottom: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  wordmark: {
+    fontSize: 18,
+    lineHeight: 22,
     fontWeight: "900",
-    marginTop: 1,
-    width: 14,
-    textAlign: "center",
+    letterSpacing: 0,
   },
-  bulletText: { flex: 1, fontSize: 13, lineHeight: 19, fontWeight: "600" },
-  disclaimer: {
-    fontSize: 11,
-    lineHeight: 16,
-    fontWeight: "700",
-    marginTop: 10,
+  title: { fontWeight: "800", letterSpacing: 0, marginBottom: 6 },
+  sub: { fontSize: 13, lineHeight: 18, marginBottom: 12, fontWeight: "600" },
+  benefitBox: {
+    borderWidth: 1,
+    borderRadius: 14,
+    paddingVertical: 11,
+    paddingHorizontal: 12,
+    gap: 9,
+    marginBottom: 10,
   },
+  benefitRow: { flexDirection: "row", alignItems: "center", gap: 9 },
+  checkDot: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  benefitText: { flex: 1, fontSize: 12.5, lineHeight: 17, fontWeight: "700" },
+  notice: {
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginBottom: 8,
+  },
+  noticeTitle: { fontSize: 13, lineHeight: 17, fontWeight: "900" },
+  noticeText: { fontSize: 12, lineHeight: 16, fontWeight: "700", marginTop: 2 },
   disclaimerHint: {
     fontSize: 11,
     lineHeight: 16,
     fontWeight: "700",
-    marginTop: 6,
+    marginTop: 4,
     opacity: 0.9,
   },
   errorText: { fontSize: 12, lineHeight: 17, fontWeight: "800", marginTop: 8 },
@@ -580,13 +755,22 @@ const styles = StyleSheet.create({
   },
   debugTitle: { fontSize: 12, fontWeight: "900" },
   debugLine: { fontSize: 10, lineHeight: 14, fontWeight: "700" },
+  restoreLink: {
+    minHeight: 38,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 8,
+    paddingHorizontal: 8,
+  },
+  restoreText: { fontSize: 12, lineHeight: 16, fontWeight: "800" },
   linkRow: {
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
     gap: 8,
-    marginTop: 10,
+    marginTop: 6,
   },
   link: { fontSize: 12, fontWeight: "800" },
   linkSep: { fontSize: 12, fontWeight: "800" },
 });
+

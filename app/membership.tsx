@@ -51,6 +51,12 @@ function DetailRow({
   );
 }
 
+function parseAccessDate(value: string | null | undefined): Date | null {
+  if (!value) return null;
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
 export default function MembershipScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -67,8 +73,9 @@ export default function MembershipScreen() {
     restore,
     openManageSubscriptions,
   } = useBilling();
-  const { isPremium, loading: premiumLoading, refresh: refreshPremium } = usePremium();
+  const { isPremium, accessStatus, loading: premiumLoading, refresh: refreshPremium } = usePremium();
   const [restoreBusy, setRestoreBusy] = useState(false);
+  const [restoreStage, setRestoreStage] = useState<null | "restoring" | "applying">(null);
   const [manageBusy, setManageBusy] = useState(false);
   const userId = session?.user?.id ?? null;
 
@@ -76,6 +83,7 @@ export default function MembershipScreen() {
 
   useEffect(() => {
     setRestoreBusy(false);
+    setRestoreStage(null);
     setManageBusy(false);
   }, [userId]);
 
@@ -94,8 +102,10 @@ export default function MembershipScreen() {
   const onRestore = useCallback(async () => {
     if (isExpoGo || !configured || !ready) return;
     setRestoreBusy(true);
+    setRestoreStage("restoring");
     try {
       await restore();
+      setRestoreStage("applying");
       await refreshBilling({ forceNetwork: true });
       await refreshPremium();
       showToast("Purchases restored.", "success");
@@ -103,6 +113,7 @@ export default function MembershipScreen() {
       showToast("Could not restore purchases.", "error");
     } finally {
       setRestoreBusy(false);
+      setRestoreStage(null);
     }
   }, [configured, isExpoGo, ready, refreshBilling, refreshPremium, restore, showToast]);
 
@@ -133,6 +144,15 @@ export default function MembershipScreen() {
     }
     return `Access until ${formatMembershipDate(summary.expiresAt)}`;
   }, [storeName, summary]);
+
+  const trialActive = accessStatus?.trialActive === true && summary.kind === "none";
+  const trialExpiresAt = parseAccessDate(accessStatus?.trialExpiresAt);
+  const restoreButtonTitle =
+    restoreStage === "applying"
+      ? "Applying membership..."
+      : restoreBusy
+        ? "Restoring purchases..."
+        : "Restore purchases";
 
   const bottomPad = Math.max(insets.bottom, 20) + 12;
 
@@ -189,6 +209,46 @@ export default function MembershipScreen() {
             <Text style={[styles.bannerText, { color: theme.colors.textMuted, marginTop: 10, textAlign: "center" }]}>
               Loading subscription status…
             </Text>
+          </View>
+        ) : null}
+
+        {!billingLoading && isPremium && trialActive ? (
+          <View
+            style={[
+              styles.card,
+              {
+                borderColor: theme.colors.indigo[500],
+                backgroundColor: theme.colors.surface,
+                marginTop: 12,
+                ...theme.shadow.card,
+              },
+            ]}
+          >
+            <View style={styles.statusHead}>
+              <View style={[styles.crownWrap, { backgroundColor: isDark ? "rgba(99, 102, 241, 0.2)" : "rgba(79, 70, 229, 0.12)" }]}>
+                <Crown size={22} color={theme.colors.indigo[400]} />
+              </View>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={[styles.planTitle, { color: theme.colors.textPrimary }]}>Community trial</Text>
+                <Text style={[styles.planSub, { color: theme.colors.indigo[400] }]}>
+                  {trialExpiresAt ? `Access until ${formatMembershipDate(trialExpiresAt)}` : "Trial active"}
+                </Text>
+              </View>
+              <View style={[styles.activePill, { backgroundColor: theme.colors.green[500] + "22", borderColor: theme.colors.green[500] }]}>
+                <Text style={[styles.activePillText, { color: theme.colors.green[500] }]}>Active</Text>
+              </View>
+            </View>
+            <Text style={[styles.bodyMuted, { color: theme.colors.textSecondary, marginTop: 14 }]}>
+              Solo habits stay free. Subscribe when you want to keep Community features after the trial.
+            </Text>
+            <Button title="View Community plans" onPress={() => openUpsell("profile")} style={{ marginTop: 16 }} />
+            <Button
+              title={restoreButtonTitle}
+              variant="secondary"
+              onPress={() => void onRestore()}
+              disabled={restoreBusy || isExpoGo || !ready}
+              style={{ marginTop: 10 }}
+            />
           </View>
         ) : null}
 
@@ -265,7 +325,7 @@ export default function MembershipScreen() {
               disabled={manageBusy || isExpoGo || !ready}
             />
             <Button
-              title={restoreBusy ? "Restoring…" : "Restore purchases"}
+              title={restoreButtonTitle}
               variant="secondary"
               onPress={() => void onRestore()}
               disabled={restoreBusy || isExpoGo || !ready}
@@ -274,7 +334,7 @@ export default function MembershipScreen() {
           </>
         ) : null}
 
-        {!billingLoading && isPremium && summary.kind === "none" ? (
+        {!billingLoading && isPremium && summary.kind === "none" && !trialActive ? (
           <View
             style={[
               styles.card,
@@ -287,7 +347,7 @@ export default function MembershipScreen() {
               device yet. If you subscribed on another device, use Restore. Otherwise your access may be managed directly
               on your profile.
             </Text>
-            <Button title="Restore purchases" onPress={() => void onRestore()} disabled={restoreBusy || isExpoGo || !ready} style={{ marginTop: 16 }} />
+            <Button title={restoreButtonTitle} onPress={() => void onRestore()} disabled={restoreBusy || isExpoGo || !ready} style={{ marginTop: 16 }} />
             <Button
               title={`Open ${storeName}`}
               variant="secondary"

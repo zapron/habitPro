@@ -11,7 +11,7 @@ const SERVER_REFRESH_TIMEOUT_MS = 2_500;
 
 type RefreshPremiumAccessOptions = {
   force?: boolean;
-  /** Server-gated Community actions need Supabase `profiles.is_premium`, not just local RevenueCat access. */
+  /** Server-gated Community actions need Supabase effective access, not just local RevenueCat access. */
   serverOnly?: boolean;
   /** For actions that have server-side enforcement, trust current local premium state before forcing a refresh. */
   cachedAccessOk?: boolean;
@@ -82,7 +82,12 @@ function selectAccess(
 export function useRefreshPremiumAccess(minIntervalMs = DEFAULT_MIN_INTERVAL_MS) {
   const { session } = useAuth();
   const { refresh: refreshBilling } = useBilling();
-  const { isPremium, loading: premiumLoading, refresh: refreshPremium } = usePremium();
+  const {
+    isPremium,
+    accessStatus,
+    loading: premiumLoading,
+    refresh: refreshPremium,
+  } = usePremium();
   const userId = session?.user?.id ?? null;
 
   return useCallback(
@@ -95,9 +100,15 @@ export function useRefreshPremiumAccess(minIntervalMs = DEFAULT_MIN_INTERVAL_MS)
       // Tap-time guards should be instant once the app-level premium flag is settled.
       // Mutations are still protected by Supabase RLS/RPCs, so stale edge cases fail safely.
       if (options?.cachedAccessOk && !options.force) {
-        if (isPremium) return true;
-        if (!premiumLoading) return false;
-        if (options.background) return selectAccess(cache.lastSnapshot, options);
+        if (options.serverOnly) {
+          if (accessStatus?.hasAccess === true) return true;
+          if (!premiumLoading && !isPremium) return false;
+          if (options.background) return selectAccess(cache.lastSnapshot, options);
+        } else {
+          if (isPremium) return true;
+          if (!premiumLoading) return false;
+          if (options.background) return selectAccess(cache.lastSnapshot, options);
+        }
       }
 
       // Premium users: avoid re-checking on every interaction. If we've already confirmed
@@ -224,6 +235,14 @@ export function useRefreshPremiumAccess(minIntervalMs = DEFAULT_MIN_INTERVAL_MS)
         }
       }
     },
-    [isPremium, premiumLoading, minIntervalMs, refreshBilling, refreshPremium, userId],
+    [
+      accessStatus?.hasAccess,
+      isPremium,
+      premiumLoading,
+      minIntervalMs,
+      refreshBilling,
+      refreshPremium,
+      userId,
+    ],
   );
 }

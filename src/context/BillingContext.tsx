@@ -1,13 +1,24 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { AppState, InteractionManager, Linking, Platform } from "react-native";
 import Constants from "expo-constants";
-import Purchases, { type CustomerInfo, LOG_LEVEL } from "react-native-purchases";
+import Purchases, { type CustomerInfo, type PurchasesPackage, LOG_LEVEL } from "react-native-purchases";
 import { HABITPRO_COMMUNITY_ENTITLEMENT_ID } from "../constants/revenueCat";
 import { getRevenueCatConfig, logRevenueCatEnvHint } from "../lib/env";
 import { useAuth } from "./AuthContext";
 
-type PlanId = "monthly" | "yearly";
+export type BillingPlanId = "monthly" | "yearly";
+type PlanId = BillingPlanId;
 type PurchaseStage = "diagnostics" | "load offerings" | "load store products" | "start purchase";
+
+export type CommunityBillingPlan = {
+  plan: BillingPlanId;
+  packageIdentifier: string;
+  offeringIdentifier: string | null;
+  productIdentifier: string;
+  title: string | null;
+  priceString: string | null;
+  subscriptionPeriod: string | null;
+};
 
 export type BillingDebugSnapshot = {
   at: string;
@@ -86,6 +97,9 @@ type BillingContextValue = {
   customerInfo: CustomerInfo | null;
   /** True when the entitlement is active in current CustomerInfo. */
   hasCommunityAccess: boolean;
+  /** Store-localized monthly/yearly plan metadata from RevenueCat offerings. */
+  communityPlans: Record<BillingPlanId, CommunityBillingPlan | null>;
+  refreshCommunityPlans: () => Promise<Record<BillingPlanId, CommunityBillingPlan | null>>;
   refresh: (options?: { forceNetwork?: boolean }) => Promise<CustomerInfo | null>;
   purchaseCommunity: (
     plan: PlanId,
@@ -121,6 +135,11 @@ const PACKAGE_BY_PLAN: Record<PlanId, string> = {
 const STORE_PRODUCT_IDS: Record<PlanId, string> = {
   monthly: "monthly",
   yearly: "yearly",
+};
+
+const EMPTY_COMMUNITY_PLANS: Record<PlanId, CommunityBillingPlan | null> = {
+  monthly: null,
+  yearly: null,
 };
 
 const MAX_REVENUECAT_LOGS = 40;
@@ -232,6 +251,30 @@ function summarizePackage(value: unknown): BillingPackageDebug {
   };
 }
 
+function communityPlanFromPackage(plan: PlanId, pkg: PurchasesPackage): CommunityBillingPlan {
+  return {
+    plan,
+    packageIdentifier: pkg.identifier,
+    offeringIdentifier: pkg.offeringIdentifier ?? null,
+    productIdentifier: pkg.product.identifier,
+    title: typeof pkg.product.title === "string" ? pkg.product.title : null,
+    priceString: typeof pkg.product.priceString === "string" ? pkg.product.priceString : null,
+    subscriptionPeriod:
+      typeof pkg.product.subscriptionPeriod === "string" ? pkg.product.subscriptionPeriod : null,
+  };
+}
+
+function communityPlansFromPackages(
+  packages: PurchasesPackage[] | undefined,
+): Record<PlanId, CommunityBillingPlan | null> {
+  const plans: Record<PlanId, CommunityBillingPlan | null> = { ...EMPTY_COMMUNITY_PLANS };
+  const monthly = packages?.find((p) => p.identifier === PACKAGE_BY_PLAN.monthly);
+  const yearly = packages?.find((p) => p.identifier === PACKAGE_BY_PLAN.yearly);
+  if (monthly) plans.monthly = communityPlanFromPackage("monthly", monthly);
+  if (yearly) plans.yearly = communityPlanFromPackage("yearly", yearly);
+  return plans;
+}
+
 function summarizeOfferings(value: unknown): BillingOfferingDebug | null {
   const offerings = asRecord(value);
   const current = offerings.current ? asRecord(offerings.current) : null;
@@ -268,6 +311,9 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
   const [ready, setReady] = useState(false);
   const [customerInfo, setCustomerInfo] = useState<CustomerInfo | null>(null);
   const [customerInfoUserId, setCustomerInfoUserId] = useState<string | null>(null);
+  const [communityPlans, setCommunityPlans] =
+    useState<Record<PlanId, CommunityBillingPlan | null>>(EMPTY_COMMUNITY_PLANS);
+  const [communityPlansUserId, setCommunityPlansUserId] = useState<string | null>(null);
   const [billingDebug, setBillingDebug] = useState<BillingDebugSnapshot | null>(null);
   const configuredRef = useRef(false);
   const logBufferRef = useRef<string[]>([]);
@@ -285,6 +331,8 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
     activeBillingUserIdRef.current = userId;
     setCustomerInfo(null);
     setCustomerInfoUserId(null);
+    setCommunityPlans(EMPTY_COMMUNITY_PLANS);
+    setCommunityPlansUserId(null);
     lastInactiveAtRef.current = null;
   }, [userId]);
 
@@ -493,6 +541,45 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
     return info;
   }, [configured, ensureRevenueCatUser, isExpoGo, ready, userId]);
 
+  const refreshCommunityPlans = useCallback(async () => {
+    if (!ready || !configured || isExpoGo || !userId) {
+      setCommunityPlans(EMPTY_COMMUNITY_PLANS);
+      setCommunityPlansUserId(null);
+      return EMPTY_COMMUNITY_PLANS;
+    }
+    const requestedUserId = userId;
+    await ensureRevenueCatUser(requestedUserId);
+    if (activeBillingUserIdRef.current !== requestedUserId) {
+      return EMPTY_COMMUNITY_PLANS;
+    }
+    const offerings = await Purchases.getOfferings();
+    const plans = communityPlansFromPackages(offerings.current?.availablePackages);
+    if (activeBillingUserIdRef.current === requestedUserId) {
+      setCommunityPlans(plans);
+      setCommunityPlansUserId(requestedUserId);
+    }
+    return plans;
+  }, [configured, ensureRevenueCatUser, isExpoGo, ready, userId]);
+
+  useEffect(() => {
+    if (!ready || !configured || isExpoGo || !userId) {
+      setCommunityPlans(EMPTY_COMMUNITY_PLANS);
+      setCommunityPlansUserId(null);
+      return;
+    }
+    const task = InteractionManager.runAfterInteractions(() => {
+      void refreshCommunityPlans().catch((e) => {
+        if (__DEV__) {
+          const msg = e instanceof Error ? e.message : String(e);
+          console.warn("[habitPro] RevenueCat plans refresh failed:", msg);
+        }
+      });
+    });
+    return () => {
+      task.cancel?.();
+    };
+  }, [configured, isExpoGo, ready, refreshCommunityPlans, userId]);
+
   const restore = async () => {
     if (!ready || !configured || isExpoGo || !userId) return;
     const requestedUserId = userId;
@@ -520,6 +607,8 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
 
       const offerings = await Purchases.getOfferings();
       snapshot.offerings = summarizeOfferings(offerings);
+      setCommunityPlans(communityPlansFromPackages(offerings.current?.availablePackages));
+      setCommunityPlansUserId(requestedUserId);
 
       try {
         stage = "load store products";
@@ -582,6 +671,7 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
   };
 
   const visibleCustomerInfo = customerInfoUserId === userId ? customerInfo : null;
+  const visibleCommunityPlans = communityPlansUserId === userId ? communityPlans : EMPTY_COMMUNITY_PLANS;
   const hasCommunityAccess = Boolean(visibleCustomerInfo?.entitlements?.active?.[ENTITLEMENT_ID]);
 
   useEffect(() => {
@@ -628,6 +718,8 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
       isExpoGo,
       customerInfo: visibleCustomerInfo,
       hasCommunityAccess,
+      communityPlans: visibleCommunityPlans,
+      refreshCommunityPlans,
       refresh,
       purchaseCommunity,
       restore,
@@ -639,8 +731,10 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
       billingDebug,
       configured,
       hasCommunityAccess,
+      visibleCommunityPlans,
       visibleCustomerInfo,
       refresh,
+      refreshCommunityPlans,
       isExpoGo,
       ready,
       runBillingDiagnostics,
