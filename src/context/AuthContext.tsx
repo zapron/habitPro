@@ -8,6 +8,7 @@ import React, {
   useState,
 } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { InteractionManager } from "react-native";
 import * as WebBrowser from "expo-web-browser";
 import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 import { useHabitStore } from "../store/habitStore";
@@ -224,12 +225,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!supabaseConfigured || !session?.user || !syncReady) return;
     const uid = session.user.id;
-    void (async () => {
-      await syncProfileTimezone(uid);
-      await registerPushTokenForCurrentUser(uid);
-    })();
+    const task = InteractionManager.runAfterInteractions(() => {
+      void Promise.allSettled([
+        syncProfileTimezone(uid),
+        registerPushTokenForCurrentUser(uid),
+      ]);
+    });
     const unsub = subscribePushAndTimezoneOnAppActive(uid);
-    return () => unsub();
+    return () => {
+      task.cancel?.();
+      unsub();
+    };
   }, [session?.user?.id, syncReady, supabaseConfigured]);
 
   const signIn = useCallback(async (email: string, password: string) => {

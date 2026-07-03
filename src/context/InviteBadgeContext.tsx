@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { AppState } from "react-native";
+import { AppState, InteractionManager } from "react-native";
 import { isSupabaseConfigured } from "../lib/env";
 import { countPendingInvitesForMe } from "../lib/groupChallengesApi";
 import { countPendingLiveMiniInvitesForMe } from "../lib/liveMiniMissionsApi";
@@ -67,7 +67,12 @@ export function InviteBadgeProvider({ children }: { children: React.ReactNode })
       lastRefreshAtRef.current = 0;
       return;
     }
-    void refreshInviteBadge({ force: true });
+    const task = InteractionManager.runAfterInteractions(() => {
+      void refreshInviteBadge({ force: true });
+    });
+    return () => {
+      task.cancel?.();
+    };
   }, [initializing, refreshInviteBadge, userId]);
 
   useEffect(() => {

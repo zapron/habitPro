@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { AppState } from "react-native";
+import { AppState, InteractionManager } from "react-native";
 import { useAuth } from "./AuthContext";
 import { useBilling } from "./BillingContext";
 import { isSupabaseConfigured } from "../lib/env";
@@ -67,7 +67,12 @@ export function PremiumProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (initializing) return;
-    void refresh();
+    const task = InteractionManager.runAfterInteractions(() => {
+      void refresh();
+    });
+    return () => {
+      task.cancel?.();
+    };
   }, [initializing, refresh]);
 
   useEffect(() => {
@@ -97,36 +102,40 @@ export function PremiumProvider({ children }: { children: React.ReactNode }) {
     const supabase = getSupabase();
     if (!supabase) return;
 
-    const channel = supabase
-      .channel(`profiles_premium_${userId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "profiles",
-          filter: `id=eq.${userId}`,
-        },
-        (payload) => {
-          if (activeUserIdRef.current !== userId) return;
-          const next = payload.new as Record<string, unknown> | null;
-          if (!next) return;
-          const v = next.is_premium;
-          if (typeof v === "boolean") {
-            setDbPremium(v);
-            setDbPremiumUserId(userId);
-          } else if (typeof v === "number") {
-            setDbPremium(Boolean(v));
-            setDbPremiumUserId(userId);
-          } else {
-            void refresh();
-          }
-        },
-      )
-      .subscribe();
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    const task = InteractionManager.runAfterInteractions(() => {
+      channel = supabase
+        .channel(`profiles_premium_${userId}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "UPDATE",
+            schema: "public",
+            table: "profiles",
+            filter: `id=eq.${userId}`,
+          },
+          (payload) => {
+            if (activeUserIdRef.current !== userId) return;
+            const next = payload.new as Record<string, unknown> | null;
+            if (!next) return;
+            const v = next.is_premium;
+            if (typeof v === "boolean") {
+              setDbPremium(v);
+              setDbPremiumUserId(userId);
+            } else if (typeof v === "number") {
+              setDbPremium(Boolean(v));
+              setDbPremiumUserId(userId);
+            } else {
+              void refresh();
+            }
+          },
+        )
+        .subscribe();
+    });
 
     return () => {
-      supabase.removeChannel(channel);
+      task.cancel?.();
+      if (channel) supabase.removeChannel(channel);
     };
   }, [initializing, userId, refresh]);
 
