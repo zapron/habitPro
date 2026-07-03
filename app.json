@@ -13,9 +13,7 @@
     "icon": "./assets/app-icon-v4.png",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
-    "runtimeVersion": {
-      "policy": "appVersion"
-    },
+    "runtimeVersion": "1.1.31",
     "updates": {
       "url": "https://u.expo.dev/cdfc2b93-f246-47b6-94ca-6a816ffda876",
       "checkAutomatically": "ON_LOAD",
