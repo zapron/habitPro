@@ -225,6 +225,41 @@ export async function listSentPresetNudgeKindsToday(
   );
 }
 
+/** Custom notes are limited to one per recipient per UTC day. */
+export async function listSentCustomNoteUserIdsToday(
+  challengeId: string,
+  toUserIds: string[],
+): Promise<string[]> {
+  const supabase = getSupabase();
+  if (!supabase) return [];
+  const uniqueToUserIds = [...new Set(toUserIds.map((id) => id.trim()).filter(Boolean))];
+  if (uniqueToUserIds.length === 0) return [];
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return [];
+
+  const { startIso, endIso } = utcTodayBounds();
+  const { data, error } = await supabase
+    .from("challenge_nudges")
+    .select("to_user_id")
+    .eq("challenge_id", challengeId)
+    .eq("from_user_id", user.id)
+    .in("to_user_id", uniqueToUserIds)
+    .eq("kind", "custom_note")
+    .gte("created_at", startIso)
+    .lt("created_at", endIso);
+  if (error) throw error;
+
+  return [
+    ...new Set(
+      (data ?? [])
+        .map((row) => row.to_user_id)
+        .filter((id): id is string => typeof id === "string" && id.length > 0),
+    ),
+  ];
+}
+
 /** Premium: one custom note per squad member per 24h (UTC day) — enforced server-side. */
 export async function sendChallengeCustomNudge(
   challengeId: string,

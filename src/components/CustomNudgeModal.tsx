@@ -21,10 +21,18 @@ type Props = {
   onRequestClose: () => void;
   recipientLabel: string;
   busy: boolean;
+  alreadySent?: boolean;
   onSend: (text: string) => void;
 };
 
-export function CustomNudgeModal({ visible, onRequestClose, recipientLabel, busy, onSend }: Props) {
+export function CustomNudgeModal({
+  visible,
+  onRequestClose,
+  recipientLabel,
+  busy,
+  alreadySent = false,
+  onSend,
+}: Props) {
   const { theme, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const [text, setText] = useState("");
@@ -34,7 +42,7 @@ export function CustomNudgeModal({ visible, onRequestClose, recipientLabel, busy
   }, [visible]);
 
   const len = text.length;
-  const canSend = len >= 1 && len <= MAX_LEN && !busy;
+  const canSend = text.trim().length >= 1 && len <= MAX_LEN && !busy && !alreadySent;
 
   return (
     <Modal
@@ -71,8 +79,9 @@ export function CustomNudgeModal({ visible, onRequestClose, recipientLabel, busy
           >
             <Text style={[styles.title, { color: theme.colors.textPrimary }]}>Custom note</Text>
             <Text style={[styles.sub, { color: theme.colors.textMuted }]}>
-              One message to {recipientLabel} in this squad (HabitPro Community). You can only send this once per
-              person.
+              {alreadySent
+                ? `You already sent a note to ${recipientLabel} today.`
+                : `One message to ${recipientLabel} in this squad (HabitPro Community). You can send one per person every 24 hours.`}
             </Text>
             <TextInput
               value={text}
@@ -81,7 +90,7 @@ export function CustomNudgeModal({ visible, onRequestClose, recipientLabel, busy
               placeholderTextColor={theme.colors.textMuted}
               multiline
               maxLength={MAX_LEN}
-              editable={!busy}
+              editable={!busy && !alreadySent}
               style={[
                 styles.input,
                 {
@@ -102,7 +111,7 @@ export function CustomNudgeModal({ visible, onRequestClose, recipientLabel, busy
                   <ActivityIndicator color={theme.colors.indigo[400]} />
                 ) : (
                   <Button
-                    title="Send"
+                    title={alreadySent ? "Sent" : "Send"}
                     variant="primary"
                     onPress={() => onSend(text.trim())}
                     disabled={!canSend}

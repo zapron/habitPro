@@ -49,6 +49,7 @@ import { usePlusUpsell } from "../../src/context/PlusUpsellContext";
 import { useHabitStore } from "../../src/store/habitStore";
 import {
   challengeNudgeSentTodayKey,
+  listSentCustomNoteUserIdsToday,
   listSentPresetNudgeKindsToday,
   listChallengeActivityPage,
   listRecentNudgesPage,
@@ -455,6 +456,7 @@ export default function ChallengeDetailScreen() {
   const [feedNudges, setFeedNudges] = useState<ChallengeNudgeRow[]>([]);
   const [nudgeBusyKey, setNudgeBusyKey] = useState<string | null>(null);
   const [sentPresetNudgeKeys, setSentPresetNudgeKeys] = useState<Set<string>>(() => new Set());
+  const [sentCustomNoteUserIds, setSentCustomNoteUserIds] = useState<Set<string>>(() => new Set());
   const [optimisticCongratsActivityIds, setOptimisticCongratsActivityIds] = useState<Set<string>>(() => new Set());
   const [refreshing, setRefreshing] = useState(false);
   const [secondaryLoading, setSecondaryLoading] = useState(false);
@@ -708,6 +710,18 @@ export default function ChallengeDetailScreen() {
         .catch((e) => {
           if (__DEV__) console.warn("[challenge] listSentPresetNudgeKindsToday", e);
         });
+      void listSentCustomNoteUserIdsToday(challengeId, loadedMemberIds)
+        .then((sentUserIds) => {
+          if (!screenActiveRef.current) return;
+          setSentCustomNoteUserIds((prev) => {
+            const next = new Set(prev);
+            for (const userId of sentUserIds) next.add(userId);
+            return next;
+          });
+        })
+        .catch((e) => {
+          if (__DEV__) console.warn("[challenge] listSentCustomNoteUserIdsToday", e);
+        });
       streakNextOffsetRef.current = page.nextOffset;
       setStreakNextOffset(page.nextOffset);
       setStreakHydrated(true);
@@ -797,6 +811,7 @@ export default function ChallengeDetailScreen() {
     setFeedActivity([]);
     setFeedNudges([]);
     setSentPresetNudgeKeys(new Set());
+    setSentCustomNoteUserIds(new Set());
     setOptimisticCongratsActivityIds(new Set());
     setRepairRows([]);
     setRepairVotes([]);
@@ -1450,8 +1465,9 @@ export default function ChallengeDetailScreen() {
         s.add(n.to_user_id);
       }
     }
+    for (const userId of sentCustomNoteUserIds) s.add(userId);
     return s;
-  }, [feedNudges, myUserId]);
+  }, [feedNudges, myUserId, sentCustomNoteUserIds]);
 
   const sentPresetNudgeKindsTodayByUserId = useMemo(() => {
     const map = new Map<string, Set<PresetChallengeNudgeKind>>();
@@ -1514,6 +1530,11 @@ export default function ChallengeDetailScreen() {
   const onSubmitCustomNote = useCallback(
     async (text: string) => {
       if (!challengeId || !customNoteToUserId || !myUserId) return;
+      if (sentCustomNoteUserIds.has(customNoteToUserId)) {
+        showToast("You already sent a note today.", "info");
+        setCustomNoteToUserId(null);
+        return;
+      }
       const freshPremium = await refreshPremiumAccess({ serverOnly: true, cachedAccessOk: true });
       if (freshPremium !== true) {
         openUpsell("squad_nudge");
@@ -1535,16 +1556,34 @@ export default function ChallengeDetailScreen() {
             await handleServerPremiumRequired("squad_nudge");
             return;
           }
+          const low = error.message.toLowerCase();
+          if (low.includes("one note") || low.includes("already sent")) {
+            setSentCustomNoteUserIds((prev) => {
+              if (prev.has(customNoteToUserId)) return prev;
+              const next = new Set(prev);
+              next.add(customNoteToUserId);
+              return next;
+            });
+            setCustomNoteToUserId(null);
+            showToast("You already sent a note today.", "info");
+            return;
+          }
           showToast(error.message, "error");
           return;
         }
+        setSentCustomNoteUserIds((prev) => {
+          if (prev.has(customNoteToUserId)) return prev;
+          const next = new Set(prev);
+          next.add(customNoteToUserId);
+          return next;
+        });
         setCustomNoteToUserId(null);
         await load({ silent: true });
       } finally {
         setNudgeBusyKey(null);
       }
     },
-    [challengeId, customNoteToUserId, myUserId, myHabit, showToast, load, openUpsell, refreshPremiumAccess, handleServerPremiumRequired],
+    [challengeId, customNoteToUserId, myUserId, myHabit, sentCustomNoteUserIds, showToast, load, openUpsell, refreshPremiumAccess, handleServerPremiumRequired],
   );
 
   const repairVotesByRepairId = useMemo(() => {
@@ -2540,6 +2579,7 @@ export default function ChallengeDetailScreen() {
           onRequestClose={() => setCustomNoteToUserId(null)}
           recipientLabel={participantDisplayName(profileLabels[customNoteToUserId ?? ""])}
           busy={customNoteToUserId !== null && nudgeBusyKey === `${customNoteToUserId}-custom_note`}
+          alreadySent={customNoteToUserId !== null && customNoteSentTodayToUserIds.has(customNoteToUserId)}
           onSend={(t) => void onSubmitCustomNote(t)}
         />
       </LazyMount>
