@@ -31,6 +31,25 @@ const REMOTE_FOCUS_REFRESH_DELAY_MS = 1200;
 type RemoteStoreSnapshot = RemoteSnapshot;
 type RefreshOptions = { force?: boolean };
 
+function hasLocalRemoteWork(
+  state: Pick<
+    HabitStore,
+    | "dirtyHabitIds"
+    | "dirtyMiniMissionIds"
+    | "pendingDeleteHabitIds"
+    | "pendingDeleteMiniMissionIds"
+    | "pendingResetHabitIds"
+  >,
+): boolean {
+  return (
+    (state.dirtyHabitIds?.length ?? 0) > 0 ||
+    (state.dirtyMiniMissionIds?.length ?? 0) > 0 ||
+    (state.pendingDeleteHabitIds?.length ?? 0) > 0 ||
+    (state.pendingDeleteMiniMissionIds?.length ?? 0) > 0 ||
+    (state.pendingResetHabitIds?.length ?? 0) > 0
+  );
+}
+
 function shouldPreserveLocalMini(remoteMini: MiniMission, localMini: MiniMission): boolean {
   if (localMini.status === "completed" && remoteMini.status !== "completed") {
     return true;
@@ -91,6 +110,11 @@ export function useRemoteStoreRefreshOnFocus(enabled = true) {
 
     busyRef.current = true;
     try {
+      const local = useHabitStore.getState();
+      if (hasLocalRemoteWork(local)) {
+        requestRemoteSync({ immediate: true });
+        return;
+      }
       if (hasPendingRemoteSync() || hasRemoteSyncFault()) {
         return;
       }
@@ -99,12 +123,11 @@ export function useRemoteStoreRefreshOnFocus(enabled = true) {
       if (!options?.force && now - lastRefreshAt < REMOTE_FOCUS_REFRESH_TTL_MS) {
         return;
       }
-      const local = useHabitStore.getState();
       if (
         !options?.force &&
-        ((local.dirtyHabitIds && local.dirtyHabitIds.length > 0) ||
-          (local.dirtyMiniMissionIds && local.dirtyMiniMissionIds.length > 0))
+        hasLocalRemoteWork(local)
       ) {
+        requestRemoteSync({ immediate: true });
         return;
       }
       const startedMutationGeneration = getLocalStoreMutationGeneration();
@@ -123,13 +146,15 @@ export function useRemoteStoreRefreshOnFocus(enabled = true) {
       }
       const latestLocal = useHabitStore.getState();
       if (
-        !options?.force &&
-        (hasPendingRemoteSync() ||
+        hasLocalRemoteWork(latestLocal) ||
+        (!options?.force &&
+          (hasPendingRemoteSync() ||
           hasRemoteSyncFault() ||
-          getLocalStoreMutationGeneration() !== startedMutationGeneration ||
-          (latestLocal.dirtyHabitIds && latestLocal.dirtyHabitIds.length > 0) ||
-          (latestLocal.dirtyMiniMissionIds && latestLocal.dirtyMiniMissionIds.length > 0))
+          getLocalStoreMutationGeneration() !== startedMutationGeneration))
       ) {
+        if (hasLocalRemoteWork(latestLocal)) {
+          requestRemoteSync({ immediate: true });
+        }
         return;
       }
       const { snapshot, preserved } = preserveLocalMiniProgress(remoteWithLocalPeers, latestLocal);

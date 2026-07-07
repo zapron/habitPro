@@ -750,12 +750,27 @@ export async function pullFocusDeltaFromSupabase(
 }
 
 export function applyFocusDeltaToStore(
-  local: Pick<HabitStore, "habits" | "miniMissions" | "xp" | "username" | "cohortPeerHabits">,
+  local: Pick<
+    HabitStore,
+    | "habits"
+    | "miniMissions"
+    | "xp"
+    | "username"
+    | "cohortPeerHabits"
+    | "pendingDeleteHabitIds"
+    | "pendingDeleteMiniMissionIds"
+  >,
   partial: Pick<RemoteSnapshot, "habits" | "miniMissions" | "xp" | "username">,
   deleted: { habitIds: string[]; miniIds: string[] },
 ): RemoteSnapshot {
-  const deletedHabits = new Set(deleted.habitIds);
-  const deletedMinis = new Set(deleted.miniIds);
+  const deletedHabits = new Set([
+    ...deleted.habitIds,
+    ...(local.pendingDeleteHabitIds ?? []),
+  ]);
+  const deletedMinis = new Set([
+    ...deleted.miniIds,
+    ...(local.pendingDeleteMiniMissionIds ?? []),
+  ]);
   const changedHabits = new Map(partial.habits.map((h) => [h.id, h]));
   const changedMinis = new Map(partial.miniMissions.map((m) => [m.id, m]));
 
@@ -764,6 +779,7 @@ export function applyFocusDeltaToStore(
     .map((h) => changedHabits.get(h.id) ?? h);
   const habitIds = new Set(habits.map((h) => h.id));
   for (const h of partial.habits) {
+    if (deletedHabits.has(h.id)) continue;
     if (!habitIds.has(h.id)) {
       habitIds.add(h.id);
       habits.push(h);
@@ -775,6 +791,7 @@ export function applyFocusDeltaToStore(
     .map((m) => changedMinis.get(m.id) ?? m);
   const miniIds = new Set(miniMissions.map((m) => m.id));
   for (const m of partial.miniMissions) {
+    if (deletedMinis.has(m.id)) continue;
     if (!miniIds.has(m.id)) {
       miniIds.add(m.id);
       miniMissions.push(m);
@@ -859,6 +876,20 @@ export async function pullFromSupabase(
     : [];
 
   return { habits, miniMissions, xp, username, cohortPeerHabits };
+}
+
+function applyLocalPendingDeletes(
+  remote: RemoteSnapshot,
+  local: Pick<HabitStore, "pendingDeleteHabitIds" | "pendingDeleteMiniMissionIds">,
+): RemoteSnapshot {
+  const pendingHabitDeletes = new Set(local.pendingDeleteHabitIds ?? []);
+  const pendingMiniDeletes = new Set(local.pendingDeleteMiniMissionIds ?? []);
+  if (pendingHabitDeletes.size === 0 && pendingMiniDeletes.size === 0) return remote;
+  return {
+    ...remote,
+    habits: remote.habits.filter((habit) => !pendingHabitDeletes.has(habit.id)),
+    miniMissions: remote.miniMissions.filter((mission) => !pendingMiniDeletes.has(mission.id)),
+  };
 }
 
 export async function pushFullState(
@@ -1069,14 +1100,21 @@ function mergeDirtyLocalIntoRemote(
   local: LocalHydrateSnapshot,
   userId: string,
 ): RemoteSnapshot {
+  remote = applyLocalPendingDeletes(remote, local);
   const dirtyHabitIds = new Set(local.dirtyHabitIds ?? []);
+  for (const id of local.pendingResetHabitIds ?? []) {
+    dirtyHabitIds.add(id);
+  }
   const dirtyMiniIds = new Set(local.dirtyMiniMissionIds ?? []);
+  const pendingHabitDeletes = new Set(local.pendingDeleteHabitIds ?? []);
+  const pendingMiniDeletes = new Set(local.pendingDeleteMiniMissionIds ?? []);
   if (dirtyHabitIds.size === 0 && dirtyMiniIds.size === 0) return remote;
 
   let preservedLocalChange = false;
   const habitsById = new Map(remote.habits.map((habit) => [habit.id, habit]));
   for (const habit of local.habits) {
     if (!dirtyHabitIds.has(habit.id) || !belongsToUser(habit, userId)) continue;
+    if (pendingHabitDeletes.has(habit.id)) continue;
     preservedLocalChange = true;
     habitsById.set(habit.id, {
       ...habit,
@@ -1087,6 +1125,7 @@ function mergeDirtyLocalIntoRemote(
   const miniMissionsById = new Map(remote.miniMissions.map((mission) => [mission.id, mission]));
   for (const mission of local.miniMissions) {
     if (!dirtyMiniIds.has(mission.id) || !belongsToUser(mission, userId)) continue;
+    if (pendingMiniDeletes.has(mission.id)) continue;
     preservedLocalChange = true;
     miniMissionsById.set(mission.id, {
       ...mission,

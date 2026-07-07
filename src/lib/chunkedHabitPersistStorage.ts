@@ -7,6 +7,9 @@ type PersistedHabitState = {
   xp?: number;
   dirtyHabitIds?: string[];
   dirtyMiniMissionIds?: string[];
+  pendingDeleteHabitIds?: string[];
+  pendingDeleteMiniMissionIds?: string[];
+  pendingResetHabitIds?: string[];
   username?: string | null;
 };
 
@@ -19,6 +22,9 @@ type Manifest = {
   xp: number;
   dirtyHabitIds: string[];
   dirtyMiniMissionIds: string[];
+  pendingDeleteHabitIds: string[];
+  pendingDeleteMiniMissionIds: string[];
+  pendingResetHabitIds: string[];
   username: string | null;
   updatedAt: string;
 };
@@ -107,6 +113,18 @@ function uniqueIds(items: Array<{ id: string }> | undefined): string[] {
     if (!item?.id || seen.has(item.id)) continue;
     seen.add(item.id);
     ids.push(item.id);
+  }
+  return ids;
+}
+
+function uniqueStringIds(value: string[] | undefined): string[] {
+  if (!value?.length) return [];
+  const seen = new Set<string>();
+  const ids: string[] = [];
+  for (const id of value) {
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    ids.push(id);
   }
   return ids;
 }
@@ -226,6 +244,9 @@ export function createChunkedHabitPersistStorage<S extends PersistedHabitState>(
         xp: manifest.xp,
         dirtyHabitIds: manifest.dirtyHabitIds,
         dirtyMiniMissionIds: manifest.dirtyMiniMissionIds,
+        pendingDeleteHabitIds: manifest.pendingDeleteHabitIds ?? [],
+        pendingDeleteMiniMissionIds: manifest.pendingDeleteMiniMissionIds ?? [],
+        pendingResetHabitIds: manifest.pendingResetHabitIds ?? [],
         username: manifest.username,
       }),
     );
@@ -237,6 +258,9 @@ export function createChunkedHabitPersistStorage<S extends PersistedHabitState>(
         xp: manifest.xp,
         dirtyHabitIds: manifest.dirtyHabitIds,
         dirtyMiniMissionIds: manifest.dirtyMiniMissionIds,
+        pendingDeleteHabitIds: manifest.pendingDeleteHabitIds ?? [],
+        pendingDeleteMiniMissionIds: manifest.pendingDeleteMiniMissionIds ?? [],
+        pendingResetHabitIds: manifest.pendingResetHabitIds ?? [],
         username: manifest.username,
       } as S,
       version: manifest.persistVersion,
@@ -361,6 +385,9 @@ export function createChunkedHabitPersistStorage<S extends PersistedHabitState>(
         xp: typeof state.xp === "number" ? state.xp : 0,
         dirtyHabitIds: state.dirtyHabitIds ?? [],
         dirtyMiniMissionIds: state.dirtyMiniMissionIds ?? [],
+        pendingDeleteHabitIds: uniqueStringIds(state.pendingDeleteHabitIds),
+        pendingDeleteMiniMissionIds: uniqueStringIds(state.pendingDeleteMiniMissionIds),
+        pendingResetHabitIds: uniqueStringIds(state.pendingResetHabitIds),
         username: typeof state.username === "string" ? state.username : null,
       };
       const serializedManifestContent = manifestContent(manifestBody);

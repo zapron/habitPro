@@ -83,6 +83,17 @@ export function registerSyncCommitHandler(fn: (snapshot: Snapshot) => { hasMoreD
   commitSyncedSnapshot = fn;
 }
 
+function snapshotHasRemoteWork(snapshot: Snapshot | null | undefined): boolean {
+  if (!snapshot) return false;
+  return (
+    (snapshot.dirtyHabitIds?.length ?? 0) > 0 ||
+    (snapshot.dirtyMiniMissionIds?.length ?? 0) > 0 ||
+    (snapshot.pendingDeleteHabitIds?.length ?? 0) > 0 ||
+    (snapshot.pendingDeleteMiniMissionIds?.length ?? 0) > 0 ||
+    (snapshot.pendingResetHabitIds?.length ?? 0) > 0
+  );
+}
+
 /**
  * Call when auth + initial hydrate are ready (or on sign-out).
  * When disabled, remote pushes are skipped (local persist still runs).
@@ -108,6 +119,9 @@ export function setRemoteSyncContext(uid: string | null, enabled: boolean) {
   if (userChanged || disabling) {
     scheduledInteractionTasks.forEach((task) => task.cancel());
     scheduledInteractionTasks.clear();
+  }
+  if (enabled && getSnapshot && snapshotHasRemoteWork(getSnapshot())) {
+    requestRemoteSync({ immediate: true });
   }
 }
 
