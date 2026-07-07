@@ -1,11 +1,19 @@
 import type { HabitStore } from "../types/habit";
 import { InteractionManager } from "react-native";
 import { saveAccountSnapshotBackup } from "./accountBackup";
-import { deleteRemoteHabit, deleteRemoteMiniMission, pushFullState } from "./sync";
+import { pushFullState } from "./sync";
 
 type Snapshot = Pick<
   HabitStore,
-  "habits" | "miniMissions" | "xp" | "username" | "dirtyHabitIds" | "dirtyMiniMissionIds"
+  | "habits"
+  | "miniMissions"
+  | "xp"
+  | "username"
+  | "dirtyHabitIds"
+  | "dirtyMiniMissionIds"
+  | "pendingDeleteHabitIds"
+  | "pendingDeleteMiniMissionIds"
+  | "pendingResetHabitIds"
 >;
 
 let userId: string | null = null;
@@ -235,42 +243,10 @@ export function requestRemoteSync(options?: {
 
 export function requestRemoteHabitDelete(habitId: string) {
   if (!canWriteRemote() || !habitId) return;
-  const deleteUserId = userId!;
-  const deleteGeneration = syncGeneration;
-  runAfterIdle(() => {
-    if (!syncEnabled || userId !== deleteUserId || syncGeneration !== deleteGeneration) return;
-    inFlightPushes += 1;
-    void deleteRemoteHabit(deleteUserId, habitId)
-      .then(() => {
-        notifySyncSuccess();
-      })
-      .catch((e) => {
-        console.warn("[habitPro] remote habit delete failed", e);
-        notifySyncFailure(e);
-      })
-      .finally(() => {
-        inFlightPushes = Math.max(0, inFlightPushes - 1);
-      });
-  }, REMOTE_DELETE_DELAY_MS);
+  requestRemoteSync({ immediate: true, debounceMs: REMOTE_DELETE_DELAY_MS });
 }
 
 export function requestRemoteMiniMissionDelete(miniMissionId: string) {
   if (!canWriteRemote() || !miniMissionId) return;
-  const deleteUserId = userId!;
-  const deleteGeneration = syncGeneration;
-  runAfterIdle(() => {
-    if (!syncEnabled || userId !== deleteUserId || syncGeneration !== deleteGeneration) return;
-    inFlightPushes += 1;
-    void deleteRemoteMiniMission(deleteUserId, miniMissionId)
-      .then(() => {
-        notifySyncSuccess();
-      })
-      .catch((e) => {
-        console.warn("[habitPro] remote mini mission delete failed", e);
-        notifySyncFailure(e);
-      })
-      .finally(() => {
-        inFlightPushes = Math.max(0, inFlightPushes - 1);
-      });
-  }, REMOTE_DELETE_DELAY_MS);
+  requestRemoteSync({ immediate: true, debounceMs: REMOTE_DELETE_DELAY_MS });
 }

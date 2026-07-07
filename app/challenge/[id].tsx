@@ -68,6 +68,7 @@ import {
 import { backOrReplace } from "../../src/lib/navigation";
 import { isSupabaseConfigured } from "../../src/lib/env";
 import { deleteAllCommunityWinsForHabit } from "../../src/lib/communityWinsApi";
+import { deleteHabitStreakMemoryImages } from "../../src/lib/streakMemoryStorage";
 import { startJsStallProbe, traceSync } from "../../src/lib/jsThreadProbe";
 import { waitForHabitPersistIdle } from "../../src/lib/chunkedHabitPersistStorage";
 import { PlusBadge } from "../../src/components/PlusBadge";
@@ -104,6 +105,20 @@ function runAfterSettledInteractions(task: () => void, delayMs = POST_OPERATION_
       setTimeout(task, 0);
     });
   }, delayMs);
+}
+
+function habitMemoryDateKeysForCleanup(habit: {
+  completedDates?: string[];
+  repairedDates?: string[];
+  streakMemories?: Record<string, unknown>;
+}): string[] {
+  return [
+    ...new Set([
+      ...Object.keys(habit.streakMemories ?? {}),
+      ...(habit.completedDates ?? []),
+      ...(habit.repairedDates ?? []),
+    ]),
+  ];
 }
 
 function waitForOperationStep(ms = OPERATION_STEP_DELAY_MS): Promise<void> {
@@ -1304,6 +1319,10 @@ export default function ChallengeDetailScreen() {
         backOrReplace(router, "/(tabs)/compete");
         runAfterSettledInteractions(() => {
           void deleteAllCommunityWinsForHabit(habitSnapshot);
+          void deleteHabitStreakMemoryImages(
+            habitSnapshot.id,
+            habitMemoryDateKeysForCleanup(habitSnapshot),
+          );
         }, 9000);
       } finally {
         setLeaveBusy(false);

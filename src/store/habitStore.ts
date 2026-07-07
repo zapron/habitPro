@@ -79,7 +79,8 @@ function mergeDirtyIdsByReference<T extends { id: string }>(
   nextItems: T[],
   currentDirtyIds: string[] | undefined,
 ): string[] {
-  const dirtyIds = currentDirtyIds ?? [];
+  const nextIds = new Set(nextItems.map((item) => item.id));
+  const dirtyIds = (currentDirtyIds ?? []).filter((id) => nextIds.has(id));
   if (previousItems === nextItems) return dirtyIds;
 
   const previousById = new Map(previousItems.map((item) => [item.id, item]));
@@ -167,6 +168,9 @@ export const useHabitStore = create<HabitStore>()(
         xp: 0,
         dirtyHabitIds: [],
         dirtyMiniMissionIds: [],
+        pendingDeleteHabitIds: [],
+        pendingDeleteMiniMissionIds: [],
+        pendingResetHabitIds: [],
         clearDirtyState: (habitIds, miniIds) => {
           rawSet((state) => {
             const clearedHabitIds = habitIds ? new Set(habitIds) : null;
@@ -178,6 +182,24 @@ export const useHabitStore = create<HabitStore>()(
               ? (state.dirtyMiniMissionIds ?? []).filter((id) => !clearedMiniIds!.has(id))
               : state.dirtyMiniMissionIds ?? [];
             return { dirtyHabitIds: nextHabits, dirtyMiniMissionIds: nextMinis };
+          });
+        },
+        clearRemotePendingState: ({ habitDeleteIds, miniDeleteIds, habitResetIds }) => {
+          rawSet((state) => {
+            const habitDeleteSet = habitDeleteIds ? new Set(habitDeleteIds) : null;
+            const miniDeleteSet = miniDeleteIds ? new Set(miniDeleteIds) : null;
+            const habitResetSet = habitResetIds ? new Set(habitResetIds) : null;
+            return {
+              pendingDeleteHabitIds: habitDeleteSet
+                ? (state.pendingDeleteHabitIds ?? []).filter((id) => !habitDeleteSet.has(id))
+                : state.pendingDeleteHabitIds ?? [],
+              pendingDeleteMiniMissionIds: miniDeleteSet
+                ? (state.pendingDeleteMiniMissionIds ?? []).filter((id) => !miniDeleteSet.has(id))
+                : state.pendingDeleteMiniMissionIds ?? [],
+              pendingResetHabitIds: habitResetSet
+                ? (state.pendingResetHabitIds ?? []).filter((id) => !habitResetSet.has(id))
+                : state.pendingResetHabitIds ?? [],
+            };
           });
         },
         username: null,
@@ -227,7 +249,18 @@ export const useHabitStore = create<HabitStore>()(
         }
       },
       resetStore: () =>
-        set({ habits: [], miniMissions: [], xp: 0, username: null, cohortPeerHabits: [] }),
+        set({
+          habits: [],
+          miniMissions: [],
+          xp: 0,
+          username: null,
+          cohortPeerHabits: [],
+          dirtyHabitIds: [],
+          dirtyMiniMissionIds: [],
+          pendingDeleteHabitIds: [],
+          pendingDeleteMiniMissionIds: [],
+          pendingResetHabitIds: [],
+        }),
       addHabit: ({
         title,
         description,
@@ -449,9 +482,16 @@ export const useHabitStore = create<HabitStore>()(
       },
       deleteHabit: (id) => {
         void recordAccountDeletedMissionId(getRemoteSyncUserId(), "habit", id);
-        set((state) => ({
-          habits: state.habits.filter((h) => h.id !== id),
-        }));
+        set((state) => {
+          const pendingDeleteHabitIds = state.pendingDeleteHabitIds?.includes(id)
+            ? state.pendingDeleteHabitIds
+            : [id, ...(state.pendingDeleteHabitIds ?? [])];
+          return {
+            habits: state.habits.filter((h) => h.id !== id),
+            pendingDeleteHabitIds,
+            pendingResetHabitIds: (state.pendingResetHabitIds ?? []).filter((pendingId) => pendingId !== id),
+          };
+        });
         requestRemoteHabitDelete(id);
       },
       resetHabit: (id) => {
@@ -471,6 +511,7 @@ export const useHabitStore = create<HabitStore>()(
               status: "active",
               startDate: now,
               streakMemories: {},
+              repairedDates: [],
               missionReport: undefined,
               missionReportAt: undefined,
               endDate:
@@ -479,6 +520,9 @@ export const useHabitStore = create<HabitStore>()(
                   : undefined,
             };
           }),
+          pendingResetHabitIds: state.pendingResetHabitIds?.includes(id)
+            ? state.pendingResetHabitIds
+            : [id, ...(state.pendingResetHabitIds ?? [])],
         }));
         requestRemoteSync({ immediate: false });
         return true;
@@ -734,11 +778,17 @@ export const useHabitStore = create<HabitStore>()(
         const mission = get().miniMissions.find((m) => m.id === id);
         if (mission?.liveSquadId) return;
         void recordAccountDeletedMissionId(getRemoteSyncUserId(), "miniMission", id);
-        set((state) => ({
-          miniMissions: state.miniMissions.filter(
-            (mission) => mission.id !== id,
-          ),
-        }));
+        set((state) => {
+          const pendingDeleteMiniMissionIds = state.pendingDeleteMiniMissionIds?.includes(id)
+            ? state.pendingDeleteMiniMissionIds
+            : [id, ...(state.pendingDeleteMiniMissionIds ?? [])];
+          return {
+            miniMissions: state.miniMissions.filter(
+              (mission) => mission.id !== id,
+            ),
+            pendingDeleteMiniMissionIds,
+          };
+        });
         requestRemoteMiniMissionDelete(id);
       },
       getMiniMission: (id) => {
@@ -760,6 +810,9 @@ export const useHabitStore = create<HabitStore>()(
         xp: state.xp,
         dirtyHabitIds: state.dirtyHabitIds,
         dirtyMiniMissionIds: state.dirtyMiniMissionIds,
+        pendingDeleteHabitIds: state.pendingDeleteHabitIds,
+        pendingDeleteMiniMissionIds: state.pendingDeleteMiniMissionIds,
+        pendingResetHabitIds: state.pendingResetHabitIds,
         username: state.username,
       }),
       // Migrate legacy habits on rehydration
@@ -831,6 +884,11 @@ export const useHabitStore = create<HabitStore>()(
           // Migrate: ensure xp exists
           if (state.xp == null) state.xp = 0;
           if (state.username === undefined) state.username = null;
+          if (!Array.isArray(state.dirtyHabitIds)) state.dirtyHabitIds = [];
+          if (!Array.isArray(state.dirtyMiniMissionIds)) state.dirtyMiniMissionIds = [];
+          if (!Array.isArray(state.pendingDeleteHabitIds)) state.pendingDeleteHabitIds = [];
+          if (!Array.isArray(state.pendingDeleteMiniMissionIds)) state.pendingDeleteMiniMissionIds = [];
+          if (!Array.isArray(state.pendingResetHabitIds)) state.pendingResetHabitIds = [];
         }
       },
     },
@@ -846,6 +904,9 @@ registerSyncSnapshotGetter(() => {
     username: s.username,
     dirtyHabitIds: s.dirtyHabitIds ?? [],
     dirtyMiniMissionIds: s.dirtyMiniMissionIds ?? [],
+    pendingDeleteHabitIds: s.pendingDeleteHabitIds ?? [],
+    pendingDeleteMiniMissionIds: s.pendingDeleteMiniMissionIds ?? [],
+    pendingResetHabitIds: s.pendingResetHabitIds ?? [],
   };
 });
 
@@ -862,6 +923,11 @@ registerSyncCommitHandler((snap) => {
     return current != null && current === pushedMinisById.get(id);
   });
   state.clearDirtyState(safeHabitIds, safeMiniIds);
+  state.clearRemotePendingState({
+    habitDeleteIds: snap.pendingDeleteHabitIds ?? [],
+    miniDeleteIds: snap.pendingDeleteMiniMissionIds ?? [],
+    habitResetIds: snap.pendingResetHabitIds ?? [],
+  });
 
   const nextState = useHabitStore.getState();
   return {

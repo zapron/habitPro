@@ -28,7 +28,15 @@ export type RemoteSnapshot = Pick<HabitStore, "habits" | "miniMissions" | "xp" |
 
 type LocalHydrateSnapshot = Pick<
   HabitStore,
-  "habits" | "miniMissions" | "xp" | "username" | "dirtyHabitIds" | "dirtyMiniMissionIds"
+  | "habits"
+  | "miniMissions"
+  | "xp"
+  | "username"
+  | "dirtyHabitIds"
+  | "dirtyMiniMissionIds"
+  | "pendingDeleteHabitIds"
+  | "pendingDeleteMiniMissionIds"
+  | "pendingResetHabitIds"
 >;
 
 type FocusDeltaRpcPayload = {
@@ -45,6 +53,13 @@ type RepairRow = {
   habit_id: string;
   date_str: string;
 };
+
+function isMissingRpcError(error: unknown): boolean {
+  const e = error as { code?: unknown; message?: unknown } | null | undefined;
+  const code = typeof e?.code === "string" ? e.code : "";
+  const message = typeof e?.message === "string" ? e.message.toLowerCase() : "";
+  return code === "PGRST202" || message.includes("could not find the function");
+}
 
 let cachedSessionUserId: string | null = null;
 let commitHabitMemoryUpload:
@@ -848,7 +863,18 @@ export async function pullFromSupabase(
 
 export async function pushFullState(
   sessionUserId: string,
-  state: Pick<HabitStore, "habits" | "miniMissions" | "xp" | "username" | "dirtyHabitIds" | "dirtyMiniMissionIds">,
+  state: Pick<
+    HabitStore,
+    | "habits"
+    | "miniMissions"
+    | "xp"
+    | "username"
+    | "dirtyHabitIds"
+    | "dirtyMiniMissionIds"
+    | "pendingDeleteHabitIds"
+    | "pendingDeleteMiniMissionIds"
+    | "pendingResetHabitIds"
+  >,
 ): Promise<void> {
   const supabase = getSupabase();
   if (!supabase) return;
@@ -865,6 +891,20 @@ export async function pushFullState(
   // Incremental Filter: only push what is dirty (or all if dirty tracking is empty/undefined)
   const dirtyHabitIdSet = state.dirtyHabitIds ? new Set(state.dirtyHabitIds) : null;
   const dirtyMiniIdSet = state.dirtyMiniMissionIds ? new Set(state.dirtyMiniMissionIds) : null;
+  const pendingHabitDeleteIds = [...new Set(state.pendingDeleteHabitIds ?? [])].filter(Boolean);
+  const pendingMiniDeleteIds = [...new Set(state.pendingDeleteMiniMissionIds ?? [])].filter(Boolean);
+  const pendingHabitResetIds = [...new Set(state.pendingResetHabitIds ?? [])].filter(Boolean);
+
+  for (const habitId of pendingHabitDeleteIds) {
+    await deleteRemoteHabit(sessionUserId, habitId);
+  }
+  for (const miniMissionId of pendingMiniDeleteIds) {
+    await deleteRemoteMiniMission(sessionUserId, miniMissionId);
+  }
+  for (const habitId of pendingHabitResetIds) {
+    await resetRemoteHabitArtifacts(sessionUserId, habitId);
+  }
+
   const dirtyHabits = state.dirtyHabitIds
     ? localHabitsForUser.filter((h) => dirtyHabitIdSet!.has(h.id))
     : localHabitsForUser;
@@ -874,7 +914,15 @@ export async function pushFullState(
 
   // If there are no dirty items and XP/Username hasn't changed, we can skip network write entirely!
   // However, we still do a quick sync push if it is a manual force or initial sync.
-  if (state.dirtyHabitIds && state.dirtyMiniMissionIds && dirtyHabits.length === 0 && dirtyMinis.length === 0) {
+  if (
+    pendingHabitDeleteIds.length === 0 &&
+    pendingMiniDeleteIds.length === 0 &&
+    pendingHabitResetIds.length === 0 &&
+    state.dirtyHabitIds &&
+    state.dirtyMiniMissionIds &&
+    dirtyHabits.length === 0 &&
+    dirtyMinis.length === 0
+  ) {
     // Only skip if XP and Username have nothing new to write to DB
     const { data: existingProfile } = await supabase
       .from("profiles")
@@ -908,12 +956,36 @@ export async function deleteRemoteHabit(sessionUserId: string, habitId: string):
   const supabase = getSupabase();
   if (!supabase || !sessionUserId || !habitId) return;
   if (!(await hasMatchingAuthSession(supabase, sessionUserId))) return;
+  try {
+    const { error: rpcError } = await supabase.rpc("rpc_delete_habit_v1", { p_habit_id: habitId });
+    if (!rpcError) return;
+    if (!isMissingRpcError(rpcError)) throw rpcError;
+    if (__DEV__) console.warn("[habitPro] rpc_delete_habit_v1 missing, using fallback");
+  } catch (e) {
+    if (!isMissingRpcError(e)) throw e;
+    // Fall back for environments that have not run the additive cleanup migration yet.
+  }
   const { error } = await supabase
     .from("habits")
     .delete()
     .eq("user_id", sessionUserId)
     .eq("id", habitId);
   if (error) throw error;
+}
+
+export async function resetRemoteHabitArtifacts(sessionUserId: string, habitId: string): Promise<void> {
+  const supabase = getSupabase();
+  if (!supabase || !sessionUserId || !habitId) return;
+  if (!(await hasMatchingAuthSession(supabase, sessionUserId))) return;
+  try {
+    const { error } = await supabase.rpc("rpc_reset_habit_artifacts_v1", { p_habit_id: habitId });
+    if (isMissingRpcError(error)) return;
+    if (error) throw error;
+  } catch (e) {
+    if (isMissingRpcError(e)) return;
+    if (__DEV__) console.warn("[habitPro] reset habit artifacts failed", e);
+    throw e;
+  }
 }
 
 export async function upsertRemoteHabit(sessionUserId: string, habit: Habit): Promise<void> {
@@ -933,6 +1005,15 @@ export async function deleteRemoteMiniMission(sessionUserId: string, miniMission
   const supabase = getSupabase();
   if (!supabase || !sessionUserId || !miniMissionId) return;
   if (!(await hasMatchingAuthSession(supabase, sessionUserId))) return;
+  try {
+    const { error: rpcError } = await supabase.rpc("rpc_delete_mini_mission_v1", { p_mini_mission_id: miniMissionId });
+    if (!rpcError) return;
+    if (!isMissingRpcError(rpcError)) throw rpcError;
+    if (__DEV__) console.warn("[habitPro] rpc_delete_mini_mission_v1 missing, using fallback");
+  } catch (e) {
+    if (!isMissingRpcError(e)) throw e;
+    // Fall back for environments that have not run the additive cleanup migration yet.
+  }
   const { error } = await supabase
     .from("mini_missions")
     .delete()

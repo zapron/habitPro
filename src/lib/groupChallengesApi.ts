@@ -275,85 +275,30 @@ export async function sendChallengeInvite(
 ): Promise<GroupActionErrorResult> {
   const supabase = getSupabase();
   if (!supabase) return { error: new Error("Supabase not configured") };
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: new Error("Not signed in") };
+  const { error } = await supabase.rpc("rpc_send_challenge_invite_v1", {
+    p_challenge_id: challengeId,
+    p_invitee_user_id: inviteeUserId,
+  });
+  if (!error) return { error: null };
 
-  const { data: activeMember, error: memberErr } = await supabase
-    .from("challenge_members")
-    .select("user_id")
-    .eq("challenge_id", challengeId)
-    .eq("user_id", inviteeUserId)
-    .maybeSingle();
-  if (memberErr) return { error: new Error(memberErr.message) };
-  if (activeMember) {
+  if (isPremiumPolicyError(error)) {
+    return {
+      error: new Error("Group invites are a HabitPro Community feature."),
+      reason: "premium_required",
+    };
+  }
+  const low = error.message.toLowerCase();
+  if (low.includes("already_joined")) {
     return {
       error: new Error("This person already joined this group mission."),
     };
   }
-
-  const { data: latest } = await supabase
-    .from("challenge_invites")
-    .select("status")
-    .eq("challenge_id", challengeId)
-    .eq("invitee_id", inviteeUserId)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  const st = latest?.status;
-  if (st === "pending") {
+  if (low.includes("invite_already_pending") || error.code === "23505") {
     return {
-      error: new Error(
-        "There is already a pending invite to this person for this group mission.",
-      ),
+      error: new Error("There is already a pending invite to this person for this group mission."),
     };
   }
-
-  const { data: inviterProfile } = await supabase.from("profiles").select("username").eq("id", user.id).maybeSingle();
-  const inviterUsername =
-    typeof inviterProfile?.username === "string" && inviterProfile.username.trim().length > 0
-      ? inviterProfile.username.trim().toLowerCase()
-      : null;
-
-  const { data: inserted, error: invErr } = await supabase
-    .from("challenge_invites")
-    .insert({
-      challenge_id: challengeId,
-      inviter_id: user.id,
-      invitee_id: inviteeUserId,
-      status: "pending",
-    })
-    .select("id")
-    .single();
-  if (invErr) {
-    if (isPremiumPolicyError(invErr)) {
-      return {
-        error: new Error("Group invites are a HabitPro Community feature."),
-        reason: "premium_required",
-      };
-    }
-    const msg =
-      invErr.message.toLowerCase().includes("unique") || invErr.code === "23505"
-        ? "There is already a pending invite to this person for this group mission."
-        : invErr.message;
-    return { error: new Error(msg) };
-  }
-
-  const { error: nErr } = await supabase.rpc("rpc_insert_notification", {
-    p_user_id: inviteeUserId,
-    p_type: "challenge_invite",
-    p_payload: {
-      challenge_id: challengeId,
-      invite_id: typeof inserted?.id === "string" ? inserted.id : null,
-      inviter_id: user.id,
-      inviter_username: inviterUsername,
-    },
-  });
-  if (nErr) return { error: new Error(nErr.message) };
-
-  return { error: null };
+  return { error: new Error(error.message) };
 }
 
 export async function listPendingInvitesForMe(): Promise<ChallengeInviteRow[]> {
@@ -910,43 +855,8 @@ export async function leaveChallengeGroup(challengeId: string): Promise<{ error:
 export async function declineInvite(inviteId: string): Promise<{ error: Error | null }> {
   const supabase = getSupabase();
   if (!supabase) return { error: new Error("Supabase not configured") };
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: new Error("Not signed in") };
-
-  const { data: invite, error: fetchErr } = await supabase
-    .from("challenge_invites")
-    .select("id, challenge_id, inviter_id, invitee_id, status")
-    .eq("id", inviteId)
-    .eq("invitee_id", user.id)
-    .maybeSingle();
-  if (fetchErr) return { error: new Error(fetchErr.message) };
-  if (!invite || invite.status !== "pending") {
-    return { error: new Error("Invite not found or already resolved.") };
-  }
-
-  const { error } = await supabase.from("challenge_invites").update({ status: "declined" }).eq("id", inviteId);
+  const { error } = await supabase.rpc("rpc_decline_challenge_invite_v1", { p_invite_id: inviteId });
   if (error) return { error: new Error(error.message) };
-
-  const { data: inviteeProfile } = await supabase.from("profiles").select("username").eq("id", user.id).maybeSingle();
-  const inviteeUsername =
-    typeof inviteeProfile?.username === "string" && inviteeProfile.username.trim().length > 0
-      ? inviteeProfile.username.trim().toLowerCase()
-      : null;
-
-  const { error: nErr } = await supabase.rpc("rpc_insert_notification", {
-    p_user_id: invite.inviter_id,
-    p_type: "challenge_invite_declined",
-    p_payload: {
-      challenge_id: invite.challenge_id,
-      invite_id: invite.id,
-      invitee_id: user.id,
-      invitee_username: inviteeUsername,
-    },
-  });
-  if (nErr && __DEV__) console.warn("[notifications] challenge_invite_declined", nErr.message);
-
   return { error: null };
 }
 
@@ -960,45 +870,11 @@ export async function acceptInviteAndJoin(
 ): Promise<GroupActionErrorResult> {
   const supabase = getSupabase();
   if (!supabase) return { error: new Error("Supabase not configured") };
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: new Error("Not signed in") };
-
-  const { error: mErr } = await supabase.from("challenge_members").insert({
-    challenge_id: invite.challenge_id,
-    user_id: user.id,
-    habit_id: newHabitId,
-    role: "member",
+  const { error } = await supabase.rpc("rpc_accept_challenge_invite_v1", {
+    p_invite_id: invite.id,
+    p_habit_id: newHabitId,
   });
-  if (mErr && (mErr as { code?: string }).code !== "23505") {
-    return groupActionError(mErr, "Could not join group mission.");
-  }
-
-  const { error: iErr } = await supabase
-    .from("challenge_invites")
-    .update({ status: "accepted" })
-    .eq("id", invite.id);
-  if (iErr) return { error: new Error(iErr.message) };
-
-  const { data: inviteeProfile } = await supabase.from("profiles").select("username").eq("id", user.id).maybeSingle();
-  const inviteeUsername =
-    typeof inviteeProfile?.username === "string" && inviteeProfile.username.trim().length > 0
-      ? inviteeProfile.username.trim().toLowerCase()
-      : null;
-
-  const { error: nErr } = await supabase.rpc("rpc_insert_notification", {
-    p_user_id: invite.inviter_id,
-    p_type: "challenge_invite_accepted",
-    p_payload: {
-      challenge_id: invite.challenge_id,
-      invite_id: invite.id,
-      invitee_id: user.id,
-      invitee_username: inviteeUsername,
-      habit_id: newHabitId,
-    },
-  });
-  if (nErr && __DEV__) console.warn("[notifications] challenge_invite_accepted", nErr.message);
+  if (error) return groupActionError(error, "Could not join group mission.");
 
   return { error: null };
 }

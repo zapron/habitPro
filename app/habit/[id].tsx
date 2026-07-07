@@ -67,6 +67,7 @@ import { LazyMount } from '../../src/components/LazyMount';
 import type { StreakMemory } from '../../src/types/habit';
 import {
     canUseStreakMemoryUpload,
+    deleteHabitStreakMemoryImages,
     shouldUploadLocalStreakImage,
     uploadHabitStreakMemoryImage,
 } from '../../src/lib/streakMemoryStorage';
@@ -103,6 +104,20 @@ const POST_OPERATION_BACKGROUND_DELAY_MS = 1600;
 const INITIAL_GRID_RENDER_DAYS = 49;
 const GRID_RENDER_BATCH_DAYS = 35;
 const GRID_RENDER_BATCH_DELAY_MS = 70;
+
+function habitMemoryDateKeysForCleanup(habit: {
+    completedDates?: string[];
+    repairedDates?: string[];
+    streakMemories?: Record<string, unknown>;
+}): string[] {
+    return [
+        ...new Set([
+            ...Object.keys(habit.streakMemories ?? {}),
+            ...(habit.completedDates ?? []),
+            ...(habit.repairedDates ?? []),
+        ]),
+    ];
+}
 const HEAVY_MOMENTS_THRESHOLD = 12;
 
 function runAfterSettledInteractions(task: () => void, delayMs = POST_OPERATION_BACKGROUND_DELAY_MS) {
@@ -1709,8 +1724,13 @@ export default function HabitDetail() {
                                     label: 'Reset',
                                     variant: 'danger',
                                     onPress: () => {
+                                        const habitSnapshot = habit;
                                         setMissionDialog({ kind: 'none' });
                                         if (resetHabit(habit.id)) {
+                                            void deleteHabitStreakMemoryImages(
+                                                habitSnapshot.id,
+                                                habitMemoryDateKeysForCleanup(habitSnapshot),
+                                            );
                                             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                                             showToast('Mission reset', 'success');
                                             backOrReplace(router, "/");
@@ -1751,6 +1771,10 @@ export default function HabitDetail() {
                                               backOrReplace(router, "/");
                                               runAfterSettledInteractions(() => {
                                                   void deleteAllCommunityWinsForHabit(habitSnapshot);
+                                                  void deleteHabitStreakMemoryImages(
+                                                      habitSnapshot.id,
+                                                      habitMemoryDateKeysForCleanup(habitSnapshot),
+                                                  );
                                               }, 9000);
                                           })();
                                       },
@@ -1797,6 +1821,10 @@ export default function HabitDetail() {
                                                 backOrReplace(router, "/");
                                                 runAfterSettledInteractions(() => {
                                                     void deleteAllCommunityWinsForHabit(habitSnapshot);
+                                                    void deleteHabitStreakMemoryImages(
+                                                        habitSnapshot.id,
+                                                        habitMemoryDateKeysForCleanup(habitSnapshot),
+                                                    );
                                                 }, 9000);
                                             })();
                                         },

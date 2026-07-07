@@ -335,11 +335,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setSession(null);
 
     const localCleanup = clearLocalAccountState();
-    const pushCleanup = uid
-      ? clearPushTokenForCurrentUser(uid).catch((e) => {
-          if (__DEV__) console.warn("[habitPro] push token cleanup failed", e);
-        })
-      : Promise.resolve();
+
+    if (uid) {
+      try {
+        await clearPushTokenForCurrentUser(uid);
+      } catch (e) {
+        if (__DEV__) console.warn("[habitPro] push token cleanup failed", e);
+      }
+    }
+
     const authCleanup = supabase
       ? supabase.auth
           .signOut()
@@ -355,7 +359,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           })
       : clearSupabaseAuthStorage();
 
-    await Promise.allSettled([localCleanup, pushCleanup, authCleanup]);
+    await Promise.allSettled([localCleanup, authCleanup]);
   }, [clearLocalAccountState, session?.user?.id]);
 
   const value = useMemo<AuthContextValue>(

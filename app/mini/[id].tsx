@@ -89,6 +89,7 @@ import {
 } from "../../src/constants/miniMissionKeepAwake";
 import {
   canUseStreakMemoryUpload,
+  deleteMiniStreakMemoryImage,
   shouldUploadLocalStreakImage,
   uploadMiniStreakMemoryImage,
 } from "../../src/lib/streakMemoryStorage";
@@ -1426,6 +1427,7 @@ export default function MiniMissionDetail() {
       router.replace("/mini");
       runAfterSettledInteractions(() => {
         void deleteCommunityWin(id);
+        void deleteMiniStreakMemoryImage(id);
       }, 9000);
     })();
   }, [mission, router]);

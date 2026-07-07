@@ -172,6 +172,53 @@ export async function uploadMiniStreakMemoryImage(
   return pub.publicUrl;
 }
 
+async function currentStorageUserPrefix(): Promise<string | null> {
+  const supabase = getSupabase();
+  if (!supabase) return null;
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  return user?.id ? user.id.toLowerCase() : null;
+}
+
+export async function deleteHabitStreakMemoryImages(
+  habitId: string,
+  dateStrs: string[],
+): Promise<void> {
+  const supabase = getSupabase();
+  if (!supabase || !habitId || dateStrs.length === 0) return;
+  const uid = await currentStorageUserPrefix();
+  if (!uid) return;
+
+  const paths = [
+    ...new Set(
+      dateStrs
+        .map((dateStr) => dateStr.replace(/[^0-9-]/g, ""))
+        .filter(Boolean)
+        .map((safeDate) => `${uid}/habits/${habitId}/${safeDate}.jpg`),
+    ),
+  ];
+  if (paths.length === 0) return;
+  const { error } = await supabase.storage.from(BUCKET).remove(paths);
+  if (error && __DEV__) {
+    console.warn("[habitPro] delete habit memory images failed", error.message);
+  }
+}
+
+export async function deleteMiniStreakMemoryImage(miniMissionId: string): Promise<void> {
+  const supabase = getSupabase();
+  if (!supabase || !miniMissionId) return;
+  const uid = await currentStorageUserPrefix();
+  if (!uid) return;
+
+  const { error } = await supabase.storage
+    .from(BUCKET)
+    .remove([`${uid}/mini-missions/${miniMissionId}/memory.jpg`]);
+  if (error && __DEV__) {
+    console.warn("[habitPro] delete mini memory image failed", error.message);
+  }
+}
+
 export function canUseStreakMemoryUpload(): boolean {
   return isSupabaseConfigured();
 }

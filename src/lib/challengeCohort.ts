@@ -115,7 +115,6 @@ export async function sendChallengeNudge(
   if (!user) return { error: new Error("Not signed in") };
   if (user.id === toUserId) return { error: new Error("Cannot nudge yourself") };
 
-  let rpcError: unknown = null;
   try {
     const { error } = await supabase.rpc("rpc_send_challenge_nudge_v2", {
       p_challenge_id: challengeId,
@@ -125,62 +124,31 @@ export async function sendChallengeNudge(
       p_target_date_str: opts?.targetDateStr ?? null,
       p_target_mission_day: opts?.targetMissionDay ?? null,
     });
-    rpcError = error;
-  } catch (error) {
-    rpcError = error;
-  }
-  if (!rpcError) return { error: null };
-
-  const { data: inserted, error } = await supabase
-    .from("challenge_nudges")
-    .insert({
-      challenge_id: challengeId,
-      from_user_id: user.id,
-      to_user_id: toUserId,
-      kind,
-      ...(kind === "congrats" && opts?.activityId ? { activity_id: opts.activityId } : {}),
-      ...(opts?.targetDateStr ? { target_date_str: opts.targetDateStr } : {}),
-      ...(typeof opts?.targetMissionDay === "number" ? { target_mission_day: opts.targetMissionDay } : {}),
-    })
-    .select("id")
-    .single();
-
-  if (error) {
     if (isPremiumPolicyError(error)) {
       return {
         error: new Error("Squad nudges are a HabitPro Community feature."),
         reason: "premium_required",
       };
     }
-    const msg =
-      error.code === "23505" || String(error.message).includes("duplicate")
-        ? kind === "congrats"
-          ? "You already congratulated that milestone."
-          : "You already sent that today."
-        : error.message;
-    return { error: new Error(msg) };
+    if (error) {
+      const raw = String(error.message ?? "");
+      const low = raw.toLowerCase();
+      const msg =
+        low.includes("duplicate") || error.code === "23505"
+          ? kind === "congrats"
+            ? "You already congratulated that milestone."
+            : "You already sent that today."
+          : low.includes("already_sent")
+            ? kind === "congrats"
+              ? "You already congratulated that milestone."
+              : "You already sent that today."
+            : raw || "Could not send nudge.";
+      return { error: new Error(msg) };
+    }
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    return { error: new Error(msg || "Could not send nudge.") };
   }
-
-  const { data: fromProfile } = await supabase.from("profiles").select("username").eq("id", user.id).maybeSingle();
-  const fromUsername =
-    typeof fromProfile?.username === "string" && fromProfile.username.trim().length > 0
-      ? fromProfile.username.trim().toLowerCase()
-      : null;
-
-  const { error: nErr } = await supabase.rpc("rpc_insert_notification", {
-    p_user_id: toUserId,
-    p_type: "challenge_nudge",
-    p_payload: {
-      challenge_id: challengeId,
-      nudge_id: inserted.id,
-      from_user_id: user.id,
-      from_username: fromUsername,
-      kind,
-      ...(opts?.targetDateStr ? { target_date_str: opts.targetDateStr } : {}),
-      ...(typeof opts?.targetMissionDay === "number" ? { target_mission_day: opts.targetMissionDay } : {}),
-    },
-  });
-  if (nErr && __DEV__) console.warn("[notifications] challenge_nudge", nErr.message);
 
   return { error: null };
 }

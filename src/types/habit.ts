@@ -132,6 +132,11 @@ export type HabitStore = {
   xp: number;
   dirtyHabitIds?: string[];
   dirtyMiniMissionIds?: string[];
+  /** Remote deletes that must be retried until Supabase confirms them. */
+  pendingDeleteHabitIds?: string[];
+  pendingDeleteMiniMissionIds?: string[];
+  /** Habit reset artifact cleanup that must run before the reset row is pushed. */
+  pendingResetHabitIds?: string[];
   /** Lowercase public handle for challenges; synced to `profiles.username`. */
   username: string | null;
   setUsername: (username: string | null) => void;
@@ -206,4 +211,9 @@ export type HabitStore = {
     options?: { requestRemoteSync?: boolean },
   ) => void;
   clearDirtyState: (habitIds?: string[], miniIds?: string[]) => void;
+  clearRemotePendingState: (input: {
+    habitDeleteIds?: string[];
+    miniDeleteIds?: string[];
+    habitResetIds?: string[];
+  }) => void;
 };
