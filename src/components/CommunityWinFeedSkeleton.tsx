@@ -1,8 +1,6 @@
 import { useEffect, useRef } from "react";
-import { View, StyleSheet, Animated, Dimensions } from "react-native";
+import { View, StyleSheet, Animated, useWindowDimensions } from "react-native";
 import type { AppTheme } from "../styles/theme";
-
-const SCREEN_W = Dimensions.get("window").width;
 
 type RowProps = {
   theme: AppTheme;
@@ -10,6 +8,7 @@ type RowProps = {
 };
 
 export function CommunityWinFeedSkeletonRow({ theme, isDark }: RowProps) {
+  const { width } = useWindowDimensions();
   const pulse = useRef(new Animated.Value(0.32)).current;
 
   useEffect(() => {
@@ -31,7 +30,7 @@ export function CommunityWinFeedSkeletonRow({ theme, isDark }: RowProps) {
       style={[
         styles.tile,
         {
-          width: SCREEN_W,
+          width,
           backgroundColor: theme.colors.background,
           borderColor: boneBorder,
         },

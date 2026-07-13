@@ -18,6 +18,7 @@ import {
 } from "react-native";
 import type { ImageStyle, LayoutChangeEvent } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { FlashList, type ListRenderItem } from "@shopify/flash-list";
 import Svg, { ClipPath, Defs, Image as SvgImage, Path } from "react-native-svg";
@@ -62,6 +63,7 @@ import { formatDateDisplay } from "../src/utils/dateDisplay";
 import { getJourneyMiniGridLayout } from "../src/utils/journeyMiniGrid";
 import { levelFromTotalXp, xpInCurrentLevel } from "../src/utils/xpLevel";
 import { playerLeagueForLevel } from "../src/utils/playerLeague";
+import { storageThumbnailUri } from "../src/utils/imageThumbnail";
 
 type StoryTab = "missions" | "minis";
 type JourneyMode = "public" | "private";
@@ -104,22 +106,6 @@ function plural(value: number, one: string, many: string): string {
 function missionDescriptionText(story: CommunityPlayerMissionStory): string {
   const description = story.description?.trim();
   return description || "No mission description is available for this mission yet.";
-}
-
-function thumbnailUri(uri: string, width: number, height: number): string {
-  try {
-    const url = new URL(uri);
-    const marker = "/storage/v1/object/public/";
-    if (!url.pathname.includes(marker)) return uri;
-    url.pathname = url.pathname.replace(marker, "/storage/v1/render/image/public/");
-    url.searchParams.set("width", String(width));
-    url.searchParams.set("height", String(height));
-    url.searchParams.set("resize", "cover");
-    url.searchParams.set("quality", "58");
-    return url.toString();
-  } catch {
-    return uri;
-  }
 }
 
 function safeDate(iso: string | undefined): Date | null {
@@ -627,7 +613,7 @@ function StoryThumbnail({
   style?: StyleProp<ViewStyle>;
 }) {
   const [useOriginal, setUseOriginal] = useState(false);
-  const thumb = thumbnailUri(uri, 420, 420);
+  const thumb = storageThumbnailUri(uri, 420, 420);
   const displayUri = useOriginal ? uri : thumb;
   return (
     <View style={[styles.thumbnailFrame, { backgroundColor: theme.colors.surfaceElevated }, style]}>
@@ -955,7 +941,7 @@ const MiniPostCard = memo(function MiniPostCard({
 }) {
   const imageUri = post.memoryImageUrl;
   const note = post.memoryNote?.trim() ?? "";
-  const thumb = imageUri ? thumbnailUri(imageUri, Math.round(width * 2), Math.round(width * 2.25)) : null;
+  const thumb = imageUri ? storageThumbnailUri(imageUri, Math.round(width * 2), Math.round(width * 2.25)) : null;
   const [useOriginal, setUseOriginal] = useState(false);
   const displayUri = useOriginal ? imageUri : thumb;
   const isPrivate = isPrivateStoryPost(post);
@@ -1162,6 +1148,7 @@ function MissionGalleryModal({
   journeyMode: JourneyMode;
 }) {
   const { width } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const horizontalPad = 12;
   const gap = 8;
   const columnCount = width >= 720 ? 3 : 2;
@@ -1185,7 +1172,15 @@ function MissionGalleryModal({
       presentationStyle="fullScreen"
       onRequestClose={onClose}
     >
-      <View style={[styles.galleryOverlay, { backgroundColor: theme.colors.background }]}>
+      <View
+        style={[
+          styles.galleryOverlay,
+          {
+            backgroundColor: theme.colors.background,
+            paddingTop: Math.max(insets.top, 28),
+          },
+        ]}
+      >
         <View style={styles.gallerySheet}>
           <View style={styles.galleryHeader}>
             <View style={styles.galleryHeaderText}>
@@ -1217,7 +1212,10 @@ function MissionGalleryModal({
             showsVerticalScrollIndicator={false}
             nestedScrollEnabled
             keyboardShouldPersistTaps="handled"
-            contentContainerStyle={styles.galleryScrollContent}
+            contentContainerStyle={[
+              styles.galleryScrollContent,
+              { paddingBottom: Math.max(insets.bottom, 28) + 12 },
+            ]}
           >
             <View style={[styles.galleryMasonryRow, { gap, paddingHorizontal: horizontalPad }]}>
               {columns.map((column, columnIndex) => (

@@ -24,21 +24,11 @@ import { buildStreakCelebrationKicker } from "../../src/lib/communityStreakFeedC
 import { formatCompletedAt, formatRelativeTime } from "../../src/lib/communityWinFeedFormat";
 import { fetchCommunityWinMoment, toggleCheer, type CommunityWinFeedItem } from "../../src/lib/communityWinsApi";
 import { backOrReplace } from "../../src/lib/navigation";
-
-const IMAGE_RENDER_SEGMENT = "/storage/v1/render/image/public/";
+import { storageThumbnailUri } from "../../src/utils/imageThumbnail";
 
 function paramString(value: string | string[] | undefined): string {
   if (Array.isArray(value)) return value[0] ?? "";
   return value ?? "";
-}
-
-function thumbnailUri(uri: string | null, width: number, height: number): string | null {
-  if (!uri) return null;
-  if (!uri.includes(IMAGE_RENDER_SEGMENT)) return uri;
-  const separator = uri.includes("?") ? "&" : "?";
-  const w = Math.max(160, Math.round(width));
-  const h = Math.max(160, Math.round(height));
-  return `${uri}${separator}width=${w}&height=${h}&resize=cover&quality=72`;
 }
 
 function ownerLabel(win: CommunityWinFeedItem): string {
@@ -96,7 +86,10 @@ export default function JourneyMomentScreen() {
 
   const imageHeight = useMemo(() => Math.min(430, Math.max(300, width * 0.8)), [width]);
   const imageUri = useMemo(
-    () => (!imageFailed && moment?.memory_image_url ? thumbnailUri(moment.memory_image_url, width * 1.5, imageHeight * 1.5) : null),
+    () =>
+      !imageFailed && moment?.memory_image_url
+        ? storageThumbnailUri(moment.memory_image_url, width * 1.5, imageHeight * 1.5, 72)
+        : null,
     [imageFailed, imageHeight, moment?.memory_image_url, width],
   );
   const isOwnMoment = Boolean(moment && session?.user?.id === moment.user_id);

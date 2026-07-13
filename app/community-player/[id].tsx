@@ -64,6 +64,7 @@ import { formatDateDisplay } from "../../src/utils/dateDisplay";
 import { getJourneyMiniGridLayout } from "../../src/utils/journeyMiniGrid";
 import { levelFromTotalXp, xpInCurrentLevel } from "../../src/utils/xpLevel";
 import { playerLeagueForLevel } from "../../src/utils/playerLeague";
+import { storageThumbnailUri } from "../../src/utils/imageThumbnail";
 import type { AppTheme } from "../../src/styles/theme";
 
 type StoryTab = "missions" | "minis";
@@ -104,22 +105,6 @@ function plural(value: number, one: string, many: string): string {
 function missionDescriptionText(story: CommunityPlayerMissionStory): string {
   const description = story.description?.trim();
   return description || "No mission description is available for this mission yet.";
-}
-
-function thumbnailUri(uri: string, width: number, height: number): string {
-  try {
-    const url = new URL(uri);
-    const marker = "/storage/v1/object/public/";
-    if (!url.pathname.includes(marker)) return uri;
-    url.pathname = url.pathname.replace(marker, "/storage/v1/render/image/public/");
-    url.searchParams.set("width", String(width));
-    url.searchParams.set("height", String(height));
-    url.searchParams.set("resize", "cover");
-    url.searchParams.set("quality", "58");
-    return url.toString();
-  } catch {
-    return uri;
-  }
 }
 
 function storyDayLabel(post: CommunityPlayerStoryPost): string {
@@ -317,7 +302,7 @@ function StoryThumbnail({
   style?: StyleProp<ViewStyle>;
 }) {
   const [useOriginal, setUseOriginal] = useState(false);
-  const thumb = thumbnailUri(uri, 420, 420);
+  const thumb = storageThumbnailUri(uri, 420, 420);
   const displayUri = useOriginal ? uri : thumb;
   return (
     <View
@@ -440,7 +425,7 @@ function RecentProofBadge({
   onPress: (uri: string) => void;
 }) {
   const uri = post.memoryImageUrl;
-  const thumb = uri ? thumbnailUri(uri, Math.round(size * 2), Math.round(size * 2)) : null;
+  const thumb = uri ? storageThumbnailUri(uri, Math.round(size * 2), Math.round(size * 2)) : null;
   const [useOriginal, setUseOriginal] = useState(false);
   const displayUri = useOriginal ? uri : thumb ?? uri;
   const pillTone = storyPillTone(`${post.feedSource}:${post.title}`);
@@ -586,7 +571,7 @@ function MissionProofTile({
 }) {
   const uri = post.memoryImageUrl;
   const [useOriginal, setUseOriginal] = useState(false);
-  const thumb = uri ? thumbnailUri(uri, Math.round(width * 2), Math.round(height * 2)) : null;
+  const thumb = uri ? storageThumbnailUri(uri, Math.round(width * 2), Math.round(height * 2)) : null;
   const displayUri = useOriginal ? uri : thumb ?? uri;
   const opensMore = extraCount > 0 && Boolean(onMorePress);
 
@@ -1164,7 +1149,7 @@ function MiniPostTile({
   const hasImage = Boolean(post.memoryImageUrl);
   const imageUri = post.memoryImageUrl as string | null;
   const [useOriginal, setUseOriginal] = useState(false);
-  const thumb = imageUri ? thumbnailUri(imageUri, Math.round(width * 2), Math.round(width * 2.2)) : null;
+  const thumb = imageUri ? storageThumbnailUri(imageUri, Math.round(width * 2), Math.round(width * 2.2)) : null;
   const displayUri = useOriginal ? imageUri : thumb;
   const liked = post.viewerHasCheered;
   const cheerButton = (

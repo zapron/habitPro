@@ -10,8 +10,8 @@ import {
   View,
   Pressable,
   StyleSheet,
-  Dimensions,
   Animated,
+  useWindowDimensions,
   type StyleProp,
   type ViewStyle,
 } from "react-native";
@@ -30,8 +30,8 @@ import { formatCompletedAt, formatRelativeTime } from "../lib/communityWinFeedFo
 import type { AppTheme } from "../styles/theme";
 import { levelFromTotalXp } from "../utils/xpLevel";
 import { playerLeagueForLevel } from "../utils/playerLeague";
+import { storageThumbnailUri } from "../utils/imageThumbnail";
 
-const SCREEN_W = Dimensions.get("window").width;
 /** Second tap within this gap counts as double-tap (cheer + burst). */
 const DOUBLE_TAP_GAP_MS = 280;
 /** RN aspectRatio is width / height; below 1 makes community moments slightly taller. */
@@ -131,6 +131,7 @@ export const CommunityWinFeedPost = memo(function CommunityWinFeedPost({
   canCheer = true,
   onCheerBlocked,
 }: Props) {
+  const { width: windowWidth } = useWindowDimensions();
   const isOwn = sessionUserId === win.user_id;
   const handle = win.username ? `@${win.username}` : "Someone";
   const displayName = win.displayName?.trim() || null;
@@ -182,6 +183,18 @@ export const CommunityWinFeedPost = memo(function CommunityWinFeedPost({
   const cheerScale = useRef(new Animated.Value(1)).current;
   const imageOpacity = useRef(new Animated.Value(0)).current;
   const [imageLoaded, setImageLoaded] = useState(false);
+  const photoRenderWidth = isFeed ? windowWidth : Math.min(360, Math.max(240, windowWidth - 48));
+  const imageDisplayUri = useMemo(
+    () =>
+      win.memory_image_url
+        ? storageThumbnailUri(
+            win.memory_image_url,
+            photoRenderWidth * 2,
+            (photoRenderWidth / COMMUNITY_PHOTO_ASPECT_RATIO) * 2,
+          )
+        : null,
+    [photoRenderWidth, win.memory_image_url],
+  );
 
   useEffect(() => {
     return () => {
@@ -259,7 +272,7 @@ export const CommunityWinFeedPost = memo(function CommunityWinFeedPost({
   );
 
   const photoFrameStyle: StyleProp<ViewStyle> = isFeed
-    ? [styles.photoTouchWrap, { width: SCREEN_W, aspectRatio: COMMUNITY_PHOTO_ASPECT_RATIO }]
+    ? [styles.photoTouchWrap, { width: windowWidth, aspectRatio: COMMUNITY_PHOTO_ASPECT_RATIO }]
     : [styles.photoTouchWrap, { aspectRatio: COMMUNITY_PHOTO_ASPECT_RATIO }];
 
   const handleImageLoad = useCallback(() => {
@@ -342,7 +355,7 @@ export const CommunityWinFeedPost = memo(function CommunityWinFeedPost({
           />
         ) : null}
         <Animated.Image
-          source={{ uri: win.memory_image_url }}
+          source={{ uri: imageDisplayUri ?? win.memory_image_url }}
           style={[styles.photoImageFill, { opacity: imageOpacity }]}
           resizeMode="cover"
           onLoad={handleImageLoad}
