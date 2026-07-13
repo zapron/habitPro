@@ -15,6 +15,7 @@ import {
   Platform,
   ScrollView,
   useWindowDimensions,
+  ActionSheetIOS,
   Animated,
   Easing,
   ActivityIndicator,
@@ -28,6 +29,8 @@ import * as Haptics from "expo-haptics";
 import { useTheme } from "../context/ThemeContext";
 import type { StreakMemory } from "../types/habit";
 import { showAppAlert } from "../context/AppDialogContext";
+
+const IOS_PICKER_PRESENT_DELAY_MS = 360;
 
 type StreakMemorySheetProps = {
   visible: boolean;
@@ -160,23 +163,36 @@ export const StreakMemorySheet = React.memo(function StreakMemorySheet({
     }
   }, []);
 
+  const waitForPickerPresentationWindow = useCallback(async () => {
+    if (Platform.OS !== "ios") return;
+    await new Promise((resolve) => setTimeout(resolve, IOS_PICKER_PRESENT_DELAY_MS));
+  }, []);
+
   const pickFromLibrary = useCallback(async () => {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) return;
+    if (!perm.granted) {
+      showAppAlert("Photos permission needed", "Allow photo access from Settings to attach a streak memory photo.");
+      return;
+    }
+    await waitForPickerPresentationWindow();
     const res = await ImagePicker.launchImageLibraryAsync(pickerOptions);
     if (!res.canceled && res.assets[0]) {
       applyPickedUri(res.assets[0].uri);
     }
-  }, [applyPickedUri]);
+  }, [applyPickedUri, waitForPickerPresentationWindow]);
 
   const pickFromCamera = useCallback(async () => {
     const perm = await ImagePicker.requestCameraPermissionsAsync();
-    if (!perm.granted) return;
+    if (!perm.granted) {
+      showAppAlert("Camera permission needed", "Allow camera access from Settings to take a streak memory photo.");
+      return;
+    }
+    await waitForPickerPresentationWindow();
     const res = await ImagePicker.launchCameraAsync(pickerOptions);
     if (!res.canceled && res.assets[0]) {
       applyPickedUri(res.assets[0].uri);
     }
-  }, [applyPickedUri]);
+  }, [applyPickedUri, waitForPickerPresentationWindow]);
 
   const choosePhotoSource = useCallback(() => {
     if (submitting || photoPickerOpeningRef.current) return;
@@ -184,8 +200,39 @@ export const StreakMemorySheet = React.memo(function StreakMemorySheet({
     const releasePickerLock = () => {
       photoPickerOpeningRef.current = false;
     };
+    const launchPicker = (source: "camera" | "library") => {
+      void (async () => {
+        try {
+          if (source === "camera") await pickFromCamera();
+          else await pickFromLibrary();
+        } finally {
+          releasePickerLock();
+        }
+      })();
+    };
     if (!visible) {
       releasePickerLock();
+      return;
+    }
+    if (Platform.OS === "ios") {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          title: "Add a photo",
+          message: "Take a new picture or choose one from your gallery.",
+          options: ["Cancel", "Take photo", "Photo library"],
+          cancelButtonIndex: 0,
+          userInterfaceStyle: isDark ? "dark" : "light",
+        },
+        (buttonIndex) => {
+          if (buttonIndex === 1) {
+            launchPicker("camera");
+          } else if (buttonIndex === 2) {
+            launchPicker("library");
+          } else {
+            releasePickerLock();
+          }
+        },
+      );
       return;
     }
     requestAnimationFrame(() => {
@@ -197,22 +244,20 @@ export const StreakMemorySheet = React.memo(function StreakMemorySheet({
           {
             text: "Take photo",
             onPress: () => {
-              releasePickerLock();
-              void pickFromCamera();
+              launchPicker("camera");
             },
           },
           {
             text: "Photo library",
             onPress: () => {
-              releasePickerLock();
-              void pickFromLibrary();
+              launchPicker("library");
             },
           },
         ],
         { cancelable: true, onDismiss: releasePickerLock },
       );
     });
-  }, [pickFromCamera, pickFromLibrary, submitting, visible]);
+  }, [isDark, pickFromCamera, pickFromLibrary, submitting, visible]);
 
   const handleSquadShareChange = useCallback(
     (nextPublic: boolean) => {
