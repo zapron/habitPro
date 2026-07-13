@@ -20,9 +20,11 @@ import { View,
   Switch,
   ActivityIndicator,
   InteractionManager,
+  Platform,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowLeft, Trash2, Lock, RotateCcw, Star, Plane, Gamepad2, Globe, User, Users, Info, Bell } from 'lucide-react-native';
 import Svg, { Circle, G } from 'react-native-svg';
 import { useHabitStore } from '../../src/store/habitStore';
@@ -48,6 +50,7 @@ import {
   calendarDateForHabitMissionDayIndex,
   calendarDayEndUtcMsForDateKey,
   getHabitActiveMissionDaySlot,
+  getHabitActiveMissionDayEndMs,
   getHabitMissionTimeZone,
   isHabitCalendarDateToggleable,
   MS_PER_MISSION_DAY,
@@ -62,7 +65,6 @@ import { StreakMemoryGallery } from '../../src/components/StreakMemoryGallery';
 import { GroupChallengeSheet } from '../../src/components/GroupChallengeSheet';
 import { MissionDetailsSheet } from '../../src/components/MissionDetailsSheet';
 import { StreakRepairSheet } from "../../src/components/StreakRepairSheet";
-import { PlusBadge } from "../../src/components/PlusBadge";
 import { LazyMount } from '../../src/components/LazyMount';
 import type { StreakMemory } from '../../src/types/habit';
 import {
@@ -130,6 +132,15 @@ function runAfterSettledInteractions(task: () => void, delayMs = POST_OPERATION_
 
 function waitForOperationStep(ms = OPERATION_STEP_DELAY_MS): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function formatUnlockDuration(ms: number): string {
+    const totalMinutes = Math.max(0, Math.ceil(ms / 60000));
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    if (hours <= 0) return `${minutes}m`;
+    if (minutes === 0) return `${hours}h`;
+    return `${hours}h ${minutes}m`;
 }
 
 type MissionDialogState =
@@ -293,6 +304,7 @@ const AnimatedDayCell = React.memo(function AnimatedDayCell({
     repairSource,
     onPress,
     isSheetOpen,
+    optimizeForScroll,
 }: {
     day: number;
     dayIndex: number;
@@ -307,6 +319,7 @@ const AnimatedDayCell = React.memo(function AnimatedDayCell({
     repairSource?: "squad" | "solo";
     onPress: (dayIndex: number, day: number) => void;
     isSheetOpen: boolean;
+    optimizeForScroll: boolean;
 }) {
     const { theme, isDark } = useTheme();
     const reduceMotion = useReducedMotion();
@@ -331,7 +344,7 @@ const AnimatedDayCell = React.memo(function AnimatedDayCell({
     }, [reduceMotion, isCurrentMissionDay, isCompleted, todayPulse, isSheetOpen]);
 
     useEffect(() => {
-        if (reduceMotion || !(isMilestone && isCompleted)) return;
+        if (reduceMotion || optimizeForScroll || !(isMilestone && isCompleted)) return;
         const loop = Animated.loop(
             Animated.sequence([
                 Animated.timing(shimmer, { toValue: 1, duration: 2000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
@@ -340,7 +353,7 @@ const AnimatedDayCell = React.memo(function AnimatedDayCell({
         );
         loop.start();
         return () => loop.stop();
-    }, [reduceMotion, isMilestone, isCompleted, shimmer]);
+    }, [reduceMotion, optimizeForScroll, isMilestone, isCompleted, shimmer]);
 
     // ── Touch-down: instant scale shrink + haptic (fires the MOMENT finger touches) ──
     const handlePressIn = useCallback(() => {
@@ -374,11 +387,11 @@ const AnimatedDayCell = React.memo(function AnimatedDayCell({
                 {
                     backgroundColor: isDark ? 'rgba(79, 70, 229, 0.12)' : 'rgba(99, 102, 241, 0.08)',
                     borderColor: isMilestone ? theme.colors.amber[500] : theme.colors.indigo[500],
-                    ...theme.shadow.glow,
+                    ...(optimizeForScroll ? {} : theme.shadow.glow),
                 },
             ]
             : [styles.dayButtonIncomplete, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }],
-        isCompleted && isMilestone && styles.dayButtonMilestone,
+        isCompleted && isMilestone && !optimizeForScroll && styles.dayButtonMilestone,
         isCurrentMissionDay && !isCompleted && { borderColor: theme.colors.cyan[400], borderWidth: 2 },
         locked && styles.dayButtonFuture,
     ];
@@ -386,7 +399,13 @@ const AnimatedDayCell = React.memo(function AnimatedDayCell({
     const animatedScale = isCurrentMissionDay && !isCompleted ? Animated.multiply(scale, todayPulse) : scale;
 
     return (
-        <Animated.View style={{ width: '13%', aspectRatio: 1, marginBottom: 14, transform: [{ scale: animatedScale as any }] }}>
+        <Animated.View
+            style={[
+                styles.dayCellFrame,
+                optimizeForScroll && isCompleted && ({ shouldRasterizeIOS: true } as any),
+                { transform: [{ scale: animatedScale as any }] },
+            ]}
+        >
             <TouchableOpacity
                 onPressIn={handlePressIn}
                 onPressOut={handlePressOut}
@@ -428,6 +447,7 @@ export default function HabitDetail() {
     const { repair, repairDate } = useLocalSearchParams<{ repair?: string; repairDate?: string }>();
     const router = useRouter();
     const { theme, isDark } = useTheme();
+    const insets = useSafeAreaInsets();
     const { showToast } = useToast();
     const { session } = useAuth();
     useRemoteStoreRefreshOnFocus();
@@ -454,6 +474,7 @@ export default function HabitDetail() {
 
     const lastVisibilityRef = useRef<{ id: string; prev: MissionVisibility } | null>(null);
     const [visibilityBusy, setVisibilityBusy] = useState(false);
+    const [optimisticMissionVisibility, setOptimisticMissionVisibility] = useState<MissionVisibility | null>(null);
 
     useEffect(() => {
         const unsubFail = subscribeSyncFailure(() => {
@@ -476,6 +497,10 @@ export default function HabitDetail() {
             lastVisibilityRef.current = null;
         };
     }, []);
+
+    useEffect(() => {
+        setOptimisticMissionVisibility(null);
+    }, [habit?.id, habit?.visibility]);
 
     const mode = habit?.mode ?? 'autopilot';
     const totalDays = habit?.totalDays ?? 21;
@@ -680,10 +705,55 @@ export default function HabitDetail() {
         return !shouldShowMainMissionTimer(habit, now);
     }, [habit, now]);
 
+    const isManual = mode === 'manual';
+    const activeMissionDaySlot = habit ? getHabitActiveMissionDaySlot(habit, now) : null;
+    const useActiveTrailGrid = totalDays > INITIAL_GRID_RENDER_DAYS;
+    const activeTrailReachedDay = useMemo(() => {
+        if (!habit) return 1;
+        let reached = activeMissionDaySlot ?? 0;
+        const memoryDays = Object.keys(habit.streakMemories ?? {})
+            .map((dateStr) => missionDayNumberForCalendarDate(habit, dateStr, now))
+            .filter((day): day is number => typeof day === 'number');
+        const completedDays = (habit.completedDates ?? [])
+            .map((dateStr) => missionDayNumberForCalendarDate(habit, dateStr, now))
+            .filter((day): day is number => typeof day === 'number');
+        for (const day of [...memoryDays, ...completedDays]) {
+            reached = Math.max(reached, day);
+        }
+        return Math.min(totalDays, Math.max(1, reached));
+    }, [activeMissionDaySlot, habit, now, totalDays]);
+    const activeTrailDays = useMemo(
+        () => Array.from({ length: activeTrailReachedDay }, (_, i) => activeTrailReachedDay - i),
+        [activeTrailReachedDay],
+    );
+    const activeTrailRemainingDays = Math.max(0, totalDays - activeTrailReachedDay);
+    const activeMissionDayEndMs = habit ? getHabitActiveMissionDayEndMs(habit, now) : null;
+    const activeTrailUnlockCopy = useMemo(() => {
+        if (!useActiveTrailGrid) return null;
+        if (activeMissionDaySlot == null) {
+            return activeTrailRemainingDays === 0 ? 'Full journey complete.' : 'No marker is open right now.';
+        }
+        if (activeMissionDaySlot >= totalDays) {
+            return 'Final marker is open now.';
+        }
+        if (activeMissionDayEndMs && activeMissionDayEndMs > now) {
+            return `Day ${activeMissionDaySlot + 1} opens in ${formatUnlockDuration(activeMissionDayEndMs - now)}`;
+        }
+        return `Day ${activeMissionDaySlot + 1} opens soon`;
+    }, [
+        activeMissionDayEndMs,
+        activeMissionDaySlot,
+        activeTrailRemainingDays,
+        now,
+        totalDays,
+        useActiveTrailGrid,
+    ]);
+
     const fireCompletionCelebration = useCallback(
         (dayIndex: number, day: number, isMilestone: boolean) => {
-            const col = dayIndex % 7;
-            const row = Math.floor(dayIndex / 7);
+            const visualIndex = useActiveTrailGrid ? Math.max(0, activeTrailReachedDay - day) : dayIndex;
+            const col = visualIndex % 7;
+            const row = Math.floor(visualIndex / 7);
             const cellSize = 50;
             const x = col * cellSize + cellSize / 2;
             const y = row * cellSize + cellSize / 2;
@@ -693,7 +763,7 @@ export default function HabitDetail() {
             }, 50);
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         },
-        [],
+        [activeTrailReachedDay, useActiveTrailGrid],
     );
 
     const handleMemoryCommit = useCallback(
@@ -969,6 +1039,47 @@ export default function HabitDetail() {
         }
     }, [canOpenGroupMissionSheet, groupSheetOpen]);
 
+    const handleMissionVisibilityChange = useCallback(
+        (v: boolean) => {
+            if (!habit || visibilityBusy) return;
+            void (async () => {
+                const next: MissionVisibility = v ? 'public' : 'solo';
+                const prev = habit.visibility ?? 'solo';
+                if (prev === next) return;
+                setOptimisticMissionVisibility(next);
+                setVisibilityBusy(true);
+                try {
+                    if (next === 'public') {
+                        const freshPremium = await refreshPremiumAccess({ serverOnly: true, cachedAccessOk: true });
+                        if (freshPremium !== true) {
+                            setOptimisticMissionVisibility(null);
+                            openUpsell('visibility');
+                            return;
+                        }
+                    }
+                    lastVisibilityRef.current = { id: habit.id, prev };
+                    setHabitVisibility(habit.id, next);
+                } catch (e) {
+                    setOptimisticMissionVisibility(null);
+                    throw e;
+                } finally {
+                    setVisibilityBusy(false);
+                }
+            })();
+        },
+        [habit, visibilityBusy, refreshPremiumAccess, openUpsell, setHabitVisibility],
+    );
+
+    const openReminderEditor = useCallback(() => {
+        if (!habit) return;
+        const seed =
+            typeof habit.reminderTimeLocal === "string" && habit.reminderTimeLocal.length > 0
+                ? habit.reminderTimeLocal
+                : "21:00";
+        setReminderDraft(seed);
+        setReminderEditorOpen(true);
+    }, [habit]);
+
     const squadShareProp = useMemo(() => {
         if (!habit) return undefined;
         return {
@@ -1051,14 +1162,15 @@ export default function HabitDetail() {
         () => days.slice(0, detailHeavyContentReady ? Math.min(visibleGridDayCount, totalDays) : 0),
         [days, detailHeavyContentReady, totalDays, visibleGridDayCount],
     );
+    const displayedGridDays = useActiveTrailGrid ? activeTrailDays : visibleDays;
+    const optimizeGridScrollForIos = Platform.OS === 'ios' && displayedGridDays.length > INITIAL_GRID_RENDER_DAYS;
 
     const getDayDate = useCallback((dayIndex: number) => {
         if (!habit) return "";
         return calendarDateForHabitMissionDayIndex(habit, dayIndex, now);
     }, [habit, now]);
 
-    const isManual = mode === 'manual';
-    const activeMissionDaySlot = habit ? getHabitActiveMissionDaySlot(habit, now) : null;
+    const detailBottomPad = Math.max(insets.bottom, 24) + 16;
 
     const handleDayPress = useCallback((dayIndex: number, day: number) => {
         const currentHabit = habitId ? useHabitStore.getState().getHabit(habitId) : undefined;
@@ -1094,6 +1206,12 @@ export default function HabitDetail() {
         });
     }, [habitId, toggleCompletion, showToast]);
 
+    const displayedMissionVisibility = optimisticMissionVisibility ?? habit?.visibility ?? 'solo';
+    const missionVisibilityIsPublic = displayedMissionVisibility === 'public';
+    const reminderLockedTime =
+        reminderIsLocked && habit?.reminderEnabled && typeof habit.reminderTimeLocal === "string"
+            ? habit.reminderTimeLocal
+            : null;
     if (!habit) {
         return (
             <Screen>
@@ -1212,7 +1330,13 @@ export default function HabitDetail() {
                 />
             </LazyMount>
 
-            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" {...({ delaysContentTouches: false } as any)}>
+            <ScrollView
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+                contentContainerStyle={{ paddingBottom: detailBottomPad }}
+                removeClippedSubviews={optimizeGridScrollForIos}
+                {...({ delaysContentTouches: false } as any)}
+            >
                 <View style={styles.modeRow}>
                     <View style={[styles.modeBadge, isManual && styles.modeBadgeManual]}>
                         {isManual ? <Gamepad2 size={13} color={theme.colors.amber[500]} /> : <Plane size={13} color={theme.colors.cyan[400]} />}
@@ -1330,115 +1454,139 @@ export default function HabitDetail() {
                     />
                 )}
 
-                <View style={[styles.visibilityRow, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, borderRadius: theme.radius.md }]}>
-                    {(habit.visibility ?? 'solo') === 'public' ? (
-                        <Globe size={theme.icon.md} color={theme.colors.cyan[400]} />
-                    ) : (
-                        <User size={theme.icon.md} color={theme.colors.indigo[400]} />
-                    )}
-                    <View style={styles.visibilityTextCol}>
-                        {(habit.visibility ?? 'solo') === 'public' ? (
-                            <>
-                                <View style={styles.visibilityTitleRow}>
-                                    <Text style={[styles.visibilityTitle, { color: theme.colors.textPrimary }]}>Public</Text>
-                                    <PlusBadge withFlame />
-                                </View>
-                                <Text style={[styles.visibilityHint, { color: theme.colors.textMuted }]}>
-                                    Visible to your squad on this mission.
-                                </Text>
-                            </>
-                        ) : (
-                            <>
-                                <Text style={[styles.visibilityTitle, { color: theme.colors.textPrimary }]}>Solo</Text>
-                                <Text style={[styles.visibilityHint, { color: theme.colors.textMuted }]}>
-                                    Private to you on this mission.
-                                </Text>
-                            </>
-                        )}
-                    </View>
-                    <Switch
-                        value={(habit.visibility ?? 'solo') === 'public'}
-                        disabled={visibilityBusy}
-                        onValueChange={(v) => {
-                            if (visibilityBusy) return;
-                            void (async () => {
-                                const next = v ? 'public' : 'solo';
-                                const prev = habit.visibility ?? 'solo';
-                                if (prev === next) return;
-                                setVisibilityBusy(true);
-                                try {
-                                    if (next === 'public') {
-                                        const freshPremium = await refreshPremiumAccess({ serverOnly: true, cachedAccessOk: true });
-                                        if (freshPremium !== true) {
-                                            openUpsell('visibility');
-                                            return;
-                                        }
-                                    }
-                                    lastVisibilityRef.current = { id: habit.id, prev };
-                                    setHabitVisibility(habit.id, next);
-                                } finally {
-                                    setVisibilityBusy(false);
-                                }
-                            })();
-                        }}
-                        trackColor={{ false: theme.colors.border, true: theme.colors.indigo[600] }}
-                        thumbColor={theme.colors.white}
-                        ios_backgroundColor={theme.colors.border}
-                    />
-                </View>
-
-                {reminderIsLocked && habit.reminderEnabled && typeof habit.reminderTimeLocal === "string" ? (
-                    <View
-                        style={[
-                            styles.reminderLockedRow,
-                            {
-                                borderColor: theme.colors.border,
-                                backgroundColor: isDark ? "rgba(99, 102, 241, 0.08)" : "rgba(99, 102, 241, 0.06)",
-                            },
-                        ]}
+                <View
+                    style={[
+                        styles.missionControlsCard,
+                        Platform.OS === 'ios' && styles.missionControlsCardIos,
+                        {
+                            backgroundColor: theme.colors.surface,
+                            borderColor: theme.colors.border,
+                            borderRadius: theme.radius.lg,
+                            ...theme.shadow.card,
+                        },
+                    ]}
+                >
+                    <TouchableOpacity
+                        activeOpacity={reminderLockedTime ? 1 : 0.84}
+                        onPress={reminderLockedTime ? undefined : openReminderEditor}
+                        disabled={Boolean(reminderLockedTime)}
+                        style={[styles.missionControlPane, Platform.OS === 'ios' && styles.missionControlPaneIos]}
+                        accessibilityRole={reminderLockedTime ? undefined : "button"}
+                        accessibilityLabel={reminderLockedTime ? "Daily reminder locked" : "Set reminder time"}
                     >
-                        <View style={[styles.reminderLockedAccent, { backgroundColor: theme.colors.indigo[500] }]} />
-                        <View style={{ flex: 1, minWidth: 0 }}>
-                            <Text style={[styles.reminderLockedLabel, { color: theme.colors.textMuted }]}>DAILY REMINDER</Text>
-                            <Text style={[styles.reminderLockedTime, { color: theme.colors.textPrimary }]}>{habit.reminderTimeLocal}</Text>
+                        <View
+                            style={[
+                                styles.missionControlIcon,
+                                {
+                                    backgroundColor: reminderLockedTime
+                                        ? isDark ? "rgba(99, 102, 241, 0.14)" : "rgba(99, 102, 241, 0.10)"
+                                        : isDark ? "rgba(245, 158, 11, 0.14)" : "rgba(245, 158, 11, 0.12)",
+                                },
+                            ]}
+                        >
+                            <Bell
+                                size={15}
+                                color={reminderLockedTime ? theme.colors.indigo[400] : theme.colors.amber[500]}
+                            />
                         </View>
-                        <Bell size={18} color={theme.colors.indigo[400]} />
-                    </View>
-                ) : (
-                    <View
-                        style={[
-                            styles.visibilityRow,
-                            { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, borderRadius: theme.radius.md },
-                        ]}
-                    >
-                        <Bell size={theme.icon.md} color={theme.colors.indigo[400]} />
-                        <View style={styles.visibilityTextCol}>
-                            <Text style={[styles.visibilityTitle, { color: theme.colors.textPrimary }]}>Reminders</Text>
-                            <Text style={[styles.visibilityHint, { color: theme.colors.textMuted }]}>
-                                Default: opening + last hour. Or set one daily time (final).
+                        <View style={styles.missionControlTextCol}>
+                            <Text style={[styles.missionControlLabel, { color: theme.colors.textMuted }]} numberOfLines={1}>
+                                REMINDER
+                            </Text>
+                            <Text style={[styles.missionControlValue, { color: theme.colors.textPrimary }]} numberOfLines={1}>
+                                {reminderLockedTime ?? "Set time"}
                             </Text>
                         </View>
-                        <TouchableOpacity
-                            onPress={() => {
-                                const seed =
-                                    typeof habit.reminderTimeLocal === "string" && habit.reminderTimeLocal.length > 0
-                                        ? habit.reminderTimeLocal
-                                        : "21:00";
-                                setReminderDraft(seed);
-                                setReminderEditorOpen(true);
-                            }}
-                            activeOpacity={0.86}
+                        <View
                             style={[
-                                styles.reminderSetBtn,
-                                { borderColor: theme.colors.border, backgroundColor: theme.colors.surfaceElevated },
+                                styles.missionControlTinyPill,
+                                {
+                                    borderColor: theme.colors.border,
+                                    backgroundColor: theme.colors.surfaceElevated,
+                                },
                             ]}
-                            accessibilityRole="button"
-                            accessibilityLabel="Set reminder time"
                         >
-                            <Text style={[styles.reminderSetBtnText, { color: theme.colors.indigo[400] }]}>Set time</Text>
-                        </TouchableOpacity>
+                            <Text
+                                style={[
+                                    styles.missionControlTinyPillText,
+                                    { color: reminderLockedTime ? theme.colors.indigo[400] : theme.colors.amber[500] },
+                                ]}
+                                numberOfLines={1}
+                            >
+                                {reminderLockedTime ? "Locked" : "Set"}
+                            </Text>
+                        </View>
+                    </TouchableOpacity>
+
+                    <View style={[styles.missionControlsDivider, { backgroundColor: theme.colors.border }]} />
+
+                    <View style={[styles.missionControlPane, Platform.OS === 'ios' && styles.missionControlPaneIos]}>
+                        <View
+                            style={[
+                                styles.missionControlIcon,
+                                {
+                                    backgroundColor: missionVisibilityIsPublic
+                                        ? isDark ? "rgba(34, 211, 238, 0.12)" : "rgba(6, 182, 212, 0.10)"
+                                        : isDark ? "rgba(99, 102, 241, 0.14)" : "rgba(99, 102, 241, 0.10)",
+                                },
+                            ]}
+                        >
+                            {missionVisibilityIsPublic ? (
+                                <Globe size={15} color={theme.colors.cyan[400]} />
+                            ) : (
+                                <User size={15} color={theme.colors.indigo[400]} />
+                            )}
+                        </View>
+                        <View style={styles.missionControlTextCol}>
+                            <Text style={[styles.missionControlLabel, { color: theme.colors.textMuted }]} numberOfLines={1}>
+                                TYPE
+                            </Text>
+                            <View style={styles.missionControlValueRow}>
+                                <Text style={[styles.missionControlValue, { color: theme.colors.textPrimary }]} numberOfLines={1}>
+                                    {missionVisibilityIsPublic ? "Public" : "Solo"}
+                                </Text>
+                                {Platform.OS === 'android' ? (
+                                    <TouchableOpacity
+                                        activeOpacity={0.84}
+                                        disabled={visibilityBusy}
+                                        onPress={() => handleMissionVisibilityChange(!missionVisibilityIsPublic)}
+                                        style={[
+                                            styles.missionControlAndroidSwitch,
+                                            {
+                                                backgroundColor: missionVisibilityIsPublic
+                                                    ? theme.colors.indigo[600]
+                                                    : theme.colors.border,
+                                            },
+                                            visibilityBusy && styles.missionControlSwitchBusy,
+                                        ]}
+                                        accessibilityRole="switch"
+                                        accessibilityState={{ checked: missionVisibilityIsPublic, disabled: visibilityBusy }}
+                                        accessibilityLabel="Mission visibility"
+                                    >
+                                        <View
+                                            style={[
+                                                styles.missionControlAndroidSwitchThumb,
+                                                missionVisibilityIsPublic
+                                                    ? styles.missionControlAndroidSwitchThumbOn
+                                                    : styles.missionControlAndroidSwitchThumbOff,
+                                            ]}
+                                        />
+                                    </TouchableOpacity>
+                                ) : (
+                                    <Switch
+                                        style={[styles.missionControlSwitch, styles.missionControlSwitchIos]}
+                                        value={missionVisibilityIsPublic}
+                                        disabled={visibilityBusy}
+                                        onValueChange={handleMissionVisibilityChange}
+                                        trackColor={{ false: theme.colors.border, true: theme.colors.indigo[600] }}
+                                        thumbColor={theme.colors.white}
+                                        ios_backgroundColor={theme.colors.border}
+                                    />
+                                )}
+                            </View>
+                        </View>
                     </View>
-                )}
+                </View>
 
                 <StreakBanner streak={habit.streak} />
 
@@ -1607,14 +1755,40 @@ export default function HabitDetail() {
                     </Modal>
                 ) : null}
 
-                <Text style={[styles.gridTitle, { color: theme.colors.textPrimary, fontSize: theme.typography.h3 }]}>
-                    {isManual ? `${totalDays}-Day Grid` : '21-Day Grid'}
-                </Text>
+                {memoryGalleryEntries.length > 0 ? <StreakMemoryGallery entries={memoryGalleryEntries} /> : null}
+
+                <View style={styles.gridHeaderRow}>
+                    <View style={styles.gridHeaderTextCol}>
+                        <Text style={[styles.gridTitle, { color: theme.colors.textPrimary, fontSize: theme.typography.h3 }]}>
+                            {useActiveTrailGrid ? 'Active Trail' : isManual ? `${totalDays}-Day Grid` : '21-Day Grid'}
+                        </Text>
+                        {useActiveTrailGrid ? (
+                            <Text style={[styles.gridSubtitle, { color: theme.colors.textMuted }]}>
+                                Day {activeTrailReachedDay}/{totalDays} | {habit.completedDates.length} done | {activeTrailRemainingDays} left
+                            </Text>
+                        ) : null}
+                    </View>
+                    {useActiveTrailGrid && activeTrailUnlockCopy ? (
+                        <View
+                            style={[
+                                styles.unlockPill,
+                                {
+                                    borderColor: theme.colors.border,
+                                    backgroundColor: isDark ? 'rgba(34, 211, 238, 0.10)' : 'rgba(6, 182, 212, 0.08)',
+                                },
+                            ]}
+                        >
+                            <Text style={[styles.unlockPillText, { color: theme.colors.cyan[400] }]} numberOfLines={2}>
+                                {activeTrailUnlockCopy}
+                            </Text>
+                        </View>
+                    ) : null}
+                </View>
 
                 <View style={styles.grid} ref={gridRef} onLayout={(e: LayoutChangeEvent) => { setGridLayout({ x: e.nativeEvent.layout.x, y: e.nativeEvent.layout.y }); }}>
                     {confetti.active && <ConfettiBurst active={confetti.active} isMilestone={confetti.milestone} originX={confetti.x} originY={confetti.y} />}
 
-                    {!detailHeavyContentReady
+                    {!detailHeavyContentReady && !useActiveTrailGrid
                         ? Array.from({ length: Math.min(14, totalDays) }, (_, i) => (
                             <View
                                 key={`grid-warmup-${i}`}
@@ -1627,8 +1801,9 @@ export default function HabitDetail() {
                         ))
                         : null}
 
-                    {visibleDays.map((day, index) => {
-                        const dateStr = getDayDate(index);
+                    {displayedGridDays.map((day) => {
+                        const dayIndex = day - 1;
+                        const dateStr = getDayDate(dayIndex);
                         const isCompleted = completedDateSet.has(dateStr);
                         const isMilestone = milestoneSet.has(day);
                         const canInteract = activeMissionDaySlot !== null && day === activeMissionDaySlot;
@@ -1649,7 +1824,7 @@ export default function HabitDetail() {
                             <AnimatedDayCell
                                 key={day}
                                 day={day}
-                                dayIndex={index} // Stable index
+                                dayIndex={dayIndex}
                                 isCompleted={isCompleted}
                                 isMilestone={isMilestone}
                                 isCurrentMissionDay={isCurrentMissionDay}
@@ -1661,19 +1836,24 @@ export default function HabitDetail() {
                                 repairSource={repairSource}
                                 onPress={handleDayPress} // Stable callback reference
                                 isSheetOpen={memoryUi !== null}
+                                optimizeForScroll={optimizeGridScrollForIos}
                             />
                         );
                     })}
 
                     {(() => {
-                        const renderedDayCount = detailHeavyContentReady ? visibleDays.length : Math.min(14, totalDays);
+                        const renderedDayCount =
+                            useActiveTrailGrid
+                                ? displayedGridDays.length
+                                : detailHeavyContentReady
+                                    ? visibleDays.length
+                                    : Math.min(14, totalDays);
                         const remainder = renderedDayCount % 7;
                         if (remainder === 0) return null;
                         return Array.from({ length: 7 - remainder }, (_, i) => <View key={`ph-${i}`} style={styles.dayButtonPlaceholder} />);
                     })()}
                 </View>
 
-                {memoryGalleryEntries.length > 0 ? <StreakMemoryGallery entries={memoryGalleryEntries} /> : null}
             </ScrollView>
 
             <OperationProgressDialog
@@ -1903,6 +2083,77 @@ const styles = StyleSheet.create({
         padding: 4,
     },
     title: { fontWeight: '800', marginBottom: 12 },
+    missionControlsCard: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        minHeight: 62,
+        paddingVertical: 8,
+        paddingHorizontal: 10,
+        borderWidth: 1,
+        marginBottom: 14,
+    },
+    missionControlsCardIos: {
+        minHeight: 78,
+        paddingVertical: 10,
+        paddingHorizontal: 12,
+        gap: 10,
+    },
+    missionControlPane: {
+        flex: 1,
+        minWidth: 0,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 7,
+        minHeight: 44,
+    },
+    missionControlPaneIos: {
+        minHeight: 56,
+        gap: 8,
+    },
+    missionControlIcon: {
+        width: 28,
+        height: 28,
+        borderRadius: 999,
+        alignItems: 'center',
+        justifyContent: 'center',
+        flexShrink: 0,
+    },
+    missionControlsDivider: { width: StyleSheet.hairlineWidth, alignSelf: 'stretch', opacity: 0.9 },
+    missionControlTextCol: { flex: 1, minWidth: 0 },
+    missionControlLabel: { fontSize: 8, lineHeight: 10, fontWeight: '900', letterSpacing: 0.8 },
+    missionControlValueRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 6, marginTop: 2, minWidth: 0 },
+    missionControlValue: { fontSize: 14, lineHeight: 17, fontWeight: '900', marginTop: 1, flexShrink: 1 },
+    missionControlSwitch: { transform: [{ scale: 0.76 }], marginLeft: 4, marginRight: -9, flexShrink: 0 },
+    missionControlSwitchIos: { transform: [{ scale: 0.84 }], marginLeft: 6, marginRight: -4, width: 54 },
+    missionControlSwitchBusy: { opacity: 0.64 },
+    missionControlAndroidSwitch: {
+        width: 38,
+        height: 22,
+        borderRadius: 999,
+        padding: 2,
+        justifyContent: 'center',
+        flexShrink: 0,
+        marginLeft: 6,
+    },
+    missionControlAndroidSwitchThumb: {
+        width: 18,
+        height: 18,
+        borderRadius: 999,
+        backgroundColor: '#FFFFFF',
+    },
+    missionControlAndroidSwitchThumbOn: { alignSelf: 'flex-end' },
+    missionControlAndroidSwitchThumbOff: { alignSelf: 'flex-start' },
+    missionControlTinyPill: {
+        minHeight: 22,
+        borderRadius: 999,
+        borderWidth: 1,
+        paddingHorizontal: 7,
+        alignItems: 'center',
+        justifyContent: 'center',
+        flexShrink: 0,
+    },
+    missionControlTinyPillText: { fontSize: 9, lineHeight: 11, fontWeight: '900' },
     visibilityRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingHorizontal: 14, borderWidth: 1, marginBottom: 20 },
     visibilityTextCol: { flex: 1 },
     visibilityTitleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
@@ -1955,8 +2206,29 @@ const styles = StyleSheet.create({
     progressTotal: { fontSize: 16 },
     progressBarBackground: { height: 12, borderRadius: 9999, overflow: 'hidden' },
     progressBarFill: { height: '100%', borderRadius: 9999 },
-    gridTitle: { fontWeight: '700', marginBottom: 14 },
+    gridHeaderRow: {
+        flexDirection: 'row',
+        alignItems: 'flex-end',
+        justifyContent: 'space-between',
+        gap: 12,
+        marginBottom: 14,
+    },
+    gridHeaderTextCol: { flex: 1, minWidth: 0 },
+    gridTitle: { fontWeight: '700', marginBottom: 0 },
+    gridSubtitle: { fontSize: 12, lineHeight: 17, fontWeight: '700', marginTop: 4 },
+    unlockPill: {
+        maxWidth: 142,
+        minHeight: 34,
+        borderRadius: 9999,
+        borderWidth: 1,
+        paddingHorizontal: 10,
+        paddingVertical: 7,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    unlockPillText: { fontSize: 11, lineHeight: 14, fontWeight: '900', textAlign: 'center' },
     grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', paddingBottom: 24, position: 'relative' },
+    dayCellFrame: { width: '13%', aspectRatio: 1, marginBottom: 14 },
     dayButton: { width: '100%', height: '100%', borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
     dayButtonCompleted: { borderWidth: 1 },
     dayButtonMilestone: { shadowColor: '#fbbf24', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.45, shadowRadius: 14, elevation: 8 },
