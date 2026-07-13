@@ -827,6 +827,7 @@ export default function LiveMiniSquadScreen() {
   const { showToast } = useToast();
   const { session } = useAuth();
   const { softAskNotifications } = useNotificationGate();
+  const insets = useSafeAreaInsets();
   const userId = session?.user?.id ?? null;
   const addMiniMission = useHabitStore((s) => s.addMiniMission);
   const miniMissions = useHabitStore((s) => s.miniMissions);
@@ -1237,7 +1238,10 @@ export default function LiveMiniSquadScreen() {
               colors={[theme.colors.indigo[400]]}
             />
           }
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: Math.max(insets.bottom, 24) + 8 },
+          ]}
         >
           <Text style={[styles.title, { color: theme.colors.textPrimary }]} numberOfLines={3}>
             {squad.title}

@@ -3,12 +3,14 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Modal,
+  Platform,
   ScrollView,
   StyleSheet,
   TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Radio, UserPlus, Users, X } from "lucide-react-native";
 import { Text } from "./AppText";
@@ -72,6 +74,7 @@ function isTerminalLiveMiniStatus(status: LiveMiniParticipantStatus): boolean {
 export function LiveMiniInviteSheet({ visible, mission, onClose }: Props) {
   const router = useRouter();
   const { theme, isDark } = useTheme();
+  const insets = useSafeAreaInsets();
   const { showToast } = useToast();
   const { session } = useAuth();
   const { isPremium, loading: premiumLoading } = usePremium();
@@ -288,7 +291,7 @@ export function LiveMiniInviteSheet({ visible, mission, onClose }: Props) {
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <KeyboardAvoidingView
-        behavior="padding"
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
         keyboardVerticalOffset={0}
         style={styles.keyboardAvoider}
       >
@@ -298,7 +301,16 @@ export function LiveMiniInviteSheet({ visible, mission, onClose }: Props) {
             { backgroundColor: isDark ? "rgba(0,0,0,0.42)" : "rgba(15,23,42,0.22)" },
           ]}
         >
-          <View style={[styles.sheet, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
+          <View
+            style={[
+              styles.sheet,
+              {
+                backgroundColor: theme.colors.surface,
+                borderColor: theme.colors.border,
+                paddingBottom: Math.max(insets.bottom, 18),
+              },
+            ]}
+          >
           <View style={styles.sheetHead}>
             <View style={styles.titleCluster}>
               <View style={styles.titleRow}>

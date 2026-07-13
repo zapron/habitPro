@@ -20,6 +20,7 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ArrowLeft, Bell } from "lucide-react-native";
 import { Screen } from "../src/components/Screen";
 import { useTheme } from "../src/context/ThemeContext";
@@ -320,6 +321,7 @@ const NotificationListItem = memo(function NotificationListItem({
 export default function NotificationsScreen() {
   const router = useRouter();
   const { theme, isDark } = useTheme();
+  const insets = useSafeAreaInsets();
   const { session } = useAuth();
   const userId = session?.user?.id ?? null;
   const [items, setItems] = useState<NotificationRow[]>([]);
@@ -759,7 +761,10 @@ export default function NotificationsScreen() {
         <FlatList
           data={items}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={[
+            styles.listContent,
+            { paddingBottom: Math.max(insets.bottom, 24) + 8 },
+          ]}
           refreshing={loading && items.length > 0}
           onRefresh={onRefreshList}
           onEndReached={onEndReachedList}

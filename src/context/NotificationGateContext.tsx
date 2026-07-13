@@ -203,7 +203,7 @@ function NotificationPermissionSheet({
           <Text style={[styles.body, { color: theme.colors.textSecondary }]}>{bodyForReason(reason)}</Text>
           {status === "denied" && !canAskAgain ? (
             <Text style={[styles.note, { color: theme.colors.amber[500] }]}>
-              You previously denied notifications. On Android, turn them back on from Settings.
+              You previously denied notifications. Turn them back on from Settings.
             </Text>
           ) : null}
           <View style={styles.actions}>

@@ -29,7 +29,9 @@
       }
     },
     "ios": {
-      "supportsTablet": true
+      "bundleIdentifier": "com.rakti.habitpro",
+      "buildNumber": "32",
+      "supportsTablet": false
     },
     "android": {
       "package": "com.rakti.habitpro",

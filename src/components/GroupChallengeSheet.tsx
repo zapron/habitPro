@@ -4,12 +4,14 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Modal,
+  Platform,
   ScrollView,
   StyleSheet,
   TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { X } from "lucide-react-native";
 import type { Habit } from "../types/habit";
@@ -42,6 +44,7 @@ type Props = {
 
 export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
   const { theme } = useTheme();
+  const insets = useSafeAreaInsets();
   const { showToast } = useToast();
   const router = useRouter();
   const { session } = useAuth();
@@ -232,12 +235,21 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
     <>
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <KeyboardAvoidingView
-        behavior="padding"
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
         keyboardVerticalOffset={0}
         style={styles.keyboardAvoider}
       >
         <View style={[styles.backdrop, { backgroundColor: theme.colors.background === '#ffffff' ? 'rgba(0,0,0,0.2)' : 'rgba(0,0,0,0.4)' }]}>
-          <View style={[styles.sheet, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
+          <View
+            style={[
+              styles.sheet,
+              {
+                backgroundColor: theme.colors.surface,
+                borderColor: theme.colors.border,
+                paddingBottom: Math.max(insets.bottom, 20),
+              },
+            ]}
+          >
           <View style={styles.sheetHead}>
             <View style={styles.titleRow}>
               <Text style={[styles.sheetTitle, { color: theme.colors.textPrimary }]}>Group mission</Text>

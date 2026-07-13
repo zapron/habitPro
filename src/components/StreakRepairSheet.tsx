@@ -2,13 +2,18 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Text } from "./AppText";
 import {
   ActivityIndicator,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   TextInput,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Users, X } from "lucide-react-native";
 import type { Habit } from "../types/habit";
 import { useTheme } from "../context/ThemeContext";
@@ -38,6 +43,8 @@ type Props = {
 
 export function StreakRepairSheet({ visible, onClose, habit, eligible, onRequested }: Props) {
   const { theme, isDark } = useTheme();
+  const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
   const { showToast } = useToast();
   const { isPremium, loading: premiumLoading } = usePremium();
   const { openUpsell } = usePlusUpsell();
@@ -101,6 +108,11 @@ export function StreakRepairSheet({ visible, onClose, habit, eligible, onRequest
     if (isGroup) return "Request squad approval";
     return "Pay XP & repair";
   }, [groupIsSoloFallback, isGroup]);
+  const sheetMaxHeight = Math.max(
+    360,
+    windowHeight - Math.max(insets.top, 16) - Math.max(insets.bottom, 12) - 24,
+  );
+  const sheetBottomPad = Math.max(insets.bottom, 16);
 
   useEffect(() => {
     if (!visible || !isGroup) return;
@@ -108,20 +120,27 @@ export function StreakRepairSheet({ visible, onClose, habit, eligible, onRequest
   }, [visible, isGroup, refreshPremiumAccess]);
 
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <Pressable
+    <Modal visible={visible} animationType="slide" transparent statusBarTranslucent onRequestClose={onClose}>
+      <View
         style={[
           styles.backdrop,
           { backgroundColor: isDark ? "rgba(0,0,0,0.45)" : "rgba(0,0,0,0.22)" },
         ]}
-        onPress={onClose}
       >
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityRole="button" accessibilityLabel="Dismiss" />
+        <KeyboardAvoidingView
+          pointerEvents="box-none"
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          style={styles.keyboardAvoider}
+        >
         <Pressable
           style={[
             styles.sheet,
             {
               backgroundColor: theme.colors.surface,
               borderColor: theme.colors.border,
+              maxHeight: sheetMaxHeight,
+              paddingBottom: sheetBottomPad,
             },
           ]}
           onPress={(e) => e.stopPropagation()}
@@ -146,6 +165,12 @@ export function StreakRepairSheet({ visible, onClose, habit, eligible, onRequest
             </TouchableOpacity>
           </View>
 
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
+            contentContainerStyle={styles.scrollContent}
+          >
           <Text style={[styles.hint, { color: theme.colors.textSecondary }]}>
             You missed day {eligible.missionDayNumber}. Repair within {STREAK_REPAIR_WINDOW_HOURS}h to keep your streak.
           </Text>
@@ -312,14 +337,17 @@ export function StreakRepairSheet({ visible, onClose, habit, eligible, onRequest
               <Text style={[styles.primaryBtnText, { color: "#111827" }]}>{busy ? "Working..." : primaryLabel}</Text>
             </View>
           </TouchableOpacity>
+          </ScrollView>
         </Pressable>
-      </Pressable>
+        </KeyboardAvoidingView>
+      </View>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
   backdrop: { flex: 1, justifyContent: "flex-end" },
+  keyboardAvoider: { width: "100%", justifyContent: "flex-end" },
   sheet: {
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
@@ -328,6 +356,7 @@ const styles = StyleSheet.create({
     paddingTop: 16,
     paddingBottom: 18,
   },
+  scrollContent: { paddingBottom: 4 },
   sheetHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 },
   titleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   sheetTitle: { fontSize: 18, fontWeight: "900" },

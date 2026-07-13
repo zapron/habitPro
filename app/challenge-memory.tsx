@@ -14,6 +14,7 @@ import {
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   ArrowLeft,
   Camera,
@@ -133,6 +134,7 @@ export default function ChallengeMemoryScreen() {
 
   const router = useRouter();
   const { theme, isDark } = useTheme();
+  const insets = useSafeAreaInsets();
   const { session } = useAuth();
   const { isPremium, loading: premiumLoading } = usePremium();
   const { openUpsell } = usePlusUpsell();
@@ -433,7 +435,10 @@ export default function ChallengeMemoryScreen() {
             tintColor={theme.colors.indigo[400]}
           />
         }
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: Math.max(insets.bottom, 24) + 8 },
+        ]}
         showsVerticalScrollIndicator={false}
       >
         {loading ? (
@@ -757,7 +762,13 @@ export default function ChallengeMemoryScreen() {
             <Image source={{ uri: detail.imageUrl }} style={styles.fullscreenImage} resizeMode="contain" />
           ) : null}
           <Pressable
-            style={[styles.fullscreenClose, { backgroundColor: "rgba(15,23,42,0.78)" }]}
+            style={[
+              styles.fullscreenClose,
+              {
+                backgroundColor: "rgba(15,23,42,0.78)",
+                top: Math.max(insets.top, 42),
+              },
+            ]}
             onPress={() => setImageViewerOpen(false)}
             accessibilityRole="button"
             accessibilityLabel="Close photo"

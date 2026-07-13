@@ -4,12 +4,15 @@ import {
   View,
   TouchableOpacity,
   Modal,
+  KeyboardAvoidingView,
+  Platform,
   StyleSheet,
   Pressable,
   ScrollView,
   InteractionManager,
   Linking,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Bell, ExternalLink, X, Monitor, Sun, Moon, type LucideIcon } from 'lucide-react-native';
 import { useTheme, type ThemePreference } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
@@ -35,6 +38,7 @@ interface SettingsModalProps {
 export function SettingsModal({ visible, onClose }: SettingsModalProps) {
     const router = useRouter();
     const { theme, isDark, preference, setPreference } = useTheme();
+    const insets = useSafeAreaInsets();
     const { session } = useAuth();
     const showAccount = isSupabaseConfigured();
     const username = useHabitStore((s) => s.username);
@@ -101,6 +105,7 @@ export function SettingsModal({ visible, onClose }: SettingsModalProps) {
     const onOpenPublicLink = async (url: string) => {
         await Linking.openURL(url);
     };
+    const sheetBottomPad = Math.max(insets.bottom, 14);
 
     return (
         <Modal
@@ -110,8 +115,24 @@ export function SettingsModal({ visible, onClose }: SettingsModalProps) {
             onRequestClose={onClose}
             statusBarTranslucent
         >
-            <Pressable style={[styles.backdrop, { backgroundColor: isDark ? 'rgba(0,0,0,0.4)' : 'rgba(0,0,0,0.2)' }]} onPress={onClose}>
-                <Pressable style={[styles.sheet, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]} onPress={(e) => e.stopPropagation()}>
+            <View style={[styles.backdrop, { backgroundColor: isDark ? 'rgba(0,0,0,0.4)' : 'rgba(0,0,0,0.2)' }]}>
+                <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityRole="button" accessibilityLabel="Dismiss" />
+                <KeyboardAvoidingView
+                    pointerEvents="box-none"
+                    behavior={Platform.OS === "ios" ? "padding" : undefined}
+                    style={styles.keyboardAvoider}
+                >
+                <Pressable
+                    style={[
+                        styles.sheet,
+                        {
+                            backgroundColor: theme.colors.surface,
+                            borderColor: theme.colors.border,
+                            paddingBottom: sheetBottomPad,
+                        },
+                    ]}
+                    onPress={(e) => e.stopPropagation()}
+                >
                     {/* Handle bar */}
                     <View style={[styles.handle, { backgroundColor: theme.colors.textMuted }]} />
 
@@ -125,8 +146,9 @@ export function SettingsModal({ visible, onClose }: SettingsModalProps) {
 
                     <ScrollView
                         showsVerticalScrollIndicator={false}
-                        contentContainerStyle={styles.contentScroll}
+                        contentContainerStyle={[styles.contentScroll, { paddingBottom: sheetBottomPad }]}
                         keyboardShouldPersistTaps="handled"
+                        keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
                     >
 
                     {showAccount && session && (
@@ -318,7 +340,8 @@ export function SettingsModal({ visible, onClose }: SettingsModalProps) {
                     </TouchableOpacity>
                     </ScrollView>
                 </Pressable>
-            </Pressable>
+                </KeyboardAvoidingView>
+            </View>
         </Modal>
     );
 }
@@ -327,6 +350,10 @@ const styles = StyleSheet.create({
     backdrop: {
         flex: 1,
         justifyContent: 'flex-end',
+    },
+    keyboardAvoider: {
+        width: "100%",
+        justifyContent: "flex-end",
     },
     sheet: {
         borderTopLeftRadius: 24,

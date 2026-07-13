@@ -39,6 +39,12 @@ if (process.env.EAS_BUILD === "true" && !revenuecatAndroidApiKey) {
       "The release APK will show the paywall but cannot start Google Play purchases.",
   );
 }
+if (process.env.EAS_BUILD === "true" && !revenuecatIosApiKey) {
+  console.warn(
+    "[habitPro] EAS build: EXPO_PUBLIC_REVENUECAT_IOS_API_KEY is missing. " +
+      "The iOS build will show the paywall but cannot start App Store purchases.",
+  );
+}
 if (process.env.EAS_BUILD === "true" && revenuecatAndroidApiKey.startsWith("test_")) {
   console.warn(
     "[habitPro] EAS build: EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY looks like a RevenueCat Test Store key. " +

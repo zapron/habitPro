@@ -14,6 +14,9 @@
     "web": "expo start --web",
     "build:apk": "eas build -p android --profile apk",
     "build:aab": "eas build -p android --profile production",
+    "build:ios:simulator": "eas build -p ios --profile development",
+    "build:ios:preview": "eas build -p ios --profile preview",
+    "build:ios": "eas build -p ios --profile production",
     "update:preview": "eas update --channel preview",
     "update:production": "eas update --channel production"
   },

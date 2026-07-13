@@ -20,6 +20,7 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
 import { ArrowLeft, Check, Clock, Eye, EyeOff, Info, LogOut, Users, X } from "lucide-react-native";
 import { CohortLeaderHero } from "../../src/components/CohortLeaderHero";
@@ -429,6 +430,7 @@ export default function ChallengeDetailScreen() {
   const requestedTab = normalizeChallengeDetailTab(tab);
   const router = useRouter();
   const { theme, isDark } = useTheme();
+  const insets = useSafeAreaInsets();
   const { showToast } = useToast();
   const { session } = useAuth();
   const { isPremium, loading: premiumLoading } = usePremium();
@@ -1638,7 +1640,7 @@ export default function ChallengeDetailScreen() {
     { key: "repairs", label: "Repairs", count: repairTabCount },
   ];
 
-  const bottomPad = 40;
+  const bottomPad = Math.max(insets.bottom, 24) + 16;
 
   if (!challengeId) {
     return (
