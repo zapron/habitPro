@@ -7,10 +7,10 @@ import {
   Pressable,
   StyleSheet,
   Modal,
-  Dimensions,
+  useWindowDimensions,
 } from "react-native";
 import { FlashList } from "@shopify/flash-list";
-import { Bookmark, X } from "lucide-react-native";
+import { Bookmark, ShieldCheck, X } from "lucide-react-native";
 import { useTheme } from "../context/ThemeContext";
 import type { StreakMemory } from "../types/habit";
 import {
@@ -18,6 +18,7 @@ import {
   REPAIR_MEMORY_NOTE_SQUAD,
 } from "../utils/repairStreakMemoryMerge";
 import { formatDateDisplay } from "../utils/dateDisplay";
+import { storageThumbnailUri } from "../utils/imageThumbnail";
 
 type Entry = { dateStr: string; memory: StreakMemory; missionDay?: number | null };
 
@@ -46,11 +47,11 @@ export function StreakMemoryGallery({
 }: StreakMemoryGalleryProps) {
   const { theme, isDark } = useTheme();
   const [open, setOpen] = useState<Entry | null>(null);
+  const { width: windowWidth } = useWindowDimensions();
 
   if (entries.length === 0) return null;
 
-  const w = Dimensions.get("window").width;
-  const cardW = Math.min(168, (w - 48) / 2.1);
+  const cardW = Math.min(168, Math.max(132, (windowWidth - 48) / 2.1));
   const viewerUri =
     open?.memory?.imageUrl || open?.memory?.imageUri;
   const modalHasRenderableImage = Boolean(
@@ -97,6 +98,10 @@ export function StreakMemoryGallery({
             const { dateStr, memory, missionDay } = item;
             const displayUri = memory.imageUrl || memory.imageUri;
             const showImage = Boolean(displayUri) && (!remotePeer || uriLoadsForRemoteViewer(displayUri));
+            const thumbUri =
+              showImage && displayUri
+                ? storageThumbnailUri(displayUri, cardW * 2, ((cardW * 5) / 4) * 2)
+                : null;
             const hasLocalOnlyPhoto =
               remotePeer &&
               Boolean(memory.imageUri) &&
@@ -104,8 +109,9 @@ export function StreakMemoryGallery({
               !uriLoadsForRemoteViewer(memory.imageUri);
             const noteTrim = memory.note?.trim() ?? "";
             const textOnlyThumb = !showImage && !hasLocalOnlyPhoto && noteTrim.length > 0;
+            const isSquadRepair = memory.repairSource === "squad";
             const repairKicker =
-              memory.repairSource === "squad"
+              isSquadRepair
                 ? "SQUAD REPAIR"
                 : memory.repairSource === "solo"
                   ? "STREAK REPAIR"
@@ -124,19 +130,58 @@ export function StreakMemoryGallery({
                   { width: cardW, backgroundColor: memoryCardBg, borderColor: theme.colors.border },
                 ]}
               >
-                {showImage ? (
-                  <Image source={{ uri: displayUri! }} style={styles.thumb} resizeMode="cover" />
+                {isSquadRepair ? (
+                  <View
+                    style={[
+                      styles.squadRepairThumb,
+                      {
+                        backgroundColor: isDark ? "rgba(8, 47, 73, 0.72)" : "rgba(236, 254, 255, 0.92)",
+                        borderColor: isDark ? "rgba(34, 211, 238, 0.36)" : "rgba(6, 182, 212, 0.28)",
+                      },
+                    ]}
+                  >
+                    <View
+                      style={[
+                        styles.squadRepairIconShell,
+                        {
+                          backgroundColor: isDark ? "rgba(34, 211, 238, 0.16)" : "rgba(6, 182, 212, 0.14)",
+                          borderColor: isDark ? "rgba(125, 211, 252, 0.42)" : "rgba(6, 182, 212, 0.34)",
+                        },
+                      ]}
+                    >
+                      <ShieldCheck size={30} color={theme.colors.cyan[400]} strokeWidth={2.4} />
+                    </View>
+                    <Text style={[styles.squadRepairKicker, { color: theme.colors.cyan[400] }]}>SQUAD SAVE</Text>
+                    <Text style={[styles.squadRepairTitle, { color: theme.colors.textPrimary }]} numberOfLines={2}>
+                      Streak saved
+                    </Text>
+                    <Text style={[styles.squadRepairBody, { color: theme.colors.textSecondary }]} numberOfLines={2}>
+                      Your squad brought this day back.
+                    </Text>
+                  </View>
+                ) : showImage ? (
+                  <Image source={{ uri: thumbUri ?? displayUri! }} style={styles.thumb} resizeMode="cover" />
                 ) : textOnlyThumb ? (
                   <View
                     style={[
                       styles.textOnlyThumb,
                       {
                         borderColor: memoryBorder,
-                        borderLeftColor: theme.colors.indigo[500],
-                        backgroundColor: memoryTextBg,
+                        backgroundColor: isDark ? "rgba(30, 27, 75, 0.72)" : "rgba(238, 242, 255, 0.92)",
                       },
                     ]}
                   >
+                    <View
+                      style={[
+                        styles.textOnlyIconShell,
+                        {
+                          backgroundColor: isDark ? "rgba(129, 140, 248, 0.16)" : "rgba(99, 102, 241, 0.12)",
+                          borderColor: isDark ? "rgba(165, 180, 252, 0.34)" : "rgba(99, 102, 241, 0.22)",
+                        },
+                      ]}
+                    >
+                      <Text style={[styles.textOnlyIcon, { color: theme.colors.indigo[400] }]}>{'\u201C'}</Text>
+                    </View>
                     <Text style={[styles.textOnlyThumbKicker, { color: memoryKickerColor }]}>
                       {repairKicker ?? "FIELD NOTE"}
                     </Text>
@@ -165,7 +210,7 @@ export function StreakMemoryGallery({
                     </Text>
                   ) : null}
                 </View>
-                {memory.repairSource ? (
+                {memory.repairSource && !isSquadRepair ? (
                   <View
                     style={[
                       styles.repairChip,
@@ -288,6 +333,45 @@ const styles = StyleSheet.create({
     marginRight: 2,
   },
   thumb: { width: "100%", aspectRatio: 4 / 5, backgroundColor: "#111" },
+  squadRepairThumb: {
+    width: "100%",
+    aspectRatio: 4 / 5,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 14,
+    overflow: "hidden",
+  },
+  squadRepairIconShell: {
+    width: 56,
+    height: 56,
+    borderRadius: 18,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 12,
+  },
+  squadRepairKicker: {
+    fontSize: 9,
+    lineHeight: 12,
+    fontWeight: "900",
+    letterSpacing: 1.4,
+    marginBottom: 6,
+    textAlign: "center",
+  },
+  squadRepairTitle: {
+    fontSize: 20,
+    lineHeight: 24,
+    fontWeight: "900",
+    textAlign: "center",
+  },
+  squadRepairBody: {
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: "700",
+    textAlign: "center",
+    marginTop: 8,
+  },
   thumbPlaceholder: {
     width: "100%",
     aspectRatio: 4 / 5,
@@ -298,25 +382,41 @@ const styles = StyleSheet.create({
     width: "100%",
     aspectRatio: 4 / 5,
     borderRadius: 0,
-    borderTopWidth: 0,
-    borderRightWidth: 0,
-    borderBottomWidth: 0,
-    borderLeftWidth: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 12,
-    justifyContent: "flex-start",
+    borderWidth: 1,
+    paddingHorizontal: 13,
+    paddingVertical: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  textOnlyIconShell: {
+    width: 40,
+    height: 40,
+    borderRadius: 14,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 10,
+  },
+  textOnlyIcon: {
+    fontSize: 30,
+    lineHeight: 34,
+    fontWeight: "900",
+    marginTop: -4,
   },
   textOnlyThumbKicker: {
-    fontSize: 8,
+    fontSize: 9,
+    lineHeight: 12,
     fontWeight: "900",
-    letterSpacing: 1.6,
+    letterSpacing: 1.4,
     marginBottom: 8,
+    textAlign: "center",
   },
   textOnlyThumbBody: {
-    fontSize: 13,
-    lineHeight: 18,
-    fontWeight: "600",
+    fontSize: 14,
+    lineHeight: 19,
+    fontWeight: "700",
     letterSpacing: 0.1,
+    textAlign: "center",
   },
   quoteMark: { fontSize: 42, fontWeight: "700", opacity: 0.5 },
   remotePhotoHint: { fontSize: 11, lineHeight: 15, textAlign: "center", paddingHorizontal: 8 },
