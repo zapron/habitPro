@@ -1,16 +1,16 @@
 import { Text } from "./AppText";
-import {
-  useState } from "react";
+import { useEffect, useState } from "react";
 import {
   View,
   Image,
   Pressable,
   StyleSheet,
   Modal,
+  ScrollView,
   useWindowDimensions,
 } from "react-native";
-import { FlashList } from "@shopify/flash-list";
 import { Bookmark, ShieldCheck, X } from "lucide-react-native";
+import Svg, { ClipPath, Defs, Image as SvgImage, Path } from "react-native-svg";
 import { useTheme } from "../context/ThemeContext";
 import type { StreakMemory } from "../types/habit";
 import {
@@ -34,26 +34,84 @@ type StreakMemoryGalleryProps = {
   remotePeer?: boolean;
 };
 
+const HONEYCOMB_ROWS = 2;
+
 function uriLoadsForRemoteViewer(uri: string | undefined): boolean {
   if (!uri) return false;
   return uri.startsWith("http://") || uri.startsWith("https://");
 }
 
+function clamp(n: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, n));
+}
+
+function roundedHexPath(width: number, height: number, radius: number): string {
+  const points = [
+    { x: width * 0.5, y: 0 },
+    { x: width, y: height * 0.25 },
+    { x: width, y: height * 0.75 },
+    { x: width * 0.5, y: height },
+    { x: 0, y: height * 0.75 },
+    { x: 0, y: height * 0.25 },
+  ];
+  const distance = (a: { x: number; y: number }, b: { x: number; y: number }) =>
+    Math.hypot(a.x - b.x, a.y - b.y);
+  const insetPoint = (
+    from: { x: number; y: number },
+    to: { x: number; y: number },
+    amount: number,
+  ) => {
+    const len = distance(from, to);
+    const t = len > 0 ? Math.min(amount / len, 0.45) : 0;
+    return {
+      x: from.x + (to.x - from.x) * t,
+      y: from.y + (to.y - from.y) * t,
+    };
+  };
+
+  return points
+    .map((point, index) => {
+      const prev = points[(index - 1 + points.length) % points.length];
+      const next = points[(index + 1) % points.length];
+      const start = insetPoint(point, prev, radius);
+      const end = insetPoint(point, next, radius);
+      const prefix = index === 0 ? `M ${start.x} ${start.y}` : `L ${start.x} ${start.y}`;
+      return `${prefix} Q ${point.x} ${point.y} ${end.x} ${end.y}`;
+    })
+    .join(" ")
+    .concat(" Z");
+}
+
+function clipIdForDate(dateStr: string, index: number): string {
+  return `memory_hex_${dateStr.replace(/[^a-zA-Z0-9]/g, "_")}_${index}`;
+}
+
 export function StreakMemoryGallery({
   entries,
   sectionTitle = "Your moments",
-  sectionHint = "Tap a card to revisit. Moments are view-only after you save them.",
+  sectionHint = "Tap a hex to revisit. Moments are view-only after you save them.",
   remotePeer = false,
 }: StreakMemoryGalleryProps) {
   const { theme, isDark } = useTheme();
   const [open, setOpen] = useState<Entry | null>(null);
-  const { width: windowWidth } = useWindowDimensions();
+  const [viewerImageAspect, setViewerImageAspect] = useState<number | null>(null);
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
 
-  if (entries.length === 0) return null;
+  const tileW = clamp((windowWidth - 42) / 3.06, 94, 122);
+  const tileH = tileW * 1.12;
+  const combGap = 2;
+  const tileXStep = tileW + combGap;
+  const tileYStep = tileH * 0.75 + combGap;
+  const middleRowOffset = tileW * 0.5 + combGap * 0.5;
+  const honeycombColumns = Math.max(1, Math.ceil(entries.length / HONEYCOMB_ROWS));
+  const honeycombStageHeight = 4 + tileH + tileYStep * (HONEYCOMB_ROWS - 1);
+  const honeycombStageWidth = Math.max(
+    windowWidth - 32,
+    16 + (honeycombColumns - 1) * tileXStep + middleRowOffset + tileW,
+  );
+  const hexPath = roundedHexPath(tileW, tileH, 6);
 
-  const cardW = Math.min(168, Math.max(132, (windowWidth - 48) / 2.1));
-  const viewerUri =
-    open?.memory?.imageUrl || open?.memory?.imageUri;
+  const viewerUri = open?.memory?.imageUrl || open?.memory?.imageUri;
   const modalHasRenderableImage = Boolean(
     viewerUri && (!remotePeer || uriLoadsForRemoteViewer(viewerUri)),
   );
@@ -79,6 +137,39 @@ export function StreakMemoryGallery({
   const memoryBorder = isDark ? "rgba(129, 140, 248, 0.32)" : theme.colors.border;
   const memoryTextColor = theme.colors.textPrimary;
   const memoryKickerColor = isDark ? theme.colors.cyan[400] : theme.colors.cyan[500];
+  const maxViewerCardWidth = Math.min(windowWidth - 40, 420);
+  const photoMaxWidth = maxViewerCardWidth - 20;
+  const photoMaxHeight = Math.max(230, Math.min(windowHeight * 0.58, 500));
+  const viewerAspect = viewerImageAspect ?? 4 / 5;
+  const naturalPhotoHeight = photoMaxWidth / viewerAspect;
+  const viewerPhotoHeight = Math.min(naturalPhotoHeight, photoMaxHeight);
+  const viewerPhotoWidth = Math.min(photoMaxWidth, viewerPhotoHeight * viewerAspect);
+  const viewerCardWidth = modalHasRenderableImage ? viewerPhotoWidth + 20 : maxViewerCardWidth;
+
+  useEffect(() => {
+    if (!modalHasRenderableImage || !viewerUri) {
+      setViewerImageAspect(null);
+      return undefined;
+    }
+
+    let cancelled = false;
+    setViewerImageAspect(null);
+    Image.getSize(
+      viewerUri,
+      (width, height) => {
+        if (cancelled || width <= 0 || height <= 0) return;
+        setViewerImageAspect(clamp(width / height, 0.45, 2.2));
+      },
+      () => {
+        if (!cancelled) setViewerImageAspect(null);
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [modalHasRenderableImage, viewerUri]);
+
+  if (entries.length === 0) return null;
 
   return (
     <>
@@ -88,185 +179,201 @@ export function StreakMemoryGallery({
           <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>{sectionTitle}</Text>
         </View>
         <Text style={[styles.sectionHint, { color: theme.colors.textMuted }]}>{sectionHint}</Text>
-        <FlashList
+
+        <ScrollView
           horizontal
-          data={entries}
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.row}
-          keyExtractor={(it) => it.dateStr}
-          renderItem={({ item }) => {
-            const { dateStr, memory, missionDay } = item;
-            const displayUri = memory.imageUrl || memory.imageUri;
-            const showImage = Boolean(displayUri) && (!remotePeer || uriLoadsForRemoteViewer(displayUri));
-            const thumbUri =
-              showImage && displayUri
-                ? storageThumbnailUri(displayUri, cardW * 2, ((cardW * 5) / 4) * 2)
-                : null;
-            const hasLocalOnlyPhoto =
-              remotePeer &&
-              Boolean(memory.imageUri) &&
-              !memory.imageUrl &&
-              !uriLoadsForRemoteViewer(memory.imageUri);
-            const noteTrim = memory.note?.trim() ?? "";
-            const textOnlyThumb = !showImage && !hasLocalOnlyPhoto && noteTrim.length > 0;
-            const isSquadRepair = memory.repairSource === "squad";
-            const repairKicker =
-              isSquadRepair
-                ? "SQUAD REPAIR"
-                : memory.repairSource === "solo"
-                  ? "STREAK REPAIR"
-                  : noteTrim === REPAIR_MEMORY_NOTE_SQUAD || noteTrim === REPAIR_MEMORY_NOTE_SOLO
+          contentContainerStyle={styles.honeycombScroll}
+        >
+          <View style={[styles.honeycombStage, { width: honeycombStageWidth, height: honeycombStageHeight }]}>
+            {entries.map((item, index) => {
+              const { dateStr, memory, missionDay } = item;
+              const displayUri = memory.imageUrl || memory.imageUri;
+              const showImage = Boolean(displayUri) && (!remotePeer || uriLoadsForRemoteViewer(displayUri));
+              const thumbUri =
+                showImage && displayUri
+                  ? storageThumbnailUri(displayUri, Math.round(tileW * 2.4), Math.round(tileH * 2.4))
+                  : null;
+              const hasLocalOnlyPhoto =
+                remotePeer &&
+                Boolean(memory.imageUri) &&
+                !memory.imageUrl &&
+                !uriLoadsForRemoteViewer(memory.imageUri);
+              const noteTrim = memory.note?.trim() ?? "";
+              const textOnlyThumb = !showImage && !hasLocalOnlyPhoto && noteTrim.length > 0;
+              const isSquadRepair = memory.repairSource === "squad";
+              const repairKicker =
+                isSquadRepair
+                  ? "SQUAD REPAIR"
+                  : memory.repairSource === "solo"
                     ? "STREAK REPAIR"
-                    : null;
+                    : noteTrim === REPAIR_MEMORY_NOTE_SQUAD || noteTrim === REPAIR_MEMORY_NOTE_SOLO
+                      ? "STREAK REPAIR"
+                      : null;
 
-            const dayLabel =
-              typeof missionDay === "number" && missionDay > 0 ? `Day ${missionDay}` : null;
+              const dayLabel =
+                typeof missionDay === "number" && missionDay > 0 ? `D${missionDay}` : null;
+              const row = index % HONEYCOMB_ROWS;
+              const col = Math.floor(index / HONEYCOMB_ROWS);
+              const left = 8 + col * tileXStep + (row === 1 ? middleRowOffset : 0);
+              const top = 2 + row * tileYStep;
+              const clipId = clipIdForDate(dateStr, index);
 
-            return (
-              <Pressable
-                onPress={() => setOpen({ dateStr, memory, missionDay })}
-                style={[
-                  styles.card,
-                  { width: cardW, backgroundColor: memoryCardBg, borderColor: theme.colors.border },
-                ]}
-              >
-                {isSquadRepair ? (
-                  <View
-                    style={[
-                      styles.squadRepairThumb,
-                      {
-                        backgroundColor: isDark ? "rgba(8, 47, 73, 0.72)" : "rgba(236, 254, 255, 0.92)",
-                        borderColor: isDark ? "rgba(34, 211, 238, 0.36)" : "rgba(6, 182, 212, 0.28)",
-                      },
-                    ]}
-                  >
-                    <View
-                      style={[
-                        styles.squadRepairIconShell,
-                        {
-                          backgroundColor: isDark ? "rgba(34, 211, 238, 0.16)" : "rgba(6, 182, 212, 0.14)",
-                          borderColor: isDark ? "rgba(125, 211, 252, 0.42)" : "rgba(6, 182, 212, 0.34)",
-                        },
-                      ]}
-                    >
-                      <ShieldCheck size={30} color={theme.colors.cyan[400]} strokeWidth={2.4} />
-                    </View>
-                    <Text style={[styles.squadRepairKicker, { color: theme.colors.cyan[400] }]}>SQUAD SAVE</Text>
-                    <Text style={[styles.squadRepairTitle, { color: theme.colors.textPrimary }]} numberOfLines={2}>
-                      Streak saved
-                    </Text>
-                    <Text style={[styles.squadRepairBody, { color: theme.colors.textSecondary }]} numberOfLines={2}>
-                      Your squad brought this day back.
-                    </Text>
-                  </View>
-                ) : showImage ? (
-                  <Image source={{ uri: thumbUri ?? displayUri! }} style={styles.thumb} resizeMode="cover" />
-                ) : textOnlyThumb ? (
-                  <View
-                    style={[
-                      styles.textOnlyThumb,
-                      {
-                        borderColor: memoryBorder,
-                        backgroundColor: isDark ? "rgba(30, 27, 75, 0.72)" : "rgba(238, 242, 255, 0.92)",
-                      },
-                    ]}
-                  >
-                    <View
-                      style={[
-                        styles.textOnlyIconShell,
-                        {
-                          backgroundColor: isDark ? "rgba(129, 140, 248, 0.16)" : "rgba(99, 102, 241, 0.12)",
-                          borderColor: isDark ? "rgba(165, 180, 252, 0.34)" : "rgba(99, 102, 241, 0.22)",
-                        },
-                      ]}
-                    >
-                      <Text style={[styles.textOnlyIcon, { color: theme.colors.indigo[400] }]}>{'\u201C'}</Text>
-                    </View>
-                    <Text style={[styles.textOnlyThumbKicker, { color: memoryKickerColor }]}>
-                      {repairKicker ?? "FIELD NOTE"}
-                    </Text>
-                    <Text style={[styles.textOnlyThumbBody, { color: memoryTextColor }]} numberOfLines={6}>
-                      {noteTrim}
-                    </Text>
-                  </View>
-                ) : (
-                  <View style={[styles.thumbPlaceholder, { backgroundColor: theme.colors.surfaceElevated }]}>
-                    {hasLocalOnlyPhoto ? (
-                      <Text style={[styles.remotePhotoHint, { color: theme.colors.textMuted }]} numberOfLines={3}>
-                        Photo on their device (not synced yet)
-                      </Text>
+              return (
+                <Pressable
+                  key={`${dateStr}-${index}`}
+                  onPress={() => setOpen({ dateStr, memory, missionDay })}
+                  style={[styles.hexTile, { width: tileW, height: tileH, left, top }]}
+                >
+                  <Svg width={tileW} height={tileH} viewBox={`0 0 ${tileW} ${tileH}`} style={styles.hexSvg}>
+                    <Defs>
+                      <ClipPath id={clipId}>
+                        <Path d={hexPath} />
+                      </ClipPath>
+                    </Defs>
+                    {showImage ? (
+                      <SvgImage
+                        href={{ uri: thumbUri ?? displayUri! }}
+                        width={tileW}
+                        height={tileH}
+                        preserveAspectRatio="xMidYMid slice"
+                        clipPath={`url(#${clipId})`}
+                      />
                     ) : (
-                      <Text style={[styles.quoteMark, { color: theme.colors.indigo[400] }]}>{'\u201C'}</Text>
-                    )}
-                  </View>
-                )}
-                <View style={styles.cardMetaRow}>
-                  <Text style={[styles.cardDate, { color: theme.colors.textSecondary }]} numberOfLines={1}>
-                    {formatDateDisplay(dateStr, dateStr)}
-                  </Text>
-                  {dayLabel ? (
-                    <Text style={[styles.cardDay, { color: theme.colors.indigo[400] }]} numberOfLines={1}>
-                      {dayLabel}
-                    </Text>
-                  ) : null}
-                </View>
-                {memory.repairSource && !isSquadRepair ? (
-                  <View
-                    style={[
-                      styles.repairChip,
-                      {
-                        backgroundColor:
-                          memory.repairSource === "squad"
+                      <Path
+                        d={hexPath}
+                        fill={
+                          isSquadRepair
                             ? isDark
-                              ? "rgba(34, 211, 238, 0.14)"
-                              : "rgba(34, 211, 238, 0.18)"
-                            : isDark
-                              ? "rgba(245, 158, 11, 0.14)"
-                              : "rgba(245, 158, 11, 0.16)",
-                        borderColor:
-                          memory.repairSource === "squad"
-                            ? theme.colors.cyan[500]
-                            : theme.colors.amber[500],
-                      },
-                    ]}
-                  >
-                    <Text
+                              ? "#082f49"
+                              : "#ecfeff"
+                            : textOnlyThumb
+                              ? isDark
+                                ? "#21194a"
+                                : "#eef2ff"
+                              : memoryCardBg
+                        }
+                      />
+                    )}
+                    <Path
+                      d={hexPath}
+                      fill="transparent"
+                      stroke={
+                        isSquadRepair
+                          ? isDark
+                            ? "rgba(34, 211, 238, 0.58)"
+                            : "rgba(6, 182, 212, 0.42)"
+                          : showImage
+                            ? isDark
+                              ? "rgba(255, 255, 255, 0.22)"
+                              : "rgba(255, 255, 255, 0.72)"
+                            : memoryBorder
+                      }
+                      strokeWidth={1.8}
+                    />
+                  </Svg>
+
+                  {isSquadRepair ? (
+                    <View
+                      style={[styles.hexOverlay, { paddingHorizontal: tileW * 0.2 }]}
+                      pointerEvents="none"
+                    >
+                      <View
+                        style={[
+                          styles.hexIconShell,
+                          {
+                            backgroundColor: isDark ? "rgba(34, 211, 238, 0.16)" : "rgba(6, 182, 212, 0.13)",
+                            borderColor: isDark ? "rgba(125, 211, 252, 0.42)" : "rgba(6, 182, 212, 0.34)",
+                          },
+                        ]}
+                      >
+                        <ShieldCheck size={18} color={theme.colors.cyan[400]} strokeWidth={2.4} />
+                      </View>
+                      <Text style={[styles.hexKicker, { color: theme.colors.cyan[400] }]} numberOfLines={1}>
+                        SAVE
+                      </Text>
+                    </View>
+                  ) : textOnlyThumb || hasLocalOnlyPhoto || !showImage ? (
+                    <View
+                      style={[styles.hexOverlay, { paddingHorizontal: tileW * 0.18 }]}
+                      pointerEvents="none"
+                    >
+                      <Text style={[styles.hexQuote, { color: theme.colors.indigo[400] }]}>{'\u201C'}</Text>
+                      <Text style={[styles.hexKicker, { color: memoryKickerColor }]} numberOfLines={1}>
+                        {hasLocalOnlyPhoto ? "PHOTO" : repairKicker ?? "NOTE"}
+                      </Text>
+                      {hasLocalOnlyPhoto ? (
+                        <Text style={[styles.hexNotePreview, { color: theme.colors.textMuted }]} numberOfLines={2}>
+                          On their device
+                        </Text>
+                      ) : textOnlyThumb ? (
+                        <Text style={[styles.hexNotePreview, { color: memoryTextColor }]} numberOfLines={2}>
+                          {noteTrim}
+                        </Text>
+                      ) : null}
+                    </View>
+                  ) : null}
+
+                  {dayLabel ? (
+                    <View
+                      pointerEvents="none"
                       style={[
-                        styles.repairChipText,
+                        styles.hexDayPill,
                         {
-                          color:
-                            memory.repairSource === "squad"
-                              ? theme.colors.cyan[500]
-                              : theme.colors.amber[500],
+                          backgroundColor: showImage
+                            ? "rgba(15, 23, 42, 0.78)"
+                            : isDark
+                              ? "rgba(15, 23, 42, 0.84)"
+                              : "rgba(255, 255, 255, 0.88)",
+                          borderColor: showImage ? "rgba(255, 255, 255, 0.42)" : memoryBorder,
                         },
                       ]}
                     >
-                      {memory.repairSource === "squad" ? "Squad repair" : "Solo repair"}
-                    </Text>
-                  </View>
-                ) : null}
-                {memory.note && !textOnlyThumb ? (
-                  <Text style={[styles.cardNote, { color: theme.colors.textMuted }]} numberOfLines={2}>
-                    {memory.note}
-                  </Text>
-                ) : null}
-              </Pressable>
-            );
-          }}
-        />
+                      <Text style={[styles.hexDayText, { color: showImage ? "#ffffff" : theme.colors.textSecondary }]}>
+                        {dayLabel}
+                      </Text>
+                    </View>
+                  ) : null}
+                </Pressable>
+              );
+            })}
+          </View>
+        </ScrollView>
+        <View style={[styles.combRail, { backgroundColor: memoryBorder }]} />
       </View>
 
       <Modal visible={open !== null} transparent animationType="fade" onRequestClose={() => setOpen(null)}>
-        <Pressable style={[styles.viewerBackdrop, { backgroundColor: "rgba(0,0,0,0.85)" }]} onPress={() => setOpen(null)}>
+        <Pressable style={styles.viewerBackdrop} onPress={() => setOpen(null)}>
           <Pressable
             style={[
               styles.viewerInner,
-              { backgroundColor: memoryShellBg, borderColor: memoryBorder },
+              { backgroundColor: memoryShellBg, borderColor: memoryBorder, width: viewerCardWidth },
             ]}
             onPress={(e) => e.stopPropagation()}
           >
             {modalHasRenderableImage ? (
-              <Image source={{ uri: viewerUri! }} style={styles.viewerImg} resizeMode="contain" />
+              <View
+                style={[
+                  styles.viewerPhotoMat,
+                  {
+                    width: viewerPhotoWidth,
+                    height: viewerPhotoHeight,
+                    backgroundColor: isDark ? "#070b16" : "#f8fafc",
+                  },
+                ]}
+              >
+                <Image
+                  source={{ uri: viewerUri! }}
+                  style={styles.viewerImg}
+                  resizeMode="cover"
+                  onLoad={(event) => {
+                    const source = event.nativeEvent.source;
+                    if (source.width > 0 && source.height > 0) {
+                      setViewerImageAspect(clamp(source.width / source.height, 0.45, 2.2));
+                    }
+                  }}
+                />
+              </View>
             ) : modalNoteTrim ? (
               <View
                 style={[
@@ -284,7 +391,15 @@ export function StreakMemoryGallery({
                 <Text style={[styles.viewerTextOnlyBody, { color: memoryTextColor }]}>{modalNoteTrim}</Text>
               </View>
             ) : null}
-            <View style={[styles.viewerMeta, { backgroundColor: memoryMetaBg, borderColor: memoryBorder }]}>
+            <View
+              style={[
+                styles.viewerMeta,
+                {
+                  backgroundColor: modalHasRenderableImage ? memoryShellBg : memoryMetaBg,
+                  borderColor: memoryBorder,
+                },
+              ]}
+            >
               <View style={styles.viewerMetaTop}>
                 <Text style={[styles.viewerDate, { color: memoryKickerColor }]}>
                   {formatDateDisplay(open?.dateStr, open?.dateStr ?? "")}
@@ -323,127 +438,95 @@ const styles = StyleSheet.create({
   section: { marginBottom: 28 },
   sectionHead: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 6 },
   sectionTitle: { fontSize: 17, fontWeight: "800" },
-  sectionHint: { fontSize: 12, marginBottom: 12, lineHeight: 17 },
-  row: { paddingRight: 10 },
-  card: {
-    borderRadius: 14,
-    borderWidth: 1,
-    overflow: "hidden",
-    paddingBottom: 10,
-    marginRight: 2,
+  sectionHint: { fontSize: 12, marginBottom: 10, lineHeight: 17 },
+  honeycombScroll: { paddingRight: 16 },
+  honeycombStage: {
+    position: "relative",
   },
-  thumb: { width: "100%", aspectRatio: 4 / 5, backgroundColor: "#111" },
-  squadRepairThumb: {
-    width: "100%",
-    aspectRatio: 4 / 5,
+  hexTile: {
+    position: "absolute",
+  },
+  hexSvg: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+  },
+  hexOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  hexIconShell: {
+    width: 30,
+    height: 30,
+    borderRadius: 11,
     borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 14,
-    overflow: "hidden",
+    marginBottom: 4,
   },
-  squadRepairIconShell: {
-    width: 56,
-    height: 56,
-    borderRadius: 18,
-    borderWidth: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 12,
-  },
-  squadRepairKicker: {
-    fontSize: 9,
-    lineHeight: 12,
+  hexQuote: {
+    fontSize: 24,
+    lineHeight: 23,
     fontWeight: "900",
-    letterSpacing: 1.4,
-    marginBottom: 6,
-    textAlign: "center",
+    marginBottom: -2,
+    opacity: 0.82,
   },
-  squadRepairTitle: {
-    fontSize: 20,
-    lineHeight: 24,
+  hexKicker: {
+    fontSize: 7,
+    lineHeight: 9,
     fontWeight: "900",
+    letterSpacing: 1.1,
     textAlign: "center",
   },
-  squadRepairBody: {
-    fontSize: 12,
-    lineHeight: 16,
-    fontWeight: "700",
-    textAlign: "center",
-    marginTop: 8,
-  },
-  thumbPlaceholder: {
-    width: "100%",
-    aspectRatio: 4 / 5,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  textOnlyThumb: {
-    width: "100%",
-    aspectRatio: 4 / 5,
-    borderRadius: 0,
-    borderWidth: 1,
-    paddingHorizontal: 13,
-    paddingVertical: 14,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  textOnlyIconShell: {
-    width: 40,
-    height: 40,
-    borderRadius: 14,
-    borderWidth: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 10,
-  },
-  textOnlyIcon: {
-    fontSize: 30,
-    lineHeight: 34,
-    fontWeight: "900",
-    marginTop: -4,
-  },
-  textOnlyThumbKicker: {
-    fontSize: 9,
-    lineHeight: 12,
-    fontWeight: "900",
-    letterSpacing: 1.4,
-    marginBottom: 8,
+  hexNotePreview: {
+    marginTop: 3,
+    fontSize: 8,
+    lineHeight: 11,
+    fontWeight: "800",
     textAlign: "center",
   },
-  textOnlyThumbBody: {
-    fontSize: 14,
-    lineHeight: 19,
-    fontWeight: "700",
-    letterSpacing: 0.1,
-    textAlign: "center",
-  },
-  quoteMark: { fontSize: 42, fontWeight: "700", opacity: 0.5 },
-  remotePhotoHint: { fontSize: 11, lineHeight: 15, textAlign: "center", paddingHorizontal: 8 },
-  cardMetaRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 8,
-    marginTop: 8,
-    paddingHorizontal: 10,
-  },
-  cardDate: { fontSize: 11, fontWeight: "700", flex: 1, minWidth: 0 },
-  cardDay: { fontSize: 11, fontWeight: "900", letterSpacing: 0.3 },
-  repairChip: {
-    alignSelf: "flex-start",
-    marginTop: 6,
-    marginHorizontal: 10,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+  hexDayPill: {
+    position: "absolute",
+    left: "50%",
+    bottom: 14,
+    minWidth: 30,
+    transform: [{ translateX: -15 }],
+    paddingHorizontal: 6,
+    paddingVertical: 3,
     borderRadius: 999,
     borderWidth: 1,
+    alignItems: "center",
   },
-  repairChipText: { fontSize: 9, fontWeight: "900", letterSpacing: 0.6 },
-  cardNote: { fontSize: 12, lineHeight: 16, paddingHorizontal: 10, marginTop: 4 },
-  viewerBackdrop: { flex: 1, justifyContent: "center", padding: 20 },
-  viewerInner: { borderRadius: 20, overflow: "hidden" },
-  viewerImg: { width: "100%", height: 320, backgroundColor: "#000" },
+  hexDayText: {
+    fontSize: 9,
+    lineHeight: 11,
+    fontWeight: "900",
+  },
+  combRail: {
+    height: StyleSheet.hairlineWidth,
+    opacity: 0.7,
+    marginTop: 10,
+  },
+  viewerBackdrop: {
+    flex: 1,
+    justifyContent: "center",
+    padding: 20,
+    backgroundColor: "rgba(0,0,0,0.85)",
+  },
+  viewerInner: {
+    alignSelf: "center",
+    borderRadius: 24,
+    borderWidth: 1,
+    overflow: "hidden",
+    padding: 10,
+  },
+  viewerPhotoMat: {
+    alignSelf: "center",
+    borderRadius: 18,
+    overflow: "hidden",
+  },
+  viewerImg: { width: "100%", height: "100%" },
   viewerTextOnlyHero: {
     width: "100%",
     minHeight: 280,
@@ -462,7 +545,7 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   viewerTextOnlyBody: { fontSize: 18, lineHeight: 28, fontWeight: "600" },
-  viewerMeta: { padding: 16, borderTopWidth: 1 },
+  viewerMeta: { paddingHorizontal: 6, paddingTop: 12, paddingBottom: 8 },
   viewerMetaTop: {
     flexDirection: "row",
     alignItems: "center",

@@ -13,8 +13,8 @@ import {
   Image,
   ActivityIndicator,
   TouchableOpacity,
+  ScrollView,
 } from "react-native";
-import { FlashList } from "@shopify/flash-list";
 import { X, Camera, MessageSquare, Lock, Check } from "lucide-react-native";
 import { useTheme } from "../context/ThemeContext";
 import { fetchChallengeMemoryDetail, type PhotoSyncState } from "../lib/challengeMemoryDetail";
@@ -315,21 +315,22 @@ export const CohortPeerStreakDots = memo(function CohortPeerStreakDots({
 
   const dots = (
     <>
-      <FlashList
-        data={days}
+      <ScrollView
         horizontal
-        drawDistance={DOT_STEP * 8}
         showsHorizontalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
         directionalLockEnabled
-        canCancelContentTouches={false}
-        keyExtractor={(item) => item.dateStr}
-        renderItem={renderDot}
-        ItemSeparatorComponent={() => <View style={styles.dotSeparator} />}
-        removeClippedSubviews
+        canCancelContentTouches
         style={styles.dotsList}
         contentContainerStyle={styles.dotsRow}
-      />
+        scrollEventThrottle={16}
+      >
+        {days.map((item, index) => (
+          <View key={item.dateStr} style={index === 0 ? null : styles.dotWithSeparator}>
+            {renderDot({ item })}
+          </View>
+        ))}
+      </ScrollView>
 
       <Modal visible={open !== null} transparent animationType="fade" onRequestClose={handleClose}>
         <Pressable style={[styles.viewerBackdrop, { backgroundColor: "rgba(0,0,0,0.85)" }]} onPress={handleClose}>
@@ -488,7 +489,7 @@ const styles = StyleSheet.create({
   meta: { fontSize: 13, marginTop: 4 },
   dotsList: { height: DOT_SIZE + 8 },
   dotsRow: { paddingVertical: 4, paddingRight: 12 },
-  dotSeparator: { width: DOT_GAP },
+  dotWithSeparator: { marginLeft: DOT_GAP },
   dot: {
     width: DOT_SIZE,
     height: DOT_SIZE,
