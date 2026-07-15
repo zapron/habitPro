@@ -31,6 +31,8 @@ function miniStatusLabel(m: MiniMission, now: number): string {
       return "Active";
     case "queued":
       return "Queued";
+    case "review":
+      return "Check In";
     case "failed":
       return "Failed";
     case "cancelled":
@@ -44,6 +46,7 @@ function miniStatusColor(m: MiniMission, now: number, theme: ReturnType<typeof u
   const status = getMiniMissionDisplayStatus(m, now);
   if (status === "done" || status === "cancelled") return theme.colors.textMuted;
   if (status === "failed") return theme.colors.red[500];
+  if (status === "review") return theme.colors.green[500];
   if (status === "queued") return theme.colors.indigo[400];
   return theme.colors.amber[500];
 }

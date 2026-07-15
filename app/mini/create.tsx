@@ -2,9 +2,8 @@ import { Text } from "../../src/components/AppText";
 import { useEffect, useRef, useState } from "react";
 import { View, TextInput, TouchableOpacity, ScrollView, StyleSheet, StatusBar, Platform, InteractionManager } from "react-native";
 import { useRouter } from "expo-router";
-import { ArrowLeft, Plane } from "lucide-react-native";
+import { ArrowLeft, Check, Clock3, Plane } from "lucide-react-native";
 import { Screen } from "../../src/components/Screen";
-import { Button } from "../../src/components/Button";
 import { useHabitStore } from "../../src/store/habitStore";
 import { useTheme } from "../../src/context/ThemeContext";
 import { FuelTimePresetButton } from "../../src/components/fuel/FuelTimePresetButton";
@@ -12,6 +11,7 @@ import { FuelQuickMinutesStrip } from "../../src/components/fuel/FuelQuickMinute
 import { backOrReplace } from "../../src/lib/navigation";
 import { useNotificationGate } from "../../src/context/NotificationGateContext";
 import { showAppAlert } from "../../src/context/AppDialogContext";
+import type { MiniMissionCompletionMode } from "../../src/types/habit";
 
 type StartMode = "now" | "later";
 
@@ -48,9 +48,9 @@ export default function CreateMiniMission() {
   const [title, setTitle] = useState("");
   const [objective, setObjective] = useState("");
   const [totalMinutes, setTotalMinutes] = useState(15);
-  const [startMode, setStartMode] = useState<StartMode>("now");
+  const [completionMode, setCompletionMode] = useState<MiniMissionCompletionMode>("timer_check_in");
   const [focused, setFocused] = useState<"title" | "objective" | "minutes" | null>(null);
-  const [creating, setCreating] = useState(false);
+  const [creatingMode, setCreatingMode] = useState<StartMode | null>(null);
   const scrollRef = useRef<ScrollView>(null);
   const titleInputRef = useRef<TextInput>(null);
   const objectiveInputYRef = useRef(0);
@@ -92,8 +92,9 @@ export default function CreateMiniMission() {
 
   const displayHours = Math.floor(totalMinutes / 60);
   const displayMins = totalMinutes % 60;
+  const creating = creatingMode !== null;
 
-  const handleCreate = () => {
+  const handleCreate = (mode: StartMode) => {
     if (creating) return;
     if (!title.trim()) {
       showAppAlert("Error", "Please enter the mini mission.");
@@ -105,10 +106,10 @@ export default function CreateMiniMission() {
       return;
     }
 
-    setCreating(true);
+    setCreatingMode(mode);
     void (async () => {
       try {
-        if (startMode === "now") {
+        if (mode === "now") {
           const notificationResult = await softAskNotifications("mini_timer");
           if (notificationResult === "settings") return;
         }
@@ -117,16 +118,17 @@ export default function CreateMiniMission() {
           title: title.trim(),
           objective: objective.trim(),
           estimatedMinutes: minutes,
-          startMode,
+          completionMode,
+          startMode: mode,
         });
 
-        if (startMode === "now") {
+        if (mode === "now") {
           router.replace(`/mini/${id}`);
           return;
         }
         router.replace("/mini");
       } finally {
-        setCreating(false);
+        setCreatingMode(null);
       }
     })();
   };
@@ -297,44 +299,115 @@ export default function CreateMiniMission() {
           </Text>
         </View>
 
+        <Text style={[styles.label, { color: theme.colors.textSecondary, fontSize: theme.typography.caption }]}>Finish Rule</Text>
+        <View
+          style={[
+            styles.finishRuleCard,
+            {
+              backgroundColor: isDark ? theme.colors.surface : theme.colors.surfaceElevated,
+              borderColor: theme.colors.border,
+              borderRadius: theme.radius.lg,
+              ...theme.shadow.card,
+            },
+          ]}
+        >
+          <TouchableOpacity
+            style={[
+              styles.finishOption,
+              completionMode === "timer_check_in" && {
+                borderColor: theme.colors.green[500],
+                backgroundColor: isDark ? "rgba(34,197,94,0.12)" : "rgba(22,163,74,0.1)",
+              },
+            ]}
+            onPress={() => setCompletionMode("timer_check_in")}
+            activeOpacity={0.86}
+            accessibilityRole="button"
+            accessibilityState={{ selected: completionMode === "timer_check_in" }}
+          >
+            <View style={[styles.finishIcon, { backgroundColor: isDark ? "rgba(34,197,94,0.14)" : "rgba(22,163,74,0.12)" }]}>
+              <Clock3 size={17} color={theme.colors.green[500]} />
+            </View>
+            <View style={styles.finishText}>
+              <Text style={[styles.finishTitle, { color: theme.colors.textPrimary }]}>Timer Check-In</Text>
+              <Text style={[styles.finishBody, { color: theme.colors.textSecondary }]} numberOfLines={2}>
+                Time ends, then confirm if you completed it. Best for workouts, planks, study, meditation.
+              </Text>
+            </View>
+            {completionMode === "timer_check_in" ? <Check size={18} color={theme.colors.green[500]} /> : null}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.finishOption,
+              completionMode === "manual" && {
+                borderColor: theme.colors.indigo[500],
+                backgroundColor: isDark ? "rgba(99,102,241,0.13)" : "rgba(99,102,241,0.1)",
+              },
+            ]}
+            onPress={() => setCompletionMode("manual")}
+            activeOpacity={0.86}
+            accessibilityRole="button"
+            accessibilityState={{ selected: completionMode === "manual" }}
+          >
+            <View style={[styles.finishIcon, { backgroundColor: isDark ? "rgba(99,102,241,0.16)" : "rgba(99,102,241,0.12)" }]}>
+              <Plane size={17} color={theme.colors.indigo[400]} />
+            </View>
+            <View style={styles.finishText}>
+              <Text style={[styles.finishTitle, { color: theme.colors.textPrimary }]}>Manual Finish</Text>
+              <Text style={[styles.finishBody, { color: theme.colors.textSecondary }]} numberOfLines={2}>
+                Tap complete before zero. Use this for stricter race-style mini missions.
+              </Text>
+            </View>
+            {completionMode === "manual" ? <Check size={18} color={theme.colors.indigo[400]} /> : null}
+          </TouchableOpacity>
+        </View>
+
         <Text style={[styles.label, { color: theme.colors.textSecondary, fontSize: theme.typography.caption }]}>Start</Text>
         <View style={styles.startModeRow}>
           <TouchableOpacity
             style={[
               styles.modeButton,
-              { borderColor: theme.colors.border, backgroundColor: theme.colors.surface, borderRadius: theme.radius.md },
-              startMode === "now" && { borderColor: theme.colors.indigo[500], backgroundColor: theme.colors.surfaceElevated },
+              styles.modeButtonPrimary,
+              {
+                borderColor: theme.colors.indigo[500],
+                backgroundColor: theme.colors.indigo[500],
+                borderRadius: theme.radius.md,
+              },
+              creating && styles.modeButtonDisabled,
             ]}
-            onPress={() => setStartMode("now")}
+            onPress={() => handleCreate("now")}
+            disabled={creating}
             activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityState={{ disabled: creating }}
           >
-            <Text style={[styles.modeText, { color: theme.colors.textSecondary }, startMode === "now" && { color: theme.colors.textPrimary }]}>
-              Let's Go Now
+            <Text style={[styles.modeText, styles.modeTextPrimary]}>
+              {creatingMode === "now" ? "Starting..." : "Let's Go Now"}
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[
               styles.modeButton,
-              { borderColor: theme.colors.border, backgroundColor: theme.colors.surface, borderRadius: theme.radius.md },
-              startMode === "later" && { borderColor: theme.colors.indigo[500], backgroundColor: theme.colors.surfaceElevated },
+              {
+                borderColor: theme.colors.border,
+                backgroundColor: theme.colors.surface,
+                borderRadius: theme.radius.md,
+              },
+              creating && styles.modeButtonDisabled,
             ]}
-            onPress={() => setStartMode("later")}
+            onPress={() => handleCreate("later")}
+            disabled={creating}
             activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityState={{ disabled: creating }}
           >
             <Text
-              style={[styles.modeText, { color: theme.colors.textSecondary }, startMode === "later" && { color: theme.colors.textPrimary }]}
+              style={[styles.modeText, { color: theme.colors.textPrimary }]}
             >
-              Start Later
+              {creatingMode === "later" ? "Saving..." : "Start Later"}
             </Text>
           </TouchableOpacity>
         </View>
-
-        <Button
-          title={creating ? "Creating..." : "Create Mini Mission"}
-          onPress={handleCreate}
-          disabled={creating}
-          style={styles.cta}
-        />
       </ScrollView>
     </Screen>
   );
@@ -372,6 +445,27 @@ const styles = StyleSheet.create({
   input: { borderWidth: 1, padding: 14, fontSize: 16, marginBottom: 16 },
   textArea: { height: 110 },
   durationCard: { borderWidth: 1, paddingVertical: 14, paddingHorizontal: 10, marginBottom: 16, gap: 10 },
+  finishRuleCard: { borderWidth: 1, padding: 10, gap: 9, marginBottom: 16 },
+  finishOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    borderWidth: 1,
+    borderColor: "transparent",
+    borderRadius: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 11,
+  },
+  finishIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  finishText: { flex: 1, minWidth: 0 },
+  finishTitle: { fontSize: 14, lineHeight: 18, fontWeight: "900" },
+  finishBody: { marginTop: 2, fontSize: 12, lineHeight: 16, fontWeight: "600" },
   presetSectionLabel: { fontSize: 11, fontWeight: "700", letterSpacing: 0.3, textTransform: "uppercase" },
   presetWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8, justifyContent: "space-between" },
   minutesLabel: { fontSize: 12, fontWeight: "600", marginTop: 4 },
@@ -387,7 +481,15 @@ const styles = StyleSheet.create({
   },
   totalLine: { fontSize: 14, textAlign: "center", marginTop: 4 },
   startModeRow: { flexDirection: "row", gap: 10, marginBottom: 20 },
-  modeButton: { flex: 1, minHeight: 48, alignItems: "center", justifyContent: "center", borderWidth: 1, flexDirection: "row", gap: 8 },
-  modeText: { fontWeight: "700" },
-  cta: { marginBottom: 20 },
+  modeButton: { flex: 1, minHeight: 52, alignItems: "center", justifyContent: "center", borderWidth: 1, flexDirection: "row", gap: 8 },
+  modeButtonPrimary: {
+    shadowColor: "#4f46e5",
+    shadowOpacity: 0.22,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 3,
+  },
+  modeButtonDisabled: { opacity: 0.68 },
+  modeText: { fontWeight: "800", fontSize: 14 },
+  modeTextPrimary: { color: "#ffffff" },
 });

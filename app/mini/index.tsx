@@ -34,7 +34,12 @@ import { useHabitStore } from "../../src/store/habitStore";
 import { MiniMission } from "../../src/types/habit";
 import { useRemoteStoreRefreshOnFocus } from "../../src/hooks/useRemoteStoreRefreshOnFocus";
 import { backOrReplace } from "../../src/lib/navigation";
-import { getMiniRemainingMs } from "../../src/utils/miniMissionTime";
+import {
+  getMiniMissionDisplayStatus,
+  getMiniRemainingMs,
+  isMiniMissionAwaitingCheckIn,
+  isMiniMissionMissed,
+} from "../../src/utils/miniMissionTime";
 import {
   MINI_MISSION_KEEP_SCREEN_ON_KEY,
   MINI_MISSIONS_LIST_KEEP_AWAKE_TAG,
@@ -68,6 +73,7 @@ const MiniMissionCard = memo(function MiniMissionCard({ item }: { item: MiniMiss
   const isInProgress = item.status === "in_progress";
   const isCompleted = item.status === "completed";
   const isCancelled = item.status === "cancelled";
+  const displayStatus = getMiniMissionDisplayStatus(item, now);
 
   useEffect(() => {
     if (!isInProgress || !item.startedAt) return;
@@ -94,10 +100,13 @@ const MiniMissionCard = memo(function MiniMissionCard({ item }: { item: MiniMiss
     progress = Math.min(1, elapsedMs / totalMs);
   }
 
-  const isTimerUp = isInProgress && remainingMs === 0;
+  const needsCheckIn = displayStatus === "review";
+  const isTimerUp = displayStatus === "failed";
 
   // Status styling
-  const statusConfig = isTimerUp
+  const statusConfig = needsCheckIn
+    ? { label: "Check In", color: theme.colors.green[500] }
+    : isTimerUp
     ? { label: "Failed", color: "#ef4444" }
     : isInProgress
       ? { label: "🔥 On mission", color: "#f97316" }
@@ -192,7 +201,7 @@ const MiniMissionCard = memo(function MiniMissionCard({ item }: { item: MiniMiss
       )}
 
       {/* In-progress: live countdown + fire progress bar */}
-      {isInProgress && !isTimerUp && (
+      {isInProgress && !isTimerUp && !needsCheckIn && (
         <View style={styles.timerSection}>
           <View style={styles.timerRow}>
             <View style={styles.timerLeft}>
@@ -219,8 +228,17 @@ const MiniMissionCard = memo(function MiniMissionCard({ item }: { item: MiniMiss
         </View>
       )}
 
+      {needsCheckIn && (
+        <View style={styles.cardFooter}>
+          <View style={[styles.metaPill, { borderColor: theme.colors.green[500] + "40", backgroundColor: theme.colors.green[500] + "10" }]}>
+            <Clock3 size={14} color={theme.colors.green[500]} />
+            <Text style={[styles.metaText, { color: theme.colors.green[500] }]}>Check In</Text>
+          </View>
+        </View>
+      )}
+
       {/* Queued: show estimated time */}
-      {!isInProgress && !isCompleted && !isCancelled && (
+      {!isInProgress && !isCompleted && !isCancelled && !isTimerUp && (
         <View style={styles.cardFooter}>
           <View style={[styles.metaPill, { borderColor: theme.colors.border, backgroundColor: theme.colors.surfaceElevated }]}>
             <Clock3 size={14} color={theme.colors.cyan[400]} />
@@ -265,7 +283,7 @@ const MiniMissionCard = memo(function MiniMissionCard({ item }: { item: MiniMiss
             />
           ) : (
             <Button
-              title="Retry mission"
+              title="Retry"
               variant="subtle"
               icon={<Timer size={16} color={theme.colors.textSecondary} />}
               onPress={handleRetry}
@@ -365,7 +383,9 @@ export default function MiniMissionsScreen() {
     if (tab === "active") {
       return sortByLatestDesc(
         miniMissions.filter(
-          (m) => m.status === "in_progress" && getMiniRemainingMs(m, listNow) > 0,
+          (m) =>
+            m.status === "in_progress" &&
+            (getMiniRemainingMs(m, listNow) > 0 || isMiniMissionAwaitingCheckIn(m, listNow)),
         ),
       );
     }
@@ -373,7 +393,7 @@ export default function MiniMissionsScreen() {
       return sortByLatestDesc(
         miniMissions.filter((m) => {
           if (m.status === "cancelled") return true;
-          return m.status === "in_progress" && getMiniRemainingMs(m, listNow) === 0;
+          return isMiniMissionMissed(m, listNow);
         }),
       );
     }
@@ -391,10 +411,12 @@ export default function MiniMissionsScreen() {
   }, [miniMissions, tab, view, listNow]);
 
   const activeCount = miniMissions.filter(
-    (m) => m.status === "in_progress" && getMiniRemainingMs(m, listNow) > 0,
+    (m) =>
+      m.status === "in_progress" &&
+      (getMiniRemainingMs(m, listNow) > 0 || isMiniMissionAwaitingCheckIn(m, listNow)),
   ).length;
   const failedCount = miniMissions.filter(
-    (m) => m.status === "cancelled" || (m.status === "in_progress" && getMiniRemainingMs(m, listNow) === 0),
+    (m) => m.status === "cancelled" || isMiniMissionMissed(m, listNow),
   ).length;
   const queuedCount = miniMissions.filter((m) => m.status === "pending" || m.status === "scheduled").length;
   const completedCount = miniMissions.filter((m) => m.status === "completed").length;

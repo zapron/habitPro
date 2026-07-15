@@ -12,6 +12,7 @@ import { MAX_RESERVE_FUEL_MINUTES } from "../constants/miniMission";
 import type { Habit, MiniMission } from "../types/habit";
 import { useTheme } from "../context/ThemeContext";
 import { formatDateDisplay, formatDateTimeDisplay } from "../utils/dateDisplay";
+import { getMiniMissionDisplayStatus } from "../utils/miniMissionTime";
 
 export type MissionDetailsSheetProps =
   | {
@@ -48,16 +49,21 @@ function formatShortDateTime(iso?: string | null): string {
 }
 
 function getMiniStatusLabel(mission: MiniMission): string {
-  if (mission.status === "completed") return "Completed";
-  if (mission.status === "cancelled") return "Cancelled";
-  if (mission.status === "pending") return "Waiting";
-  if (mission.status === "scheduled") return "Scheduled";
-  if (mission.status === "in_progress" && mission.startedAt) {
-    const totalMinutes = mission.estimatedMinutes + (mission.extendedMinutes ?? 0);
-    const endMs = new Date(mission.startedAt).getTime() + totalMinutes * 60 * 1000;
-    return Date.now() >= endMs ? "Failed" : "In progress";
+  switch (getMiniMissionDisplayStatus(mission, Date.now())) {
+    case "done":
+      return "Completed";
+    case "cancelled":
+      return "Cancelled";
+    case "queued":
+      return mission.status === "scheduled" ? "Scheduled" : "Waiting";
+    case "review":
+      return "Check In";
+    case "failed":
+      return "Failed";
+    case "active":
+    default:
+      return "In progress";
   }
-  return "In progress";
 }
 
 export function MissionDetailsSheet(props: MissionDetailsSheetProps) {
@@ -66,6 +72,7 @@ export function MissionDetailsSheet(props: MissionDetailsSheetProps) {
 
   if (props.variant === "mini") {
     const { mission } = props;
+    const showReserveFuel = mission.completionMode !== "timer_check_in";
     const reserveMinutes = mission.extendedMinutes ?? 0;
     const totalMinutes = mission.estimatedMinutes + reserveMinutes;
     const brief =
@@ -129,9 +136,11 @@ export function MissionDetailsSheet(props: MissionDetailsSheetProps) {
               <Text style={[styles.metaLine, { color: theme.colors.textPrimary }]}>
                 {mission.estimatedMinutes} min planned
               </Text>
-              <Text style={[styles.metaSubLine, { color: theme.colors.textSecondary }]}>
-                Reserve used: {reserveMinutes}/{MAX_RESERVE_FUEL_MINUTES} min
-              </Text>
+              {showReserveFuel ? (
+                <Text style={[styles.metaSubLine, { color: theme.colors.textSecondary }]}>
+                  Reserve used: {reserveMinutes}/{MAX_RESERVE_FUEL_MINUTES} min
+                </Text>
+              ) : null}
               <Text style={[styles.metaSubLine, { color: theme.colors.textSecondary }]}>
                 Total: {totalMinutes} min
               </Text>

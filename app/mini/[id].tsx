@@ -98,6 +98,7 @@ import { backOrReplace } from "../../src/lib/navigation";
 import { showAppAlert } from "../../src/context/AppDialogContext";
 import { startJsStallProbe, traceSync } from "../../src/lib/jsThreadProbe";
 import { waitForHabitPersistIdle } from "../../src/lib/chunkedHabitPersistStorage";
+import { isMiniMissionAwaitingCheckIn } from "../../src/utils/miniMissionTime";
 
 // Notification handler is configured globally in _layout.tsx via setupNotifications()
 
@@ -453,6 +454,7 @@ type FocusSecondsMatrixProps = {
   baseMissionSeconds: number;
   totalMinutes: number;
   reserveUsed: number;
+  allowReserveFuel: boolean;
   isTimerUp: boolean;
   isWide: boolean;
 };
@@ -463,6 +465,7 @@ function FocusSecondsMatrix({
   baseMissionSeconds,
   totalMinutes,
   reserveUsed,
+  allowReserveFuel,
   isTimerUp,
   isWide,
 }: FocusSecondsMatrixProps) {
@@ -626,20 +629,24 @@ function FocusSecondsMatrix({
               MIN
             </Text>
           </View>
-          <View
-            style={[
-              focusStyles.secondsMetaDivider,
-              { backgroundColor: cardColors.valueMuted },
-            ]}
-          />
-          <View style={focusStyles.secondsMetaItem}>
-            <Text style={[focusStyles.secondsMetaValue, { color: cardColors.detailValue }]}>
-              {reserveUsed}/{MAX_RESERVE_FUEL_MINUTES}
-            </Text>
-            <Text style={[focusStyles.secondsMetaLabel, { color: cardColors.detail }]}>
-              RSV
-            </Text>
-          </View>
+          {allowReserveFuel ? (
+            <>
+              <View
+                style={[
+                  focusStyles.secondsMetaDivider,
+                  { backgroundColor: cardColors.valueMuted },
+                ]}
+              />
+              <View style={focusStyles.secondsMetaItem}>
+                <Text style={[focusStyles.secondsMetaValue, { color: cardColors.detailValue }]}>
+                  {reserveUsed}/{MAX_RESERVE_FUEL_MINUTES}
+                </Text>
+                <Text style={[focusStyles.secondsMetaLabel, { color: cardColors.detail }]}>
+                  RSV
+                </Text>
+              </View>
+            </>
+          ) : null}
         </View>
       </View>
       <Pressable
@@ -704,6 +711,7 @@ type FocusMissionControlModalProps = {
   baseMissionSeconds: number;
   reserveUsed: number;
   reserveFull: boolean;
+  allowReserveFuel: boolean;
   completeSheetOpen: boolean;
   timerFrozenAtMs: number | null;
   status: string;
@@ -722,6 +730,7 @@ function FocusMissionControlModal({
   baseMissionSeconds,
   reserveUsed,
   reserveFull,
+  allowReserveFuel,
   completeSheetOpen,
   timerFrozenAtMs,
   status,
@@ -822,7 +831,7 @@ function FocusMissionControlModal({
         completeIcon: "#16a34a",
         disabled: "#94a3b8",
       };
-  const reserveDisabled = reserveFull || isTimerUp || reserveSlotsAvailable <= 0;
+  const reserveDisabled = !allowReserveFuel || reserveFull || isTimerUp || reserveSlotsAvailable <= 0;
 
   return (
     <Modal
@@ -867,43 +876,45 @@ function FocusMissionControlModal({
               {title}
             </Text>
           </View>
-          <TouchableOpacity
-            style={[
-              focusStyles.topReserveButton,
-              {
-                backgroundColor: focusColors.reserveBg,
-                borderColor: focusColors.reserveBorder,
-              },
-              reserveDisabled && focusStyles.actionDisabled,
-            ]}
-            onPress={onReserveFuel}
-            disabled={reserveDisabled}
-            activeOpacity={0.86}
-            accessibilityRole="button"
-            accessibilityLabel="Add one minute reserve fuel"
-          >
-            <Fuel
-              size={17}
-              color={
-                reserveDisabled
-                  ? focusColors.disabled
-                  : focusColors.reserveText
-              }
-            />
-            <Text
+          {allowReserveFuel ? (
+            <TouchableOpacity
               style={[
-                focusStyles.topReserveText,
+                focusStyles.topReserveButton,
                 {
-                  color:
-                    reserveDisabled
-                      ? focusColors.disabled
-                      : focusColors.reserveText,
+                  backgroundColor: focusColors.reserveBg,
+                  borderColor: focusColors.reserveBorder,
                 },
+                reserveDisabled && focusStyles.actionDisabled,
               ]}
+              onPress={onReserveFuel}
+              disabled={reserveDisabled}
+              activeOpacity={0.86}
+              accessibilityRole="button"
+              accessibilityLabel="Add one minute reserve fuel"
             >
-              +1
-            </Text>
-          </TouchableOpacity>
+              <Fuel
+                size={17}
+                color={
+                  reserveDisabled
+                    ? focusColors.disabled
+                    : focusColors.reserveText
+                }
+              />
+              <Text
+                style={[
+                  focusStyles.topReserveText,
+                  {
+                    color:
+                      reserveDisabled
+                        ? focusColors.disabled
+                        : focusColors.reserveText,
+                  },
+                ]}
+              >
+                +1
+              </Text>
+            </TouchableOpacity>
+          ) : null}
           <TouchableOpacity
             style={[
               focusStyles.completeIconButton,
@@ -986,6 +997,7 @@ function FocusMissionControlModal({
               baseMissionSeconds={baseMissionSeconds}
               totalMinutes={totalMinutes}
               reserveUsed={reserveUsed}
+              allowReserveFuel={allowReserveFuel}
               isTimerUp={isTimerUp}
               isWide={isWide}
             />
@@ -1162,6 +1174,8 @@ export default function MiniMissionDetail() {
   const [focusModeOpen, setFocusModeOpen] = useState(false);
   const [liveMiniSheetOpen, setLiveMiniSheetOpen] = useState(false);
   const [liveMiniSheetPrimed, setLiveMiniSheetPrimed] = useState(false);
+  const [timerCheckInPromptOpen, setTimerCheckInPromptOpen] = useState(false);
+  const timerCheckInPromptSeenRef = useRef<string | null>(null);
 
   const completionImageUri = useMemo(() => {
     return mission?.completionMemory?.imageUrl ?? mission?.completionMemory?.imageUri ?? null;
@@ -1175,7 +1189,7 @@ export default function MiniMissionDetail() {
 
   useEffect(() => {
     setLiveMiniSheetPrimed(false);
-    if (!mission || mission.status === "completed" || mission.status === "cancelled") return undefined;
+    if (!mission || mission.status === "completed" || mission.status === "missed" || mission.status === "cancelled") return undefined;
     let timer: ReturnType<typeof setTimeout> | null = null;
     const task = InteractionManager.runAfterInteractions(() => {
       timer = setTimeout(() => {
@@ -1256,6 +1270,11 @@ export default function MiniMissionDetail() {
     setIsTimerUpState(getIsTimerExpired());
   }, [mission?.status, totalMinutes, getIsTimerExpired]);
 
+  useEffect(() => {
+    if (!isFocused) return;
+    setIsTimerUpState(getIsTimerExpired());
+  }, [getIsTimerExpired, isFocused]);
+
   // Single one-shot timeout to handle timer expiry in parent:
   useEffect(() => {
     if (!mission || mission.status !== "in_progress" || !mission.startedAt) return;
@@ -1318,6 +1337,17 @@ export default function MiniMissionDetail() {
   }, [mission?.status, completeSheetOpen, animateQuoteChange]);
   const isLiveMiniMission = Boolean(mission?.liveSquadId);
   const isLiveMiniCreator = mission?.liveSquadRole === "creator";
+  const plannedEndMs =
+    mission?.startedAt && mission.status === "in_progress"
+      ? new Date(mission.startedAt).getTime() + totalMinutes * 60 * 1000
+      : null;
+  const isTimerCheckInSoloMode =
+    Boolean(mission && mission.completionMode === "timer_check_in" && !mission.liveSquadId);
+  const isTimerCheckInReview =
+    Boolean(mission && isTimerUpState && isMiniMissionAwaitingCheckIn(mission, Date.now()));
+  const isMiniMissionFailed = Boolean(mission && (mission.status === "missed" || (isTimerUpState && !isTimerCheckInReview)));
+  const timerCheckInPromptKey =
+    isTimerCheckInReview && mission?.startedAt ? `${mission.id}:${mission.startedAt}` : null;
 
   const openLiveSquadBoard = useCallback(() => {
     const squadId = mission?.liveSquadId;
@@ -1331,6 +1361,14 @@ export default function MiniMissionDetail() {
   }, [mission?.liveSquadId, router]);
 
   const openLiveSquadEntry = useCallback(() => {
+    if (!mission?.liveSquadId && mission?.completionMode === "timer_check_in") {
+      showAppAlert(
+        "Timer Check-In is solo for now",
+        "Live Squad mini missions still use Manual Finish so the shared board can fairly mark completed or missed runs.",
+        [{ text: "OK" }],
+      );
+      return;
+    }
     if (!mission?.liveSquadId) {
       setLiveMiniSheetOpen(true);
       return;
@@ -1340,7 +1378,17 @@ export default function MiniMissionDetail() {
       return;
     }
     openLiveSquadBoard();
-  }, [isLiveMiniCreator, mission?.liveSquadId, openLiveSquadBoard]);
+  }, [isLiveMiniCreator, mission?.completionMode, mission?.liveSquadId, openLiveSquadBoard]);
+
+  useEffect(() => {
+    if (!timerCheckInPromptKey || completeSheetOpen) {
+      if (!timerCheckInPromptKey) setTimerCheckInPromptOpen(false);
+      return;
+    }
+    if (timerCheckInPromptSeenRef.current === timerCheckInPromptKey) return;
+    timerCheckInPromptSeenRef.current = timerCheckInPromptKey;
+    setTimerCheckInPromptOpen(true);
+  }, [completeSheetOpen, timerCheckInPromptKey]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1496,7 +1544,8 @@ export default function MiniMissionDetail() {
 
   const handleMarkComplete = () => {
     setFocusModeOpen(false);
-    setTimerFrozenAtMs(Date.now());
+    setTimerCheckInPromptOpen(false);
+    setTimerFrozenAtMs(isTimerCheckInReview && plannedEndMs ? plannedEndMs : Date.now());
     setCompleteSheetOpen(true);
     void refreshPremiumAccess({ serverOnly: true, cachedAccessOk: true, background: true });
   };
@@ -1701,6 +1750,7 @@ export default function MiniMissionDetail() {
       }
     };
   
+    const allowReserveFuel = mission.completionMode !== "timer_check_in";
     const reserveUsed = mission.extendedMinutes ?? 0;
     const reserveFull = reserveUsed >= MAX_RESERVE_FUEL_MINUTES;
     const reserveSlotsAvailable = (() => {
@@ -1713,9 +1763,12 @@ export default function MiniMissionDetail() {
       return Math.max(0, earnedSlots - reserveUsed);
     })();
     const reserveCanAdd =
-      reserveSlotsAvailable > 0 && !reserveFull && !isTimerUpState;
+      allowReserveFuel && reserveSlotsAvailable > 0 && !reserveFull && !isTimerUpState;
   
     const handleReserveFuel = () => {
+      if (!allowReserveFuel) {
+        return;
+      }
       if (reserveFull) {
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
         showAppAlert(
@@ -1747,8 +1800,19 @@ export default function MiniMissionDetail() {
         showAppAlert("Live Squad mission", "Live mini missions cannot be retried. Start a fresh mini mission when you want another run.");
         return;
       }
+      setTimerCheckInPromptOpen(false);
       useHabitStore.getState().retryFailedMiniMission(mission.id);
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    };
+
+    const handleFailMiniMission = () => {
+      if (mission.liveSquadId) {
+        showAppAlert("Live Squad mission", "Live mini missions use the shared missed result from the board.");
+        return;
+      }
+      setTimerCheckInPromptOpen(false);
+      useHabitStore.getState().failMiniMission(mission.id);
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
     };
 
   return (
@@ -1772,6 +1836,19 @@ export default function MiniMissionDetail() {
           { label: "Delete", variant: "danger", onPress: confirmDeleteMiniMission },
         ]}
       />
+
+      <ConfirmDialog
+        visible={timerCheckInPromptOpen}
+        onRequestClose={() => setTimerCheckInPromptOpen(false)}
+        title="Time is up"
+        message="Did you complete this mini mission? You can save it now and add a memory if you want."
+        actions={[
+          { label: "Complete", onPress: handleMarkComplete },
+          { label: "Retry", variant: "secondary", onPress: handleRetryFailed },
+          { label: "Fail", variant: "danger", onPress: handleFailMiniMission },
+        ]}
+      />
+
       <LazyMount visible={missionDetailsOpen} unmountOnExit>
         <MissionDetailsSheet
           variant="mini"
@@ -1817,6 +1894,7 @@ export default function MiniMissionDetail() {
           baseMissionSeconds={Math.max(1, mission.estimatedMinutes * 60)}
           reserveUsed={reserveUsed}
           reserveFull={reserveFull}
+          allowReserveFuel={allowReserveFuel}
           completeSheetOpen={completeSheetOpen}
           timerFrozenAtMs={timerFrozenAtMs}
           status={mission.status}
@@ -1960,10 +2038,14 @@ export default function MiniMissionDetail() {
           >
             <Clock3 size={14} color={theme.colors.cyan[400]} />
             <Text style={[styles.metaText, { color: theme.colors.textPrimary }]}>
-              {mission.status === "in_progress" && !isTimerUpState
-                ? `${totalMinutes} min total · reserve ${reserveUsed}/${MAX_RESERVE_FUEL_MINUTES} min`
+              {isTimerCheckInReview
+                ? "Check In"
+                : mission.status === "in_progress" && !isTimerUpState
+                ? allowReserveFuel
+                  ? `${totalMinutes} min total · reserve ${reserveUsed}/${MAX_RESERVE_FUEL_MINUTES} min`
+                  : `${totalMinutes} min total`
                 : `${totalMinutes} minutes ${
-                    (mission.extendedMinutes ?? 0) > 0
+                    allowReserveFuel && (mission.extendedMinutes ?? 0) > 0
                       ? `(+${mission.extendedMinutes ?? 0} reserve)`
                       : "planned"
                   }`}
@@ -1973,12 +2055,16 @@ export default function MiniMissionDetail() {
 
         {mission.status !== "completed" ? (
           <Text style={[styles.timerHint, { color: theme.colors.textSecondary }]}>
-            {isTimerUpState
-              ? "Timer depleted. No reserve fuel after zero. Cancel this mission or go back."
+            {isTimerCheckInReview
+              ? "Time is up. Confirm whether you completed it, then save a memory if you want."
+              : isMiniMissionFailed
+              ? "Mission failed. Retry when you are ready."
               : mission.status === "in_progress"
                 ? completeSheetOpen
                   ? "Timer paused while you save your moment."
-                  : `Stay with it until done. Reserve fuel is capped at ${MAX_RESERVE_FUEL_MINUTES} min total.`
+                  : allowReserveFuel
+                    ? `Stay with it until done. Reserve fuel is capped at ${MAX_RESERVE_FUEL_MINUTES} min total.`
+                    : "Stay with it until the timer ends. You can check in after it finishes."
                 : "Ready when you are."}
           </Text>
         ) : null}
@@ -2025,7 +2111,10 @@ export default function MiniMissionDetail() {
           </TouchableOpacity>
         ) : null}
 
-        {mission.status !== "completed" && mission.status !== "cancelled" ? (
+        {mission.status !== "completed" &&
+        mission.status !== "missed" &&
+        mission.status !== "cancelled" &&
+        !isTimerCheckInSoloMode ? (
           <TouchableOpacity
             style={[
               styles.liveMiniEntry,
@@ -2097,6 +2186,7 @@ export default function MiniMissionDetail() {
         <View style={styles.actions}>
           {mission.status !== "in_progress" &&
             mission.status !== "completed" &&
+            mission.status !== "missed" &&
             mission.status !== "cancelled" && (
               <Button title="Start Now" onPress={handleStart} />
             )}
@@ -2107,42 +2197,44 @@ export default function MiniMissionDetail() {
                 title="Mark Complete"
                 onPress={handleMarkComplete}
               />
-              {reserveFull || !reserveCanAdd ? (
-                <View
-                  style={[
-                    styles.extendButton,
-                    styles.extendButtonDisabled,
-                    { borderRadius: theme.radius.md },
-                  ]}
-                >
-                  <Fuel size={20} color={theme.colors.textMuted} />
-                  <Text
-                    style={[styles.extendButtonText, { color: theme.colors.textMuted }]}
-                    numberOfLines={1}
-                  >
-                    {reserveFull
-                      ? `Reserve fuel max (${MAX_RESERVE_FUEL_MINUTES} min)`
-                      : `Reserve slot opens each minute - ${reserveUsed}/${MAX_RESERVE_FUEL_MINUTES}`}
-                  </Text>
-                </View>
-              ) : (
-                <TouchableOpacity
-                  style={[styles.extendButton, { borderRadius: theme.radius.md }]}
-                  onPress={handleReserveFuel}
-                  activeOpacity={0.85}
-                >
-                  <Fuel size={20} color={theme.colors.amber[500]} />
-                  <Text
+              {allowReserveFuel ? (
+                reserveFull || !reserveCanAdd ? (
+                  <View
                     style={[
-                      styles.extendButtonText,
-                      { color: theme.colors.amber[500] },
+                      styles.extendButton,
+                      styles.extendButtonDisabled,
+                      { borderRadius: theme.radius.md },
                     ]}
-                    numberOfLines={1}
                   >
-                    Need reserve fuel · +1 min · {reserveUsed}/{MAX_RESERVE_FUEL_MINUTES}
-                  </Text>
-                </TouchableOpacity>
-              )}
+                    <Fuel size={20} color={theme.colors.textMuted} />
+                    <Text
+                      style={[styles.extendButtonText, { color: theme.colors.textMuted }]}
+                      numberOfLines={1}
+                    >
+                      {reserveFull
+                        ? `Reserve fuel max (${MAX_RESERVE_FUEL_MINUTES} min)`
+                        : `Reserve slot opens each minute - ${reserveUsed}/${MAX_RESERVE_FUEL_MINUTES}`}
+                    </Text>
+                  </View>
+                ) : (
+                  <TouchableOpacity
+                    style={[styles.extendButton, { borderRadius: theme.radius.md }]}
+                    onPress={handleReserveFuel}
+                    activeOpacity={0.85}
+                  >
+                    <Fuel size={20} color={theme.colors.amber[500]} />
+                    <Text
+                      style={[
+                        styles.extendButtonText,
+                        { color: theme.colors.amber[500] },
+                      ]}
+                      numberOfLines={1}
+                    >
+                      Need reserve fuel · +1 min · {reserveUsed}/{MAX_RESERVE_FUEL_MINUTES}
+                    </Text>
+                  </TouchableOpacity>
+                )
+              ) : null}
               <Button
                 title="Cancel Mission"
                 variant="secondary"
@@ -2151,7 +2243,36 @@ export default function MiniMissionDetail() {
             </>
           )}
 
-          {isTimerUpState && (
+          {isTimerCheckInReview && (
+            <>
+              <View style={styles.checkInRow}>
+                <Clock3 size={22} color={theme.colors.green[500]} />
+                <View style={styles.failedTextCol}>
+                  <Text
+                    style={[
+                      styles.failedTitle,
+                      { color: theme.colors.green[500] },
+                    ]}
+                  >
+                    Check In
+                  </Text>
+                  <Text
+                    style={[
+                      styles.failedHint,
+                      { color: theme.colors.textSecondary },
+                    ]}
+                  >
+                    The timer finished. Confirm if you completed it.
+                  </Text>
+                </View>
+              </View>
+              <Button title="Complete" onPress={handleMarkComplete} />
+              <Button title="Retry" variant="secondary" onPress={handleRetryFailed} />
+              <Button title="Fail" variant="danger" onPress={handleFailMiniMission} />
+            </>
+          )}
+
+          {isMiniMissionFailed && (
             <>
               <View style={styles.failedRow}>
                 <CircleX size={22} color={theme.colors.red[500]} />
@@ -2177,7 +2298,7 @@ export default function MiniMissionDetail() {
               {mission.liveSquadId ? (
                 <Button title="Open Live Squad" onPress={openLiveSquadBoard} />
               ) : (
-                <Button title="Retry mission" onPress={handleRetryFailed} />
+                <Button title="Retry" onPress={handleRetryFailed} />
               )}
             </>
           )}
@@ -2508,6 +2629,17 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(239, 68, 68, 0.35)",
     backgroundColor: "rgba(239, 68, 68, 0.08)",
+  },
+  checkInRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(34, 197, 94, 0.34)",
+    backgroundColor: "rgba(34, 197, 94, 0.1)",
   },
   failedTextCol: { flex: 1 },
   failedTitle: { fontWeight: "800", fontSize: 16, marginBottom: 4 },
