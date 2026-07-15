@@ -80,9 +80,11 @@ export type MiniMissionStatus =
   | "scheduled"
   | "in_progress"
   | "completed"
+  | "missed"
   | "cancelled";
 
 export type MiniMissionLiveRole = "creator" | "member";
+export type MiniMissionCompletionMode = "manual" | "timer_check_in";
 
 export interface MiniMission {
   /** Supabase auth user id who owns this mini mission (set on create / hydrate). */
@@ -95,6 +97,8 @@ export interface MiniMission {
   communityFeedRevoked?: boolean;
   estimatedMinutes: number;
   extendedMinutes: number; // +1 min per reserve tap; capped (see MAX_RESERVE_FUEL_MINUTES)
+  /** Manual requires tapping complete before zero; timer_check_in asks for a solo check-in after zero. */
+  completionMode?: MiniMissionCompletionMode;
   status: MiniMissionStatus;
   createdAt: string;
   scheduledStartAt?: string;
@@ -169,6 +173,7 @@ export type HabitStore = {
     title: string;
     objective?: string;
     estimatedMinutes: number;
+    completionMode?: MiniMissionCompletionMode;
     startMode: "now" | "later";
     createdAt?: string;
     startedAt?: string;
@@ -191,6 +196,8 @@ export type HabitStore = {
     },
   ) => void;
   extendMiniMission: (id: string, extraMinutes: number) => void;
+  /** User explicitly decided an expired timer check-in was not completed. */
+  failMiniMission: (id: string) => void;
   cancelMiniMission: (id: string) => void;
   /** Timer depleted: restart same mission with fresh clock (reserve fuel cleared). */
   retryFailedMiniMission: (id: string) => void;

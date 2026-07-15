@@ -55,8 +55,16 @@ function shouldPreserveLocalMini(remoteMini: MiniMission, localMini: MiniMission
     return true;
   }
   if (
+    localMini.status === "missed" &&
+    remoteMini.status !== "completed" &&
+    remoteMini.status !== "missed"
+  ) {
+    return true;
+  }
+  if (
     localMini.status === "in_progress" &&
     remoteMini.status !== "completed" &&
+    remoteMini.status !== "missed" &&
     remoteMini.status !== "cancelled"
   ) {
     const localStarted = localMini.startedAt ? new Date(localMini.startedAt).getTime() : 0;
@@ -84,7 +92,7 @@ function preserveLocalMiniProgress(
 
   for (const localMini of local.miniMissions) {
     if (
-      (localMini.status === "completed" || localMini.status === "in_progress") &&
+      (localMini.status === "completed" || localMini.status === "missed" || localMini.status === "in_progress") &&
       !remoteIds.has(localMini.id)
     ) {
       preserved = true;

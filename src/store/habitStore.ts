@@ -615,6 +615,7 @@ export const useHabitStore = create<HabitStore>()(
         title,
         objective,
         estimatedMinutes,
+        completionMode,
         startMode,
         createdAt,
         startedAt,
@@ -635,6 +636,7 @@ export const useHabitStore = create<HabitStore>()(
           communityFeedRevoked: false,
           estimatedMinutes: normalizedMinutes,
           extendedMinutes: 0,
+          completionMode: completionMode === "timer_check_in" ? "timer_check_in" : "manual",
           status: startMode === "now" ? "in_progress" : "pending",
           createdAt: now,
           startedAt: startMode === "now" ? startedAt ?? now : undefined,
@@ -730,16 +732,33 @@ export const useHabitStore = create<HabitStore>()(
         }));
         requestRemoteSync({ immediate: false });
       },
+      failMiniMission: (id) => {
+        const mission = get().miniMissions.find((m) => m.id === id);
+        if (mission?.liveSquadId) return;
+        set((state) => ({
+          miniMissions: state.miniMissions.map((m) => {
+            if (m.id !== id) return m;
+            if (m.status === "completed" || m.status === "cancelled") return m;
+            return {
+              ...m,
+              status: "missed",
+            };
+          }),
+        }));
+        requestRemoteSync({ immediate: true });
+      },
       retryFailedMiniMission: (id) => {
         const mission = get().miniMissions.find((m) => m.id === id);
         if (mission?.liveSquadId) return;
-        if (!mission || mission.status !== "in_progress" || !mission.startedAt) return;
+        if (!mission || !mission.startedAt) return;
+        const alreadyMissed = mission.status === "missed";
+        if (!alreadyMissed && mission.status !== "in_progress") return;
         const totalMinutes =
           mission.estimatedMinutes + (mission.extendedMinutes ?? 0);
         const totalMs = totalMinutes * 60_000;
         const elapsed =
           Date.now() - new Date(mission.startedAt).getTime();
-        if (elapsed < totalMs) return;
+        if (!alreadyMissed && elapsed < totalMs) return;
         const now = new Date().toISOString();
         set((state) => ({
           miniMissions: state.miniMissions.map((m) => {

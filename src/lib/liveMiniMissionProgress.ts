@@ -9,6 +9,7 @@ export function liveMiniStatusFromMission(
 ): Extract<LiveMiniParticipantStatus, "joined" | "in_progress" | "completed" | "missed" | "cancelled"> | null {
   if (!mission.liveSquadId) return null;
   if (mission.status === "completed") return "completed";
+  if (mission.status === "missed") return "missed";
   if (mission.status === "cancelled") return "cancelled";
   if (mission.status === "in_progress") {
     return getMiniRemainingMs(mission, now) <= 0 ? "missed" : "in_progress";

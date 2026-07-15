@@ -361,56 +361,76 @@ function miniCompletionMemoryFromRow(
   }
 }
 
-function miniFromRow(row: {
-  user_id: string;
-  id: string;
-  title: string;
-  objective: string | null;
-  visibility?: string | null;
-  community_feed_revoked?: boolean | null;
-  estimated_minutes: number;
-  extended_minutes: number;
-  status: string;
-  created_at: string;
-  scheduled_start_at: string | null;
-  started_at: string | null;
-  completed_at: string | null;
-  completion_memory?: unknown | null;
-  live_squad_id?: string | null;
-  live_squad_role?: string | null;
-}): MiniMission {
+function miniRowValue(row: Record<string, unknown>, snakeKey: string, camelKey: string): unknown {
+  return row[snakeKey] ?? row[camelKey];
+}
+
+function miniRowString(row: Record<string, unknown>, snakeKey: string, camelKey: string): string | null {
+  const value = miniRowValue(row, snakeKey, camelKey);
+  return typeof value === "string" ? value : null;
+}
+
+function miniRowNumber(row: Record<string, unknown>, snakeKey: string, camelKey: string, fallback: number): number {
+  const value = miniRowValue(row, snakeKey, camelKey);
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function miniRowBoolean(row: Record<string, unknown>, snakeKey: string, camelKey: string): boolean | null {
+  const value = miniRowValue(row, snakeKey, camelKey);
+  return typeof value === "boolean" ? value : null;
+}
+
+function miniFromRow(row: Record<string, unknown>): MiniMission {
+  const ownerUserId = miniRowString(row, "user_id", "userId") ?? "";
+  const visibilityRaw = miniRowString(row, "visibility", "visibility");
+  const statusRaw = miniRowString(row, "status", "status");
+  const completionModeRaw = miniRowString(row, "completion_mode", "completionMode");
+  const communityFeedRevokedRaw = miniRowBoolean(row, "community_feed_revoked", "communityFeedRevoked");
+  const completionMemoryRaw = miniRowValue(row, "completion_memory", "completionMemory");
+  const liveRoleRaw = miniRowString(row, "live_squad_role", "liveSquadRole");
   const vis: MissionVisibility =
-    row.visibility === "public" || row.visibility === "solo"
-      ? row.visibility
+    visibilityRaw === "public" || visibilityRaw === "solo"
+      ? visibilityRaw
       : "solo";
-  const rawRevoked = row.community_feed_revoked;
+  const status: MiniMission["status"] =
+    statusRaw === "pending" ||
+    statusRaw === "scheduled" ||
+    statusRaw === "in_progress" ||
+    statusRaw === "completed" ||
+    statusRaw === "missed" ||
+    statusRaw === "cancelled"
+      ? statusRaw
+      : "pending";
+  const completionMode =
+    completionModeRaw === "timer_check_in" ? "timer_check_in" : "manual";
   const communityFeedRevoked =
-    rawRevoked === true
+    communityFeedRevokedRaw === true
       ? true
-      : rawRevoked === false
+      : communityFeedRevokedRaw === false
         ? false
-        : row.status === "completed" && vis === "solo"
+        : status === "completed" && vis === "solo"
           ? true
           : false;
   return {
-    ownerUserId: row.user_id,
-    id: row.id,
-    title: row.title,
-    objective: row.objective ?? undefined,
+    ownerUserId,
+    id: miniRowString(row, "id", "id") ?? "",
+    title: miniRowString(row, "title", "title") ?? "Mini mission",
+    objective: miniRowString(row, "objective", "objective") ?? undefined,
     visibility: vis,
     communityFeedRevoked,
-    estimatedMinutes: row.estimated_minutes,
-    extendedMinutes: row.extended_minutes,
-    status: row.status as MiniMission["status"],
-    createdAt: row.created_at,
-    scheduledStartAt: row.scheduled_start_at ?? undefined,
-    startedAt: row.started_at ?? undefined,
-    completedAt: row.completed_at ?? undefined,
-    completionMemory: miniCompletionMemoryFromRow(row.completion_memory),
-    liveSquadId: row.live_squad_id ?? null,
+    estimatedMinutes: miniRowNumber(row, "estimated_minutes", "estimatedMinutes", 1),
+    extendedMinutes: miniRowNumber(row, "extended_minutes", "extendedMinutes", 0),
+    completionMode,
+    status,
+    createdAt: miniRowString(row, "created_at", "createdAt") ?? new Date().toISOString(),
+    scheduledStartAt: miniRowString(row, "scheduled_start_at", "scheduledStartAt") ?? undefined,
+    startedAt: miniRowString(row, "started_at", "startedAt") ?? undefined,
+    completedAt: miniRowString(row, "completed_at", "completedAt") ?? undefined,
+    completionMemory: miniCompletionMemoryFromRow(completionMemoryRaw),
+    liveSquadId: miniRowString(row, "live_squad_id", "liveSquadId"),
     liveSquadRole:
-      row.live_squad_role === "creator" || row.live_squad_role === "member"
-        ? row.live_squad_role
+      liveRoleRaw === "creator" || liveRoleRaw === "member"
+        ? liveRoleRaw
         : null,
   };
 }
@@ -464,6 +484,7 @@ function miniToRow(sessionUserId: string, m: MiniMission) {
     community_feed_revoked: m.communityFeedRevoked === true,
     estimated_minutes: m.estimatedMinutes,
     extended_minutes: m.extendedMinutes,
+    completion_mode: m.completionMode === "timer_check_in" ? "timer_check_in" : "manual",
     status: m.status,
     created_at: m.createdAt,
     scheduled_start_at: m.scheduledStartAt ?? null,
@@ -840,7 +861,7 @@ export async function pullFromSupabase(
       supabase
         .from("mini_missions")
         .select(
-          "user_id, id, title, objective, visibility, community_feed_revoked, estimated_minutes, extended_minutes, status, created_at, scheduled_start_at, started_at, completed_at, completion_memory, live_squad_id, live_squad_role",
+          "user_id, id, title, objective, visibility, community_feed_revoked, estimated_minutes, extended_minutes, completion_mode, status, created_at, scheduled_start_at, started_at, completed_at, completion_memory, live_squad_id, live_squad_role",
         )
         .eq("user_id", userId),
       supabase.from("profiles").select("xp, username").eq("id", userId).maybeSingle(),

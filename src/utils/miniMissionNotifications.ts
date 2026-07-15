@@ -5,6 +5,7 @@ import {
   listScheduledNotifications,
   scheduleTimerNotification,
 } from "./notifications";
+import { getMiniMissionCompletionMode } from "./miniMissionTime";
 
 /** Timer heads-up rules for mini missions. */
 const WARN_LEAD_SECONDS = 120;
@@ -33,6 +34,14 @@ function getMissionEndMs(mission: MiniMission): number | null {
 }
 
 function getWarnCopy(mission: MiniMission): { title: string; body: string } {
+  const usesTimerCheckIn = getMiniMissionCompletionMode(mission) === "timer_check_in" && !mission.liveSquadId;
+  if (usesTimerCheckIn) {
+    return {
+      title: "Timer ending soon",
+      body: `About 2 minutes left for "${mission.title}".`,
+    };
+  }
+
   const extended = mission.extendedMinutes ?? 0;
   const reserveMaxed = extended >= MAX_RESERVE_FUEL_MINUTES;
   if (reserveMaxed) {
@@ -207,11 +216,11 @@ async function syncMiniMissionNotificationsNow(missions: MiniMission[]) {
       await cancelNotification(warnIdByMission.get(missionId) ?? null);
 
       // Only cancel the fail notification if the mission was explicitly ended before its
-      // natural deadline (completed or cancelled). If the mission expired on its own
+      // natural deadline (completed, missed, or cancelled). If the mission expired on its own
       // (endMs is near or past), let the OS deliver the fail notification — cancelling
       // it here would race with delivery and cause silent drops.
       const explicitlyEnded =
-        mission?.status === "completed" || mission?.status === "cancelled";
+        mission?.status === "completed" || mission?.status === "missed" || mission?.status === "cancelled";
       const endIsFarFuture = endMs > nowMs + 60_000;
       if (explicitlyEnded || endIsFarFuture) {
         await cancelNotification(failIdByMission.get(missionId) ?? null);
@@ -285,8 +294,11 @@ async function syncMiniMissionNotificationsNow(missions: MiniMission[]) {
       }
     }
 
-    const failTitle = "Mini failed";
-    const failBody = `Your mini mission failed. Retry "${mission.title}" and try to win again.`;
+    const usesTimerCheckIn = getMiniMissionCompletionMode(mission) === "timer_check_in" && !mission.liveSquadId;
+    const failTitle = usesTimerCheckIn ? "Timer finished" : "Mini failed";
+    const failBody = usesTimerCheckIn
+      ? `Check In for "${mission.title}" and save your win.`
+      : `Your mini mission failed. Retry "${mission.title}" and try to win again.`;
     const newFailId = await scheduleTimerNotification(failTitle, failBody, secondsUntilEnd, {
       data: {
         type: "mini_mission",
