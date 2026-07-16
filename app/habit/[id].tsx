@@ -335,8 +335,8 @@ const AnimatedDayCell = React.memo(function AnimatedDayCell({
         }
         const loop = Animated.loop(
             Animated.sequence([
-                Animated.timing(todayPulse, { toValue: 1.06, duration: 1400, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-                Animated.timing(todayPulse, { toValue: 1, duration: 1400, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+                Animated.timing(todayPulse, { toValue: 1.06, duration: 1400, easing: Easing.inOut(Easing.ease), useNativeDriver: true, isInteraction: false }),
+                Animated.timing(todayPulse, { toValue: 1, duration: 1400, easing: Easing.inOut(Easing.ease), useNativeDriver: true, isInteraction: false }),
             ]),
         );
         loop.start();
@@ -347,8 +347,8 @@ const AnimatedDayCell = React.memo(function AnimatedDayCell({
         if (reduceMotion || optimizeForScroll || !(isMilestone && isCompleted)) return;
         const loop = Animated.loop(
             Animated.sequence([
-                Animated.timing(shimmer, { toValue: 1, duration: 2000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-                Animated.timing(shimmer, { toValue: 0, duration: 2000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+                Animated.timing(shimmer, { toValue: 1, duration: 2000, easing: Easing.inOut(Easing.ease), useNativeDriver: true, isInteraction: false }),
+                Animated.timing(shimmer, { toValue: 0, duration: 2000, easing: Easing.inOut(Easing.ease), useNativeDriver: true, isInteraction: false }),
             ]),
         );
         loop.start();
@@ -683,7 +683,7 @@ export default function HabitDetail() {
     }, [detailHeavyContentReady, totalDays, visibleGridDayCount]);
 
     const memoryGalleryEntries = useMemo(() => {
-        if (!habit || !detailHeavyContentReady || visibleGridDayCount < totalDays) return [];
+        if (!habit || !detailHeavyContentReady) return [];
         const raw = habit.streakMemories ?? {};
         return Object.entries(raw)
             .filter(([, memory]) => {
@@ -698,7 +698,7 @@ export default function HabitDetail() {
                 missionDay: missionDayNumberForCalendarDate(habit, dateStr),
             }))
             .sort((a, b) => (a.dateStr < b.dateStr ? 1 : -1));
-    }, [detailHeavyContentReady, habit, totalDays, visibleGridDayCount]);
+    }, [detailHeavyContentReady, habit]);
 
     const showMissionReportInsteadOfTimer = useMemo(() => {
         if (!habit) return false;
@@ -725,6 +725,10 @@ export default function HabitDetail() {
     const activeTrailDays = useMemo(
         () => Array.from({ length: activeTrailReachedDay }, (_, i) => activeTrailReachedDay - i),
         [activeTrailReachedDay],
+    );
+    const visibleActiveTrailDays = useMemo(
+        () => activeTrailDays.slice(0, Math.min(activeTrailDays.length, visibleGridDayCount)),
+        [activeTrailDays, visibleGridDayCount],
     );
     const activeTrailRemainingDays = Math.max(0, totalDays - activeTrailReachedDay);
     const activeMissionDayEndMs = habit ? getHabitActiveMissionDayEndMs(habit, now) : null;
@@ -1162,8 +1166,8 @@ export default function HabitDetail() {
         () => days.slice(0, detailHeavyContentReady ? Math.min(visibleGridDayCount, totalDays) : 0),
         [days, detailHeavyContentReady, totalDays, visibleGridDayCount],
     );
-    const displayedGridDays = useActiveTrailGrid ? activeTrailDays : visibleDays;
-    const optimizeGridScrollForIos = Platform.OS === 'ios' && displayedGridDays.length > INITIAL_GRID_RENDER_DAYS;
+    const displayedGridDays = useActiveTrailGrid ? visibleActiveTrailDays : visibleDays;
+    const optimizeGridScrollForLongGrid = displayedGridDays.length > INITIAL_GRID_RENDER_DAYS;
 
     const getDayDate = useCallback((dayIndex: number) => {
         if (!habit) return "";
@@ -1334,7 +1338,7 @@ export default function HabitDetail() {
                 showsVerticalScrollIndicator={false}
                 keyboardShouldPersistTaps="handled"
                 contentContainerStyle={{ paddingBottom: detailBottomPad }}
-                removeClippedSubviews={optimizeGridScrollForIos}
+                removeClippedSubviews={optimizeGridScrollForLongGrid}
                 {...({ delaysContentTouches: false } as any)}
             >
                 <View style={styles.modeRow}>
@@ -1836,7 +1840,7 @@ export default function HabitDetail() {
                                 repairSource={repairSource}
                                 onPress={handleDayPress} // Stable callback reference
                                 isSheetOpen={memoryUi !== null}
-                                optimizeForScroll={optimizeGridScrollForIos}
+                                optimizeForScroll={optimizeGridScrollForLongGrid}
                             />
                         );
                     })}
@@ -2091,7 +2095,7 @@ const styles = StyleSheet.create({
         paddingVertical: 8,
         paddingHorizontal: 10,
         borderWidth: 1,
-        marginBottom: 14,
+        marginBottom: 10,
     },
     missionControlsCardIos: {
         minHeight: 78,
@@ -2199,12 +2203,12 @@ const styles = StyleSheet.create({
     repairCost: { fontSize: 12, fontWeight: "900", marginTop: 6 },
     repairBtn: { paddingHorizontal: 14, paddingVertical: 10, borderRadius: 14 },
     repairBtnText: { fontSize: 12, fontWeight: "900" },
-    progressCard: { padding: 20, marginBottom: 28, borderWidth: 1 },
-    progressHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 14 },
+    progressCard: { padding: 16, marginBottom: 16, borderWidth: 1 },
+    progressHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 10 },
     progressLabel: { fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1 },
     progressValue: { fontSize: 24, fontWeight: '800' },
     progressTotal: { fontSize: 16 },
-    progressBarBackground: { height: 12, borderRadius: 9999, overflow: 'hidden' },
+    progressBarBackground: { height: 10, borderRadius: 9999, overflow: 'hidden' },
     progressBarFill: { height: '100%', borderRadius: 9999 },
     gridHeaderRow: {
         flexDirection: 'row',
@@ -2253,8 +2257,8 @@ const styles = StyleSheet.create({
     dayButtonPlaceholder: { width: '13%', aspectRatio: 1, marginBottom: 14 },
     dayButtonWarmup: { borderWidth: 1, borderRadius: 12, opacity: 0.56 },
     missionTimerSlot: {
-        padding: 20,
-        marginBottom: 32,
+        padding: 16,
+        marginBottom: 10,
         borderWidth: 1,
     },
     missionLengthField: {

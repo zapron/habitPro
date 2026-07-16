@@ -214,12 +214,14 @@ export const HabitCard = memo(({ item, nowMs }: HabitCardProps) => {
             duration: 900,
             easing: Easing.inOut(Easing.quad),
             useNativeDriver: true,
+            isInteraction: false,
           }),
           Animated.timing(pulse, {
             toValue: 0,
             duration: 900,
             easing: Easing.inOut(Easing.quad),
             useNativeDriver: true,
+            isInteraction: false,
           }),
         ]),
       );

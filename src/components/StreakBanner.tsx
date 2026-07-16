@@ -30,11 +30,13 @@ export function StreakBanner({ streak }: StreakBannerProps) {
                 tension: 60,
                 friction: 8,
                 useNativeDriver: true,
+                isInteraction: false,
             }),
             Animated.timing(opacity, {
                 toValue: 1,
                 duration: 400,
                 useNativeDriver: true,
+                isInteraction: false,
             }),
         ]).start();
 
@@ -45,12 +47,14 @@ export function StreakBanner({ streak }: StreakBannerProps) {
                     duration: 1500,
                     easing: Easing.inOut(Easing.ease),
                     useNativeDriver: true,
+                    isInteraction: false,
                 }),
                 Animated.timing(glow, {
                     toValue: 0,
                     duration: 1500,
                     easing: Easing.inOut(Easing.ease),
                     useNativeDriver: true,
+                    isInteraction: false,
                 }),
             ]),
         );
@@ -123,10 +127,10 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         gap: 8,
-        paddingVertical: 10,
+        paddingVertical: 8,
         paddingHorizontal: 14,
         borderWidth: 1,
-        marginBottom: 16,
+        marginBottom: 12,
     },
     text: {
         fontWeight: '800',
