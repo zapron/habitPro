@@ -1,5 +1,6 @@
 ## Cursor agent instructions (habitPro)
 
+- On new sessions, read `docs/PROJECT_CONTEXT.md` and `docs/CURRENT_WORK.md` after this file.
 - Do **not** create git commits unless the user explicitly approves first.
 - When proposing a commit, show what will be included (staged diff/stat) and ask for approval.
 - Do **not** push to remote unless the user explicitly asks.
