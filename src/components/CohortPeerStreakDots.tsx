@@ -25,9 +25,8 @@ import { calendarDateForHabitMissionDayIndex, getHabitActiveMissionDaySlot } fro
 
 const DOT_SIZE = 36;
 const DOT_GAP = 8;
-const DOT_STEP = DOT_SIZE + DOT_GAP;
 
-/** Dot timeline key: Completed / Today / Upcoming. Use once beside the cohort participants heading. */
+/** Dot timeline key: memory / check-in / current day. Use once beside the cohort participants heading. */
 export function CohortParticipantTimelineLegend({
   theme,
   isDark,
@@ -38,12 +37,11 @@ export function CohortParticipantTimelineLegend({
   const richLegendFill = isDark ? "#23274e" : "#eef2ff";
   const richLegendBorder = theme.colors.indigo[500];
   const todayLegendBorder = theme.colors.amber[500];
-  const upcomingLegendBorder = theme.colors.slate[500];
 
   return (
     <View
       style={styles.legendRow}
-      accessibilityLabel="Timeline legend: with memory, check-in only, today, upcoming days"
+      accessibilityLabel="Timeline legend: with memory, check-in only, current day"
     >
       <View style={styles.legendItem}>
         <View
@@ -82,20 +80,7 @@ export function CohortParticipantTimelineLegend({
             { backgroundColor: theme.colors.surfaceElevated, borderColor: todayLegendBorder, borderWidth: 1.8 },
           ]}
         />
-        <Text style={[styles.legendLabel, { color: theme.colors.textMuted }]}>Today</Text>
-      </View>
-      <View style={styles.legendItem}>
-        <View
-          style={[
-            styles.legendSwatch,
-            {
-              backgroundColor: theme.colors.surfaceElevated,
-              borderColor: upcomingLegendBorder,
-              borderWidth: 1.8,
-            },
-          ]}
-        />
-        <Text style={[styles.legendLabel, { color: theme.colors.textMuted }]}>Upcoming</Text>
+        <Text style={[styles.legendLabel, { color: theme.colors.textMuted }]}>Current</Text>
       </View>
     </View>
   );
@@ -132,6 +117,7 @@ export const CohortPeerStreakDots = memo(function CohortPeerStreakDots({
   const total = Math.max(1, habit.totalDays ?? 21);
   const nowMs = nowMsProp ?? Date.now();
   const activeSlot = getHabitActiveMissionDaySlot(habit, nowMs);
+  const visibleThroughDay = activeSlot ?? total;
   const completedDateSet = useMemo(() => new Set(habit.completedDates), [habit.completedDates]);
 
   const days = useMemo(() => {
@@ -141,14 +127,15 @@ export const CohortPeerStreakDots = memo(function CohortPeerStreakDots({
       completed: boolean;
       memory: StreakMemory | undefined;
     }[] = [];
-    for (let i = 0; i < total; i++) {
+    const cappedVisibleDay = Math.min(total, Math.max(1, visibleThroughDay));
+    for (let i = cappedVisibleDay - 1; i >= 0; i--) {
       const dateStr = calendarDateForHabitMissionDayIndex(habit, i, nowMs);
       const completed = completedDateSet.has(dateStr);
       const memory = habit.streakMemories?.[dateStr];
       out.push({ dayNum: i + 1, dateStr, completed, memory });
     }
     return out;
-  }, [completedDateSet, habit, nowMs, total]);
+  }, [completedDateSet, habit, nowMs, total, visibleThroughDay]);
 
   const [open, setOpen] = useState<{
     dateStr: string;
