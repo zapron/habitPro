@@ -1,5 +1,5 @@
 import { Text } from "./AppText";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AccessibilityInfo,
   Animated,
@@ -15,6 +15,7 @@ import {
   SPLASH_WORDMARK_PRO_COLOR,
 } from "../constants/splash";
 import { useTheme } from "../context/ThemeContext";
+import { quotes } from "../data/quotes";
 
 const AnimatedText = Animated.createAnimatedComponent(Text);
 
@@ -28,6 +29,17 @@ const WORDMARK_FONT_SIZE = 48;
 const WORDMARK_LINE_HEIGHT = 62;
 const WORDMARK_GAP = 6;
 const ROTATION_DURATION_MS = 18_000;
+const WISDOM_INTRO_DELAY_MS = 1280;
+const WISDOM_INTRO_DURATION_MS = 560;
+
+function dailyQuoteIndex(date = new Date()): number {
+  const key = date.toISOString().slice(0, 10);
+  let hash = 0;
+  for (let i = 0; i < key.length; i += 1) {
+    hash = (hash * 31 + key.charCodeAt(i)) % 100000;
+  }
+  return Math.abs(hash) % quotes.length;
+}
 
 type Props = {
   onFirstLayout: () => void;
@@ -40,8 +52,10 @@ export function AnimatedSplashOverlay({ onFirstLayout, dismiss, onDismissed }: P
   const layoutReported = useRef(false);
   const spinProgress = useRef(new Animated.Value(0)).current;
   const lockupProgress = useRef(new Animated.Value(0)).current;
+  const wisdomProgress = useRef(new Animated.Value(0)).current;
   const overlayOpacity = useRef(new Animated.Value(1)).current;
   const [reduceMotion, setReduceMotion] = useState(false);
+  const quote = useMemo(() => quotes[dailyQuoteIndex()], []);
 
   useEffect(() => {
     void AccessibilityInfo.isReduceMotionEnabled().then(setReduceMotion);
@@ -57,6 +71,7 @@ export function AnimatedSplashOverlay({ onFirstLayout, dismiss, onDismissed }: P
         duration: ROTATION_DURATION_MS,
         easing: Easing.linear,
         useNativeDriver: true,
+        isInteraction: false,
       }),
     );
     loop.start();
@@ -80,6 +95,7 @@ export function AnimatedSplashOverlay({ onFirstLayout, dismiss, onDismissed }: P
         duration: 820,
         easing: Easing.out(Easing.cubic),
         useNativeDriver: true,
+        isInteraction: false,
       }),
     ]);
     intro.start();
@@ -89,11 +105,35 @@ export function AnimatedSplashOverlay({ onFirstLayout, dismiss, onDismissed }: P
   }, [lockupProgress, reduceMotion]);
 
   useEffect(() => {
+    if (reduceMotion) {
+      wisdomProgress.setValue(1);
+      return;
+    }
+
+    wisdomProgress.setValue(0);
+    const intro = Animated.sequence([
+      Animated.delay(WISDOM_INTRO_DELAY_MS),
+      Animated.timing(wisdomProgress, {
+        toValue: 1,
+        duration: WISDOM_INTRO_DURATION_MS,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+        isInteraction: false,
+      }),
+    ]);
+    intro.start();
+    return () => {
+      intro.stop();
+    };
+  }, [reduceMotion, wisdomProgress]);
+
+  useEffect(() => {
     if (!dismiss) return;
     Animated.timing(overlayOpacity, {
       toValue: 0,
       duration: 320,
       useNativeDriver: true,
+      isInteraction: false,
     }).start(({ finished }) => {
       if (finished) onDismissed();
     });
@@ -123,7 +163,17 @@ export function AnimatedSplashOverlay({ onFirstLayout, dismiss, onDismissed }: P
     inputRange: [0, 1],
     outputRange: [-26, 0],
   });
+  const wisdomOpacity = wisdomProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 1],
+  });
+  const wisdomTranslateY = wisdomProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [12, 0],
+  });
   const wordmarkHabitColor = isDark ? theme.colors.slate[400] : theme.colors.textSecondary;
+  const wisdomPanelBg = isDark ? "rgba(15, 23, 42, 0.42)" : "rgba(255, 255, 255, 0.62)";
+  const wisdomBorder = isDark ? "rgba(129, 140, 248, 0.16)" : "rgba(99, 102, 241, 0.14)";
 
   const handleLayout = (_e: LayoutChangeEvent) => {
     if (layoutReported.current) return;
@@ -147,7 +197,7 @@ export function AnimatedSplashOverlay({ onFirstLayout, dismiss, onDismissed }: P
         style={styles.stage}
         accessible
         accessibilityRole="image"
-        accessibilityLabel="habitPro loading"
+        accessibilityLabel={`habitPro loading. Daily wisdom. ${quote}`}
       >
         <AnimatedText
           style={[
@@ -185,6 +235,25 @@ export function AnimatedSplashOverlay({ onFirstLayout, dismiss, onDismissed }: P
           </Animated.View>
         </Animated.View>
       </View>
+      <Animated.View
+        style={[
+          styles.wisdomPanel,
+          {
+            opacity: wisdomOpacity,
+            backgroundColor: wisdomPanelBg,
+            borderColor: wisdomBorder,
+            transform: [{ translateY: wisdomTranslateY }],
+          },
+        ]}
+      >
+        <Text style={[styles.wisdomLabel, { color: theme.colors.textMuted }]}>DAILY WISDOM</Text>
+        <AnimatedText style={[styles.wisdomText, { color: theme.colors.textPrimary }]} numberOfLines={3}>
+          "{quote}"
+        </AnimatedText>
+        <Text style={[styles.wisdomStatus, { color: theme.colors.textMuted }]}>
+          Preparing today's missions
+        </Text>
+      </Animated.View>
     </Animated.View>
   );
 }
@@ -197,6 +266,7 @@ const styles = StyleSheet.create({
     elevation: 9999,
     justifyContent: "center",
     alignItems: "center",
+    paddingHorizontal: 24,
   },
   stage: {
     width: STAGE_WIDTH,
@@ -238,5 +308,33 @@ const styles = StyleSheet.create({
   wordmarkPro: {
     color: SPLASH_WORDMARK_PRO_COLOR,
     fontWeight: "700",
+  },
+  wisdomPanel: {
+    width: "100%",
+    maxWidth: 390,
+    borderRadius: 20,
+    borderWidth: 1,
+    paddingVertical: 16,
+    paddingHorizontal: 18,
+    marginTop: 8,
+  },
+  wisdomLabel: {
+    fontSize: 10,
+    lineHeight: 13,
+    fontWeight: "900",
+    letterSpacing: 1.2,
+    marginBottom: 8,
+  },
+  wisdomText: {
+    fontSize: 17,
+    lineHeight: 24,
+    fontWeight: "800",
+    letterSpacing: 0,
+  },
+  wisdomStatus: {
+    marginTop: 12,
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: "800",
   },
 });

@@ -31,7 +31,6 @@ import { useHabitStore } from '../../src/store/habitStore';
 import { useShallow } from 'zustand/react/shallow';
 import { Button } from '../../src/components/Button';
 import { Timer } from '../../src/components/Timer';
-import { QuoteCard } from '../../src/components/QuoteCard';
 import { Screen } from '../../src/components/Screen';
 import { ConfirmDialog } from '../../src/components/ConfirmDialog';
 import {
@@ -1638,9 +1637,6 @@ export default function HabitDetail() {
                     </TouchableOpacity>
                   </View>
                 ) : null}
-
-                <QuoteCard />
-
                 <View style={[styles.progressCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, borderRadius: theme.radius.lg, ...theme.shadow.card }]}>
                     <View style={styles.progressHeader}>
                         <Text style={[styles.progressLabel, { color: theme.colors.textSecondary, fontSize: theme.typography.micro }]}>Campaign Progress</Text>

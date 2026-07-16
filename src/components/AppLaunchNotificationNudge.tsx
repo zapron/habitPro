@@ -6,9 +6,9 @@ import { shouldSkipRemotePushRegistration } from "../lib/pushTokens";
 
 /**
  * One-time (per device) soft ask after cold start, once the user is signed in.
- * Delay matches splash minimum (~2s) + fade-out (~320ms) so the sheet does not sit under the overlay.
+ * Delay clears splash plus the optional daily wisdom launch moment.
  */
-const POST_SPLASH_SOFT_ASK_MS = 3000;
+const POST_SPLASH_SOFT_ASK_MS = 5200;
 
 export function AppLaunchNotificationNudge() {
   const { session, initializing } = useAuth();
