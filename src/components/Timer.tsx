@@ -193,14 +193,14 @@ const styles = StyleSheet.create({
     container: {
         flexDirection: 'row',
         alignItems: 'center',
-        padding: 20,
-        marginBottom: 32,
+        padding: 16,
+        marginBottom: 10,
         borderWidth: 1,
     },
     iconContainer: {
-        marginRight: 20,
+        marginRight: 16,
         backgroundColor: 'rgba(245, 158, 11, 0.1)',
-        padding: 10,
+        padding: 9,
         borderRadius: 18,
         borderWidth: 1,
         borderColor: 'rgba(245, 158, 11, 0.3)',

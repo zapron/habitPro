@@ -29,7 +29,7 @@ export function QuoteCard() {
             </View>
             <View style={styles.content}>
                 <Text style={[styles.label, { color: theme.colors.textMuted }]}>DAILY WISDOM</Text>
-                <Text style={[styles.text, { color: theme.colors.textPrimary }]}>"{quote}"</Text>
+                <Text style={[styles.text, { color: theme.colors.textPrimary }]} numberOfLines={2}>"{quote}"</Text>
             </View>
         </View>
     );
@@ -37,15 +37,16 @@ export function QuoteCard() {
 
 const styles = StyleSheet.create({
     container: {
-        padding: 20,
-        marginBottom: 32,
+        paddingVertical: 16,
+        paddingHorizontal: 18,
+        marginBottom: 10,
         borderWidth: 1,
         flexDirection: 'row',
         alignItems: 'flex-start',
     },
     iconContainer: {
-        marginRight: 16,
-        paddingTop: 4,
+        marginRight: 12,
+        paddingTop: 3,
     },
     content: {
         flex: 1,
@@ -53,14 +54,14 @@ const styles = StyleSheet.create({
     label: {
         fontSize: 10,
         fontWeight: 'bold',
-        letterSpacing: 1.5,
-        marginBottom: 8,
+        letterSpacing: 1.2,
+        marginBottom: 5,
         textTransform: 'uppercase',
     },
     text: {
-        fontSize: 16,
-        lineHeight: 24,
+        fontSize: 15,
+        lineHeight: 21,
         fontStyle: 'italic',
-        fontWeight: '500',
+        fontWeight: '600',
     },
 });
