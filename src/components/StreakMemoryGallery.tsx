@@ -1,17 +1,22 @@
 import { Text } from "./AppText";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
+  Animated,
+  Easing,
   View,
   Image,
   Pressable,
   StyleSheet,
   Modal,
-  ScrollView,
   useWindowDimensions,
+  type StyleProp,
+  type ViewStyle,
 } from "react-native";
+import { FlashList } from "@shopify/flash-list";
 import { Bookmark, ShieldCheck, X } from "lucide-react-native";
 import Svg, { ClipPath, Defs, Image as SvgImage, Path } from "react-native-svg";
 import { useTheme } from "../context/ThemeContext";
+import { useReducedMotion } from "../hooks/useReducedMotion";
 import type { StreakMemory } from "../types/habit";
 import {
   REPAIR_MEMORY_NOTE_SOLO,
@@ -21,6 +26,10 @@ import { formatDateDisplay } from "../utils/dateDisplay";
 import { storageThumbnailUri } from "../utils/imageThumbnail";
 
 type Entry = { dateStr: string; memory: StreakMemory; missionDay?: number | null };
+type HoneycombColumn = {
+  key: string;
+  items: Array<{ entry: Entry; index: number; row: number }>;
+};
 
 type StreakMemoryGalleryProps = {
   entries: Entry[];
@@ -35,6 +44,9 @@ type StreakMemoryGalleryProps = {
 };
 
 const HONEYCOMB_ROWS = 2;
+const HONEYCOMB_BUILD_STAGGER_MS = 58;
+const HONEYCOMB_BUILD_STAGGER_CAP_MS = 580;
+const HONEYCOMB_BUILD_DURATION_MS = 420;
 
 function uriLoadsForRemoteViewer(uri: string | undefined): boolean {
   if (!uri) return false;
@@ -86,6 +98,59 @@ function clipIdForDate(dateStr: string, index: number): string {
   return `memory_hex_${dateStr.replace(/[^a-zA-Z0-9]/g, "_")}_${index}`;
 }
 
+function HoneycombBuildTile({
+  children,
+  delay,
+  reduceMotion,
+  style,
+}: {
+  children: ReactNode;
+  delay: number;
+  reduceMotion: boolean;
+  style: StyleProp<ViewStyle>;
+}) {
+  const progress = useRef(new Animated.Value(reduceMotion ? 1 : 0)).current;
+
+  useEffect(() => {
+    progress.stopAnimation();
+    if (reduceMotion) {
+      progress.setValue(1);
+      return undefined;
+    }
+
+    progress.setValue(0);
+    const animation = Animated.timing(progress, {
+      toValue: 1,
+      duration: HONEYCOMB_BUILD_DURATION_MS,
+      delay,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+      isInteraction: false,
+    });
+    animation.start();
+    return () => {
+      animation.stop();
+    };
+  }, [delay, progress, reduceMotion]);
+
+  const scale = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.82, 1],
+  });
+  const translateY = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [8, 0],
+  });
+  const animatedStyle: Animated.WithAnimatedValue<ViewStyle> | null = reduceMotion
+    ? null
+    : {
+        opacity: progress,
+        transform: [{ scale }, { translateY }],
+      };
+
+  return <Animated.View style={[style, animatedStyle]}>{children}</Animated.View>;
+}
+
 export function StreakMemoryGallery({
   entries,
   sectionTitle = "Your moments",
@@ -93,6 +158,7 @@ export function StreakMemoryGallery({
   remotePeer = false,
 }: StreakMemoryGalleryProps) {
   const { theme, isDark } = useTheme();
+  const reduceMotion = useReducedMotion();
   const [open, setOpen] = useState<Entry | null>(null);
   const [viewerImageAspect, setViewerImageAspect] = useState<number | null>(null);
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
@@ -105,11 +171,23 @@ export function StreakMemoryGallery({
   const middleRowOffset = tileW * 0.5 + combGap * 0.5;
   const honeycombColumns = Math.max(1, Math.ceil(entries.length / HONEYCOMB_ROWS));
   const honeycombStageHeight = 4 + tileH + tileYStep * (HONEYCOMB_ROWS - 1);
-  const honeycombStageWidth = Math.max(
-    windowWidth - 32,
-    16 + (honeycombColumns - 1) * tileXStep + middleRowOffset + tileW,
-  );
+  const honeycombFootprintWidth = tileW + middleRowOffset;
+  const honeycombColumnMarginRight = tileXStep - honeycombFootprintWidth;
   const hexPath = roundedHexPath(tileW, tileH, 6);
+  const honeycombColumnData = useMemo<HoneycombColumn[]>(() => {
+    return Array.from({ length: honeycombColumns }, (_, columnIndex) => {
+      const items = Array.from({ length: HONEYCOMB_ROWS }, (_, row) => {
+        const index = columnIndex * HONEYCOMB_ROWS + row;
+        const entry = entries[index];
+        return entry ? { entry, index, row } : null;
+      }).filter((item): item is { entry: Entry; index: number; row: number } => item !== null);
+
+      return {
+        key: items.map(({ entry, index }) => `${entry.dateStr}:${index}`).join("|") || String(columnIndex),
+        items,
+      };
+    });
+  }, [entries, honeycombColumns]);
 
   const viewerUri = open?.memory?.imageUrl || open?.memory?.imageUri;
   const modalHasRenderableImage = Boolean(
@@ -180,13 +258,26 @@ export function StreakMemoryGallery({
         </View>
         <Text style={[styles.sectionHint, { color: theme.colors.textMuted }]}>{sectionHint}</Text>
 
-        <ScrollView
+        <FlashList
           horizontal
+          data={honeycombColumnData}
+          drawDistance={tileXStep * 4}
+          keyExtractor={(column) => column.key}
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.honeycombScroll}
-        >
-          <View style={[styles.honeycombStage, { width: honeycombStageWidth, height: honeycombStageHeight }]}>
-            {entries.map((item, index) => {
+          contentContainerStyle={{ paddingLeft: 8, paddingRight: middleRowOffset + 16 }}
+          style={{ height: honeycombStageHeight, overflow: "visible" }}
+          renderItem={({ item: column }) => (
+            <View
+              style={[
+                styles.honeycombColumn,
+                {
+                  width: honeycombFootprintWidth,
+                  height: honeycombStageHeight,
+                  marginRight: honeycombColumnMarginRight,
+                },
+              ]}
+            >
+              {column.items.map(({ entry: item, index, row }) => {
               const { dateStr, memory, missionDay } = item;
               const displayUri = memory.imageUrl || memory.imageUri;
               const showImage = Boolean(displayUri) && (!remotePeer || uriLoadsForRemoteViewer(displayUri));
@@ -213,132 +304,138 @@ export function StreakMemoryGallery({
 
               const dayLabel =
                 typeof missionDay === "number" && missionDay > 0 ? `D${missionDay}` : null;
-              const row = index % HONEYCOMB_ROWS;
-              const col = Math.floor(index / HONEYCOMB_ROWS);
-              const left = 8 + col * tileXStep + (row === 1 ? middleRowOffset : 0);
+              const left = row === 1 ? middleRowOffset : 0;
               const top = 2 + row * tileYStep;
               const clipId = clipIdForDate(dateStr, index);
+              const buildDelay = Math.min(index * HONEYCOMB_BUILD_STAGGER_MS, HONEYCOMB_BUILD_STAGGER_CAP_MS);
 
               return (
-                <Pressable
+                <HoneycombBuildTile
                   key={`${dateStr}-${index}`}
-                  onPress={() => setOpen({ dateStr, memory, missionDay })}
+                  delay={buildDelay}
+                  reduceMotion={reduceMotion}
                   style={[styles.hexTile, { width: tileW, height: tileH, left, top }]}
                 >
-                  <Svg width={tileW} height={tileH} viewBox={`0 0 ${tileW} ${tileH}`} style={styles.hexSvg}>
-                    <Defs>
-                      <ClipPath id={clipId}>
-                        <Path d={hexPath} />
-                      </ClipPath>
-                    </Defs>
-                    {showImage ? (
-                      <SvgImage
-                        href={{ uri: thumbUri ?? displayUri! }}
-                        width={tileW}
-                        height={tileH}
-                        preserveAspectRatio="xMidYMid slice"
-                        clipPath={`url(#${clipId})`}
-                      />
-                    ) : (
+                  <Pressable
+                    onPress={() => setOpen({ dateStr, memory, missionDay })}
+                    style={styles.hexPressable}
+                  >
+                    <Svg width={tileW} height={tileH} viewBox={`0 0 ${tileW} ${tileH}`} style={styles.hexSvg}>
+                      <Defs>
+                        <ClipPath id={clipId}>
+                          <Path d={hexPath} />
+                        </ClipPath>
+                      </Defs>
+                      {showImage ? (
+                        <SvgImage
+                          href={{ uri: thumbUri ?? displayUri! }}
+                          width={tileW}
+                          height={tileH}
+                          preserveAspectRatio="xMidYMid slice"
+                          clipPath={`url(#${clipId})`}
+                        />
+                      ) : (
+                        <Path
+                          d={hexPath}
+                          fill={
+                            isSquadRepair
+                              ? isDark
+                                ? "#082f49"
+                                : "#ecfeff"
+                              : textOnlyThumb
+                                ? isDark
+                                  ? "#21194a"
+                                  : "#eef2ff"
+                                : memoryCardBg
+                          }
+                        />
+                      )}
                       <Path
                         d={hexPath}
-                        fill={
+                        fill="transparent"
+                        stroke={
                           isSquadRepair
                             ? isDark
-                              ? "#082f49"
-                              : "#ecfeff"
-                            : textOnlyThumb
+                              ? "rgba(34, 211, 238, 0.58)"
+                              : "rgba(6, 182, 212, 0.42)"
+                            : showImage
                               ? isDark
-                                ? "#21194a"
-                                : "#eef2ff"
-                              : memoryCardBg
+                                ? "rgba(255, 255, 255, 0.22)"
+                                : "rgba(255, 255, 255, 0.72)"
+                              : memoryBorder
                         }
+                        strokeWidth={1.8}
                       />
-                    )}
-                    <Path
-                      d={hexPath}
-                      fill="transparent"
-                      stroke={
-                        isSquadRepair
-                          ? isDark
-                            ? "rgba(34, 211, 238, 0.58)"
-                            : "rgba(6, 182, 212, 0.42)"
-                          : showImage
-                            ? isDark
-                              ? "rgba(255, 255, 255, 0.22)"
-                              : "rgba(255, 255, 255, 0.72)"
-                            : memoryBorder
-                      }
-                      strokeWidth={1.8}
-                    />
-                  </Svg>
+                    </Svg>
 
-                  {isSquadRepair ? (
-                    <View
-                      style={[styles.hexOverlay, { paddingHorizontal: tileW * 0.2 }]}
-                      pointerEvents="none"
-                    >
+                    {isSquadRepair ? (
                       <View
+                        style={[styles.hexOverlay, { paddingHorizontal: tileW * 0.2 }]}
+                        pointerEvents="none"
+                      >
+                        <View
+                          style={[
+                            styles.hexIconShell,
+                            {
+                              backgroundColor: isDark ? "rgba(34, 211, 238, 0.16)" : "rgba(6, 182, 212, 0.13)",
+                              borderColor: isDark ? "rgba(125, 211, 252, 0.42)" : "rgba(6, 182, 212, 0.34)",
+                            },
+                          ]}
+                        >
+                          <ShieldCheck size={18} color={theme.colors.cyan[400]} strokeWidth={2.4} />
+                        </View>
+                        <Text style={[styles.hexKicker, { color: theme.colors.cyan[400] }]} numberOfLines={1}>
+                          SAVE
+                        </Text>
+                      </View>
+                    ) : textOnlyThumb || hasLocalOnlyPhoto || !showImage ? (
+                      <View
+                        style={[styles.hexOverlay, { paddingHorizontal: tileW * 0.18 }]}
+                        pointerEvents="none"
+                      >
+                        <Text style={[styles.hexQuote, { color: theme.colors.indigo[400] }]}>{'\u201C'}</Text>
+                        <Text style={[styles.hexKicker, { color: memoryKickerColor }]} numberOfLines={1}>
+                          {hasLocalOnlyPhoto ? "PHOTO" : repairKicker ?? "NOTE"}
+                        </Text>
+                        {hasLocalOnlyPhoto ? (
+                          <Text style={[styles.hexNotePreview, { color: theme.colors.textMuted }]} numberOfLines={2}>
+                            On their device
+                          </Text>
+                        ) : textOnlyThumb ? (
+                          <Text style={[styles.hexNotePreview, { color: memoryTextColor }]} numberOfLines={2}>
+                            {noteTrim}
+                          </Text>
+                        ) : null}
+                      </View>
+                    ) : null}
+
+                    {dayLabel ? (
+                      <View
+                        pointerEvents="none"
                         style={[
-                          styles.hexIconShell,
+                          styles.hexDayPill,
                           {
-                            backgroundColor: isDark ? "rgba(34, 211, 238, 0.16)" : "rgba(6, 182, 212, 0.13)",
-                            borderColor: isDark ? "rgba(125, 211, 252, 0.42)" : "rgba(6, 182, 212, 0.34)",
+                            backgroundColor: showImage
+                              ? "rgba(15, 23, 42, 0.78)"
+                              : isDark
+                                ? "rgba(15, 23, 42, 0.84)"
+                                : "rgba(255, 255, 255, 0.88)",
+                            borderColor: showImage ? "rgba(255, 255, 255, 0.42)" : memoryBorder,
                           },
                         ]}
                       >
-                        <ShieldCheck size={18} color={theme.colors.cyan[400]} strokeWidth={2.4} />
+                        <Text style={[styles.hexDayText, { color: showImage ? "#ffffff" : theme.colors.textSecondary }]}>
+                          {dayLabel}
+                        </Text>
                       </View>
-                      <Text style={[styles.hexKicker, { color: theme.colors.cyan[400] }]} numberOfLines={1}>
-                        SAVE
-                      </Text>
-                    </View>
-                  ) : textOnlyThumb || hasLocalOnlyPhoto || !showImage ? (
-                    <View
-                      style={[styles.hexOverlay, { paddingHorizontal: tileW * 0.18 }]}
-                      pointerEvents="none"
-                    >
-                      <Text style={[styles.hexQuote, { color: theme.colors.indigo[400] }]}>{'\u201C'}</Text>
-                      <Text style={[styles.hexKicker, { color: memoryKickerColor }]} numberOfLines={1}>
-                        {hasLocalOnlyPhoto ? "PHOTO" : repairKicker ?? "NOTE"}
-                      </Text>
-                      {hasLocalOnlyPhoto ? (
-                        <Text style={[styles.hexNotePreview, { color: theme.colors.textMuted }]} numberOfLines={2}>
-                          On their device
-                        </Text>
-                      ) : textOnlyThumb ? (
-                        <Text style={[styles.hexNotePreview, { color: memoryTextColor }]} numberOfLines={2}>
-                          {noteTrim}
-                        </Text>
-                      ) : null}
-                    </View>
-                  ) : null}
-
-                  {dayLabel ? (
-                    <View
-                      pointerEvents="none"
-                      style={[
-                        styles.hexDayPill,
-                        {
-                          backgroundColor: showImage
-                            ? "rgba(15, 23, 42, 0.78)"
-                            : isDark
-                              ? "rgba(15, 23, 42, 0.84)"
-                              : "rgba(255, 255, 255, 0.88)",
-                          borderColor: showImage ? "rgba(255, 255, 255, 0.42)" : memoryBorder,
-                        },
-                      ]}
-                    >
-                      <Text style={[styles.hexDayText, { color: showImage ? "#ffffff" : theme.colors.textSecondary }]}>
-                        {dayLabel}
-                      </Text>
-                    </View>
-                  ) : null}
-                </Pressable>
+                    ) : null}
+                  </Pressable>
+                </HoneycombBuildTile>
               );
-            })}
-          </View>
-        </ScrollView>
+              })}
+            </View>
+          )}
+        />
         <View style={[styles.combRail, { backgroundColor: memoryBorder }]} />
       </View>
 
@@ -439,12 +536,16 @@ const styles = StyleSheet.create({
   sectionHead: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 6 },
   sectionTitle: { fontSize: 17, fontWeight: "800" },
   sectionHint: { fontSize: 12, marginBottom: 10, lineHeight: 17 },
-  honeycombScroll: { paddingRight: 16 },
-  honeycombStage: {
+  honeycombColumn: {
     position: "relative",
+    overflow: "visible",
   },
   hexTile: {
     position: "absolute",
+  },
+  hexPressable: {
+    width: "100%",
+    height: "100%",
   },
   hexSvg: {
     position: "absolute",
