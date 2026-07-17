@@ -1,34 +1,46 @@
 # HabitPro Current Work
 
-Last updated: 2026-07-16.
+Last updated: 2026-07-17.
 
 This file captures the current working state so future chats do not need the full conversation.
 
 ## Current Worktree State
 
-There are intentional uncommitted changes. Do not revert them unless the user explicitly asks.
+There are no intentional uncommitted app code changes at this checkpoint. The current documentation / handoff audit changes are intentional until they are committed. Do not revert unrelated local files unless the user explicitly asks.
 
 Recent code commits already created:
 
 - `1c5d5a3 feat: add mini mission timer check-in state`
 - `6197f56 feat: update mini mission check-in UI`
 - `c3b1bdf feat: revamp mission moment gallery`
+- `1ecb823 feat: virtualize mission moment honeycomb`
+- `f94bacf perf: smooth mission detail rendering`
+- `d1fc011 style: compact mission detail cards`
+- `2884de9 docs: add project handoff context`
+- `075cabe feat: add daily wisdom launch splash`
+- `5131c7a feat: show cohort streak dots newest first`
 
-Key current uncommitted code areas:
+Latest committed product changes:
 
-- Mission detail spacing polish.
-- Mission moment honeycomb optimization and build-in animation.
-- Android mission-detail performance fixes for marker batching and non-blocking decorative animations.
-- Home habit-card check-in pulse animation marked non-blocking.
+- Daily Wisdom moved out of mission detail and into the existing launch splash sequence.
+- `SplashGate` now keeps the overlay through a short minimum display window and waits for signed-in startup data readiness or a max cap.
+- `AppLaunchNotificationNudge` delay was increased so it does not collide with launch wisdom.
+- Mission detail no longer renders `QuoteCard`.
+- Group/cohort streak dots now render newest-first and omit future/unreached dots.
+
+Current documentation / handoff updates:
+
+- `agent.md` now tells future agents to read `docs/WORK_HISTORY.md` for longer sessions.
+- `docs/WORK_HISTORY.md` records chronological development history.
+- `docs/MAC_SETUP_HANDOFF.md` captures the Windows-to-Mac migration checklist.
+- `.codex/skills/habitpro-session-logger/` adds a repo-local Codex skill for end-of-session logging.
 
 Known untracked docs/workspace files may exist:
 
 - `.claude/`
-- `app-architecture.md`
-- `docs/CURRENT_WORK.md`
-- `docs/FUTURE_AGENT_HANDOFF.md`
-- `docs/PROJECT_CONTEXT.md`
-- `docs/IOS_BUILD_PLAYBOOK.md`
+- `.codex/skills/habitpro-session-logger/`
+- `docs/MAC_SETUP_HANDOFF.md`
+- `docs/WORK_HISTORY.md`
 - `habitPro-latest.code-workspace`
 - `habitPro.code-workspace`
 - `habitPro_tryItFirst.code-workspace`
@@ -140,9 +152,62 @@ Important files:
 
 If Android still feels delayed when opening a 75-day mission:
 
-- First test disabling the honeycomb build animation only on Android.
+- First test Android Home without the segmented per-day `RingDayArcs` in `src/components/HabitCard.tsx`.
+- Then test mission detail with `StreakMemoryGallery` temporarily disabled on Android.
+- Then test disabling the honeycomb build animation only on Android.
 - Then test lowering `HONEYCOMB_BUILD_STAGGER_CAP_MS`.
 - Avoid increasing initial marker batch size until Android navigation is confirmed smooth.
+
+## Daily Wisdom Launch Splash
+
+Implemented in commit:
+
+- `075cabe feat: add daily wisdom launch splash`
+
+Current behavior:
+
+- `src/components/AnimatedSplashOverlay.tsx` displays a deterministic daily quote under the habitPro lockup.
+- `src/components/SplashGate.tsx` waits for a minimum launch window and signed-in startup readiness when available.
+- The old mission detail `QuoteCard` was removed from `app/habit/[id].tsx`.
+
+Important caution:
+
+- The user clarified that the Android issue is not the splash itself. The visible jank starts after Home appears.
+- Do not spend more time blaming the splash unless profiling shows splash-specific stalls.
+
+## Cohort Streak Dot Timeline
+
+Implemented in commit:
+
+- `5131c7a feat: show cohort streak dots newest first`
+
+Current behavior:
+
+- `src/components/CohortPeerStreakDots.tsx` renders each participant's dots from current/reached day back to day 1.
+- Future/unreached dots are omitted.
+- The legend now says `Current` instead of `Today` / `Upcoming`.
+- Dot taps still fetch memory details lazily through `fetchChallengeMemoryDetail()`.
+
+## Current Android Performance Investigation
+
+User reports:
+
+- S24 Ultra shows Home jank after splash and delayed touches.
+- iPhone 17 is smooth.
+- Mission detail touch responses can queue and fire after moments start appearing.
+
+Current diagnosis, not yet fixed:
+
+- Home card `RingDayArcs` renders one SVG `Circle` per mission day. A 75-day card creates about 75 SVG nodes for a tiny ring.
+- Android `react-native-svg` node creation can be significantly heavier than iOS.
+- Mission detail still has heavy Android surfaces: Active Trail cells, lock icons, honeycomb SVG clipping/images, and memory date mapping.
+
+Recommended next experiments:
+
+1. Android-only replace Home `RingDayArcs` with a lightweight progress ring or progress text for long missions.
+2. Temporarily disable `StreakMemoryGallery` on Android detail to confirm touch delay source.
+3. Disable honeycomb build animation on Android if moments are confirmed as the blocker.
+4. Add timing logs around Home first render, HabitCard render count, detail mount, and memory gallery mount.
 
 ## Validation Already Run Recently
 
@@ -159,6 +224,31 @@ Also run before handing off a release build:
 git diff --check
 npx tsc --noEmit
 ```
+
+After commits `075cabe` and `5131c7a`, these passed:
+
+```bash
+npx tsc --noEmit
+git diff --check
+cmd /c npx expo export --platform ios --output-dir .expo-export-check
+```
+
+The export folder was removed after verification.
+
+OTA update note:
+
+- `npm run update:preview -- --message "Preview daily wisdom splash and cohort timeline"` was attempted from the sandbox.
+- It failed due to Expo GraphQL/network/log write restrictions, and escalation was denied as external data export.
+- User should run the command locally when ready.
+
+After the documentation / handoff audit, these passed:
+
+```bash
+npx tsc --noEmit
+git diff --check
+```
+
+`git diff --check` only printed Windows line-ending warnings. The skill validator command was attempted, but the local Python environment is missing the `yaml` module required by `quick_validate.py`.
 
 ## Suggested Test Checklist
 
@@ -210,3 +300,4 @@ Possible future work:
 - iOS build/TestFlight setup.
 - Further iOS/Android scroll performance pass for long mission detail screens.
 - Commit current changes in phases if user asks.
+- Mac migration setup and environment recreation.

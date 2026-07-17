@@ -59,7 +59,7 @@ Install the build from the EAS build link on the registered iPhone.
 ## TestFlight Path
 
 1. Enroll in Apple Developer Program.
-2. Create App Store Connect app record.
+2. Create App Store Connect app record. The user reported Apple Developer Program enrollment is active as of 2026-07-17.
 3. Use bundle id `com.rakti.habitpro`.
 4. Build production:
 
@@ -75,6 +75,8 @@ eas submit --platform ios
 
 6. Add internal testers in App Store Connect TestFlight.
 
+For internal TestFlight, Sign in with Apple is not required just to install and test. It may still matter for external beta/App Review because Google sign-in exists.
+
 ## App Store Review Readiness
 
 Before production App Review, plan for:
@@ -87,4 +89,3 @@ Before production App Review, plan for:
 - Screenshots.
 - In-app purchase/subscription products if RevenueCat is live.
 - Demo account or review notes.
-

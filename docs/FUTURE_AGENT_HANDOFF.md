@@ -24,12 +24,13 @@ Then inspect the files relevant to the user request.
 ## Current User Priorities
 
 - iPhone-first polish and real-device testing.
-- Android performance must stay smooth on modern phones, not only older-device fallback paths.
+- Android performance must stay smooth on modern phones, not only older-device fallback paths. The current pain point is S24 Ultra Home/detail jank after splash.
 - Compact but clear mission detail UI.
 - Reliable photo picker and memory flows on iOS.
 - Mission moments should feel visually special, but not at the cost of habit-card-to-detail navigation.
 - Mini missions that are humane for real workouts/timed tasks.
 - Build path for iOS physical device and TestFlight.
+- Mac migration so Windows and Mac can both continue from committed docs/history.
 
 ## Current Technical Risk Areas
 
@@ -42,6 +43,9 @@ Then inspect the files relevant to the user request.
 - Active Trail marker batching is intentional. `visibleActiveTrailDays` should continue to limit initially rendered markers for long missions.
 - Moments should not be gated on every marker batch completing. `memoryGalleryEntries` should depend on `detailHeavyContentReady`, not `visibleGridDayCount >= totalDays`.
 - App Store Review will likely require Sign in with Apple because Google sign-in exists.
+- Daily Wisdom now lives in `AnimatedSplashOverlay`; do not re-add the mission detail quote card unless the product direction changes.
+- Cohort dots now show newest/current first and omit future dots.
+- Home `HabitCard` segmented `RingDayArcs` is a current Android performance suspect for long missions because it creates one SVG `Circle` per mission day.
 
 ## Good Next Actions
 
@@ -66,6 +70,14 @@ If the user reports mission-detail jank:
 4. Confirm decorative animations have `isInteraction: false`.
 5. If Android still lags, temporarily disable the honeycomb build animation on Android before changing the layout.
 
+If the user reports Home jank after splash:
+
+1. Inspect `app/(tabs)/index.tsx` and `src/components/HabitCard.tsx`.
+2. Check how many `HabitCard` rows mount initially.
+3. Temporarily replace Android long-mission `RingDayArcs` with a lightweight progress ring/text.
+4. Confirm whether touch response improves before changing mission detail.
+5. Keep splash out of the blame path unless profiling shows splash-specific stalls; the user clarified the jank starts on Home after splash.
+
 If the user asks for iOS build:
 
 1. Confirm Apple Developer enrollment is active.
@@ -73,3 +85,10 @@ If the user asks for iOS build:
 3. Confirm Supabase migration is applied.
 4. Use `npm run build:ios:preview` for physical iPhone ad hoc test.
 5. Use `npm run build:ios` plus `eas submit --platform ios` for TestFlight.
+
+If ending a long session:
+
+1. Read `.codex/skills/habitpro-session-logger/SKILL.md`.
+2. Update `docs/CURRENT_WORK.md`.
+3. Append a dated entry to `docs/WORK_HISTORY.md`.
+4. Update `app-architecture.md` only if architecture or cross-cutting behavior changed.

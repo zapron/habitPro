@@ -55,6 +55,14 @@ Read these in this order for future work:
 
 ## Recent Product Decisions
 
+### Daily Wisdom Launch
+
+- Daily Wisdom is no longer a mission detail card.
+- `src/components/AnimatedSplashOverlay.tsx` now shows daily wisdom under the habitPro launch lockup.
+- `src/components/SplashGate.tsx` owns launch timing and waits for signed-in startup readiness when available.
+- `src/components/AppLaunchNotificationNudge.tsx` waits longer so notification permission prompts do not collide with launch wisdom.
+- The user clarified the Android performance issue begins after Home appears, not in splash itself.
+
 ### iOS Optimization
 
 - The app is being actively tested on a physical iPhone 17.
@@ -64,6 +72,7 @@ Read these in this order for future work:
 ### Mission Detail UI
 
 - Mission detail was made more compact.
+- The old `QuoteCard` was removed from mission detail to keep the screen focused on check-in/progress.
 - Daily grid now shows only current active day and completed days in reverse-style progress rather than rendering all locked future days.
 - Moments/memories were moved above the grid so users see proof before progress markers.
 - Mission type and daily reminder controls were compressed into a compact card, with iOS-specific layout fixes.
@@ -101,6 +110,22 @@ Recommended V1:
 - No speed ranking for Timer Check-In squads.
 
 Do not treat this as a tiny UI toggle. It touches local state, Supabase RPCs, Live Squad participant statuses, notifications, and board UI.
+
+### Cohort Timeline
+
+- Group/cohort participant dots now show current/reached day first and walk backward to day 1.
+- Future/unreached dots are omitted.
+- The row still uses lightweight memory markers and fetches full memory detail only on tap.
+
+### Android Performance Investigation
+
+- S24 Ultra has reported jank on Home after splash and delayed touches in mission detail.
+- iPhone 17 is smooth, so Android-specific render/native-view cost is likely.
+- Suspects:
+  - Home `HabitCard` segmented `RingDayArcs` creates one SVG `Circle` per mission day.
+  - Mission detail Active Trail and honeycomb moments still mount many views/SVG/image nodes.
+  - Honeycomb uses SVG clipping/images and should remain virtualized.
+- Suggested first experiment: Android-only lightweight Home ring for long missions, then isolate mission detail gallery.
 
 ## Build And Release Direction
 
@@ -146,3 +171,5 @@ npm run db:push
 Tell the new agent:
 
 > Read `agent.md`, `docs/PROJECT_CONTEXT.md`, `docs/CURRENT_WORK.md`, and `app-architecture.md` before making changes. Continue from the current working tree. Do not revert uncommitted user changes.
+
+For longer work sessions, also read `docs/WORK_HISTORY.md` and use `.codex/skills/habitpro-session-logger/SKILL.md` before ending the session.

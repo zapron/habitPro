@@ -1,9 +1,11 @@
 ## Cursor agent instructions (habitPro)
 
 - On new sessions, read `docs/PROJECT_CONTEXT.md` and `docs/CURRENT_WORK.md` after this file.
+- For longer sessions, also scan `docs/WORK_HISTORY.md` for the latest dated handoff.
 - Do **not** create git commits unless the user explicitly approves first.
 - When proposing a commit, show what will be included (staged diff/stat) and ask for approval.
 - Do **not** push to remote unless the user explicitly asks.
+- At the end of substantial development sessions, update `docs/CURRENT_WORK.md` and append to `docs/WORK_HISTORY.md`. Use the repo skill in `.codex/skills/habitpro-session-logger/SKILL.md` as the checklist.
 
 ## HabitPro UI preferences
 

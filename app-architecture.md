@@ -1,6 +1,6 @@
 # HabitPro App Architecture
 
-Last updated: 2026-07-16
+Last updated: 2026-07-17
 
 This document is a practical map of the HabitPro mobile app for future AI agents and developers. It describes what the app does, where important behavior lives, how data moves between local state and Supabase, and which files are risky to change.
 
@@ -71,6 +71,8 @@ Expo updates are now an explicit part of the app shell.
 Files:
 
 - `src/components/OtaUpdateManager.tsx`
+- `src/components/AnimatedSplashOverlay.tsx`
+- `src/components/SplashGate.tsx`
 - `app.json`
 - `eas.json`
 - `package.json`
@@ -93,6 +95,13 @@ Current build/update model:
 - Skips OTA checks while the force-update policy says a native update is required.
 - Checks once after launch and again when the app returns to foreground, with a cooldown.
 - Downloads available JS/assets update, then prompts the user to restart now or later.
+
+Launch splash behavior:
+
+- `SplashGate` hides the native splash once the custom overlay is laid out.
+- `AnimatedSplashOverlay` animates the habitPro lockup and shows a deterministic daily wisdom quote below it.
+- For signed-in users, `SplashGate` waits for local store hydration plus auth sync readiness when available, with a short max cap.
+- Home still owns the visible dashboard; do not add a second post-splash overlay unless the Home flash behavior is explicitly solved.
 
 OTA-safe changes:
 
@@ -140,6 +149,12 @@ Provider order:
 - OTA update check/download/restart prompt.
 - Mini mission local notification reconciliation.
 - Supabase Realtime subscription for applied squad streak repairs.
+
+`SplashGate` now handles:
+
+- Custom habitPro splash overlay.
+- Daily Wisdom launch copy.
+- Minimum display timing and signed-in startup readiness handoff.
 
 Avoid casually reordering providers. Billing depends on auth, premium depends on billing/auth, username and notification gates depend on theme/auth, and app version wraps the force-update UI.
 
@@ -336,6 +351,7 @@ Important behavior:
 - Home filters habits based on active segment and mission/report state.
 - Home has animated indicators for live minis and available check-ins.
 - Home notification bell uses cached unread notification count first, then refreshes from Supabase.
+- `HabitCard` currently uses a segmented SVG streak/progress ring (`RingDayArcs`) that creates one `Circle` per mission day. This is useful visually but is a current Android performance suspect for long missions such as 75-day challenges.
 
 Notification count helpers:
 
@@ -396,6 +412,7 @@ Mission detail performance behavior:
 - Moments should be allowed to render after `detailHeavyContentReady`. They should not wait for `visibleGridDayCount >= totalDays`.
 - Decorative animations in this path should use `isInteraction: false` when they are not part of a tap/gesture. This keeps `InteractionManager.runAfterInteractions()` from being delayed, especially on Android.
 - `optimizeGridScrollForLongGrid` is intentionally platform-neutral for long marker lists.
+- The old mission detail `QuoteCard` was removed; Daily Wisdom is now a launch-splash experience.
 
 ## Mini Missions
 
@@ -522,6 +539,7 @@ Streaks tab:
 - Dots use lightweight memory markers initially.
 - Actual memory content is fetched only when tapping a dot.
 - For community/image memory details, `challenge-memory.tsx` is used.
+- Participant dots render newest/current-first and omit future/unreached dots so users do not scroll to the far end to see the latest state.
 
 Activity tab:
 
@@ -872,6 +890,14 @@ Several flows were optimized for older phones:
 - Use native-driver animations where possible.
 - Mark decorative/looping animations with `isInteraction: false` when they should not delay `InteractionManager` work.
 - For mission detail, preserve staged marker rendering and virtualized honeycomb moments; Android navigation can regress if all markers or all SVG image tiles mount at once.
+
+Current Android performance investigation:
+
+- User reports Home jank after splash and delayed mission-detail touches on S24 Ultra, while iPhone 17 remains smooth.
+- Do not assume the splash is the source; user clarified the visible issue starts after Home appears.
+- First suspect: Home `HabitCard` segmented `RingDayArcs` on long missions. It creates one SVG circle per mission day.
+- Second suspect: mission detail Active Trail plus honeycomb moments mounting.
+- Recommended experiments: Android-only lightweight Home ring, then temporarily disable `StreakMemoryGallery` on Android to isolate detail jank.
 
 Important performance files:
 

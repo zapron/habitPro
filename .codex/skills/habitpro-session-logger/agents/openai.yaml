@@ -1,0 +1,4 @@
+interface:
+  display_name: "HabitPro Session Logger"
+  short_description: "Log HabitPro session handoffs"
+  default_prompt: "Update the HabitPro session log and handoff docs for today."
