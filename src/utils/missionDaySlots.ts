@@ -135,6 +135,15 @@ export function missionDayNumberForCalendarDate(habit: Habit, dateStr: string, n
   return null;
 }
 
+export function missionDayNumberMapForHabit(habit: Habit, nowMs: number = Date.now()): Map<string, number> {
+  const td = Math.max(1, habit.totalDays ?? 21);
+  const out = new Map<string, number>();
+  for (let i = 0; i < td; i++) {
+    out.set(calendarDateForHabitMissionDayIndex(habit, i, nowMs), i + 1);
+  }
+  return out;
+}
+
 /** Whether this calendar date may be toggled (only the current 24h slot). */
 export function isHabitCalendarDateToggleable(habit: Habit, dateStr: string, nowMs: number): boolean {
   if (!usesCalendarDayMission(habit)) {

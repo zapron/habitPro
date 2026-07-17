@@ -53,7 +53,7 @@ import {
   getHabitMissionTimeZone,
   isHabitCalendarDateToggleable,
   MS_PER_MISSION_DAY,
-  missionDayNumberForCalendarDate,
+  missionDayNumberMapForHabit,
   usesCalendarDayMission,
 } from '../../src/utils/missionDaySlots';
 import { isMissionGridFull } from '../../src/utils/habitDerived';
@@ -442,6 +442,7 @@ function isValidHHMM(v: string): boolean {
 }
 
 export default function HabitDetail() {
+    const renderStartedAt = Date.now();
     const { id } = useLocalSearchParams<{ id?: string | string[] }>();
     const { repair, repairDate } = useLocalSearchParams<{ repair?: string; repairDate?: string }>();
     const router = useRouter();
@@ -538,6 +539,11 @@ export default function HabitDetail() {
     const [pendingExitAfterRemove, setPendingExitAfterRemove] = useState(false);
     const [detailHeavyContentReady, setDetailHeavyContentReady] = useState(false);
     const [visibleGridDayCount, setVisibleGridDayCount] = useState(INITIAL_GRID_RENDER_DAYS);
+    const mountedAtRef = useRef(renderStartedAt);
+    const latestRenderStartedAtRef = useRef(renderStartedAt);
+    const firstCommitLoggedRef = useRef(false);
+    const memoryReadyLoggedRef = useRef(false);
+    latestRenderStartedAtRef.current = renderStartedAt;
 
     const [reminderEditorOpen, setReminderEditorOpen] = useState(false);
     const [reminderDraft, setReminderDraft] = useState("21:00");
@@ -616,6 +622,42 @@ export default function HabitDetail() {
     const pendingMemoryRef = useRef<{ dateStr: string; day: number; dayIndex: number } | null>(null);
 
     useEffect(() => {
+        if (!__DEV__) return undefined;
+        firstCommitLoggedRef.current = false;
+        memoryReadyLoggedRef.current = false;
+        mountedAtRef.current = Date.now();
+        const stopProbe = startJsStallProbe(`habit.detail.${habitId ?? "unknown"}`, {
+            durationMs: 8000,
+            intervalMs: 120,
+            slowMs: 120,
+        });
+        console.info(
+            `[habitPro:perf] habit.detail.mounted ${JSON.stringify({
+                habitId,
+                hasHabit: Boolean(habit),
+                platform: Platform.OS,
+            })}`,
+        );
+        return stopProbe;
+    }, [habitId]);
+
+    useEffect(() => {
+        if (!__DEV__ || firstCommitLoggedRef.current) return;
+        firstCommitLoggedRef.current = true;
+        console.info(
+            `[habitPro:perf] habit.detail.firstCommit ${Date.now() - latestRenderStartedAtRef.current}ms ${JSON.stringify({
+                sinceMountMs: Date.now() - mountedAtRef.current,
+                habitId,
+                hasHabit: Boolean(habit),
+                totalDays,
+                completed: habit?.completedDates.length ?? 0,
+                memories: Object.keys(habit?.streakMemories ?? {}).length,
+                detailHeavyContentReady,
+            })}`,
+        );
+    }, [detailHeavyContentReady, habit, habitId, totalDays]);
+
+    useEffect(() => {
         const tick = habit && !habit.isCompleted ? 30_000 : 60_000;
         const t = setInterval(() => setNow(Date.now()), tick);
         return () => clearInterval(t);
@@ -641,12 +683,29 @@ export default function HabitDetail() {
     const milestoneSet = useMemo(() => new Set(milestones), [milestones]);
     const repairedDateSet = useMemo(() => new Set(habit?.repairedDates ?? []), [habit?.repairedDates]);
     const streakMemoryCount = useMemo(() => Object.keys(habit?.streakMemories ?? {}).length, [habit?.streakMemories]);
+    const missionDayByDate = useMemo(() => {
+        return traceSync("habit.detail.missionDayByDate", () => {
+            return habit ? missionDayNumberMapForHabit(habit) : new Map<string, number>();
+        });
+    }, [habit]);
     const shouldDeferHeavyMissionContent =
         totalDays > INITIAL_GRID_RENDER_DAYS || streakMemoryCount > HEAVY_MOMENTS_THRESHOLD;
     const initialGridDayCount = Math.min(totalDays, shouldDeferHeavyMissionContent ? INITIAL_GRID_RENDER_DAYS : totalDays);
 
     useFocusEffect(
         useCallback(() => {
+            const focusStartedAt = Date.now();
+            if (__DEV__) {
+                console.info(
+                    `[habitPro:perf] habit.detail.heavyFocusStart ${JSON.stringify({
+                        habitId,
+                        totalDays,
+                        initialGridDayCount,
+                        shouldDeferHeavyMissionContent,
+                        streakMemoryCount,
+                    })}`,
+                );
+            }
             let cancelled = false;
             let task: { cancel?: () => void } | null = null;
 
@@ -654,6 +713,9 @@ export default function HabitDetail() {
 
             if (!shouldDeferHeavyMissionContent) {
                 setDetailHeavyContentReady(true);
+                if (__DEV__) {
+                    console.info(`[habitPro:perf] habit.detail.heavyReadyImmediate ${Date.now() - focusStartedAt}ms`);
+                }
                 return () => {
                     cancelled = true;
                 };
@@ -662,8 +724,18 @@ export default function HabitDetail() {
             setDetailHeavyContentReady(false);
             task = InteractionManager.runAfterInteractions(() => {
                 if (cancelled) return;
+                const interactionsDoneAt = Date.now();
                 setVisibleGridDayCount(initialGridDayCount);
                 setDetailHeavyContentReady(true);
+                if (__DEV__) {
+                    console.info(
+                        `[habitPro:perf] habit.detail.heavyReadyAfterInteractions ${interactionsDoneAt - focusStartedAt}ms ${JSON.stringify({
+                            habitId,
+                            initialGridDayCount,
+                            totalDays,
+                        })}`,
+                    );
+                }
             });
 
             return () => {
@@ -676,28 +748,55 @@ export default function HabitDetail() {
     useEffect(() => {
         if (!detailHeavyContentReady || visibleGridDayCount >= totalDays) return undefined;
         const timer = setTimeout(() => {
-            setVisibleGridDayCount((prev) => Math.min(totalDays, prev + GRID_RENDER_BATCH_DAYS));
+            setVisibleGridDayCount((prev) => {
+                const next = Math.min(totalDays, prev + GRID_RENDER_BATCH_DAYS);
+                if (__DEV__) {
+                    console.info(
+                        `[habitPro:perf] habit.detail.gridBatch ${JSON.stringify({
+                            habitId,
+                            prev,
+                            next,
+                            totalDays,
+                        })}`,
+                    );
+                }
+                return next;
+            });
         }, GRID_RENDER_BATCH_DELAY_MS);
         return () => clearTimeout(timer);
-    }, [detailHeavyContentReady, totalDays, visibleGridDayCount]);
+    }, [detailHeavyContentReady, habitId, totalDays, visibleGridDayCount]);
 
     const memoryGalleryEntries = useMemo(() => {
-        if (!habit || !detailHeavyContentReady) return [];
-        const raw = habit.streakMemories ?? {};
-        return Object.entries(raw)
-            .filter(([, memory]) => {
-                if (memory.checkInOnly) {
-                    return Boolean(memory.note?.trim() || memory.imageUrl || memory.imageUri);
-                }
-                return true;
-            })
-            .map(([dateStr, memory]) => ({
-                dateStr,
-                memory,
-                missionDay: missionDayNumberForCalendarDate(habit, dateStr),
-            }))
-            .sort((a, b) => (a.dateStr < b.dateStr ? 1 : -1));
-    }, [detailHeavyContentReady, habit]);
+        return traceSync("habit.detail.memoryGalleryEntries", () => {
+            if (!habit || !detailHeavyContentReady) return [];
+            const raw = habit.streakMemories ?? {};
+            const entries = Object.entries(raw)
+                .filter(([, memory]) => {
+                    if (memory.checkInOnly) {
+                        return Boolean(memory.note?.trim() || memory.imageUrl || memory.imageUri);
+                    }
+                    return true;
+                })
+                .map(([dateStr, memory]) => ({
+                    dateStr,
+                    memory,
+                    missionDay: missionDayByDate.get(dateStr) ?? null,
+                }))
+                .sort((a, b) => (a.dateStr < b.dateStr ? 1 : -1));
+            if (__DEV__ && entries.length > 0 && !memoryReadyLoggedRef.current) {
+                memoryReadyLoggedRef.current = true;
+                console.info(
+                    `[habitPro:perf] habit.detail.memoryEntriesReady ${Date.now() - mountedAtRef.current}ms ${JSON.stringify({
+                        habitId,
+                        entries: entries.length,
+                        rawMemories: Object.keys(raw).length,
+                        detailHeavyContentReady,
+                    })}`,
+                );
+            }
+            return entries;
+        });
+    }, [detailHeavyContentReady, habit, habitId, missionDayByDate]);
 
     const showMissionReportInsteadOfTimer = useMemo(() => {
         if (!habit) return false;
@@ -708,19 +807,21 @@ export default function HabitDetail() {
     const activeMissionDaySlot = habit ? getHabitActiveMissionDaySlot(habit, now) : null;
     const useActiveTrailGrid = totalDays > INITIAL_GRID_RENDER_DAYS;
     const activeTrailReachedDay = useMemo(() => {
-        if (!habit) return 1;
-        let reached = activeMissionDaySlot ?? 0;
-        const memoryDays = Object.keys(habit.streakMemories ?? {})
-            .map((dateStr) => missionDayNumberForCalendarDate(habit, dateStr, now))
-            .filter((day): day is number => typeof day === 'number');
-        const completedDays = (habit.completedDates ?? [])
-            .map((dateStr) => missionDayNumberForCalendarDate(habit, dateStr, now))
-            .filter((day): day is number => typeof day === 'number');
-        for (const day of [...memoryDays, ...completedDays]) {
-            reached = Math.max(reached, day);
-        }
-        return Math.min(totalDays, Math.max(1, reached));
-    }, [activeMissionDaySlot, habit, now, totalDays]);
+        return traceSync("habit.detail.activeTrailReachedDay", () => {
+            if (!habit) return 1;
+            let reached = activeMissionDaySlot ?? 0;
+            const memoryDays = Object.keys(habit.streakMemories ?? {})
+                .map((dateStr) => missionDayByDate.get(dateStr) ?? null)
+                .filter((day): day is number => typeof day === 'number');
+            const completedDays = (habit.completedDates ?? [])
+                .map((dateStr) => missionDayByDate.get(dateStr) ?? null)
+                .filter((day): day is number => typeof day === 'number');
+            for (const day of [...memoryDays, ...completedDays]) {
+                reached = Math.max(reached, day);
+            }
+            return Math.min(totalDays, Math.max(1, reached));
+        });
+    }, [activeMissionDaySlot, habit, missionDayByDate, totalDays]);
     const activeTrailDays = useMemo(
         () => Array.from({ length: activeTrailReachedDay }, (_, i) => activeTrailReachedDay - i),
         [activeTrailReachedDay],

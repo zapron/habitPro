@@ -24,6 +24,7 @@ import {
 } from "../utils/repairStreakMemoryMerge";
 import { formatDateDisplay } from "../utils/dateDisplay";
 import { storageThumbnailUri } from "../utils/imageThumbnail";
+import { traceSync } from "../lib/jsThreadProbe";
 
 type Entry = { dateStr: string; memory: StreakMemory; missionDay?: number | null };
 type HoneycombColumn = {
@@ -162,6 +163,8 @@ export function StreakMemoryGallery({
   const [open, setOpen] = useState<Entry | null>(null);
   const [viewerImageAspect, setViewerImageAspect] = useState<number | null>(null);
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const mountedAtRef = useRef(Date.now());
+  const firstCommitLoggedRef = useRef(false);
 
   const tileW = clamp((windowWidth - 42) / 3.06, 94, 122);
   const tileH = tileW * 1.12;
@@ -175,19 +178,34 @@ export function StreakMemoryGallery({
   const honeycombColumnMarginRight = tileXStep - honeycombFootprintWidth;
   const hexPath = roundedHexPath(tileW, tileH, 6);
   const honeycombColumnData = useMemo<HoneycombColumn[]>(() => {
-    return Array.from({ length: honeycombColumns }, (_, columnIndex) => {
-      const items = Array.from({ length: HONEYCOMB_ROWS }, (_, row) => {
-        const index = columnIndex * HONEYCOMB_ROWS + row;
-        const entry = entries[index];
-        return entry ? { entry, index, row } : null;
-      }).filter((item): item is { entry: Entry; index: number; row: number } => item !== null);
+    return traceSync("memory.gallery.columns", () =>
+      Array.from({ length: honeycombColumns }, (_, columnIndex) => {
+        const items = Array.from({ length: HONEYCOMB_ROWS }, (_, row) => {
+          const index = columnIndex * HONEYCOMB_ROWS + row;
+          const entry = entries[index];
+          return entry ? { entry, index, row } : null;
+        }).filter((item): item is { entry: Entry; index: number; row: number } => item !== null);
 
-      return {
-        key: items.map(({ entry, index }) => `${entry.dateStr}:${index}`).join("|") || String(columnIndex),
-        items,
-      };
-    });
+        return {
+          key: items.map(({ entry, index }) => `${entry.dateStr}:${index}`).join("|") || String(columnIndex),
+          items,
+        };
+      }),
+    );
   }, [entries, honeycombColumns]);
+
+  useEffect(() => {
+    if (!__DEV__ || firstCommitLoggedRef.current) return;
+    firstCommitLoggedRef.current = true;
+    console.info(
+      `[habitPro:perf] memory.gallery.firstCommit ${Date.now() - mountedAtRef.current}ms ${JSON.stringify({
+        entries: entries.length,
+        columns: honeycombColumnData.length,
+        tileW: Math.round(tileW),
+        tileH: Math.round(tileH),
+      })}`,
+    );
+  }, [entries.length, honeycombColumnData.length, tileH, tileW]);
 
   const viewerUri = open?.memory?.imageUrl || open?.memory?.imageUri;
   const modalHasRenderableImage = Boolean(

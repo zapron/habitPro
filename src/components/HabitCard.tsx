@@ -8,13 +8,13 @@ import {
   Animated,
   Easing,
   InteractionManager,
+  Platform,
 } from "react-native";
 import { useRouter } from 'expo-router';
 import { Flame, Check, CircleX, Plane, Gamepad2, Globe, Swords, Users } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
 import { Habit } from '../types/habit';
 import { needsMainMissionOutcome } from '../utils/mainMissionUi';
-import { ProgressRing } from './ProgressRing';
 import * as Haptics from 'expo-haptics';
 import { getEligibleStreakRepair } from "../utils/streakRepairEligibility";
 import { calendarDateForHabitMissionDayIndex, getHabitActiveMissionDaySlot } from "../utils/missionDaySlots";
@@ -23,6 +23,7 @@ import Svg, { Circle, G } from "react-native-svg";
 import { prewarmChallengeStreaks } from "../lib/groupChallengesApi";
 
 const prewarmedGroupStreakIds = new Set<string>();
+const ANDROID_SEGMENTED_RING_DAY_LIMIT = 45;
 
 function clamp(n: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, n));
@@ -164,6 +165,53 @@ const RingDayArcs = memo(function RingDayArcs({
   );
 });
 
+const LightweightMissionRing = memo(function LightweightMissionRing({
+  ringSize,
+  strokeWidth,
+  progress,
+  doneColor,
+  futureColor,
+}: {
+  ringSize: number;
+  strokeWidth: number;
+  progress: number;
+  doneColor: string;
+  futureColor: string;
+}) {
+  const cx = ringSize / 2;
+  const cy = ringSize / 2;
+  const r = (ringSize - strokeWidth) / 2;
+  const circumference = 2 * Math.PI * r;
+  const clamped = clamp(progress, 0, 1);
+  const dashOffset = circumference * (1 - clamped);
+
+  return (
+    <Svg width={ringSize} height={ringSize} style={{ position: "absolute", left: 0, top: 0 }}>
+      <G transform={`rotate(-90 ${cx} ${cy})`}>
+        <Circle
+          cx={cx}
+          cy={cy}
+          r={r}
+          fill="none"
+          stroke={futureColor}
+          strokeWidth={strokeWidth}
+        />
+        <Circle
+          cx={cx}
+          cy={cy}
+          r={r}
+          fill="none"
+          stroke={doneColor}
+          strokeWidth={strokeWidth}
+          strokeLinecap="round"
+          strokeDasharray={`${circumference} ${circumference}`}
+          strokeDashoffset={dashOffset}
+        />
+      </G>
+    </Svg>
+  );
+});
+
 // NOTE: Lottie tinting is not reliable across assets (many are not recolorable at runtime).
 // For a true bluish flame, we use the app's AnimatedFire with a cyan color.
 
@@ -254,7 +302,22 @@ export const HabitCard = memo(({ item, nowMs }: HabitCardProps) => {
     const pulseOpacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.22, 0.62] });
 
     const openHabit = () => {
+        if (__DEV__) {
+          console.info(
+            `[habitPro:perf] habit.card.openPress ${JSON.stringify({
+              habitId: item.id,
+              totalDays,
+              memories: Object.keys(item.streakMemories ?? {}).length,
+              completed: item.completedDates.length,
+              platform: Platform.OS,
+            })}`,
+          );
+        }
+        const startedAt = Date.now();
         router.push(`/habit/${item.id}`);
+        if (__DEV__) {
+          console.info(`[habitPro:perf] habit.card.routerPush returned ${Date.now() - startedAt}ms`);
+        }
         setTimeout(() => {
           void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         }, 0);
@@ -402,10 +465,20 @@ export const HabitCard = memo(({ item, nowMs }: HabitCardProps) => {
               const ringSize = 56;
               const strokeWidth = 4;
               const slot = getHabitActiveMissionDaySlot(item, nowMs);
+              const useLightweightRing =
+                Platform.OS === "android" && totalDays > ANDROID_SEGMENTED_RING_DAY_LIMIT;
 
               return (
                 <View style={[styles.ringWrap, { width: ringSize, height: ringSize }]}>
-                  {!missionWon && !missionFailed ? (
+                  {!missionWon && !missionFailed && useLightweightRing ? (
+                    <LightweightMissionRing
+                      ringSize={ringSize}
+                      strokeWidth={strokeWidth}
+                      progress={campaignProgress}
+                      doneColor={theme.colors.indigo[400]}
+                      futureColor={isDark ? "rgba(148, 163, 184, 0.22)" : "rgba(100, 116, 139, 0.22)"}
+                    />
+                  ) : !missionWon && !missionFailed ? (
                     <RingDayArcs
                       ringSize={ringSize}
                       strokeWidth={strokeWidth}
