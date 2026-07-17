@@ -19,19 +19,32 @@ export function calculateMissionEndDateFromStart(startIso: string, totalDays: nu
   return d.toISOString();
 }
 
-function findDayIndexForCalendarKey(
+function dayIndexMapForMission(
   startIso: string,
-  dateKey: string,
   totalDays: number,
   timeZone: string,
-): number | null {
+): Map<string, number> {
   const td = Math.max(1, totalDays);
+  const out = new Map<string, number>();
   for (let i = 0; i < td; i++) {
-    const k = missionDayDateKey(startIso, i, timeZone);
-    if (k === dateKey) return i;
-    if (legacyCalendarDateForMissionDayIndex(startIso, i) === dateKey) return i;
+    const key = missionDayDateKey(startIso, i, timeZone);
+    if (key) out.set(key, i);
+    out.set(legacyCalendarDateForMissionDayIndex(startIso, i), i);
   }
-  return null;
+  return out;
+}
+
+function missionDateKeysByIndex(
+  startIso: string,
+  totalDays: number,
+  timeZone: string,
+): string[] {
+  const td = Math.max(1, totalDays);
+  const out: string[] = [];
+  for (let i = 0; i < td; i++) {
+    out[i] = missionDayDateKey(startIso, i, timeZone) ?? legacyCalendarDateForMissionDayIndex(startIso, i);
+  }
+  return out;
 }
 
 export function remapCalendarKeysForGroupStartChange(
@@ -41,16 +54,16 @@ export function remapCalendarKeysForGroupStartChange(
   totalDays: number,
   timeZone: string,
 ): string[] {
-  const td = Math.max(1, totalDays);
+  const oldIndexByKey = dayIndexMapForMission(oldStartIso, totalDays, timeZone);
+  const newKeys = missionDateKeysByIndex(newStartIso, totalDays, timeZone);
   const out: string[] = [];
   for (const key of keys) {
-    const idx = findDayIndexForCalendarKey(oldStartIso, key, td, timeZone);
+    const idx = oldIndexByKey.get(key) ?? null;
     if (idx == null) {
       out.push(key);
       continue;
     }
-    const nk = missionDayDateKey(newStartIso, idx, timeZone);
-    out.push(nk ?? key);
+    out.push(newKeys[idx] ?? key);
   }
   return [...new Set(out)].sort((a, b) => a.localeCompare(b));
 }
@@ -63,16 +76,16 @@ export function remapStreakMemoriesForGroupStartChange(
   timeZone: string,
 ): Record<string, StreakMemory> | undefined {
   if (!memories || typeof memories !== "object") return memories;
+  const oldIndexByKey = dayIndexMapForMission(oldStartIso, totalDays, timeZone);
+  const newKeys = missionDateKeysByIndex(newStartIso, totalDays, timeZone);
   const out: Record<string, StreakMemory> = {};
-  const td = Math.max(1, totalDays);
   for (const [key, mem] of Object.entries(memories)) {
-    const idx = findDayIndexForCalendarKey(oldStartIso, key, td, timeZone);
+    const idx = oldIndexByKey.get(key) ?? null;
     if (idx == null) {
       out[key] = mem;
       continue;
     }
-    const nk = missionDayDateKey(newStartIso, idx, timeZone);
-    out[nk ?? key] = mem;
+    out[newKeys[idx] ?? key] = mem;
   }
   return out;
 }
@@ -102,6 +115,16 @@ export function alignGroupHabitToChallengeStart(
   const canonical = canonicalGroupMissionHabitStartIso(groupStartDateYmd, anchorTimeZone);
   const tz = habit.missionTimezone || habit.challengeCreatorTimezone || getMissionCalendarTimeZone();
   const td = Math.max(1, habit.totalDays ?? 21);
+
+  let endDate = habit.endDate;
+  if (habit.mode === "manual") {
+    endDate = manualEndDateFromTemplate(canonical, td, habitTemplate);
+  }
+
+  if (habit.startDate === canonical && habit.endDate === endDate) {
+    return habit;
+  }
+
   const repairedSet = new Set(habit.repairedDates ?? []);
   const mergedCompleted = habit.completedDates;
 
@@ -131,11 +154,6 @@ export function alignGroupHabitToChallengeStart(
     td,
     tz,
   );
-
-  let endDate = habit.endDate;
-  if (habit.mode === "manual") {
-    endDate = manualEndDateFromTemplate(canonical, td, habitTemplate);
-  }
 
   const d = getDerivedState(mergedForDerived, td, habit.missionReport);
   const streak = Math.max(d.streak, habit.streak);

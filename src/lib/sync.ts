@@ -43,6 +43,7 @@ type FocusDeltaRpcPayload = {
   changedHabits?: unknown[];
   changedMinis?: unknown[];
   profilePatch?: Record<string, unknown>;
+  groupMeta?: { id: string; start_date?: string; startDate?: string; habit_template?: unknown; habitTemplate?: unknown }[];
   deletedIds?: { habits?: unknown[]; miniMissions?: unknown[] };
   serverNow?: string;
 };
@@ -53,6 +54,22 @@ type RepairRow = {
   habit_id: string;
   date_str: string;
 };
+
+function logSyncPerf(label: string, startedAt: number, meta?: Record<string, unknown>) {
+  if (!__DEV__) return;
+  const elapsedMs = Date.now() - startedAt;
+  const suffix = meta ? ` ${JSON.stringify(meta)}` : "";
+  console.info(`[habitPro:perf] ${label} took ${elapsedMs}ms${suffix}`);
+}
+
+function approximateJsonBytes(value: unknown): number | null {
+  if (!__DEV__) return null;
+  try {
+    return JSON.stringify(value).length;
+  } catch {
+    return null;
+  }
+}
 
 function isMissingRpcError(error: unknown): boolean {
   const e = error as { code?: unknown; message?: unknown } | null | undefined;
@@ -474,6 +491,23 @@ function alignHabitsToChallengeGroups(
   });
 }
 
+function groupMetaFromPayload(
+  rows: FocusDeltaRpcPayload["groupMeta"],
+): Map<string, ChallengeGroupAlignmentMeta> | null {
+  if (!Array.isArray(rows)) return null;
+  const meta = new Map<string, ChallengeGroupAlignmentMeta>();
+  for (const row of rows) {
+    if (!row || typeof row.id !== "string" || row.id.length === 0) continue;
+    const startDate = row.start_date ?? row.startDate;
+    if (typeof startDate !== "string" || startDate.length === 0) continue;
+    meta.set(row.id, {
+      start_date: startDate,
+      habit_template: (row.habit_template ?? row.habitTemplate ?? {}) as Record<string, unknown>,
+    });
+  }
+  return meta;
+}
+
 function miniToRow(sessionUserId: string, m: MiniMission) {
   return {
     id: m.id,
@@ -721,11 +755,27 @@ function minisFromDeltaRows(userId: string, rows: unknown[]): MiniMission[] {
   return minis;
 }
 
-async function alignOwnHabits(supabase: SupabaseClient, habits: Habit[]): Promise<Habit[]> {
+async function alignOwnHabits(
+  supabase: SupabaseClient,
+  habits: Habit[],
+  payloadGroupMeta?: Map<string, ChallengeGroupAlignmentMeta> | null,
+): Promise<Habit[]> {
   const alignGroupIds = habits
     .map((h) => h.challengeGroupId)
     .filter((id): id is string => Boolean(id));
-  const groupMeta = await fetchChallengeGroupAlignmentMeta(supabase, alignGroupIds);
+  const startedAt = Date.now();
+  const uniqueGroupIds = [...new Set(alignGroupIds)];
+  const missingGroupIds = payloadGroupMeta
+    ? uniqueGroupIds.filter((id) => !payloadGroupMeta.has(id))
+    : uniqueGroupIds;
+  const fetchedMeta = await fetchChallengeGroupAlignmentMeta(supabase, missingGroupIds);
+  const groupMeta = new Map([...(payloadGroupMeta ?? new Map()), ...fetchedMeta]);
+  logSyncPerf("sync.mapDelta.alignGroups", startedAt, {
+    habits: habits.length,
+    groupIds: uniqueGroupIds.length,
+    payloadGroupIds: payloadGroupMeta?.size ?? 0,
+    fetchedGroupIds: fetchedMeta.size,
+  });
   return alignHabitsToChallengeGroups(habits, groupMeta);
 }
 
@@ -735,11 +785,31 @@ async function mapFocusDeltaPayload(
   payload: FocusDeltaRpcPayload,
   repairedByHabit: Map<string, string[]>,
 ): Promise<Pick<RemoteSnapshot, "habits" | "miniMissions" | "xp" | "username">> {
-  const habits = await alignOwnHabits(
-    supabase,
-    habitsFromDeltaRows(userId, payload.changedHabits ?? [], repairedByHabit),
-  );
-  const miniMissions = minisFromDeltaRows(userId, payload.changedMinis ?? []);
+  const rawHabits = payload.changedHabits ?? [];
+  const rawMinis = payload.changedMinis ?? [];
+  const payloadGroupMeta = groupMetaFromPayload(payload.groupMeta);
+  const habitMapStartedAt = Date.now();
+  const mappedHabits = habitsFromDeltaRows(userId, rawHabits, repairedByHabit);
+  logSyncPerf("sync.mapDelta.habitsFromRows", habitMapStartedAt, {
+    rawHabits: rawHabits.length,
+    habits: mappedHabits.length,
+    approxBytes: approximateJsonBytes(rawHabits),
+  });
+
+  const alignStartedAt = Date.now();
+  const habits = await alignOwnHabits(supabase, mappedHabits, payloadGroupMeta);
+  logSyncPerf("sync.mapDelta.alignOwnHabitsTotal", alignStartedAt, {
+    habits: habits.length,
+  });
+
+  const miniMapStartedAt = Date.now();
+  const miniMissions = minisFromDeltaRows(userId, rawMinis);
+  logSyncPerf("sync.mapDelta.minisFromRows", miniMapStartedAt, {
+    rawMinis: rawMinis.length,
+    miniMissions: miniMissions.length,
+    approxBytes: approximateJsonBytes(rawMinis),
+  });
+
   const { xp, username } = profileFieldsFromPatch(payload.profilePatch);
   return { habits, miniMissions, xp, username };
 }
@@ -832,16 +902,22 @@ export async function pullFromSupabase(
   userId: string,
   options?: { includeCohortPeerHabits?: boolean },
 ): Promise<RemoteSnapshot> {
+  const startedAt = Date.now();
   const supabase = getSupabase();
   if (!supabase) {
     return { habits: [], miniMissions: [], xp: 0, username: null, cohortPeerHabits: [] };
   }
   const includeCohortPeerHabits = options?.includeCohortPeerHabits ?? true;
 
+  const baseFetchStartedAt = Date.now();
   const [deltaPayload, repairedByHabit] = await Promise.all([
     pullViaFocusDeltaRpc(supabase, null),
     fetchAppliedRepairsByHabit(supabase, userId),
   ]);
+  logSyncPerf("sync.pull.baseFetch", baseFetchStartedAt, {
+    mode: deltaPayload ? "rpc_delta" : "legacy_full",
+    repairs: repairedByHabit.size,
+  });
 
   let habits: Habit[];
   let miniMissions: MiniMission[];
@@ -849,13 +925,21 @@ export async function pullFromSupabase(
   let username: string | null;
 
   if (deltaPayload) {
+    const mapStartedAt = Date.now();
     const partial = await mapFocusDeltaPayload(supabase, userId, deltaPayload, repairedByHabit);
     const deleted = deletedIdsFromPayload(deltaPayload);
     habits = partial.habits.filter((h) => !deleted.habitIds.includes(h.id));
     miniMissions = partial.miniMissions.filter((m) => !deleted.miniIds.includes(m.id));
     xp = partial.xp;
     username = partial.username;
+    logSyncPerf("sync.pull.mapDelta", mapStartedAt, {
+      habits: habits.length,
+      miniMissions: miniMissions.length,
+      deletedHabits: deleted.habitIds.length,
+      deletedMinis: deleted.miniIds.length,
+    });
   } else {
+    const legacyStartedAt = Date.now();
     const [habitsRes, miniRes, profileRes] = await Promise.all([
       supabase.from("habits").select(HABIT_ROW_SELECT).eq("user_id", userId),
       supabase
@@ -890,11 +974,29 @@ export async function pullFromSupabase(
       .filter((id): id is string => Boolean(id));
     const groupMeta = await fetchChallengeGroupAlignmentMeta(supabase, alignGroupIds);
     habits = alignHabitsToChallengeGroups(habits, groupMeta);
+    logSyncPerf("sync.pull.legacyFull", legacyStartedAt, {
+      habits: habits.length,
+      miniMissions: miniMissions.length,
+      groupIds: alignGroupIds.length,
+    });
   }
 
+  const cohortStartedAt = Date.now();
   const cohortPeerHabits = includeCohortPeerHabits
     ? await pullCohortPeerHabitsFromSupabase(userId)
     : [];
+  if (includeCohortPeerHabits) {
+    logSyncPerf("sync.pull.cohortPeers", cohortStartedAt, {
+      cohortPeerHabits: cohortPeerHabits.length,
+    });
+  }
+
+  logSyncPerf("sync.pull.total", startedAt, {
+    habits: habits.length,
+    miniMissions: miniMissions.length,
+    cohortPeerHabits: cohortPeerHabits.length,
+    includeCohortPeerHabits,
+  });
 
   return { habits, miniMissions, xp, username, cohortPeerHabits };
 }
@@ -1174,6 +1276,7 @@ export async function hydrateStoreAfterAuth(
   getLocal: () => LocalHydrateSnapshot,
   apply: (next: RemoteSnapshot) => void,
 ): Promise<void> {
+  const startedAt = Date.now();
   const local = getLocal();
   const remote = await pullFromSupabase(userId, { includeCohortPeerHabits: false });
 
@@ -1193,8 +1296,24 @@ export async function hydrateStoreAfterAuth(
     };
     apply(stamped);
     await pushFullState(userId, stamped);
+    logSyncPerf("sync.authHydrate", startedAt, {
+      mode: "local_upload_first_user",
+      habits: stamped.habits.length,
+      miniMissions: stamped.miniMissions.length,
+    });
     return;
   }
 
-  apply(mergeDirtyLocalIntoRemote(remote, getLocal(), userId));
+  const applyStartedAt = Date.now();
+  const next = mergeDirtyLocalIntoRemote(remote, getLocal(), userId);
+  apply(next);
+  logSyncPerf("sync.authHydrate.apply", applyStartedAt, {
+    habits: next.habits.length,
+    miniMissions: next.miniMissions.length,
+  });
+  logSyncPerf("sync.authHydrate", startedAt, {
+    mode: "remote_apply",
+    habits: next.habits.length,
+    miniMissions: next.miniMissions.length,
+  });
 }

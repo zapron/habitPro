@@ -165,13 +165,22 @@ export function legacyCalendarDateForMissionDayIndex(startIso: string, dayIndexZ
 }
 
 export function canonicalizeMissionDateKey(startDate: string, totalDays: number, key: string, timeZone?: string): string {
+  return canonicalizeMissionDateKeyWithMap(canonicalDateKeyMap(startDate, totalDays, timeZone), key);
+}
+
+function canonicalDateKeyMap(startDate: string, totalDays: number, timeZone?: string): Map<string, string> {
+  const out = new Map<string, string>();
   const td = Math.max(1, totalDays);
   for (let i = 0; i < td; i++) {
     const canonical = calendarDateForMissionDayIndex(startDate, i, timeZone);
-    if (key === canonical) return key;
-    if (key === legacyCalendarDateForMissionDayIndex(startDate, i)) return canonical;
+    out.set(canonical, canonical);
+    out.set(legacyCalendarDateForMissionDayIndex(startDate, i), canonical);
   }
-  return key;
+  return out;
+}
+
+function canonicalizeMissionDateKeyWithMap(map: Map<string, string>, key: string): string {
+  return map.get(key) ?? key;
 }
 
 export function canonicalizeMissionDateKeys(
@@ -180,7 +189,8 @@ export function canonicalizeMissionDateKeys(
   totalDays: number,
   timeZone?: string,
 ): string[] {
-  const mapped = keys.map((k) => canonicalizeMissionDateKey(startDate, totalDays, k, timeZone));
+  const map = canonicalDateKeyMap(startDate, totalDays, timeZone);
+  const mapped = keys.map((k) => canonicalizeMissionDateKeyWithMap(map, k));
   return [...new Set(mapped)].sort((a, b) => a.localeCompare(b));
 }
 
@@ -191,9 +201,10 @@ export function canonicalizeStreakMemoryKeys(
   timeZone?: string,
 ): Record<string, unknown> | undefined {
   if (!memories || typeof memories !== "object") return memories;
+  const map = canonicalDateKeyMap(startDate, totalDays, timeZone);
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(memories)) {
-    const nk = canonicalizeMissionDateKey(startDate, totalDays, k, timeZone);
+    const nk = canonicalizeMissionDateKeyWithMap(map, k);
     out[nk] = v;
   }
   return out;
