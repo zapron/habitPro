@@ -6,7 +6,7 @@ This file captures the current working state so future chats do not need the ful
 
 ## Current Worktree State
 
-There are no intentional uncommitted app code changes at this checkpoint. The current documentation / handoff audit changes are intentional until they are committed. Do not revert unrelated local files unless the user explicitly asks.
+There are no intentional uncommitted app code changes at this checkpoint. The worktree was clean before the current markdown / handoff audit. Do not revert unrelated local files unless the user explicitly asks.
 
 Recent code commits already created:
 
@@ -19,6 +19,7 @@ Recent code commits already created:
 - `2884de9 docs: add project handoff context`
 - `075cabe feat: add daily wisdom launch splash`
 - `5131c7a feat: show cohort streak dots newest first`
+- `4a078b7 docs: add migration handoff context`
 
 Latest committed product changes:
 
@@ -28,25 +29,31 @@ Latest committed product changes:
 - Mission detail no longer renders `QuoteCard`.
 - Group/cohort streak dots now render newest-first and omit future/unreached dots.
 
-Current documentation / handoff updates:
+Current uncommitted Android performance fix:
+
+- `src/components/HabitCard.tsx` now uses a lightweight aggregate progress ring on Android when a mission has more than 45 days.
+- iOS and shorter Android missions still use the segmented per-day ring.
+- This is intended to reduce Home jank after splash by avoiding dozens of tiny `react-native-svg` `Circle` nodes per long-mission card.
+- Dev-only timing logs were added for launch/hydrate/Home readiness. Watch Android logs for `[habitPro:perf] splash.*`, `sync.pull.*`, `sync.authHydrate*`, and `home.firstCardsCommit`.
+- Android timing logs showed `sync.mapDelta.alignGroups` taking 22-28s for 13 challenge groups, while Home card commit was only about 30-100ms and mini mapping was about 2-4ms.
+- `supabase/migrations/20260717120000_focus_delta_group_meta.sql` updates `rpc_focus_delta_v1` to return challenge group alignment metadata in the same payload. Apply this migration before retesting; otherwise the client must still do the slow separate `challenge_groups` fetch.
+- After applying the migration, logs showed `fetchedGroupIds: 0`, confirming the slow network query was removed. Remaining CPU time was in `habitsFromRows` / `alignOwnHabitsTotal`.
+- `src/utils/groupMissionClock.ts` now skips expensive group date/memory remapping when the habit already matches the canonical challenge start/end.
+- `src/utils/missionCalendarKeys.ts` and `src/utils/groupMissionClock.ts` now precompute date-key maps for mission-day canonicalization/remapping instead of scanning every mission day for every completed/memory key. This should reduce `sync.mapDelta.habitsFromRows` and `sync.mapDelta.alignOwnHabitsTotal` on 180-day missions.
+- Latest Expo Go Android logs after date-map optimization showed `sync.mapDelta.habitsFromRows` down to about 240-430ms, `sync.mapDelta.alignOwnHabitsTotal` around 650-1200ms, and `sync.pull.total` often around 1.2-2.8s. Home card commit stayed under about 230ms.
+- Dev-only mission detail logs were added to investigate Android detail navigation and delayed memories. Watch for `habit.card.openPress`, `habit.card.routerPush`, `habit.detail.mounted`, `habit.detail.firstCommit`, `habit.detail.heavyFocusStart`, `habit.detail.heavyReadyAfterInteractions`, `habit.detail.memoryEntriesReady`, `habit.detail.gridBatch`, `memory.gallery.firstCommit`, and `habit.detail.*` / `memory.gallery.*` JS sync/stall labels.
+- Mission detail logs showed Android navigation was blocked by `habit.detail.activeTrailReachedDay` taking about 1.8-5.1s and `habit.detail.memoryGalleryEntries` taking about 0.9-2.5s on a 75-day mission with 65 memories.
+- `src/utils/missionDaySlots.ts` now exports `missionDayNumberMapForHabit()`, and `app/habit/[id].tsx` reuses one date-to-day map for Active Trail and memory gallery entries instead of scanning all mission days for every memory/completion date.
+- Follow-up Android logs after `missionDayNumberMapForHabit()` showed detail first commit around 232-336ms, `heavyReadyAfterInteractions` around 110-167ms, `memoryEntriesReady` around 120-182ms, and `memory.gallery.firstCommit` around 10-12ms. The previous multi-second Active Trail / memory entry stalls were gone.
+
+Current documentation / handoff status:
 
 - `agent.md` now tells future agents to read `docs/WORK_HISTORY.md` for longer sessions.
 - `docs/WORK_HISTORY.md` records chronological development history.
 - `docs/MAC_SETUP_HANDOFF.md` captures the Windows-to-Mac migration checklist.
 - `.codex/skills/habitpro-session-logger/` adds a repo-local Codex skill for end-of-session logging.
-
-Known untracked docs/workspace files may exist:
-
-- `.claude/`
-- `.codex/skills/habitpro-session-logger/`
-- `docs/MAC_SETUP_HANDOFF.md`
-- `docs/WORK_HISTORY.md`
-- `habitPro-latest.code-workspace`
-- `habitPro.code-workspace`
-- `habitPro_tryItFirst.code-workspace`
-- `neededpoints.md`
-
-Do not include unrelated workspace files in commits unless the user asks. If committing docs, include only the docs explicitly intended for that phase.
+- The repo markdown files have been checked on Mac for Windows CRLF line endings, conflict markers, Windows-only paths, and stale handoff/untracked-file wording.
+- Project markdown files are LF-normalized; CRLF matches were only found under `node_modules` dependency README files and were left untouched.
 
 ## Mini Mission Timer Check-In Work
 
@@ -198,16 +205,18 @@ User reports:
 
 Current diagnosis, not yet fixed:
 
-- Home card `RingDayArcs` renders one SVG `Circle` per mission day. A 75-day card creates about 75 SVG nodes for a tiny ring.
+- Home card `RingDayArcs` rendered one SVG `Circle` per mission day. A 75-day card created about 75 SVG nodes for a tiny ring.
 - Android `react-native-svg` node creation can be significantly heavier than iOS.
 - Mission detail still has heavy Android surfaces: Active Trail cells, lock icons, honeycomb SVG clipping/images, and memory date mapping.
 
 Recommended next experiments:
 
-1. Android-only replace Home `RingDayArcs` with a lightweight progress ring or progress text for long missions.
-2. Temporarily disable `StreakMemoryGallery` on Android detail to confirm touch delay source.
-3. Disable honeycomb build animation on Android if moments are confirmed as the blocker.
-4. Add timing logs around Home first render, HabitCard render count, detail mount, and memory gallery mount.
+1. Apply `supabase/migrations/20260717120000_focus_delta_group_meta.sql`, then retest Android launch logs. Expected `sync.mapDelta.alignGroups` should show `payloadGroupIds` matching group count and `fetchedGroupIds: 0`.
+2. Retest after the `groupMissionClock` fast path. Expected `sync.mapDelta.alignOwnHabitsTotal` should drop sharply for already-aligned group habits.
+3. Test the Android long-mission Home ring fallback on S24 Ultra and an older Android device.
+4. Test mission detail on Android and compare the new detail log timings. If memories are delayed, check whether the delay is before `heavyReadyAfterInteractions`, during `memoryEntriesReady`, or inside `memory.gallery.firstCommit` / JS stall logs.
+5. Test the same flow on a physical older Android device. If it feels good, remove or gate the temporary perf logs before release.
+6. If launch still feels slow on older Android devices, create a lighter launch/home payload that omits full `streak_memories` and fetches details only on mission detail open.
 
 ## Validation Already Run Recently
 
@@ -217,6 +226,15 @@ The following commands have passed after the latest mission-detail performance c
 npx tsc --noEmit
 git diff --check
 ```
+
+After the Android Home long-mission ring fallback, these passed:
+
+```bash
+npx tsc --noEmit
+git diff --check
+```
+
+After adding dev-only timing logs, rerun the same validation before commit.
 
 Also run before handing off a release build:
 
@@ -248,7 +266,7 @@ npx tsc --noEmit
 git diff --check
 ```
 
-`git diff --check` only printed Windows line-ending warnings. The skill validator command was attempted, but the local Python environment is missing the `yaml` module required by `quick_validate.py`.
+The earlier skill validator command was attempted, but the local Python environment was missing the `yaml` module required by `quick_validate.py`.
 
 ## Suggested Test Checklist
 

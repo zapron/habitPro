@@ -52,8 +52,29 @@ cmd /c npm run update:preview -- --message "Preview daily wisdom splash and coho
 ### Documentation Validation
 
 - `npx tsc --noEmit` passed.
-- `git diff --check` passed with Windows line-ending warnings only.
+- `git diff --check` passed at that checkpoint; a later Mac audit found no project markdown line-ending warnings.
 - Skill validator was attempted, but `quick_validate.py` could not run because the local Python environment is missing the `yaml` module.
+
+### Mac Markdown / Handoff Follow-Up
+
+- Checked all project markdown files for CRLF line endings, conflict markers, Windows-only paths, and stale handoff/untracked-file notes.
+- Project markdown files are LF-normalized; CRLF matches were only in `node_modules` README/CHANGELOG files and were left untouched.
+- Updated `docs/CURRENT_WORK.md` to reflect the clean committed handoff state after `4a078b7`.
+- `git diff --check` passed with no warnings.
+
+### Android Home Performance Follow-Up
+
+- Updated `src/components/HabitCard.tsx` so Android long missions use a lightweight aggregate progress ring on Home instead of one `react-native-svg` `Circle` per mission day.
+- iOS and shorter Android missions keep the segmented day ring.
+- Added dev-only `[habitPro:perf]` timing logs around splash dismissal, Supabase hydrate/pull phases, and Home first card commit.
+- Added migration `supabase/migrations/20260717120000_focus_delta_group_meta.sql` so `rpc_focus_delta_v1` returns challenge group metadata with the delta payload and the client can avoid a slow launch-time `challenge_groups` fetch.
+- Added a fast path in `src/utils/groupMissionClock.ts` to skip expensive group habit remapping when the habit already matches the canonical challenge start/end.
+- Optimized mission date-key canonicalization/remapping in `src/utils/missionCalendarKeys.ts` and `src/utils/groupMissionClock.ts` by precomputing date maps instead of scanning every mission day for each completed/memory key.
+- Follow-up Expo Go Android logs showed the date-map optimization reduced `sync.mapDelta.habitsFromRows` to about 240-430ms and `sync.mapDelta.alignOwnHabitsTotal` to about 650-1200ms.
+- Added dev-only mission detail and memory gallery timing logs to isolate Android detail navigation, heavy-content readiness, Active Trail batching, memory entry construction, gallery commit, and JS thread stalls.
+- Mission detail logs identified repeated mission-day date lookup as the Android blocker. Added `missionDayNumberMapForHabit()` and switched detail Active Trail / memory gallery entry construction to one shared date-to-day map.
+- Follow-up Android logs showed mission detail first commit around 232-336ms and memories ready around 120-182ms, replacing the previous multi-second Active Trail / memory entry stalls.
+- Validation: `npx tsc --noEmit` and `git diff --check` passed.
 
 ## 2026-07-16
 
