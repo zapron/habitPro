@@ -2,6 +2,67 @@
 
 This is a concise chronological log for future sessions. Keep secrets out of this file.
 
+## 2026-07-19
+
+### Commits
+
+- `61e035c fix: repair mission marker date mapping`
+- `c41cc69 db: add marker progress repair migrations`
+
+### Release Boundaries
+
+- No push was run.
+- No Supabase migration was applied.
+- Preview OTA was explicitly requested after phased commits.
+- User added a standing rule: never commit, push, apply migrations, build, publish OTA, or deploy unless explicitly asked for that exact action.
+- Added local skill `.codex/skills/habitpro-deployment-guard/` to preserve that rule for future HabitPro sessions.
+
+### Marker Regression Investigation
+
+- User reported a major marker unlock regression: campaign progress stayed at `66/75`, moments showed up to `D68`, Active Trail showed `Day 68/75 | 66 done | 7 left`, and the unlock pill still said `Day 68 opens in 21h...` after midnight.
+- Added marker diagnostics in `app/habit/[id].tsx` (`[habitPro:marker] detailState`, `dayPress`, `memoryCommitRejected`, `storeToggleRejected`) to inspect active slot/date, mission timezone, raw creation key, rolling slot, stored/effective completed counts, and memory tails.
+- Logs exposed the root bug: the performance optimization in `37f723e` changed canonical date mapping so legacy UTC keys could overwrite correct timezone calendar keys.
+- Example from logs: mission start `2026-07-18T20:47:13.379Z`, timezone `Asia/Kolkata`, canonical Day 1 `2026-07-19`.
+- Broken optimized map shifted dates forward:
+  - `2026-07-19 -> 2026-07-20`
+  - `2026-07-20 -> 2026-07-21`
+  - `2026-07-21 -> 2026-07-22`
+- This matched logs where `storedCompletedTail` shifted after sync from `["2026-07-19","2026-07-20"]` to `["2026-07-20","2026-07-21"]`.
+
+### Fixes
+
+- `src/utils/missionCalendarKeys.ts`: canonical mission-calendar dates now win map collisions; legacy UTC keys only fill missing entries.
+- `src/utils/groupMissionClock.ts`: same collision fix for group mission remapping; group start alignment now falls back to `challengeCreatorTimezone` when `missionTimezone` is missing.
+- `src/utils/missionDaySlots.ts`: calendar-day mission mode now activates when either `missionTimezone` or `challengeCreatorTimezone` exists.
+- `supabase/functions/process-streak-reminders/index.ts`: server reminder calendar-day detection mirrors the client fallback.
+- `app/habit/[id].tsx`: detail clock/display uses an effective completed-date set from `completedDates + streakMemories`, preventing `66/75` from displaying when saved memories prove later completed days exist.
+- `src/store/habitStore.ts` / `src/types/habit.ts`: added `repairHabitCompletedDatesFromMemories()` to self-heal local progress and queue remote sync.
+- `src/lib/sync.ts`: remote hydrate treats canonicalized streak memory keys as completion evidence.
+- `src/components/StreakMemorySheet.tsx`: image loading now clears on error/timeout and shows a fallback instead of spinning forever.
+- Manual missions now always use reverse Active Trail (`isManual || totalDays > INITIAL_GRID_RENDER_DAYS`), fixing inconsistent 30-day manual vs 75-day manual grid behavior.
+- Added migrations:
+  - `supabase/migrations/20260719120000_backfill_completed_dates_from_streak_memories.sql`
+  - `supabase/migrations/20260719121000_focus_delta_group_creator_timezone.sql`
+
+### Validation
+
+- `git diff --check` passed.
+- `npx tsc --noEmit` passed.
+- Node sanity script verified the collision fix:
+
+```text
+2026-07-19 old=> 2026-07-20 new=> 2026-07-19
+2026-07-20 old=> 2026-07-21 new=> 2026-07-20
+2026-07-21 old=> 2026-07-22 new=> 2026-07-21
+```
+
+### Open Risks / Next Steps
+
+- Preview OTA still needs to be published to the `preview` channel.
+- Live data still needs the backfill migration to repair existing rows in Supabase.
+- If testing still shows marker mismatch, capture the full `[habitPro:marker] detailState` line.
+- Skill validator for `.codex/skills/habitpro-deployment-guard/` could not run because the local Python environment is missing the `yaml` module.
+
 ## 2026-07-17
 
 ### Commits

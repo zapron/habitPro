@@ -1,15 +1,20 @@
 # HabitPro Current Work
 
-Last updated: 2026-07-17.
+Last updated: 2026-07-19.
 
 This file captures the current working state so future chats do not need the full conversation.
 
 ## Current Worktree State
 
-There are no intentional uncommitted app code changes at this checkpoint. The worktree was clean before the current markdown / handoff audit. Do not revert unrelated local files unless the user explicitly asks.
+The mission marker regression fix has been split into phased local commits. Do not push, apply migrations, build, publish OTA, or deploy unless the user explicitly asks for that exact action in the latest relevant message.
 
 Recent code commits already created:
 
+- `c41cc69 db: add marker progress repair migrations`
+- `61e035c fix: repair mission marker date mapping`
+- `136183f docs: log Android performance work`
+- `789dd0f perf: smooth Android mission detail`
+- `37f723e perf: speed up launch sync mapping`
 - `1c5d5a3 feat: add mini mission timer check-in state`
 - `6197f56 feat: update mini mission check-in UI`
 - `c3b1bdf feat: revamp mission moment gallery`
@@ -21,6 +26,61 @@ Recent code commits already created:
 - `5131c7a feat: show cohort streak dots newest first`
 - `4a078b7 docs: add migration handoff context`
 
+Current pending files before preview OTA:
+
+- `docs/CURRENT_WORK.md`
+- `docs/WORK_HISTORY.md`
+- `.codex/skills/habitpro-deployment-guard/`
+
+## Mission Marker Regression Fix
+
+User-visible issue:
+
+- A 75-day manual mission could show `Campaign Progress 66/75`.
+- `Your moments` showed saved memories up to `D68`.
+- Active Trail said `Day 68/75 | 66 done | 7 left`.
+- Unlock pill said `Day 68 opens in 21h...` even after local midnight should have opened the next marker.
+- Tapping a saved memory could leave the image area stuck at `Loading moment...`.
+
+Root cause found from `[habitPro:marker] detailState` logs:
+
+- The performance optimization in `37f723e` changed date canonicalization/remapping to use precomputed maps.
+- In `src/utils/missionCalendarKeys.ts`, the legacy UTC key could overwrite the correct mission-timezone calendar key.
+- For a mission starting at `2026-07-18T20:47:13.379Z` with `Asia/Kolkata`, canonical Day 1 is `2026-07-19`, but the old optimized map did:
+  - `2026-07-19 -> 2026-07-20`
+  - `2026-07-20 -> 2026-07-21`
+  - `2026-07-21 -> 2026-07-22`
+- Logs confirmed the shift after sync: `storedCompletedTail` changed from `["2026-07-19","2026-07-20"]` to `["2026-07-20","2026-07-21"]`.
+
+Committed fixes:
+
+- `src/utils/missionCalendarKeys.ts`: canonical calendar keys now win; legacy UTC keys only fill gaps (`if (!out.has(legacy)) ...`).
+- `src/utils/groupMissionClock.ts`: same collision fix for group mission date remapping.
+- `src/utils/groupMissionClock.ts`: group alignment now uses `challengeCreatorTimezone` when `missionTimezone` is missing.
+- `src/utils/missionDaySlots.ts`: calendar-day mission mode now activates from either `missionTimezone` or `challengeCreatorTimezone`.
+- `supabase/functions/process-streak-reminders/index.ts`: server reminder calendar-day detection matches client fallback.
+- `app/habit/[id].tsx`: detail screen now computes an effective completion set from `completedDates + streakMemories` so saved memories cannot visually disagree with campaign progress.
+- `src/store/habitStore.ts` / `src/types/habit.ts`: added `repairHabitCompletedDatesFromMemories()` to self-heal local progress when saved memories exist for dates missing from `completedDates`.
+- `src/lib/sync.ts`: remote hydrate treats canonicalized streak memory keys as completion evidence.
+- `supabase/migrations/20260719120000_backfill_completed_dates_from_streak_memories.sql`: backfills live `completed_dates` from saved `streak_memories` keys.
+- `supabase/migrations/20260719121000_focus_delta_group_creator_timezone.sql`: widens focus delta group metadata with `creator_timezone`.
+- `src/components/StreakMemorySheet.tsx`: image loader now clears on error/timeout and shows `Photo unavailable` instead of spinning forever.
+- Manual missions now always use reverse Active Trail; previously only missions with `totalDays > 49` used it, so 30-day manual and 75-day manual behaved differently.
+
+Local verification already run:
+
+- `git diff --check` passed.
+- `npx tsc --noEmit` passed.
+- A Node sanity script confirmed the old map shifted `2026-07-19 -> 2026-07-20`, while the patched map keeps `2026-07-19 -> 2026-07-19`.
+
+Open / not yet done:
+
+- No push has been made.
+- Supabase migrations have not been applied.
+- Preview OTA is explicitly requested next and should target the `preview` channel only.
+- User explicitly instructed: never commit, push, apply migrations, build, publish OTA, or deploy unless explicitly asked.
+- `.codex/skills/habitpro-deployment-guard/` was added locally to make that rule durable. Skill validator was attempted earlier but local Python lacked the `yaml` module.
+
 Latest committed product changes:
 
 - Daily Wisdom moved out of mission detail and into the existing launch splash sequence.
@@ -29,7 +89,7 @@ Latest committed product changes:
 - Mission detail no longer renders `QuoteCard`.
 - Group/cohort streak dots now render newest-first and omit future/unreached dots.
 
-Current uncommitted Android performance fix:
+Recent Android performance fix:
 
 - `src/components/HabitCard.tsx` now uses a lightweight aggregate progress ring on Android when a mission has more than 45 days.
 - iOS and shorter Android missions still use the segmented per-day ring.
