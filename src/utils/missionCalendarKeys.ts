@@ -174,7 +174,8 @@ function canonicalDateKeyMap(startDate: string, totalDays: number, timeZone?: st
   for (let i = 0; i < td; i++) {
     const canonical = calendarDateForMissionDayIndex(startDate, i, timeZone);
     out.set(canonical, canonical);
-    out.set(legacyCalendarDateForMissionDayIndex(startDate, i), canonical);
+    const legacy = legacyCalendarDateForMissionDayIndex(startDate, i);
+    if (!out.has(legacy)) out.set(legacy, canonical);
   }
   return out;
 }

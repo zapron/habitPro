@@ -43,7 +43,15 @@ type FocusDeltaRpcPayload = {
   changedHabits?: unknown[];
   changedMinis?: unknown[];
   profilePatch?: Record<string, unknown>;
-  groupMeta?: { id: string; start_date?: string; startDate?: string; habit_template?: unknown; habitTemplate?: unknown }[];
+  groupMeta?: {
+    id: string;
+    start_date?: string;
+    startDate?: string;
+    habit_template?: unknown;
+    habitTemplate?: unknown;
+    creator_timezone?: string | null;
+    creatorTimezone?: string | null;
+  }[];
   deletedIds?: { habits?: unknown[]; miniMissions?: unknown[] };
   serverNow?: string;
 };
@@ -259,6 +267,18 @@ function habitFromRow(row: {
   const completedDatesMigrated = canonicalizeMissionDateKeys(row.start_date, rawCompleted, tdRow, stableTimeZone);
   const repairedDates: string[] =
     (row as unknown as { repairedDates?: string[] }).repairedDates ?? [];
+  const rawMem = row.streak_memories;
+  const streakMemoriesRaw =
+    rawMem && typeof rawMem === "object" && !Array.isArray(rawMem)
+      ? (rawMem as Record<string, unknown>)
+      : undefined;
+  const streakMemoriesMigrated = canonicalizeStreakMemoryKeys(row.start_date, streakMemoriesRaw, tdRow, stableTimeZone);
+  const streakMemories =
+    streakMemoriesMigrated === undefined ? undefined : (streakMemoriesMigrated as Habit["streakMemories"]);
+  const memoryCompletionDates = Object.keys(streakMemories ?? {}).filter((date) =>
+    /^\d{4}-\d{2}-\d{2}$/.test(date),
+  );
+  const completedWithMemoryEvidence = [...completedDatesMigrated, ...memoryCompletionDates];
 
   const storedStreak = typeof row.streak === "number" && Number.isFinite(row.streak) ? row.streak : 0;
   const missionReport = parseMissionReport(row.mission_report);
@@ -267,7 +287,7 @@ function habitFromRow(row: {
 
   let effectiveReport = missionReport;
   const pre = getDerivedState(
-    completedDatesMigrated,
+    completedWithMemoryEvidence,
     tdRow,
     missionReport,
   );
@@ -276,7 +296,7 @@ function habitFromRow(row: {
   }
 
   const d = getDerivedState(
-    [...completedDatesMigrated, ...repairedDates],
+    [...completedWithMemoryEvidence, ...repairedDates],
     tdRow,
     effectiveReport,
   );
@@ -286,14 +306,6 @@ function habitFromRow(row: {
   if (!d.isCompleted && (effectiveReport === "failed" || row.status === "failed")) {
     status = "failed";
   }
-  const rawMem = row.streak_memories;
-  const streakMemoriesRaw =
-    rawMem && typeof rawMem === "object" && !Array.isArray(rawMem)
-      ? (rawMem as Record<string, unknown>)
-      : undefined;
-  const streakMemoriesMigrated = canonicalizeStreakMemoryKeys(row.start_date, streakMemoriesRaw, tdRow, stableTimeZone);
-  const streakMemories =
-    streakMemoriesMigrated === undefined ? undefined : (streakMemoriesMigrated as Habit["streakMemories"]);
   const streakMemoryMarkers =
     streakMemoryMarkersFromRow(row.streak_memory_markers) ?? streakMemoryMarkersFromRow(row.streak_memories);
   return {
@@ -455,6 +467,7 @@ function miniFromRow(row: Record<string, unknown>): MiniMission {
 type ChallengeGroupAlignmentMeta = {
   start_date: string;
   habit_template: Record<string, unknown>;
+  creator_timezone?: string | null;
 };
 
 async function fetchChallengeGroupAlignmentMeta(
@@ -466,14 +479,15 @@ async function fetchChallengeGroupAlignmentMeta(
   if (uniq.length === 0) return map;
   const { data, error } = await supabase
     .from("challenge_groups")
-    .select("id, start_date, habit_template")
+    .select("id, start_date, habit_template, creator_timezone")
     .in("id", uniq);
   if (error) throw error;
   for (const row of data ?? []) {
-    const rec = row as { id: string; start_date: string; habit_template?: unknown };
+    const rec = row as { id: string; start_date: string; habit_template?: unknown; creator_timezone?: string | null };
     map.set(rec.id, {
       start_date: String(rec.start_date),
       habit_template: (rec.habit_template ?? {}) as Record<string, unknown>,
+      creator_timezone: rec.creator_timezone ?? null,
     });
   }
   return map;
@@ -487,7 +501,11 @@ function alignHabitsToChallengeGroups(
     if (!h.challengeGroupId) return h;
     const g = meta.get(h.challengeGroupId);
     if (!g) return h;
-    return alignGroupHabitToChallengeStart(h, g.start_date, g.habit_template);
+    return alignGroupHabitToChallengeStart(
+      h.challengeCreatorTimezone ? h : { ...h, challengeCreatorTimezone: g.creator_timezone ?? null },
+      g.start_date,
+      g.habit_template,
+    );
   });
 }
 
@@ -503,6 +521,7 @@ function groupMetaFromPayload(
     meta.set(row.id, {
       start_date: startDate,
       habit_template: (row.habit_template ?? row.habitTemplate ?? {}) as Record<string, unknown>,
+      creator_timezone: row.creator_timezone ?? row.creatorTimezone ?? null,
     });
   }
   return meta;
@@ -565,7 +584,7 @@ async function pullCohortPeerHabitsViaRpc(
   }
   const payload = data as {
     habits?: unknown;
-    groupMeta?: { id: string; start_date: string; habit_template?: unknown }[];
+    groupMeta?: { id: string; start_date: string; habit_template?: unknown; creator_timezone?: string | null }[];
   } | null;
   if (!payload || !Array.isArray(payload.habits)) return null;
 
@@ -575,6 +594,7 @@ async function pullCohortPeerHabitsViaRpc(
     meta.set(g.id, {
       start_date: String(g.start_date),
       habit_template: (g.habit_template ?? {}) as Record<string, unknown>,
+      creator_timezone: g.creator_timezone ?? null,
     });
   }
 

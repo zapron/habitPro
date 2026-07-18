@@ -47,7 +47,10 @@ import { ConfettiBurst } from '../../src/components/ConfettiBurst';
 import { StreakBanner } from '../../src/components/StreakBanner';
 import {
   calendarDateForHabitMissionDayIndex,
+  calendarDateForMissionDayIndex,
+  calendarDateKeyForTimestamp,
   calendarDayEndUtcMsForDateKey,
+  getActiveMissionDaySlot,
   getHabitActiveMissionDaySlot,
   getHabitActiveMissionDayEndMs,
   getHabitMissionTimeZone,
@@ -459,10 +462,21 @@ export default function HabitDetail() {
     const socialLocked = !isPremium || premiumLoading;
     const habitId = Array.isArray(id) ? id[0] : id;
 
-    const { habit, toggleCompletion, setStreakMemory, patchStreakMemory, resetHabit, deleteHabit, setHabitVisibility, setMissionReport } = useHabitStore(
+    const {
+        habit,
+        toggleCompletion,
+        repairHabitCompletedDatesFromMemories,
+        setStreakMemory,
+        patchStreakMemory,
+        resetHabit,
+        deleteHabit,
+        setHabitVisibility,
+        setMissionReport,
+    } = useHabitStore(
       useShallow((state) => ({
         habit: habitId ? state.getHabit(habitId) : undefined,
         toggleCompletion: state.toggleCompletion,
+        repairHabitCompletedDatesFromMemories: state.repairHabitCompletedDatesFromMemories,
         setStreakMemory: state.setStreakMemory,
         patchStreakMemory: state.patchStreakMemory,
         resetHabit: state.resetHabit,
@@ -501,6 +515,17 @@ export default function HabitDetail() {
     useEffect(() => {
         setOptimisticMissionVisibility(null);
     }, [habit?.id, habit?.visibility]);
+
+    useEffect(() => {
+        if (!habit) return;
+        const completedSet = new Set(habit.completedDates ?? []);
+        const hasMissingMemoryCompletion = Object.keys(habit.streakMemories ?? {}).some(
+            (dateStr) => /^\d{4}-\d{2}-\d{2}$/.test(dateStr) && !completedSet.has(dateStr),
+        );
+        if (hasMissingMemoryCompletion) {
+            repairHabitCompletedDatesFromMemories(habit.id);
+        }
+    }, [habit, repairHabitCompletedDatesFromMemories]);
 
     const mode = habit?.mode ?? 'autopilot';
     const totalDays = habit?.totalDays ?? 21;
@@ -543,6 +568,7 @@ export default function HabitDetail() {
     const latestRenderStartedAtRef = useRef(renderStartedAt);
     const firstCommitLoggedRef = useRef(false);
     const memoryReadyLoggedRef = useRef(false);
+    const markerStateLoggedRef = useRef<string | null>(null);
     latestRenderStartedAtRef.current = renderStartedAt;
 
     const [reminderEditorOpen, setReminderEditorOpen] = useState(false);
@@ -679,15 +705,37 @@ export default function HabitDetail() {
         }, [refreshPremiumAccess]),
     );
 
-    const completedDateSet = useMemo(() => new Set(habit?.completedDates ?? []), [habit?.completedDates]);
+    const memoryCompletionDates = useMemo(
+        () =>
+            Object.keys(habit?.streakMemories ?? {})
+                .filter((dateStr) => /^\d{4}-\d{2}-\d{2}$/.test(dateStr))
+                .sort((a, b) => a.localeCompare(b)),
+        [habit?.streakMemories],
+    );
+    const effectiveCompletedDates = useMemo(() => {
+        const out = new Set<string>(habit?.completedDates ?? []);
+        for (const dateStr of memoryCompletionDates) out.add(dateStr);
+        return [...out].sort((a, b) => a.localeCompare(b));
+    }, [habit?.completedDates, memoryCompletionDates]);
+    const effectiveCompletedCount = effectiveCompletedDates.length;
+    const clockHabit = useMemo(
+        () => (habit ? { ...habit, completedDates: effectiveCompletedDates } : undefined),
+        [effectiveCompletedDates, habit],
+    );
+    const completedDateSet = useMemo(() => new Set(effectiveCompletedDates), [effectiveCompletedDates]);
     const milestoneSet = useMemo(() => new Set(milestones), [milestones]);
     const repairedDateSet = useMemo(() => new Set(habit?.repairedDates ?? []), [habit?.repairedDates]);
     const streakMemoryCount = useMemo(() => Object.keys(habit?.streakMemories ?? {}).length, [habit?.streakMemories]);
+    const missionDayMapKey = useMemo(() => {
+        if (!clockHabit) return "none";
+        if (!usesCalendarDayMission(clockHabit)) return `${clockHabit.id}:${clockHabit.startDate}:${clockHabit.totalDays}`;
+        return `${clockHabit.id}:${calendarDateKeyForTimestamp(now, getHabitMissionTimeZone(clockHabit))}:${effectiveCompletedDates.join("|")}`;
+    }, [clockHabit, effectiveCompletedDates, now]);
     const missionDayByDate = useMemo(() => {
         return traceSync("habit.detail.missionDayByDate", () => {
-            return habit ? missionDayNumberMapForHabit(habit) : new Map<string, number>();
+            return clockHabit ? missionDayNumberMapForHabit(clockHabit, Date.now()) : new Map<string, number>();
         });
-    }, [habit]);
+    }, [clockHabit, missionDayMapKey]);
     const shouldDeferHeavyMissionContent =
         totalDays > INITIAL_GRID_RENDER_DAYS || streakMemoryCount > HEAVY_MOMENTS_THRESHOLD;
     const initialGridDayCount = Math.min(totalDays, shouldDeferHeavyMissionContent ? INITIAL_GRID_RENDER_DAYS : totalDays);
@@ -804,16 +852,16 @@ export default function HabitDetail() {
     }, [habit, now]);
 
     const isManual = mode === 'manual';
-    const activeMissionDaySlot = habit ? getHabitActiveMissionDaySlot(habit, now) : null;
-    const useActiveTrailGrid = totalDays > INITIAL_GRID_RENDER_DAYS;
+    const activeMissionDaySlot = clockHabit ? getHabitActiveMissionDaySlot(clockHabit, now) : null;
+    const useActiveTrailGrid = isManual || totalDays > INITIAL_GRID_RENDER_DAYS;
     const activeTrailReachedDay = useMemo(() => {
         return traceSync("habit.detail.activeTrailReachedDay", () => {
-            if (!habit) return 1;
+            if (!clockHabit) return 1;
             let reached = activeMissionDaySlot ?? 0;
-            const memoryDays = Object.keys(habit.streakMemories ?? {})
+            const memoryDays = Object.keys(clockHabit.streakMemories ?? {})
                 .map((dateStr) => missionDayByDate.get(dateStr) ?? null)
                 .filter((day): day is number => typeof day === 'number');
-            const completedDays = (habit.completedDates ?? [])
+            const completedDays = effectiveCompletedDates
                 .map((dateStr) => missionDayByDate.get(dateStr) ?? null)
                 .filter((day): day is number => typeof day === 'number');
             for (const day of [...memoryDays, ...completedDays]) {
@@ -821,7 +869,7 @@ export default function HabitDetail() {
             }
             return Math.min(totalDays, Math.max(1, reached));
         });
-    }, [activeMissionDaySlot, habit, missionDayByDate, totalDays]);
+    }, [activeMissionDaySlot, clockHabit, effectiveCompletedDates, missionDayByDate, totalDays]);
     const activeTrailDays = useMemo(
         () => Array.from({ length: activeTrailReachedDay }, (_, i) => activeTrailReachedDay - i),
         [activeTrailReachedDay],
@@ -831,14 +879,88 @@ export default function HabitDetail() {
         [activeTrailDays, visibleGridDayCount],
     );
     const activeTrailRemainingDays = Math.max(0, totalDays - activeTrailReachedDay);
-    const activeMissionDayEndMs = habit ? getHabitActiveMissionDayEndMs(habit, now) : null;
+    const activeMissionDayEndMs = clockHabit ? getHabitActiveMissionDayEndMs(clockHabit, now) : null;
+    const activeMissionDate =
+        clockHabit && activeMissionDaySlot != null
+            ? calendarDateForHabitMissionDayIndex(clockHabit, activeMissionDaySlot - 1, now)
+            : null;
+    const activeMissionDayCompleted = activeMissionDate ? completedDateSet.has(activeMissionDate) : false;
+    useEffect(() => {
+        if (!__DEV__ || !habit || !clockHabit) return;
+        const missionTz = getHabitMissionTimeZone(clockHabit);
+        const todayKey = calendarDateKeyForTimestamp(now, missionTz);
+        const rawCreatedKey = calendarDateForMissionDayIndex(clockHabit.startDate, 0, missionTz);
+        const rollingSlot = getActiveMissionDaySlot(clockHabit.startDate, now, totalDays);
+        const latestMemoryDate = memoryCompletionDates[memoryCompletionDates.length - 1] ?? null;
+        const logKey = [
+            habit.id,
+            activeMissionDaySlot ?? "none",
+            activeMissionDate ?? "none",
+            activeMissionDayCompleted ? "done" : "open",
+            activeMissionDayEndMs ?? "none",
+            effectiveCompletedCount,
+        ].join(":");
+        if (markerStateLoggedRef.current === logKey) return;
+        markerStateLoggedRef.current = logKey;
+        console.info(
+            `[habitPro:marker] detailState ${JSON.stringify({
+                habitId: habit.id,
+                title: habit.title,
+                usesCalendarMission: usesCalendarDayMission(habit),
+                missionTimezone: habit.missionTimezone ?? null,
+                challengeCreatorTimezone: habit.challengeCreatorTimezone ?? null,
+                mode: habit.mode,
+                startDate: habit.startDate,
+                endDate: habit.endDate ?? null,
+                missionTz,
+                todayKey,
+                rawCreatedKey,
+                rawCreatedCompleted: completedDateSet.has(rawCreatedKey),
+                nowIso: new Date(now).toISOString(),
+                activeMissionDaySlot,
+                rollingSlot,
+                activeDate: activeMissionDate,
+                activeCompleted: activeMissionDayCompleted,
+                activeMissionDayEndIso: activeMissionDayEndMs ? new Date(activeMissionDayEndMs).toISOString() : null,
+                unlockMs: activeMissionDayEndMs ? activeMissionDayEndMs - now : null,
+                totalDays,
+                storedCompletedCount: habit.completedDates.length,
+                effectiveCompletedCount,
+                memoryCompletionCount: memoryCompletionDates.length,
+                latestStoredCompletedDate: habit.completedDates[habit.completedDates.length - 1] ?? null,
+                latestEffectiveCompletedDate: effectiveCompletedDates[effectiveCompletedDates.length - 1] ?? null,
+                latestMemoryDate,
+                latestMemoryMissionDay: latestMemoryDate ? missionDayByDate.get(latestMemoryDate) ?? null : null,
+                storedCompletedTail: habit.completedDates.slice(-6),
+                effectiveCompletedTail: effectiveCompletedDates.slice(-6),
+                memoryDateTail: memoryCompletionDates.slice(-6),
+            })}`,
+        );
+    }, [
+        activeMissionDate,
+        activeMissionDayCompleted,
+        activeMissionDayEndMs,
+        activeMissionDaySlot,
+        clockHabit,
+        completedDateSet,
+        effectiveCompletedCount,
+        effectiveCompletedDates,
+        habit,
+        memoryCompletionDates,
+        missionDayByDate,
+        now,
+        totalDays,
+    ]);
     const activeTrailUnlockCopy = useMemo(() => {
         if (!useActiveTrailGrid) return null;
         if (activeMissionDaySlot == null) {
             return activeTrailRemainingDays === 0 ? 'Full journey complete.' : 'No marker is open right now.';
         }
+        if (!activeMissionDayCompleted) {
+            return `Day ${activeMissionDaySlot} is open now`;
+        }
         if (activeMissionDaySlot >= totalDays) {
-            return 'Final marker is open now.';
+            return 'Final marker is saved.';
         }
         if (activeMissionDayEndMs && activeMissionDayEndMs > now) {
             return `Day ${activeMissionDaySlot + 1} opens in ${formatUnlockDuration(activeMissionDayEndMs - now)}`;
@@ -846,6 +968,7 @@ export default function HabitDetail() {
         return `Day ${activeMissionDaySlot + 1} opens soon`;
     }, [
         activeMissionDayEndMs,
+        activeMissionDayCompleted,
         activeMissionDaySlot,
         activeTrailRemainingDays,
         now,
@@ -874,6 +997,7 @@ export default function HabitDetail() {
         async (memory: StreakMemory | null, meta?: { publishToCommunity?: boolean }) => {
             const ctx = pendingMemoryRef.current;
             if (!ctx || !habit) return;
+            const commitNow = Date.now();
 
             // Only block on the image upload when publishing to Community (which needs
             // the remote URL). For private check-ins we save the local imageUri and let
@@ -919,8 +1043,26 @@ export default function HabitDetail() {
                 }
             }
 
-            const changed = toggleCompletion(habit.id, ctx.dateStr);
+            const changed = toggleCompletion(habit.id, ctx.dateStr, commitNow);
             if (!changed) {
+                if (__DEV__) {
+                    const freshHabit = useHabitStore.getState().getHabit(habit.id);
+                    const activeSlot = freshHabit ? getHabitActiveMissionDaySlot(freshHabit, commitNow) : null;
+                    const activeDate =
+                        freshHabit && activeSlot != null
+                            ? calendarDateForHabitMissionDayIndex(freshHabit, activeSlot - 1, commitNow)
+                            : null;
+                    console.info(
+                        `[habitPro:marker] memoryCommitRejected ${JSON.stringify({
+                            habitId: habit.id,
+                            dateStr: ctx.dateStr,
+                            day: ctx.day,
+                            activeSlot,
+                            activeDate,
+                            nowIso: new Date(commitNow).toISOString(),
+                        })}`,
+                    );
+                }
                 showToast(LOCKED_CHECKIN_MSG, 'info', 5000);
                 return;
             }
@@ -1270,9 +1412,9 @@ export default function HabitDetail() {
     const optimizeGridScrollForLongGrid = displayedGridDays.length > INITIAL_GRID_RENDER_DAYS;
 
     const getDayDate = useCallback((dayIndex: number) => {
-        if (!habit) return "";
-        return calendarDateForHabitMissionDayIndex(habit, dayIndex, now);
-    }, [habit, now]);
+        if (!clockHabit) return "";
+        return calendarDateForHabitMissionDayIndex(clockHabit, dayIndex, now);
+    }, [clockHabit, now]);
 
     const detailBottomPad = Math.max(insets.bottom, 24) + 16;
 
@@ -1280,13 +1422,38 @@ export default function HabitDetail() {
         const currentHabit = habitId ? useHabitStore.getState().getHabit(habitId) : undefined;
         if (!currentHabit) return;
 
-        const dateStr = calendarDateForHabitMissionDayIndex(currentHabit, dayIndex, Date.now());
+        const pressNow = Date.now();
+        const dateStr = calendarDateForHabitMissionDayIndex(currentHabit, dayIndex, pressNow);
         const wasCompleted = currentHabit.completedDates.includes(dateStr);
-        const activeSlot = getHabitActiveMissionDaySlot(currentHabit, Date.now());
+        const activeSlot = getHabitActiveMissionDaySlot(currentHabit, pressNow);
+        const activeDate =
+            activeSlot != null
+                ? calendarDateForHabitMissionDayIndex(currentHabit, activeSlot - 1, pressNow)
+                : null;
         const canInteract = activeSlot !== null && day === activeSlot;
+        const toggleable = isHabitCalendarDateToggleable(currentHabit, dateStr, pressNow);
+
+        if (__DEV__) {
+            console.info(
+                `[habitPro:marker] dayPress ${JSON.stringify({
+                    habitId,
+                    day,
+                    dayIndex,
+                    dateStr,
+                    wasCompleted,
+                    activeSlot,
+                    activeDate,
+                    canInteract,
+                    toggleable,
+                    usesCalendarMission: usesCalendarDayMission(currentHabit),
+                    missionTimezone: currentHabit.missionTimezone ?? null,
+                    nowIso: new Date(pressNow).toISOString(),
+                })}`,
+            );
+        }
 
         if (!wasCompleted) {
-            if (!isHabitCalendarDateToggleable(currentHabit, dateStr, Date.now())) {
+            if (!toggleable) {
                 showToast(LOCKED_CHECKIN_MSG, 'info', 5000);
                 return;
             }
@@ -1742,11 +1909,11 @@ export default function HabitDetail() {
                     <View style={styles.progressHeader}>
                         <Text style={[styles.progressLabel, { color: theme.colors.textSecondary, fontSize: theme.typography.micro }]}>Campaign Progress</Text>
                         <Text style={[styles.progressValue, { color: theme.colors.indigo[400] }]}>
-                            {habit.completedDates.length} <Text style={[styles.progressTotal, { color: theme.colors.textMuted }]}>/ {totalDays}</Text>
+                            {effectiveCompletedCount} <Text style={[styles.progressTotal, { color: theme.colors.textMuted }]}>/ {totalDays}</Text>
                         </Text>
                     </View>
                     <View style={[styles.progressBarBackground, { backgroundColor: theme.colors.slate[700] }]}>
-                        <View style={[styles.progressBarFill, isManual && { backgroundColor: theme.colors.amber[500] }, { backgroundColor: theme.colors.indigo[500], width: `${(habit.completedDates.length / totalDays) * 100}%` }]} />
+                        <View style={[styles.progressBarFill, isManual && { backgroundColor: theme.colors.amber[500] }, { backgroundColor: theme.colors.indigo[500], width: `${(effectiveCompletedCount / totalDays) * 100}%` }]} />
                     </View>
                 </View>
 
@@ -1865,7 +2032,7 @@ export default function HabitDetail() {
                         </Text>
                         {useActiveTrailGrid ? (
                             <Text style={[styles.gridSubtitle, { color: theme.colors.textMuted }]}>
-                                Day {activeTrailReachedDay}/{totalDays} | {habit.completedDates.length} done | {activeTrailRemainingDays} left
+                                Day {activeTrailReachedDay}/{totalDays} | {effectiveCompletedCount} done | {activeTrailRemainingDays} left
                             </Text>
                         ) : null}
                     </View>

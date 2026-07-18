@@ -33,7 +33,10 @@ export function getActiveMissionDaySlot(startIso: string, nowMs: number, totalDa
 }
 
 export function usesCalendarDayMission(habit: Habit): boolean {
-  return typeof habit.missionTimezone === "string" && habit.missionTimezone.trim().length > 0;
+  return (
+    (typeof habit.missionTimezone === "string" && habit.missionTimezone.trim().length > 0) ||
+    (typeof habit.challengeCreatorTimezone === "string" && habit.challengeCreatorTimezone.trim().length > 0)
+  );
 }
 
 export function getHabitMissionTimeZone(habit: Habit): string {

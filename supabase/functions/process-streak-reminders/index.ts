@@ -155,7 +155,10 @@ function getRollingActiveMissionDaySlot(startIso: string, nowMs: number, totalDa
 }
 
 function hasCalendarDayModel(h: HabitRow): boolean {
-  return typeof h.mission_timezone === "string" && h.mission_timezone.trim().length > 0;
+  return (
+    (typeof h.mission_timezone === "string" && h.mission_timezone.trim().length > 0) ||
+    (typeof h.challenge_creator_timezone === "string" && h.challenge_creator_timezone.trim().length > 0)
+  );
 }
 
 function reminderTimeZoneForHabit(h: HabitRow, profileTz: string | null | undefined): string {

@@ -147,7 +147,7 @@ export type HabitStore = {
   /** Clears mission data (e.g. on sign-out). */
   resetStore: () => void;
   addHabit: (input: AddHabitInput) => string;
-  toggleCompletion: (id: string, date: string) => boolean;
+  toggleCompletion: (id: string, date: string, nowMs?: number) => boolean;
   /**
    * Apply a server-approved streak repair to local state immediately (without granting completion XP).
    * Used for squad approvals so UI updates without logout/login.
@@ -160,6 +160,8 @@ export type HabitStore = {
     /** When false, XP was already adjusted client-side (e.g. solo repair). Default true if xpCost > 0. */
     deductXp?: boolean;
   }) => void;
+  /** Repairs local progress when saved streak memories exist for dates missing from completedDates. */
+  repairHabitCompletedDatesFromMemories: (id: string) => boolean;
   setStreakMemory: (id: string, date: string, memory: StreakMemory | null) => void;
   /** Merge into an existing streak memory (e.g. Community flags); no-op if no memory for date. */
   patchStreakMemory: (id: string, date: string, patch: Partial<StreakMemory>) => void;

@@ -22,7 +22,12 @@ import { MAX_RESERVE_FUEL_MINUTES } from "../constants/miniMission";
 import { recordAccountDeletedMissionId } from "../lib/accountBackup";
 import { tryRecordChallengeMilestones } from "../lib/challengeCohort";
 import { getDerivedState, isMissionGridFull } from "../utils/habitDerived";
-import { isHabitCalendarDateToggleable } from "../utils/missionDaySlots";
+import {
+  calendarDateForHabitMissionDayIndex,
+  getHabitActiveMissionDaySlot,
+  isHabitCalendarDateToggleable,
+  usesCalendarDayMission,
+} from "../utils/missionDaySlots";
 import { isHabitMissionWindowClosed } from "../utils/habitMissionWindow";
 import { mergeRepairIntoStreakMemory } from "../utils/repairStreakMemoryMerge";
 import { alignGroupHabitToChallengeStart } from "../utils/groupMissionClock";
@@ -34,6 +39,16 @@ const calculateEndDate = (startIso: string, totalDays: number): string => {
   const d = new Date(startIso);
   d.setDate(d.getDate() + totalDays);
   return d.toISOString();
+};
+
+const completedDatesWithMemoryEvidence = (
+  completedDates: string[] | undefined,
+  streakMemories: Habit["streakMemories"] | undefined,
+): string[] => {
+  const memoryDates = Object.keys(streakMemories ?? {}).filter((date) =>
+    /^\d{4}-\d{2}-\d{2}$/.test(date),
+  );
+  return [...(completedDates ?? []), ...memoryDates];
 };
 
 /**
@@ -317,9 +332,28 @@ export const useHabitStore = create<HabitStore>()(
         }
         return newHabit.id;
       },
-      toggleCompletion: (id, date) => {
+      toggleCompletion: (id, date, nowMs = Date.now()) => {
         const habitBefore = get().habits.find((h) => h.id === id);
-        if (!habitBefore || !isHabitCalendarDateToggleable(habitBefore, date, Date.now())) {
+        if (!habitBefore || !isHabitCalendarDateToggleable(habitBefore, date, nowMs)) {
+          if (__DEV__) {
+            const activeSlot = habitBefore ? getHabitActiveMissionDaySlot(habitBefore, nowMs) : null;
+            const activeDate =
+              habitBefore && activeSlot != null
+                ? calendarDateForHabitMissionDayIndex(habitBefore, activeSlot - 1, nowMs)
+                : null;
+            console.info(
+              `[habitPro:marker] storeToggleRejected ${JSON.stringify({
+                habitId: id,
+                requestedDate: date,
+                habitFound: Boolean(habitBefore),
+                activeSlot,
+                activeDate,
+                usesCalendarMission: habitBefore ? usesCalendarDayMission(habitBefore) : null,
+                missionTimezone: habitBefore?.missionTimezone ?? null,
+                nowIso: new Date(nowMs).toISOString(),
+              })}`,
+            );
+          }
           return false;
         }
 
@@ -446,6 +480,59 @@ export const useHabitStore = create<HabitStore>()(
 
           return didApply ? { habits: updatedHabits, xp: nextXp } : { habits: updatedHabits };
         });
+      },
+      repairHabitCompletedDatesFromMemories: (id) => {
+        let changed = false;
+        let beforeHabit: Habit | undefined;
+        set((state) => {
+          const updatedHabits = state.habits.map((habit) => {
+            if (habit.id !== id) return habit;
+            beforeHabit = habit;
+            const nextCompletedDates = completedDatesWithMemoryEvidence(
+              habit.completedDates,
+              habit.streakMemories,
+            );
+            const { normalized, streak, isCompleted, status } = getDerivedState(
+              nextCompletedDates,
+              habit.totalDays,
+              habit.missionReport,
+            );
+            if (
+              normalized.length === habit.completedDates.length &&
+              normalized.every((date, index) => date === habit.completedDates[index])
+            ) {
+              return habit;
+            }
+            changed = true;
+            if (__DEV__) {
+              console.info(
+                `[habitPro:marker] repairedCompletedDatesFromMemories ${JSON.stringify({
+                  habitId: id,
+                  before: habit.completedDates.length,
+                  after: normalized.length,
+                  memoryDates: Object.keys(habit.streakMemories ?? {}).length,
+                })}`,
+              );
+            }
+            return {
+              ...habit,
+              completedDates: normalized,
+              streak,
+              isCompleted,
+              status,
+            };
+          });
+          return changed ? { habits: updatedHabits } : state;
+        });
+
+        if (changed) {
+          const habit = get().habits.find((h) => h.id === id);
+          if (habit && habit.challengeGroupId) {
+            void tryRecordChallengeMilestones(beforeHabit, habit);
+          }
+          requestRemoteSync({ immediate: false });
+        }
+        return changed;
       },
       setStreakMemory: (id, date, memory) => {
         set((state) => ({
@@ -839,8 +926,12 @@ export const useHabitStore = create<HabitStore>()(
         if (state) {
           state.habits = state.habits.map((h) => {
             const migrated = migrateHabit(h);
+            const completedWithMemories = completedDatesWithMemoryEvidence(
+              migrated.completedDates,
+              migrated.streakMemories,
+            );
             const pre = getDerivedState(
-              migrated.completedDates ?? [],
+              completedWithMemories,
               migrated.totalDays ?? 21,
               migrated.missionReport,
             );
@@ -849,7 +940,7 @@ export const useHabitStore = create<HabitStore>()(
               missionReport = "accomplished";
             }
             const d = getDerivedState(
-              migrated.completedDates ?? [],
+              completedWithMemories,
               migrated.totalDays ?? 21,
               missionReport,
             );

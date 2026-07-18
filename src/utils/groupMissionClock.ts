@@ -29,7 +29,8 @@ function dayIndexMapForMission(
   for (let i = 0; i < td; i++) {
     const key = missionDayDateKey(startIso, i, timeZone);
     if (key) out.set(key, i);
-    out.set(legacyCalendarDateForMissionDayIndex(startIso, i), i);
+    const legacy = legacyCalendarDateForMissionDayIndex(startIso, i);
+    if (!out.has(legacy)) out.set(legacy, i);
   }
   return out;
 }
@@ -111,7 +112,7 @@ export function alignGroupHabitToChallengeStart(
 ): Habit {
   if (!habit.challengeGroupId) return habit;
 
-  const anchorTimeZone = habit.missionTimezone || null;
+  const anchorTimeZone = habit.missionTimezone || habit.challengeCreatorTimezone || null;
   const canonical = canonicalGroupMissionHabitStartIso(groupStartDateYmd, anchorTimeZone);
   const tz = habit.missionTimezone || habit.challengeCreatorTimezone || getMissionCalendarTimeZone();
   const td = Math.max(1, habit.totalDays ?? 21);

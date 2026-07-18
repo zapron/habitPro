@@ -577,7 +577,7 @@ function streakMemoryMarkers(value: unknown): Habit["streakMemoryMarkers"] | und
 function lightweightHabitFromRpc(
   raw: unknown,
   challengeId: string,
-  groupMeta?: { startDate?: unknown; habitTemplate?: unknown },
+  groupMeta?: { startDate?: unknown; habitTemplate?: unknown; creatorTimezone?: unknown },
 ): Habit | undefined {
   if (!raw || typeof raw !== "object") return undefined;
   const row = raw as Record<string, unknown>;
@@ -611,7 +611,11 @@ function lightweightHabitFromRpc(
     missionReportAt: typeof row.mission_report_at === "string" ? row.mission_report_at : undefined,
     challengeGroupId: typeof row.challenge_group_id === "string" ? row.challenge_group_id : challengeId,
     challengeCreatorTimezone:
-      typeof row.challenge_creator_timezone === "string" ? row.challenge_creator_timezone : null,
+      typeof row.challenge_creator_timezone === "string"
+        ? row.challenge_creator_timezone
+        : typeof groupMeta?.creatorTimezone === "string"
+          ? groupMeta.creatorTimezone
+          : null,
     missionTimezone: typeof row.mission_timezone === "string" ? row.mission_timezone : null,
     streakMemories: streakMemories(row.streak_memories),
     streakMemoryMarkers: streakMemoryMarkers(row.streak_memory_markers) ?? streakMemoryMarkers(row.streak_memories),
@@ -649,6 +653,7 @@ function normalizeStreakMembersPayload(
     const habit = lightweightHabitFromRpc(row.habit, challengeId, {
       startDate: group?.startDate,
       habitTemplate: group?.habitTemplate,
+      creatorTimezone: group?.creatorTimezone,
     });
     items.push({ memberId, label, habit });
   }

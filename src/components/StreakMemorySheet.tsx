@@ -112,6 +112,7 @@ export const StreakMemorySheet = React.memo(function StreakMemorySheet({
     (squadShare?.visibility ?? "solo") === "public",
   );
   const [imgLoading, setImgLoading] = useState(false);
+  const [imgFailed, setImgFailed] = useState(false);
 
   useEffect(() => {
     if (!visible || isView) return;
@@ -144,10 +145,21 @@ export const StreakMemorySheet = React.memo(function StreakMemorySheet({
   useEffect(() => {
     if (visible && isView && (viewMemory?.imageUrl || viewMemory?.imageUri)) {
       setImgLoading(true);
+      setImgFailed(false);
     } else {
       setImgLoading(false);
+      setImgFailed(false);
     }
   }, [visible, isView, viewMemory?.imageUrl, viewMemory?.imageUri]);
+
+  useEffect(() => {
+    if (!imgLoading) return undefined;
+    const timer = setTimeout(() => {
+      setImgLoading(false);
+      setImgFailed(true);
+    }, 12000);
+    return () => clearTimeout(timer);
+  }, [imgLoading, viewMemory?.imageUrl, viewMemory?.imageUri]);
 
   const pickerOptions = {
     mediaTypes: ["images"] satisfies ImagePicker.MediaType[],
@@ -362,7 +374,8 @@ export const StreakMemorySheet = React.memo(function StreakMemorySheet({
   const memoryCaptureSheetMaxHeight = Math.min(windowH * 0.78, windowH - insets.top - 8);
 
   const vm = viewMemory;
-  const viewHasImage = Boolean(vm?.imageUrl || vm?.imageUri);
+  const viewImageUri = vm?.imageUrl ?? vm?.imageUri;
+  const viewHasImage = Boolean(viewImageUri);
   const viewNoteStr = vm?.note?.trim() ?? "";
   const viewTextOnlyMemory = isView && viewNoteStr.length > 0 && !viewHasImage;
   /** Main mission: “Just mark done” — locked row with no photo/note. */
@@ -525,14 +538,21 @@ export const StreakMemorySheet = React.memo(function StreakMemorySheet({
                       </View>
                     ) : (
                       <>
-                        {viewHasImage ? (
+                        {viewHasImage && !imgFailed ? (
                           <View style={[styles.photoSlotView, { borderColor: theme.colors.border }]}>
                             <View style={styles.photoSlotImageFill}>
                               <Image
-                                source={{ uri: vm!.imageUrl ?? vm!.imageUri! }}
+                                source={{ uri: viewImageUri! }}
                                 style={StyleSheet.absoluteFillObject}
                                 resizeMode="cover"
                                 onLoadStart={() => setImgLoading(true)}
+                                onLoad={() => {
+                                  setImgFailed(false);
+                                }}
+                                onError={() => {
+                                  setImgLoading(false);
+                                  setImgFailed(true);
+                                }}
                                 onLoadEnd={() => setImgLoading(false)}
                               />
                               {imgLoading && (
@@ -550,6 +570,23 @@ export const StreakMemorySheet = React.memo(function StreakMemorySheet({
                                 </View>
                               )}
                             </View>
+                          </View>
+                        ) : imgFailed ? (
+                          <View
+                            style={[
+                              styles.checkInOnlyCard,
+                              {
+                                borderColor: theme.colors.border,
+                                backgroundColor: isDark ? "rgba(148, 163, 184, 0.1)" : "rgba(100, 116, 139, 0.08)",
+                              },
+                            ]}
+                          >
+                            <Text style={[styles.checkInOnlyTitle, { color: theme.colors.textPrimary }]}>
+                              Photo unavailable
+                            </Text>
+                            <Text style={[styles.checkInOnlyBody, { color: theme.colors.textSecondary }]}>
+                              The note is saved, but this photo could not be loaded on this device.
+                            </Text>
                           </View>
                         ) : null}
                         {viewNoteStr ? (
