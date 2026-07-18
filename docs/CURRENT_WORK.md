@@ -6,10 +6,11 @@ This file captures the current working state so future chats do not need the ful
 
 ## Current Worktree State
 
-The mission marker regression fix has been split into phased local commits. Do not push, apply migrations, build, publish OTA, or deploy unless the user explicitly asks for that exact action in the latest relevant message.
+The mission marker regression fix has been split into phased local commits and published as a preview OTA. Do not push, apply migrations, build, publish another OTA, or deploy unless the user explicitly asks for that exact action in the latest relevant message.
 
 Recent code commits already created:
 
+- `4acde02 docs: record marker regression recovery`
 - `c41cc69 db: add marker progress repair migrations`
 - `61e035c fix: repair mission marker date mapping`
 - `136183f docs: log Android performance work`
@@ -26,11 +27,15 @@ Recent code commits already created:
 - `5131c7a feat: show cohort streak dots newest first`
 - `4a078b7 docs: add migration handoff context`
 
-Current pending files before preview OTA:
+Current local state:
 
-- `docs/CURRENT_WORK.md`
-- `docs/WORK_HISTORY.md`
-- `.codex/skills/habitpro-deployment-guard/`
+- Preview OTA was published from commit `4acde0277ec4025c82b36edc0a6073628555dc85`.
+- EAS update group: `683beb51-84b0-4bb8-aa2d-8572757e4bea`.
+- Branch/channel: `preview`.
+- Runtime version: `1.1.31`.
+- Android update ID: `019f7711-2b55-7b40-bd1b-7f03cf79e188`.
+- iOS update ID: `019f7711-2b55-7980-bf35-7175c3aacb09`.
+- Dashboard: `https://expo.dev/accounts/raktim24/projects/habitPro/updates/683beb51-84b0-4bb8-aa2d-8572757e4bea`.
 
 ## Mission Marker Regression Fix
 
@@ -77,7 +82,7 @@ Open / not yet done:
 
 - No push has been made.
 - Supabase migrations have not been applied.
-- Preview OTA is explicitly requested next and should target the `preview` channel only.
+- Preview OTA has been published to the `preview` channel only.
 - User explicitly instructed: never commit, push, apply migrations, build, publish OTA, or deploy unless explicitly asked.
 - `.codex/skills/habitpro-deployment-guard/` was added locally to make that rule durable. Skill validator was attempted earlier but local Python lacked the `yaml` module.
 

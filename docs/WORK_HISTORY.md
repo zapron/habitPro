@@ -8,14 +8,26 @@ This is a concise chronological log for future sessions. Keep secrets out of thi
 
 - `61e035c fix: repair mission marker date mapping`
 - `c41cc69 db: add marker progress repair migrations`
+- `4acde02 docs: record marker regression recovery`
 
 ### Release Boundaries
 
 - No push was run.
 - No Supabase migration was applied.
-- Preview OTA was explicitly requested after phased commits.
+- Preview OTA was published to the `preview` channel.
 - User added a standing rule: never commit, push, apply migrations, build, publish OTA, or deploy unless explicitly asked for that exact action.
 - Added local skill `.codex/skills/habitpro-deployment-guard/` to preserve that rule for future HabitPro sessions.
+
+### Preview OTA
+
+- Command: `npx --yes eas-cli@latest update --channel preview --message "Preview mission marker date fix"`
+- Branch/channel: `preview`
+- Runtime version: `1.1.31`
+- Update group ID: `683beb51-84b0-4bb8-aa2d-8572757e4bea`
+- Android update ID: `019f7711-2b55-7b40-bd1b-7f03cf79e188`
+- iOS update ID: `019f7711-2b55-7980-bf35-7175c3aacb09`
+- Commit published by EAS: `4acde0277ec4025c82b36edc0a6073628555dc85`
+- Dashboard: `https://expo.dev/accounts/raktim24/projects/habitPro/updates/683beb51-84b0-4bb8-aa2d-8572757e4bea`
 
 ### Marker Regression Investigation
 
@@ -58,7 +70,7 @@ This is a concise chronological log for future sessions. Keep secrets out of thi
 
 ### Open Risks / Next Steps
 
-- Preview OTA still needs to be published to the `preview` channel.
+- Preview OTA is published; no production OTA was run.
 - Live data still needs the backfill migration to repair existing rows in Supabase.
 - If testing still shows marker mismatch, capture the full `[habitPro:marker] detailState` line.
 - Skill validator for `.codex/skills/habitpro-deployment-guard/` could not run because the local Python environment is missing the `yaml` module.
