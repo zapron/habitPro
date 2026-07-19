@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { InteractionManager, View } from "react-native";
 import * as SplashScreen from "expo-splash-screen";
 
@@ -21,7 +21,6 @@ export function SplashGate({ children }: Props) {
   const [nativeHiddenAt, setNativeHiddenAt] = useState<number | null>(null);
   const [shouldDismiss, setShouldDismiss] = useState(false);
   const [storeHydrated, setStoreHydrated] = useState(() => useHabitStore.persist.hasHydrated());
-  const dismissLoggedRef = useRef(false);
   const userId = session?.user?.id ?? null;
   const shouldWaitForSignedInData = Boolean(requireAuth && userId && !passwordRecoveryPending);
   const signedInDataReady =
@@ -29,11 +28,7 @@ export function SplashGate({ children }: Props) {
 
   const onFirstLayout = useCallback(() => {
     void SplashScreen.hideAsync().finally(() => {
-      const hiddenAt = Date.now();
-      if (__DEV__) {
-        console.info("[habitPro:perf] splash.nativeHidden");
-      }
-      setNativeHiddenAt(hiddenAt);
+      setNativeHiddenAt(Date.now());
     });
   }, []);
 
@@ -45,19 +40,6 @@ export function SplashGate({ children }: Props) {
       const authOk = !requireAuth || !initializing;
       const maxOk = elapsed >= MAX_DISPLAY_MS;
       if (authOk && ((minOk && signedInDataReady) || maxOk)) {
-        if (__DEV__ && !dismissLoggedRef.current) {
-          dismissLoggedRef.current = true;
-          console.info(
-            `[habitPro:perf] splash.dismissAfter ${elapsed}ms ${JSON.stringify({
-              authOk,
-              signedInDataReady,
-              maxOk,
-              storeHydrated,
-              syncReady,
-              syncError: Boolean(syncError),
-            })}`,
-          );
-        }
         setShouldDismiss(true);
       }
     }, 120);

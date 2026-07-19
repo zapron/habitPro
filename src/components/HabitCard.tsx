@@ -302,22 +302,7 @@ export const HabitCard = memo(({ item, nowMs }: HabitCardProps) => {
     const pulseOpacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.22, 0.62] });
 
     const openHabit = () => {
-        if (__DEV__) {
-          console.info(
-            `[habitPro:perf] habit.card.openPress ${JSON.stringify({
-              habitId: item.id,
-              totalDays,
-              memories: Object.keys(item.streakMemories ?? {}).length,
-              completed: item.completedDates.length,
-              platform: Platform.OS,
-            })}`,
-          );
-        }
-        const startedAt = Date.now();
         router.push(`/habit/${item.id}`);
-        if (__DEV__) {
-          console.info(`[habitPro:perf] habit.card.routerPush returned ${Date.now() - startedAt}ms`);
-        }
         setTimeout(() => {
           void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         }, 0);

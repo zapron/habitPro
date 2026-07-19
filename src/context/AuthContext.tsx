@@ -286,15 +286,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     const browserUrl = buildSupabaseOAuthBrowserUrl(data.url);
-    if (__DEV__) {
-      console.log("[OAuth] Supabase redirectTo:", redirectTo);
-      console.log("[OAuth] WebBrowser returnUrl:", returnUrl);
-      console.log(
-        "[OAuth] browser opens:",
-        browserUrl === data.url ? "raw Supabase authorize" : "auth.expo.io/start proxy",
-      );
-    }
-
     const result = await WebBrowser.openAuthSessionAsync(browserUrl, returnUrl);
     if (result.type !== "success" || !result.url) {
       if (result.type === "cancel" || result.type === "dismiss") {

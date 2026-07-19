@@ -298,7 +298,6 @@ function ListSkeleton({
 }
 
 export default function Home() {
-  const renderStartedAt = Date.now();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { theme, isDark } = useTheme();
@@ -339,10 +338,6 @@ export default function Home() {
   const bellScale = useRef(new Animated.Value(1)).current;
   const bellBuzz = useRef(new Animated.Value(0)).current;
   const emptyIconScale = useRef(new Animated.Value(1)).current;
-  const firstCommitLoggedRef = useRef(false);
-  const homeMountedAtRef = useRef(renderStartedAt);
-  const latestRenderStartedAtRef = useRef(renderStartedAt);
-  latestRenderStartedAtRef.current = renderStartedAt;
 
   useEffect(() => {
     if (reduceMotion) {
@@ -421,38 +416,6 @@ export default function Home() {
     }
     return habits.filter((h) => h.missionReport === "failed");
   }, [habits, activeTab, reportsSegment, missionNow]);
-
-  useEffect(() => {
-    if (!__DEV__ || !isFocused || firstCommitLoggedRef.current) return;
-    if (!storeHydrated || shouldHoldForFirstSync || cloudSyncBlocked) return;
-    firstCommitLoggedRef.current = true;
-    const longMissionCount = filteredHabits.filter((h) => (h.totalDays ?? 21) > 45).length;
-    const maxMissionDays = filteredHabits.reduce((max, h) => Math.max(max, h.totalDays ?? 21), 0);
-    const now = Date.now();
-    console.info(
-      `[habitPro:perf] home.firstCardsCommit ${now - latestRenderStartedAtRef.current}ms ${JSON.stringify({
-        sinceHomeMountMs: now - homeMountedAtRef.current,
-        habits: habits.length,
-        filteredHabits: filteredHabits.length,
-        miniMissions: miniMissions.length,
-        longMissionCount,
-        maxMissionDays,
-        storeHydrated,
-        syncReady,
-        activeTab,
-      })}`,
-    );
-  }, [
-    activeTab,
-    cloudSyncBlocked,
-    filteredHabits,
-    habits.length,
-    isFocused,
-    miniMissions.length,
-    shouldHoldForFirstSync,
-    storeHydrated,
-    syncReady,
-  ]);
 
   const stats = useMemo(() => {
     let missionsCount = 0;

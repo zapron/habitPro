@@ -11,6 +11,11 @@
 
 - Do **not** use the `Sparkles` / magic-wand style icon in HabitPro UI. It gives the product an AI-first vibe; prefer habit, progress, mission, proof, or community metaphors instead.
 
+## Performance / time optimization
+
+- When optimizing slow screens, timers, check-in timing, navigation latency, or perceived wait time, first add targeted temporary timer logs around the suspected path and use the timings to choose the fix.
+- Remove temporary `console.log` / `console.info` instrumentation before handing back production-ready code, unless the user explicitly asks to keep a debug logger.
+
 ## Production version bumps
 
 When the user asks to bump the app version for a production build, update all release-version sources together:
@@ -21,4 +26,3 @@ When the user asks to bump the app version for a production build, update all re
 - `android/app/build.gradle`: native Android `versionCode` and `versionName`
 
 The `android/` folder may be ignored by Git, but still check and update `android/app/build.gradle` because local/native production builds can read from it.
-

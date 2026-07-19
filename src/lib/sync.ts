@@ -64,10 +64,9 @@ type RepairRow = {
 };
 
 function logSyncPerf(label: string, startedAt: number, meta?: Record<string, unknown>) {
-  if (!__DEV__) return;
-  const elapsedMs = Date.now() - startedAt;
-  const suffix = meta ? ` ${JSON.stringify(meta)}` : "";
-  console.info(`[habitPro:perf] ${label} took ${elapsedMs}ms${suffix}`);
+  void label;
+  void startedAt;
+  void meta;
 }
 
 function approximateJsonBytes(value: unknown): number | null {

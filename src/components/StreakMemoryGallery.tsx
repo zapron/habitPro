@@ -163,8 +163,6 @@ export function StreakMemoryGallery({
   const [open, setOpen] = useState<Entry | null>(null);
   const [viewerImageAspect, setViewerImageAspect] = useState<number | null>(null);
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
-  const mountedAtRef = useRef(Date.now());
-  const firstCommitLoggedRef = useRef(false);
 
   const tileW = clamp((windowWidth - 42) / 3.06, 94, 122);
   const tileH = tileW * 1.12;
@@ -193,19 +191,6 @@ export function StreakMemoryGallery({
       }),
     );
   }, [entries, honeycombColumns]);
-
-  useEffect(() => {
-    if (!__DEV__ || firstCommitLoggedRef.current) return;
-    firstCommitLoggedRef.current = true;
-    console.info(
-      `[habitPro:perf] memory.gallery.firstCommit ${Date.now() - mountedAtRef.current}ms ${JSON.stringify({
-        entries: entries.length,
-        columns: honeycombColumnData.length,
-        tileW: Math.round(tileW),
-        tileH: Math.round(tileH),
-      })}`,
-    );
-  }, [entries.length, honeycombColumnData.length, tileH, tileW]);
 
   const viewerUri = open?.memory?.imageUrl || open?.memory?.imageUri;
   const modalHasRenderableImage = Boolean(

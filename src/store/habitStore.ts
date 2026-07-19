@@ -23,10 +23,7 @@ import { recordAccountDeletedMissionId } from "../lib/accountBackup";
 import { tryRecordChallengeMilestones } from "../lib/challengeCohort";
 import { getDerivedState, isMissionGridFull } from "../utils/habitDerived";
 import {
-  calendarDateForHabitMissionDayIndex,
-  getHabitActiveMissionDaySlot,
   isHabitCalendarDateToggleable,
-  usesCalendarDayMission,
 } from "../utils/missionDaySlots";
 import { isHabitMissionWindowClosed } from "../utils/habitMissionWindow";
 import { mergeRepairIntoStreakMemory } from "../utils/repairStreakMemoryMerge";
@@ -335,25 +332,6 @@ export const useHabitStore = create<HabitStore>()(
       toggleCompletion: (id, date, nowMs = Date.now()) => {
         const habitBefore = get().habits.find((h) => h.id === id);
         if (!habitBefore || !isHabitCalendarDateToggleable(habitBefore, date, nowMs)) {
-          if (__DEV__) {
-            const activeSlot = habitBefore ? getHabitActiveMissionDaySlot(habitBefore, nowMs) : null;
-            const activeDate =
-              habitBefore && activeSlot != null
-                ? calendarDateForHabitMissionDayIndex(habitBefore, activeSlot - 1, nowMs)
-                : null;
-            console.info(
-              `[habitPro:marker] storeToggleRejected ${JSON.stringify({
-                habitId: id,
-                requestedDate: date,
-                habitFound: Boolean(habitBefore),
-                activeSlot,
-                activeDate,
-                usesCalendarMission: habitBefore ? usesCalendarDayMission(habitBefore) : null,
-                missionTimezone: habitBefore?.missionTimezone ?? null,
-                nowIso: new Date(nowMs).toISOString(),
-              })}`,
-            );
-          }
           return false;
         }
 
@@ -504,16 +482,6 @@ export const useHabitStore = create<HabitStore>()(
               return habit;
             }
             changed = true;
-            if (__DEV__) {
-              console.info(
-                `[habitPro:marker] repairedCompletedDatesFromMemories ${JSON.stringify({
-                  habitId: id,
-                  before: habit.completedDates.length,
-                  after: normalized.length,
-                  memoryDates: Object.keys(habit.streakMemories ?? {}).length,
-                })}`,
-              );
-            }
             return {
               ...habit,
               completedDates: normalized,
