@@ -328,7 +328,22 @@ export default function CreateMiniMission() {
               <Clock3 size={17} color={theme.colors.green[500]} />
             </View>
             <View style={styles.finishText}>
-              <Text style={[styles.finishTitle, { color: theme.colors.textPrimary }]}>Timer Check-In</Text>
+              <View style={styles.finishTitleRow}>
+                <Text style={[styles.finishTitle, { color: theme.colors.textPrimary }]} numberOfLines={1}>
+                  Timer Check-In
+                </Text>
+                <View
+                  style={[
+                    styles.finishModeTag,
+                    {
+                      backgroundColor: isDark ? "rgba(34,197,94,0.16)" : "rgba(22,163,74,0.11)",
+                      borderColor: theme.colors.green[500] + "66",
+                    },
+                  ]}
+                >
+                  <Text style={[styles.finishModeTagText, { color: theme.colors.green[500] }]}>SOLO</Text>
+                </View>
+              </View>
               <Text style={[styles.finishBody, { color: theme.colors.textSecondary }]} numberOfLines={2}>
                 Time ends, then confirm if you completed it. Best for workouts, planks, study, meditation.
               </Text>
@@ -353,7 +368,24 @@ export default function CreateMiniMission() {
               <Plane size={17} color={theme.colors.indigo[400]} />
             </View>
             <View style={styles.finishText}>
-              <Text style={[styles.finishTitle, { color: theme.colors.textPrimary }]}>Manual Finish</Text>
+              <View style={styles.finishTitleRow}>
+                <Text style={[styles.finishTitle, { color: theme.colors.textPrimary }]} numberOfLines={1}>
+                  Manual Finish
+                </Text>
+                <View
+                  style={[
+                    styles.finishModeTag,
+                    {
+                      backgroundColor: isDark ? "rgba(99,102,241,0.17)" : "rgba(79,70,229,0.1)",
+                      borderColor: theme.colors.indigo[400] + "66",
+                    },
+                  ]}
+                >
+                  <Text style={[styles.finishModeTagText, { color: theme.colors.indigo[400] }]} numberOfLines={1}>
+                    SOLO / COMMUNITY
+                  </Text>
+                </View>
+              </View>
               <Text style={[styles.finishBody, { color: theme.colors.textSecondary }]} numberOfLines={2}>
                 Tap complete before zero. Use this for stricter race-style mini missions.
               </Text>
@@ -464,7 +496,16 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   finishText: { flex: 1, minWidth: 0 },
+  finishTitleRow: { flexDirection: "row", alignItems: "center", gap: 8, minWidth: 0 },
   finishTitle: { fontSize: 14, lineHeight: 18, fontWeight: "900" },
+  finishModeTag: {
+    flexShrink: 1,
+    borderWidth: 1,
+    borderRadius: 7,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+  },
+  finishModeTagText: { fontSize: 9, lineHeight: 11, fontWeight: "900", letterSpacing: 0.8 },
   finishBody: { marginTop: 2, fontSize: 12, lineHeight: 16, fontWeight: "600" },
   presetSectionLabel: { fontSize: 11, fontWeight: "700", letterSpacing: 0.3, textTransform: "uppercase" },
   presetWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8, justifyContent: "space-between" },
