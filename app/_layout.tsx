@@ -25,6 +25,7 @@ import { AppLaunchNotificationNudge } from "../src/components/AppLaunchNotificat
 import { OtaUpdateManager } from "../src/components/OtaUpdateManager";
 import { SyncManager } from "../src/components/SyncManager";
 import { SyncToast } from "../src/components/SyncToast";
+import { NetworkRequiredGate } from "../src/components/NetworkRequiredGate";
 import { setupNotifications } from "../src/utils/notifications";
 import { syncMiniMissionNotifications } from "../src/utils/miniMissionNotifications";
 import { useHabitStore } from "../src/store/habitStore";
@@ -347,6 +348,7 @@ function RootLayoutNav() {
       <ToastHost />
       <SyncToast />
       <ForceUpdateModal visible={needsForceUpdate} downloadUrl={downloadUrl} message={forceMessage} />
+      <NetworkRequiredGate />
     </View>
   );
 }

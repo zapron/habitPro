@@ -186,7 +186,6 @@ export default function LoginScreen() {
                 Add EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY (.env or EAS
                 secrets), then restart Expo.
               </Text>
-              <Button title="Continue offline" onPress={() => router.replace("/")} />
             </View>
           )}
 
