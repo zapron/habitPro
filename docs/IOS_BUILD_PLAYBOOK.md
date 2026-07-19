@@ -7,7 +7,7 @@ Use this when preparing HabitPro for iPhone testing or TestFlight.
 - Expo SDK 54.
 - EAS project id: `cdfc2b93-f246-47b6-94ca-6a816ffda876`.
 - iOS bundle id: `com.rakti.habitpro`.
-- iOS build number in `app.json`: `32`.
+- iOS build number in `app.json`: `33`.
 - EAS profiles: `development`, `preview`, `production`.
 
 The `development` profile currently has `ios.simulator: true`, so it is for simulator builds.

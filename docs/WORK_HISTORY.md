@@ -75,6 +75,40 @@ This is a concise chronological log for future sessions. Keep secrets out of thi
 - If testing still shows marker mismatch, capture the full `[habitPro:marker] detailState` line.
 - Skill validator for `.codex/skills/habitpro-deployment-guard/` could not run because the local Python environment is missing the `yaml` module.
 
+### Production Build Prep / Connectivity Layer
+
+- `460f366` bumped the app to `1.1.32`: Expo/package version `1.1.32`, runtime `1.1.32`, iOS build `33`, Android versionCode `33`.
+- `eb9dcbd` made mini mission finish rules clearer: `Timer Check-In` now shows a straight `SOLO` pill and `Manual Finish` shows `SOLO / COMMUNITY`.
+- `60b53f2` removed temporary `console.log` / `console.info` instrumentation from app code and added `.codex/skills/habitpro-performance-investigation/` plus `agent.md` guidance: use targeted timer logs for performance work, then remove them before production handoff.
+- `11eb8f0` added the internet-required layer:
+  - installed `@react-native-community/netinfo`
+  - added `src/components/NetworkRequiredGate.tsx`
+  - mounted it globally in `app/_layout.tsx`
+  - removed login's `Continue offline` action
+  - blocks app usage with `No internet connection` when connectivity is unavailable.
+- User reported they triggered a production EAS Android build themselves.
+- Codex started a local Gradle APK build only after the user asked for help creating a local APK, then stopped it immediately when the user clarified they wanted guidance only. `git status --short` was clean after interruption.
+- Local APK guidance retained for future reference:
+
+```bash
+cd android
+JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" ./gradlew assembleRelease
+```
+
+- Validation for the connectivity/logging work:
+
+```bash
+npx tsc --noEmit
+git diff --check
+```
+
+### Handoff / Skill Maintenance
+
+- Audited repo Markdown files for whether they should move into `.codex/skills`; most should remain as docs. Potential future skill candidates are RevenueCat debugging and release/build playbooks.
+- Updated `.codex/skills/habitpro-session-logger/SKILL.md` so future end-of-session logging audits all Markdown files and updates affected docs.
+- `git diff --check` passed after the skill edit.
+- Skill validator still cannot run because local Python lacks `yaml`.
+
 ## 2026-07-17
 
 ### Commits

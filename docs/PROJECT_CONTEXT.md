@@ -23,6 +23,7 @@ The product direction is mission-first, dark-mode-friendly, polished on iPhone a
 - EAS Build / Update.
 - RevenueCat for subscriptions.
 - `expo-notifications`, `expo-image-picker`, `expo-secure-store`, `expo-updates`.
+- `@react-native-community/netinfo` for the app-level internet-required gate.
 
 Important config:
 
@@ -30,7 +31,7 @@ Important config:
 - EAS profiles: `eas.json`.
 - Bundle id: `com.rakti.habitpro`.
 - Android package: `com.rakti.habitpro`.
-- Current app version at time of writing: `1.1.31`.
+- Current app version at time of writing: `1.1.32`.
 - Runtime version is pinned manually in `app.json`.
 
 ## Must-Read Files
@@ -86,6 +87,7 @@ Read these in this order for future work:
 
 - Timer Check-In is now the humane default direction.
 - Manual Finish remains the stricter race-style option.
+- Creation UI labels use straight mode pills: `SOLO` for Timer Check-In and `SOLO / COMMUNITY` for Manual Finish.
 - Timer Check-In lets the timer end and then asks the user to choose Complete, Retry, or Fail.
 - Timer Check-In is solo-only for now.
 - Timer Check-In hides Live Squad invite card and reserve fuel.
@@ -119,13 +121,17 @@ Do not treat this as a tiny UI toggle. It touches local state, Supabase RPCs, Li
 
 ### Android Performance Investigation
 
-- S24 Ultra has reported jank on Home after splash and delayed touches in mission detail.
-- iPhone 17 is smooth, so Android-specific render/native-view cost is likely.
-- Suspects:
-  - Home `HabitCard` segmented `RingDayArcs` creates one SVG `Circle` per mission day.
-  - Mission detail Active Trail and honeycomb moments still mount many views/SVG/image nodes.
-  - Honeycomb uses SVG clipping/images and should remain virtualized.
-- Suggested first experiment: Android-only lightweight Home ring for long missions, then isolate mission detail gallery.
+- S24 Ultra previously showed Home jank after splash and delayed touches in mission detail.
+- Performance work added Android long-mission Home ring fallback, mission-detail date-map reuse, Active Trail batching, and virtualized honeycomb moments.
+- Temporary performance logs have been removed for production readiness.
+- For future time/performance optimization, use `.codex/skills/habitpro-performance-investigation/SKILL.md`: add targeted timer logs, use the measurements, then remove logs before handoff.
+
+### Internet Required
+
+- `src/components/NetworkRequiredGate.tsx` blocks app usage when NetInfo reports no internet.
+- It is mounted globally in `app/_layout.tsx`.
+- The gate uses a full-screen `No internet connection` overlay and a `Try Again` action.
+- Because NetInfo is a native dependency, this requires a native build and cannot be shipped by OTA alone.
 
 ## Build And Release Direction
 

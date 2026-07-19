@@ -33,6 +33,7 @@ The app is mobile-first and uses Expo Router routes under `app/`.
 - Billing: RevenueCat via `react-native-purchases`.
 - Notifications: `expo-notifications`, Supabase `notifications`, push Edge Function.
 - OTA updates: `expo-updates` with EAS update channels.
+- Network reachability: `@react-native-community/netinfo` for the app-wide internet-required gate.
 - Styling: app-local theme in `src/styles/theme.ts`, React Native StyleSheet, lucide icons, SVG, LinearGradient, Lottie.
 
 Important config files:
@@ -79,7 +80,7 @@ Files:
 
 Current build/update model:
 
-- Runtime version is manually pinned in `app.json` as `1.1.31`. This is required because the project has native Android code / bare workflow behavior, so runtime version policies are not supported.
+- Runtime version is manually pinned in `app.json` as `1.1.32`. This is required because the project has native Android code / bare workflow behavior, so runtime version policies are not supported.
 - EAS channels are `development`, `preview`, and `production`.
 - Build profiles `apk` and `preview` both publish Android APKs on the `preview` channel.
 - Production builds use the `production` channel.
@@ -146,6 +147,7 @@ Provider order:
 - App launch notification nudge.
 - Sync manager/toasts.
 - Force update modal.
+- Internet-required overlay via `NetworkRequiredGate`.
 - OTA update check/download/restart prompt.
 - Mini mission local notification reconciliation.
 - Supabase Realtime subscription for applied squad streak repairs.
@@ -157,6 +159,14 @@ Provider order:
 - Minimum display timing and signed-in startup readiness handoff.
 
 Avoid casually reordering providers. Billing depends on auth, premium depends on billing/auth, username and notification gates depend on theme/auth, and app version wraps the force-update UI.
+
+`NetworkRequiredGate`:
+
+- File: `src/components/NetworkRequiredGate.tsx`.
+- Uses `@react-native-community/netinfo`.
+- Renders last in `RootLayoutNav` so it blocks all app screens when internet is unavailable.
+- Shows `No internet connection`, explains internet is required, swallows touches, and offers `Try Again`.
+- Because NetInfo is native, changes involving this dependency require a native build, not only OTA.
 
 ## Navigation Structure
 
@@ -808,6 +818,19 @@ Purpose:
 - Show force update modal when needed.
 - Coordinate with OTA update checks so a required native update is not masked by an OTA refresh.
 
+## Internet Required Gate
+
+Files:
+
+- `src/components/NetworkRequiredGate.tsx`
+- `app/_layout.tsx`
+
+Purpose:
+
+- Block app usage when internet is unavailable.
+- Prevent stale/offline interactions from competing with Supabase sync, billing, squads, version policy, and updates.
+- Keep the UI recoverable through a manual `Try Again` NetInfo refresh.
+
 ## Push And Local Notifications
 
 Remote push:
@@ -891,13 +914,12 @@ Several flows were optimized for older phones:
 - Mark decorative/looping animations with `isInteraction: false` when they should not delay `InteractionManager` work.
 - For mission detail, preserve staged marker rendering and virtualized honeycomb moments; Android navigation can regress if all markers or all SVG image tiles mount at once.
 
-Current Android performance investigation:
+Current Android performance status:
 
-- User reports Home jank after splash and delayed mission-detail touches on S24 Ultra, while iPhone 17 remains smooth.
-- Do not assume the splash is the source; user clarified the visible issue starts after Home appears.
-- First suspect: Home `HabitCard` segmented `RingDayArcs` on long missions. It creates one SVG circle per mission day.
-- Second suspect: mission detail Active Trail plus honeycomb moments mounting.
-- Recommended experiments: Android-only lightweight Home ring, then temporarily disable `StreakMemoryGallery` on Android to isolate detail jank.
+- Prior Android logs isolated expensive sync/date-map and mission-detail memory/day lookup paths.
+- Fixes now include Android long-mission Home ring fallback, fast mission date maps, Active Trail batching, and virtualized honeycomb moments.
+- Temporary `console.log` / `console.info` instrumentation has been removed for production readiness.
+- For future time/performance work, use `.codex/skills/habitpro-performance-investigation/SKILL.md`: add targeted timer logs, measure, fix, re-measure, then remove logs.
 
 Important performance files:
 

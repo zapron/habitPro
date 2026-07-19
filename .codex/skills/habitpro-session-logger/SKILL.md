@@ -21,28 +21,33 @@ Use this skill to leave the repo in a resumable state. It updates the durable ha
    - validation run
    - blocked commands or external actions the user must run locally
    - active investigations and next recommended experiment
-3. Update `docs/CURRENT_WORK.md`:
+3. Audit Markdown docs so stale repo knowledge is not forgotten:
+   - run `rg --files -g '*.md' -g '!node_modules'`
+   - review the file list against the session changes
+   - read and update every Markdown file whose scope was affected
+   - do not bulk-edit unrelated docs just because they exist
+4. Update `docs/CURRENT_WORK.md`:
    - set `Last updated` to today's date
    - record current worktree state
    - list recent commits relevant to the session
    - keep unresolved work clearly marked as not fixed
-4. Append to `docs/WORK_HISTORY.md`:
+5. Append to `docs/WORK_HISTORY.md`:
    - date
    - commits
    - what changed
    - validation
    - open risks / next steps
-5. Update architecture docs only when cross-cutting behavior changed:
+6. Update architecture docs only when cross-cutting behavior changed:
    - `docs/PROJECT_CONTEXT.md` for compact high-level decisions
    - `app-architecture.md` for architectural maps and caution points
    - `docs/FUTURE_AGENT_HANDOFF.md` for next-agent instructions
    - feature playbooks such as `docs/IOS_BUILD_PLAYBOOK.md` only when relevant
-6. Never log secrets:
+7. Never log secrets:
    - no `.env` values
    - no service-role keys
    - no Apple private keys/certs
    - no user data
-7. Validate docs/skill changes:
+8. Validate docs/skill changes:
    - run `npx tsc --noEmit` if code changed during the session
    - run `git diff --check`
    - run the skill validator if this skill changed

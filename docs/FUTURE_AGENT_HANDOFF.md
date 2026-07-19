@@ -31,6 +31,7 @@ Then inspect the files relevant to the user request.
 - Mini missions that are humane for real workouts/timed tasks.
 - Build path for iOS physical device and TestFlight.
 - Mac migration so Windows and Mac can both continue from committed docs/history.
+- Production Android build/testing around version `1.1.32` and the new internet-required gate.
 
 ## Current Technical Risk Areas
 
@@ -46,6 +47,8 @@ Then inspect the files relevant to the user request.
 - Daily Wisdom now lives in `AnimatedSplashOverlay`; do not re-add the mission detail quote card unless the product direction changes.
 - Cohort dots now show newest/current first and omit future dots.
 - Home `HabitCard` segmented `RingDayArcs` is a current Android performance suspect for long missions because it creates one SVG `Circle` per mission day.
+- `NetworkRequiredGate` uses `@react-native-community/netinfo`; any change to it requires native-build awareness.
+- Temporary timer/performance logs should be added only for investigation and removed before production handoff.
 
 ## Good Next Actions
 
@@ -86,9 +89,17 @@ If the user asks for iOS build:
 4. Use `npm run build:ios:preview` for physical iPhone ad hoc test.
 5. Use `npm run build:ios` plus `eas submit --platform ios` for TestFlight.
 
+If the user reports internet/offline behavior:
+
+1. Inspect `src/components/NetworkRequiredGate.tsx` and `app/_layout.tsx`.
+2. Test in an Android emulator/dev build by disabling network.
+3. Confirm the overlay blocks underlying app touches and disappears after connectivity returns plus `Try Again`.
+4. Remember NetInfo is native; Expo Go may not be enough for release-confidence testing.
+
 If ending a long session:
 
 1. Read `.codex/skills/habitpro-session-logger/SKILL.md`.
-2. Update `docs/CURRENT_WORK.md`.
-3. Append a dated entry to `docs/WORK_HISTORY.md`.
-4. Update `app-architecture.md` only if architecture or cross-cutting behavior changed.
+2. Audit all Markdown files with `rg --files -g '*.md' -g '!node_modules'`.
+3. Update `docs/CURRENT_WORK.md`.
+4. Append a dated entry to `docs/WORK_HISTORY.md`.
+5. Update affected architecture/context/playbook docs only when their scope changed.
