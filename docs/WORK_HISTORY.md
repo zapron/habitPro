@@ -2,6 +2,53 @@
 
 This is a concise chronological log for future sessions. Keep secrets out of this file.
 
+## 2026-07-20
+
+### Commits
+
+- `cbb5a37 fix: polish iOS live mini experience`
+- `c8a29bf db: persist habit visibility in sync rpc`
+- `e002f35 chore: use eas environments for ota scripts`
+
+### iOS TestFlight / Push Milestone
+
+- Created iOS production/TestFlight build for `com.rakti.habitpro`, version `1.1.32`, build `33`.
+- Submitted binary to App Store Connect app id `6792545017`.
+- Completed App Store Connect encryption compliance with standard/exempt encryption.
+- Internal TestFlight group `Team (Expo)` has the user invited and build available.
+- Created and assigned Apple Push Notifications key for `com.rakti.habitpro`.
+- Verified iPhone push delivery using Expo's notification tester and the device Expo push token.
+
+### Production OTAs
+
+- Published `00fdba0a-081e-4347-af3f-cdb04f51c472` to `production`: `Fix iOS network gate foreground refresh`.
+- Published `e36a7398-10f9-44d7-abad-c750ba03c664` to `production`: `Fix iOS live mini invite and image performance`.
+- Discovered Mac local `.env` had a RevenueCat Android `test_...` key. Android release intentionally treats `test_` keys as missing, so a production OTA made from local env could break billing configuration.
+- Published corrective OTA `97cb22c0-2958-402d-8dc2-cde2fb5b4d73` with `--environment production`: `Fix Android RevenueCat production key`.
+- Updated `package.json` OTA scripts so future preview/production updates explicitly use EAS environments.
+
+### Fixes
+
+- `NetworkRequiredGate` now refreshes NetInfo on app foreground and waits briefly before showing the offline blocker, avoiding false iOS offline overlays after returning from background.
+- Live Mini board inline memory images now use Supabase render thumbnails while full-size images remain available in the tap-to-view modal.
+- Live Mini invite sheet is keyboard-scrollable on iPhone so username search/results are not covered by the keyboard.
+- Added migration `supabase/migrations/20260720110000_fix_habit_visibility_sync_rpc.sql` to restore main habit `visibility` writes in `rpc_sync_dirty_state`.
+
+### Validation
+
+- `npx tsc --noEmit` passed before commits.
+- `git diff --check` passed before commits.
+- `package.json` JSON parse sanity check passed after OTA script update.
+
+### Open Risks / Next Steps
+
+- User reported `supabase/migrations/20260720110000_fix_habit_visibility_sync_rpc.sql` was applied after creation. Retest synced main mission Solo/Public persistence on device.
+- Other previously noted live migrations may still need applying before synced marker/group retesting:
+  - `supabase/migrations/20260719120000_backfill_completed_dates_from_streak_memories.sql`
+  - `supabase/migrations/20260719121000_focus_delta_group_creator_timezone.sql`
+- Mac `.env` should be updated privately so `EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY` uses the real Play Store `goog_...` public SDK key.
+- External TestFlight beta remains to be configured after smoke testing.
+
 ## 2026-07-19
 
 ### Commits

@@ -32,6 +32,7 @@ Then inspect the files relevant to the user request.
 - Build path for iOS physical device and TestFlight.
 - Mac migration so Windows and Mac can both continue from committed docs/history.
 - Production Android build/testing around version `1.1.32` and the new internet-required gate.
+- External TestFlight setup for friends after internal smoke testing.
 
 ## Current Technical Risk Areas
 
@@ -48,6 +49,11 @@ Then inspect the files relevant to the user request.
 - Cohort dots now show newest/current first and omit future dots.
 - Home `HabitCard` segmented `RingDayArcs` is a current Android performance suspect for long missions because it creates one SVG `Circle` per mission day.
 - `NetworkRequiredGate` uses `@react-native-community/netinfo`; any change to it requires native-build awareness.
+- iOS foreground reachability can be briefly stale; `NetworkRequiredGate` intentionally refreshes NetInfo and delays confirmed offline display.
+- Live Mini invite sheet uses keyboard-aware scroll behavior for iPhone username search; preserve that when editing the sheet.
+- Live Mini board inline memory photos should use thumbnails, not full public image URLs.
+- Main habit visibility persistence depends on `rpc_sync_dirty_state` writing `visibility`; migration `20260720110000_fix_habit_visibility_sync_rpc.sql` restores this and the user reported it was applied.
+- Production OTA scripts must keep `--environment production`; a Mac local `.env` once had a RevenueCat Android `test_...` key and caused Android release billing to look unconfigured until a corrective OTA was published.
 - Temporary timer/performance logs should be added only for investigation and removed before production handoff.
 
 ## Good Next Actions
@@ -89,12 +95,25 @@ If the user asks for iOS build:
 4. Use `npm run build:ios:preview` for physical iPhone ad hoc test.
 5. Use `npm run build:ios` plus `eas submit --platform ios` for TestFlight.
 
+If the user asks for production OTA:
+
+1. Use the HabitPro deployment guard.
+2. Run validation first.
+3. Use `npm run update:production -- --message "<message>"` or `npx eas update --channel production --environment production --message "<message>"`.
+4. Confirm the EAS output says production environment variables were loaded.
+
 If the user reports internet/offline behavior:
 
 1. Inspect `src/components/NetworkRequiredGate.tsx` and `app/_layout.tsx`.
 2. Test in an Android emulator/dev build by disabling network.
 3. Confirm the overlay blocks underlying app touches and disappears after connectivity returns plus `Try Again`.
 4. Remember NetInfo is native; Expo Go may not be enough for release-confidence testing.
+
+If the user reports Solo/Public mission visibility reverting:
+
+1. Confirm migration `20260720110000_fix_habit_visibility_sync_rpc.sql` is applied on the target Supabase project.
+2. Retest by toggling a main mission to Public, leaving the detail screen, reopening, and confirming it stays Public.
+3. If it still reverts, inspect `rpc_sync_dirty_state` in the live database and verify the habit insert/update writes `visibility`.
 
 If ending a long session:
 

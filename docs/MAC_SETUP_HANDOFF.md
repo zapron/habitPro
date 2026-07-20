@@ -28,6 +28,12 @@ Firebase Android client config:
 - `google-services.json` exists in the repo now. Treat it as Firebase client config, not a server secret.
 - Never commit Firebase Admin/service-account JSON files.
 
+RevenueCat caution:
+
+- For Android release/Play Store builds, `EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY` must be the Play Store public SDK key that starts with `goog_`.
+- Do not use a RevenueCat Test Store `test_...` key for Android release. The app intentionally treats that as unconfigured in release builds.
+- Production OTA scripts use EAS `--environment production`; keep that flag so local Mac `.env` values cannot override production billing config.
+
 ## Tooling
 
 Install on Mac:
@@ -54,6 +60,8 @@ npm run build:ios
 npm run update:preview
 npm run update:production
 ```
+
+`npm run update:production` maps to `eas update --channel production --environment production`.
 
 ## Resume Context
 

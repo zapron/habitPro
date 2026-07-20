@@ -56,6 +56,8 @@ Expected public env/config values:
 - `EXPO_PUBLIC_REVENUECAT_IOS_API_KEY`
 - `EXPO_PUBLIC_HABITPRO_WEB_URL` or `EXPO_PUBLIC_SITE_URL`
 
+Android release billing requires the RevenueCat Play Store public SDK key (`goog_...`). A RevenueCat Test Store key (`test_...`) is intentionally treated as unconfigured in Android release builds.
+
 Supabase is optional at runtime. Many helpers call `isSupabaseConfigured()` and return local-only fallbacks if missing.
 
 Supabase client:
@@ -89,6 +91,10 @@ Current build/update model:
   - `npm run build:aab`
   - `npm run update:preview`
   - `npm run update:production`
+- OTA scripts explicitly pass EAS environments:
+  - preview uses `--environment preview`
+  - production uses `--environment production`
+  This prevents local `.env` values from leaking into release OTA bundles.
 
 `OtaUpdateManager` behavior:
 
@@ -166,6 +172,7 @@ Avoid casually reordering providers. Billing depends on auth, premium depends on
 - Uses `@react-native-community/netinfo`.
 - Renders last in `RootLayoutNav` so it blocks all app screens when internet is unavailable.
 - Shows `No internet connection`, explains internet is required, swallows touches, and offers `Try Again`.
+- Refreshes NetInfo when the app returns active and delays confirmed offline display, because iOS can briefly report stale reachability after backgrounding.
 - Because NetInfo is native, changes involving this dependency require a native build, not only OTA.
 
 ## Navigation Structure
@@ -474,6 +481,8 @@ Purpose:
 - Participants have statuses such as invited, joined, in_progress, completed, missed.
 - Invite expiry is part of the participant model and should be respected in UI and RPC handling.
 - Local mini mission state is synced to the live board through `syncLiveMiniFromLocalMission()`.
+- `LiveMiniInviteSheet` uses a keyboard-aware scroll container so iPhone username search/results stay above the keyboard.
+- Live Mini board cards use Supabase render thumbnails for inline memory images while preserving full-size tap-to-view.
 
 Backend:
 
@@ -798,6 +807,7 @@ Important constraints:
 
 - RevenueCat keys must be present for real purchases in builds.
 - EAS build must include correct Play Store SDK key, not a test key.
+- Production OTA must use EAS `--environment production` so the same correct RevenueCat key is embedded in updates.
 - Supabase migrations include premium sync and premium social RLS.
 - Backend trial config changes are database-only; plan pricing comes from RevenueCat/Play/App Store configuration.
 

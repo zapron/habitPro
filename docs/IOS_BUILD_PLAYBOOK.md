@@ -9,6 +9,9 @@ Use this when preparing HabitPro for iPhone testing or TestFlight.
 - iOS bundle id: `com.rakti.habitpro`.
 - iOS build number in `app.json`: `33`.
 - EAS profiles: `development`, `preview`, `production`.
+- First TestFlight build uploaded: version `1.1.32`, build `33`, App Store Connect app id `6792545017`.
+- Internal TestFlight group `Team (Expo)` was created and the user was invited.
+- Apple Push Notifications key was created and assigned to `com.rakti.habitpro`.
 
 The `development` profile currently has `ios.simulator: true`, so it is for simulator builds.
 For a physical iPhone test, use `preview` or change/add a physical-device development profile.
@@ -76,6 +79,18 @@ eas submit --platform ios
 6. Add internal testers in App Store Connect TestFlight.
 
 For internal TestFlight, Sign in with Apple is not required just to install and test. It may still matter for external beta/App Review because Google sign-in exists.
+
+External testing for friends requires an External Testing group and Beta App Review. Use a group such as `Friends Beta`, add build `1.1.32 (33)` or newer, fill Test Information, then submit for Beta App Review before sharing emails/public link.
+
+## OTA Env Safety
+
+Production OTA must use EAS production env vars, not local `.env`:
+
+```bash
+npm run update:production -- --message "Your message"
+```
+
+The script includes `--environment production`. This is important because one Mac local `.env` used a RevenueCat Android `test_...` key, which Android release treats as missing.
 
 ## App Store Review Readiness
 

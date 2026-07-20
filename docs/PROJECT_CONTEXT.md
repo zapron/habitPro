@@ -131,11 +131,30 @@ Do not treat this as a tiny UI toggle. It touches local state, Supabase RPCs, Li
 - `src/components/NetworkRequiredGate.tsx` blocks app usage when NetInfo reports no internet.
 - It is mounted globally in `app/_layout.tsx`.
 - The gate uses a full-screen `No internet connection` overlay and a `Try Again` action.
+- iOS can briefly report stale reachability while returning from background; the gate refreshes NetInfo on foreground and delays confirmed offline display to avoid false blockers.
 - Because NetInfo is a native dependency, this requires a native build and cannot be shipped by OTA alone.
+
+### Live Mini iOS Polish
+
+- Live Mini invite sheet content is keyboard-scrollable so iPhone keyboards do not cover username search/results.
+- Live Mini board cards use Supabase render thumbnails for inline memory images; tap-to-view still opens the full image.
+
+### Main Mission Visibility Sync
+
+- Main mission Solo/Public visibility is sent by the client and must be persisted by `rpc_sync_dirty_state`.
+- Migration `supabase/migrations/20260720110000_fix_habit_visibility_sync_rpc.sql` restores habit `visibility` writes in that RPC.
+- User reported this migration has been applied; retest toggling a main mission to Public, leaving, and reopening.
 
 ## Build And Release Direction
 
-Immediate iOS testing path:
+Current iOS testing status:
+
+- First iOS TestFlight build was submitted for `com.rakti.habitpro`, version `1.1.32`, build `33`.
+- App Store Connect app id is `6792545017`.
+- Internal TestFlight testing is enabled for `Team (Expo)`.
+- Apple Push Notifications key was created and Expo push tester delivery worked on the iPhone build.
+
+Immediate iOS testing path for future builds:
 
 1. Apple Developer Program enrollment.
 2. EAS env setup.
@@ -163,6 +182,12 @@ npm run build:aab
 npm run update:preview
 npm run update:production
 ```
+
+OTA scripts include EAS environments:
+
+- `npm run update:preview` uses `--environment preview`.
+- `npm run update:production` uses `--environment production`.
+- This prevents local `.env` values, such as a Mac RevenueCat `test_...` key, from leaking into production OTA bundles.
 
 Supabase:
 
