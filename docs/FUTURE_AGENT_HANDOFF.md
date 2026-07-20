@@ -31,7 +31,7 @@ Then inspect the files relevant to the user request.
 - Mini missions that are humane for real workouts/timed tasks.
 - Build path for iOS physical device and TestFlight.
 - Mac migration so Windows and Mac can both continue from committed docs/history.
-- Production Android build/testing around version `1.1.32` and the new internet-required gate.
+- Production Android build/testing around version `1.1.34` and the new internet-required gate.
 - External TestFlight setup for friends after internal smoke testing.
 
 ## Current Technical Risk Areas
@@ -44,7 +44,8 @@ Then inspect the files relevant to the user request.
 - Decorative animations that should not block navigation or `InteractionManager` should use `isInteraction: false`.
 - Active Trail marker batching is intentional. `visibleActiveTrailDays` should continue to limit initially rendered markers for long missions.
 - Moments should not be gated on every marker batch completing. `memoryGalleryEntries` should depend on `detailHeavyContentReady`, not `visibleGridDayCount >= totalDays`.
-- App Store Review will likely require Sign in with Apple because Google sign-in exists.
+- Sign in with Apple is implemented and enabled for the iOS bundle; retest after any provisioning/profile or auth provider changes.
+- RevenueCat iOS billing is configured in RevenueCat for App Store products `monthly` and `yearly`, entitlement `habitpro_community`, and the current `default` offering packages. EAS production env includes the iOS RevenueCat public SDK key.
 - Daily Wisdom now lives in `AnimatedSplashOverlay`; do not re-add the mission detail quote card unless the product direction changes.
 - Cohort dots now show newest/current first and omit future dots.
 - Home `HabitCard` segmented `RingDayArcs` is a current Android performance suspect for long missions because it creates one SVG `Circle` per mission day.
@@ -92,8 +93,9 @@ If the user asks for iOS build:
 1. Confirm Apple Developer enrollment is active.
 2. Confirm EAS env vars are set.
 3. Confirm Supabase migration is applied.
-4. Use `npm run build:ios:preview` for physical iPhone ad hoc test.
-5. Use `npm run build:ios` plus `eas submit --platform ios` for TestFlight.
+4. Confirm RevenueCat default offering still has both Android and iOS products in `$rc_monthly` and `$rc_annual`.
+5. Use `npm run build:ios:preview` for physical iPhone ad hoc test.
+6. Use `npm run build:ios` plus `eas submit --platform ios` for TestFlight.
 
 If the user asks for production OTA:
 

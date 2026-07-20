@@ -1,6 +1,6 @@
 # HabitPro Current Work
 
-Last updated: 2026-07-20.
+Last updated: 2026-07-21.
 
 This file captures the current working state so future chats do not need the full conversation.
 
@@ -19,7 +19,13 @@ Recent local commits:
 
 Uncommitted at handoff:
 
-- None expected after the docs logging commit. Re-run `git status --short` to confirm before starting new work.
+- Apple login, iOS RevenueCat setup, and the `1.1.34` release bump are currently uncommitted:
+  - `app.json`
+  - `app/(auth)/login.tsx`
+  - `package.json`
+  - `package-lock.json`
+  - `src/context/AuthContext.tsx`
+- `android/app/build.gradle` was also updated locally to `versionName "1.1.34"` / `versionCode 35`; this path may be ignored by Git, so verify it manually before a local native Android build.
 
 Release/build boundaries:
 
@@ -29,10 +35,10 @@ Release/build boundaries:
 
 Current app version/build:
 
-- Expo/package version: `1.1.32`
-- Runtime version: `1.1.32`
-- iOS build number: `33`
-- Android versionCode: `33`
+- Expo/package version: `1.1.34`
+- Runtime version: `1.1.34`
+- iOS build number: `35`
+- Android versionCode: `35`
 
 ## Latest Product / Release Prep Changes
 
@@ -40,12 +46,17 @@ iOS/TestFlight setup:
 
 - First iOS TestFlight-capable production build was created and submitted through EAS/App Store Connect.
 - App Store Connect app id: `6792545017`.
-- iOS build: version `1.1.32`, build `33`.
+- First iOS build: version `1.1.32`, build `33`.
+- Latest local build target: version `1.1.34`, build `35`.
 - Bundle id: `com.rakti.habitpro`.
 - Internal TestFlight group `Team (Expo)` has the user invited and the build available.
 - App encryption compliance was answered as standard/exempt encryption.
 - Apple Push Notifications key was created and assigned to `com.rakti.habitpro`.
 - Expo push tester successfully delivered a notification to the iPhone TestFlight build.
+- Sign in with Apple is enabled in `app.json`, wired in `app/(auth)/login.tsx`, and was reported working on the iPhone TestFlight build after the provisioning profile was regenerated with the Apple sign-in entitlement.
+- EAS production env includes `EXPO_PUBLIC_REVENUECAT_IOS_API_KEY`.
+- RevenueCat App Store app `habitPro (App Store)` exists for bundle id `com.rakti.habitpro`; its App Store Connect API key and in-app purchase key configuration were verified as present by MCP.
+- App Store products `monthly` and `yearly` were imported into RevenueCat, attached to `habitpro_community`, and attached to default offering packages `$rc_monthly` and `$rc_annual`.
 
 Production OTAs published:
 
@@ -177,7 +188,7 @@ Mini mission create:
 
 Release/build:
 
-- Production Android build should include version/runtime `1.1.32` and Android versionCode `33`.
+- Production Android build should include version/runtime `1.1.34` and Android versionCode `35`.
 - Production OTA should use `npm run update:production -- --message "<message>"` so EAS uses the `production` environment.
 - If building a local APK, use Android Studio's bundled JDK via `JAVA_HOME` unless system Java is installed.
 - For Play Store style production Android release, prefer the EAS production AAB path.

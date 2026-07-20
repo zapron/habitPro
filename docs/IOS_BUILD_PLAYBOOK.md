@@ -7,11 +7,13 @@ Use this when preparing HabitPro for iPhone testing or TestFlight.
 - Expo SDK 54.
 - EAS project id: `cdfc2b93-f246-47b6-94ca-6a816ffda876`.
 - iOS bundle id: `com.rakti.habitpro`.
-- iOS build number in `app.json`: `33`.
+- iOS build number in `app.json`: `35`.
 - EAS profiles: `development`, `preview`, `production`.
 - First TestFlight build uploaded: version `1.1.32`, build `33`, App Store Connect app id `6792545017`.
 - Internal TestFlight group `Team (Expo)` was created and the user was invited.
 - Apple Push Notifications key was created and assigned to `com.rakti.habitpro`.
+- Sign in with Apple is enabled for the iOS bundle and wired in the login UI.
+- RevenueCat App Store products `monthly` and `yearly` are attached to entitlement `habitpro_community` and default offering packages `$rc_monthly` / `$rc_annual`.
 
 The `development` profile currently has `ios.simulator: true`, so it is for simulator builds.
 For a physical iPhone test, use `preview` or change/add a physical-device development profile.
@@ -80,7 +82,7 @@ eas submit --platform ios
 
 For internal TestFlight, Sign in with Apple is not required just to install and test. It may still matter for external beta/App Review because Google sign-in exists.
 
-External testing for friends requires an External Testing group and Beta App Review. Use a group such as `Friends Beta`, add build `1.1.32 (33)` or newer, fill Test Information, then submit for Beta App Review before sharing emails/public link.
+External testing for friends requires an External Testing group and Beta App Review. Use a group such as `Friends Beta`, add the latest TestFlight build, fill Test Information, then submit for Beta App Review before sharing emails/public link.
 
 ## OTA Env Safety
 
@@ -96,7 +98,7 @@ The script includes `--environment production`. This is important because one Ma
 
 Before production App Review, plan for:
 
-- Sign in with Apple if Google sign-in remains enabled.
+- Sign in with Apple if Google sign-in remains enabled. This is now implemented, but still retest it on the build being submitted.
 - Privacy policy URL.
 - Support URL.
 - Account deletion flow.

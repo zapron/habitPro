@@ -31,7 +31,7 @@ Important config:
 - EAS profiles: `eas.json`.
 - Bundle id: `com.rakti.habitpro`.
 - Android package: `com.rakti.habitpro`.
-- Current app version at time of writing: `1.1.32`.
+- Current app version at time of writing: `1.1.34`.
 - Runtime version is pinned manually in `app.json`.
 
 ## Must-Read Files
@@ -69,6 +69,8 @@ Read these in this order for future work:
 - The app is being actively tested on a physical iPhone 17.
 - Target should also remain reasonable for iPhone 14 and newer.
 - Safe area, image picker/photo flows, bottom tab behavior, scroll performance, and horizontal marker scrolling need iOS attention.
+- Sign in with Apple is now enabled for the iOS bundle and wired through Supabase native Apple auth.
+- RevenueCat has an App Store app for `com.rakti.habitpro`; monthly/yearly App Store products are attached to the same `habitpro_community` entitlement and default offering packages as Android.
 
 ### Mission Detail UI
 

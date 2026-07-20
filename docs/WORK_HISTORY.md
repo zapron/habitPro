@@ -2,6 +2,39 @@
 
 This is a concise chronological log for future sessions. Keep secrets out of this file.
 
+## 2026-07-21
+
+### iOS Apple Login / RevenueCat Billing Prep
+
+- Added native Sign in with Apple support through `expo-apple-authentication`.
+- Updated `app.json` for iOS Apple sign-in capability, encryption compliance metadata, and the release bump to version/runtime `1.1.34`, iOS build `35`, Android versionCode `35`.
+- Updated `package.json` and `package-lock.json` to version `1.1.34`.
+- Updated ignored native Android file `android/app/build.gradle` to `versionName "1.1.34"` and `versionCode 35`.
+- Regenerated the iOS provisioning profile through EAS credentials after enabling the Apple sign-in capability.
+- User reported the TestFlight Apple sign-in flow works on iPhone.
+- Created and configured the RevenueCat App Store app for bundle id `com.rakti.habitpro`.
+- App Store Connect subscriptions `monthly` and `yearly` were created under the `habitPro Community` subscription group.
+- Imported both App Store products into RevenueCat, attached them to entitlement `habitpro_community`, and attached them to default offering packages `$rc_monthly` and `$rc_annual`.
+- Added/verified EAS production env `EXPO_PUBLIC_REVENUECAT_IOS_API_KEY`; no private Apple `.p8` contents were recorded in docs.
+
+### Validation
+
+- RevenueCat MCP audit confirmed:
+  - App Store Connect API key and in-app purchase key are configured for the RevenueCat App Store app.
+  - App Store products `monthly` and `yearly` are active in RevenueCat.
+  - Both products are attached to entitlement `habitpro_community`.
+  - Default offering package `$rc_monthly` contains Android `monthly:monthly-base` and iOS `monthly`.
+  - Default offering package `$rc_annual` contains Android `yearly:yearly-base` and iOS `yearly`.
+- `npx tsc --noEmit` passed.
+- `git diff --check` passed.
+- `npx eas env:list --environment production` confirmed production env includes the iOS RevenueCat public SDK key.
+
+### Open Risks / Next Steps
+
+- A new iOS TestFlight build is still needed to embed the iOS RevenueCat key and test the App Store paywall flow.
+- Do not click App Store Connect `Add for Review` for subscriptions until the new build is uploaded and the paywall/products are smoke-tested on TestFlight.
+- RevenueCat may continue showing `Missing Metadata` for App Store products until Apple metadata/status fully settles.
+
 ## 2026-07-20
 
 ### Commits
