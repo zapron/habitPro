@@ -1,7 +1,7 @@
 import NetInfo, { useNetInfo } from "@react-native-community/netinfo";
 import { RefreshCw, WifiOff } from "lucide-react-native";
-import { useState } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, View } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import { ActivityIndicator, AppState, Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useTheme } from "../context/ThemeContext";
@@ -12,8 +12,44 @@ export function NetworkRequiredGate() {
   const { theme, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const [checking, setChecking] = useState(false);
+  const [confirmedOffline, setConfirmedOffline] = useState(false);
+  const offlineConfirmTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const offline = netInfo.isConnected === false || netInfo.isInternetReachable === false;
+  const rawOffline = netInfo.isConnected === false || netInfo.isInternetReachable === false;
+
+  useEffect(() => {
+    const clearOfflineConfirmTimeout = () => {
+      if (offlineConfirmTimeoutRef.current) {
+        clearTimeout(offlineConfirmTimeoutRef.current);
+        offlineConfirmTimeoutRef.current = null;
+      }
+    };
+
+    clearOfflineConfirmTimeout();
+
+    if (!rawOffline) {
+      setConfirmedOffline(false);
+      return clearOfflineConfirmTimeout;
+    }
+
+    offlineConfirmTimeoutRef.current = setTimeout(() => {
+      setConfirmedOffline(true);
+    }, 1400);
+
+    return clearOfflineConfirmTimeout;
+  }, [rawOffline]);
+
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state !== "active") return;
+      setConfirmedOffline(false);
+      void NetInfo.refresh();
+    });
+
+    return () => sub.remove();
+  }, []);
+
+  const offline = rawOffline && confirmedOffline;
 
   if (!offline) return null;
 

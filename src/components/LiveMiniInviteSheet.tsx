@@ -311,162 +311,170 @@ export function LiveMiniInviteSheet({ visible, mission, onClose }: Props) {
               },
             ]}
           >
-          <View style={styles.sheetHead}>
-            <View style={styles.titleCluster}>
-              <View style={styles.titleRow}>
-                <Text style={[styles.sheetTitle, { color: theme.colors.textPrimary }]}>Live Squad</Text>
-                <PlusBadge withFlame />
-              </View>
-              <Text style={[styles.sheetHint, { color: theme.colors.textSecondary }]}>
-                Invite people to run this mini mission on their own timer.
-              </Text>
-            </View>
-            <TouchableOpacity
-              onPress={onClose}
-              style={[styles.closeBtn, { borderColor: theme.colors.border, backgroundColor: theme.colors.surfaceElevated }]}
-              hitSlop={12}
+            <ScrollView
+              style={styles.sheetScroll}
+              contentContainerStyle={styles.sheetContent}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
+              showsVerticalScrollIndicator={false}
             >
-              <X size={20} color={theme.colors.textMuted} />
-            </TouchableOpacity>
-          </View>
-
-          {!configured || !signedIn ? (
-            <Text style={[styles.body, { color: theme.colors.textSecondary }]}>
-              Sign in with cloud sync to start or join Live Squad mini missions.
-            </Text>
-          ) : !squadId ? (
-            <View style={styles.createBlock}>
-              <View style={[styles.liveInfo, { borderColor: theme.colors.border, backgroundColor: theme.colors.surfaceElevated }]}>
-                <Radio size={20} color={theme.colors.cyan[400]} />
-                <View style={styles.liveInfoText}>
-                  <Text style={[styles.liveInfoTitle, { color: theme.colors.textPrimary }]}>
-                    Do it with others?
-                  </Text>
-                  <Text style={[styles.liveInfoBody, { color: theme.colors.textSecondary }]}>
-                    Your mission stays normal. The live board only tracks who joined, finished, missed, or cancelled.
+              <View style={styles.sheetHead}>
+                <View style={styles.titleCluster}>
+                  <View style={styles.titleRow}>
+                    <Text style={[styles.sheetTitle, { color: theme.colors.textPrimary }]}>Live Squad</Text>
+                    <PlusBadge withFlame />
+                  </View>
+                  <Text style={[styles.sheetHint, { color: theme.colors.textSecondary }]}>
+                    Invite people to run this mini mission on their own timer.
                   </Text>
                 </View>
-              </View>
-              <Button
-                title={creating ? "Starting Live Squad..." : "Start Live Squad"}
-                onPress={() => void handleCreate()}
-                disabled={creating}
-              />
-              {!plusOk ? (
-                <Text style={[styles.plusHint, { color: theme.colors.textMuted }]}>
-                  Hosting Live Squad is part of HabitPro Community. Invitees can join free.
-                </Text>
-              ) : null}
-            </View>
-          ) : (
-            <>
-              <View style={styles.boardRow}>
                 <TouchableOpacity
-                  style={[
-                    styles.boardButton,
-                    {
-                      borderColor: isDark ? "rgba(34,211,238,0.35)" : "rgba(8,145,178,0.28)",
-                      backgroundColor: isDark ? "rgba(34,211,238,0.1)" : "rgba(8,145,178,0.08)",
-                    },
-                  ]}
-                  onPress={openBoard}
-                  activeOpacity={0.88}
+                  onPress={onClose}
+                  style={[styles.closeBtn, { borderColor: theme.colors.border, backgroundColor: theme.colors.surfaceElevated }]}
+                  hitSlop={12}
                 >
-                  <Users size={18} color={theme.colors.cyan[400]} />
-                  <Text style={[styles.boardButtonText, { color: theme.colors.textPrimary }]}>
-                    Open Live Board
-                  </Text>
+                  <X size={20} color={theme.colors.textMuted} />
                 </TouchableOpacity>
               </View>
 
-              {statusesLoading ? (
-                <View style={styles.statusCheck}>
-                  <ActivityIndicator color={theme.colors.indigo[400]} />
-                  <Text style={[styles.body, { color: theme.colors.textSecondary }]}>
-                    Checking Live Squad status...
-                  </Text>
-                </View>
-              ) : canInviteInExistingSquad ? (
-                <>
-                  <Text style={[styles.sectionLabel, { color: theme.colors.textMuted }]}>INVITE BY USERNAME</Text>
-                  <TextInput
-                    editable
-                    value={query}
-                    onChangeText={setQuery}
-                    placeholder="Search username"
-                    placeholderTextColor={theme.colors.textMuted}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    style={[
-                      styles.input,
-                      {
-                        color: theme.colors.textPrimary,
-                        borderColor: theme.colors.border,
-                        backgroundColor: theme.colors.background,
-                      },
-                    ]}
+              {!configured || !signedIn ? (
+                <Text style={[styles.body, { color: theme.colors.textSecondary }]}>
+                  Sign in with cloud sync to start or join Live Squad mini missions.
+                </Text>
+              ) : !squadId ? (
+                <View style={styles.createBlock}>
+                  <View style={[styles.liveInfo, { borderColor: theme.colors.border, backgroundColor: theme.colors.surfaceElevated }]}>
+                    <Radio size={20} color={theme.colors.cyan[400]} />
+                    <View style={styles.liveInfoText}>
+                      <Text style={[styles.liveInfoTitle, { color: theme.colors.textPrimary }]}>
+                        Do it with others?
+                      </Text>
+                      <Text style={[styles.liveInfoBody, { color: theme.colors.textSecondary }]}>
+                        Your mission stays normal. The live board only tracks who joined, finished, missed, or cancelled.
+                      </Text>
+                    </View>
+                  </View>
+                  <Button
+                    title={creating ? "Starting Live Squad..." : "Start Live Squad"}
+                    onPress={() => void handleCreate()}
+                    disabled={creating}
                   />
-                  {searching ? (
-                    <ActivityIndicator color={theme.colors.indigo[400]} style={{ marginVertical: 10 }} />
-                  ) : (
-                    <ScrollView
-                      style={styles.resultsList}
-                      keyboardShouldPersistTaps="handled"
-                      showsVerticalScrollIndicator={false}
-                      bounces={false}
+                  {!plusOk ? (
+                    <Text style={[styles.plusHint, { color: theme.colors.textMuted }]}>
+                      Hosting Live Squad is part of HabitPro Community. Invitees can join free.
+                    </Text>
+                  ) : null}
+                </View>
+              ) : (
+                <>
+                  <View style={styles.boardRow}>
+                    <TouchableOpacity
+                      style={[
+                        styles.boardButton,
+                        {
+                          borderColor: isDark ? "rgba(34,211,238,0.35)" : "rgba(8,145,178,0.28)",
+                          backgroundColor: isDark ? "rgba(34,211,238,0.1)" : "rgba(8,145,178,0.08)",
+                        },
+                      ]}
+                      onPress={openBoard}
+                      activeOpacity={0.88}
                     >
-                      {results.length === 0 && query.trim().length >= 3 ? (
-                        <Text style={[styles.emptySearch, { color: theme.colors.textMuted }]}>No matches</Text>
-                      ) : null}
-                      {results.map((item) => {
-                        const st = statusByUserId[item.id];
-                        const label = statusLabel(st);
-                        const blocked = Boolean(st);
-                        return (
-                          <TouchableOpacity
-                            key={item.id}
-                            style={[styles.resultRow, { borderColor: theme.colors.border, opacity: blocked ? 0.72 : 1 }]}
-                            onPress={() => void handleInvite(item.id)}
-                            disabled={blocked || invitingId === item.id}
-                            activeOpacity={0.86}
-                          >
-                            <View style={styles.resultIdentity}>
-                              <Text style={[styles.username, { color: theme.colors.textPrimary }]}>
-                                @{item.username}
-                              </Text>
-                              {item.display_name ? (
-                                <Text style={[styles.displayName, { color: theme.colors.textMuted }]} numberOfLines={1}>
-                                  {item.display_name}
-                                </Text>
-                              ) : null}
-                            </View>
-                            {label ? (
-                              <Text style={[styles.statusText, { color: theme.colors.textMuted }]}>{label}</Text>
-                            ) : invitingId === item.id ? (
-                              <ActivityIndicator size="small" color={theme.colors.indigo[400]} />
-                            ) : (
-                              <View style={styles.inviteCta}>
-                                <UserPlus size={15} color={theme.colors.cyan[400]} />
-                                <Text style={[styles.inviteCtaText, { color: theme.colors.cyan[400] }]}>Invite</Text>
-                              </View>
-                            )}
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </ScrollView>
+                      <Users size={18} color={theme.colors.cyan[400]} />
+                      <Text style={[styles.boardButtonText, { color: theme.colors.textPrimary }]}>
+                        Open Live Board
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  {statusesLoading ? (
+                    <View style={styles.statusCheck}>
+                      <ActivityIndicator color={theme.colors.indigo[400]} />
+                      <Text style={[styles.body, { color: theme.colors.textSecondary }]}>
+                        Checking Live Squad status...
+                      </Text>
+                    </View>
+                  ) : canInviteInExistingSquad ? (
+                    <>
+                      <Text style={[styles.sectionLabel, { color: theme.colors.textMuted }]}>INVITE BY USERNAME</Text>
+                      <TextInput
+                        editable
+                        value={query}
+                        onChangeText={setQuery}
+                        placeholder="Search username"
+                        placeholderTextColor={theme.colors.textMuted}
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                        style={[
+                          styles.input,
+                          {
+                            color: theme.colors.textPrimary,
+                            borderColor: theme.colors.border,
+                            backgroundColor: theme.colors.background,
+                          },
+                        ]}
+                      />
+                      {searching ? (
+                        <ActivityIndicator color={theme.colors.indigo[400]} style={{ marginVertical: 10 }} />
+                      ) : (
+                        <ScrollView
+                          style={styles.resultsList}
+                          keyboardShouldPersistTaps="handled"
+                          showsVerticalScrollIndicator={false}
+                          bounces={false}
+                        >
+                          {results.length === 0 && query.trim().length >= 3 ? (
+                            <Text style={[styles.emptySearch, { color: theme.colors.textMuted }]}>No matches</Text>
+                          ) : null}
+                          {results.map((item) => {
+                            const st = statusByUserId[item.id];
+                            const label = statusLabel(st);
+                            const blocked = Boolean(st);
+                            return (
+                              <TouchableOpacity
+                                key={item.id}
+                                style={[styles.resultRow, { borderColor: theme.colors.border, opacity: blocked ? 0.72 : 1 }]}
+                                onPress={() => void handleInvite(item.id)}
+                                disabled={blocked || invitingId === item.id}
+                                activeOpacity={0.86}
+                              >
+                                <View style={styles.resultIdentity}>
+                                  <Text style={[styles.username, { color: theme.colors.textPrimary }]}>
+                                    @{item.username}
+                                  </Text>
+                                  {item.display_name ? (
+                                    <Text style={[styles.displayName, { color: theme.colors.textMuted }]} numberOfLines={1}>
+                                      {item.display_name}
+                                    </Text>
+                                  ) : null}
+                                </View>
+                                {label ? (
+                                  <Text style={[styles.statusText, { color: theme.colors.textMuted }]}>{label}</Text>
+                                ) : invitingId === item.id ? (
+                                  <ActivityIndicator size="small" color={theme.colors.indigo[400]} />
+                                ) : (
+                                  <View style={styles.inviteCta}>
+                                    <UserPlus size={15} color={theme.colors.cyan[400]} />
+                                    <Text style={[styles.inviteCtaText, { color: theme.colors.cyan[400] }]}>Invite</Text>
+                                  </View>
+                                )}
+                              </TouchableOpacity>
+                            );
+                          })}
+                        </ScrollView>
+                      )}
+                    </>
+                  ) : squadSettled ? (
+                    <Text style={[styles.body, { color: theme.colors.textSecondary }]}>
+                      This Live Squad is finished. Results stay locked on the board, so new invites are closed.
+                    </Text>
+                  ) : (
+                    <Text style={[styles.body, { color: theme.colors.textSecondary }]}>
+                      Only the Live Squad creator can invite more people.
+                    </Text>
                   )}
                 </>
-              ) : squadSettled ? (
-                <Text style={[styles.body, { color: theme.colors.textSecondary }]}>
-                  This Live Squad is finished. Results stay locked on the board, so new invites are closed.
-                </Text>
-              ) : (
-                <Text style={[styles.body, { color: theme.colors.textSecondary }]}>
-                  Only the Live Squad creator can invite more people.
-                </Text>
               )}
-            </>
-          )}
+            </ScrollView>
           </View>
         </View>
       </KeyboardAvoidingView>
@@ -486,6 +494,8 @@ const styles = StyleSheet.create({
     padding: 18,
     maxHeight: "88%",
   },
+  sheetScroll: { flexGrow: 0 },
+  sheetContent: { paddingBottom: 4 },
   sheetHead: { flexDirection: "row", alignItems: "flex-start", gap: 12, marginBottom: 16 },
   titleCluster: { flex: 1, minWidth: 0 },
   titleRow: { flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" },

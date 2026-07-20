@@ -50,6 +50,7 @@ import type {
   LiveMiniSquadSnapshot,
 } from "../../src/types/liveMiniMission";
 import { formatDateTimeDisplay } from "../../src/utils/dateDisplay";
+import { storageThumbnailUri } from "../../src/utils/imageThumbnail";
 import { levelFromTotalXp } from "../../src/utils/xpLevel";
 
 const QUICK_MINUTES = [
@@ -640,6 +641,10 @@ function ParticipantCard({
   const progress = elapsedSeconds == null ? 0 : Math.min(1, elapsedSeconds / totalSeconds);
   const showProgress = row.status === "completed" || row.status === "in_progress";
   const memoryImage = row.memory_image_url ? withImageVersion(row.memory_image_url, row.updated_at) : null;
+  const memoryThumbnail = useMemo(
+    () => (memoryImage ? storageThumbnailUri(memoryImage, 820, 456, 64) : null),
+    [memoryImage],
+  );
   const playerName = displayName(profile);
 
   const handlePlayerJourneyPress = useCallback(() => {
@@ -796,7 +801,7 @@ function ParticipantCard({
           accessibilityLabel="View squad memory photo"
           style={({ pressed }) => ({ opacity: pressed ? 0.92 : 1 })}
         >
-          <Image source={{ uri: memoryImage }} style={styles.memoryImage} resizeMode="cover" />
+          <Image source={{ uri: memoryThumbnail ?? memoryImage }} style={styles.memoryImage} resizeMode="cover" />
         </Pressable>
       ) : null}
       {row.memory_note ? (
