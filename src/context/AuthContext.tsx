@@ -8,7 +8,8 @@ import React, {
   useState,
 } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { InteractionManager } from "react-native";
+import { InteractionManager, Platform } from "react-native";
+import * as AppleAuthentication from "expo-apple-authentication";
 import * as WebBrowser from "expo-web-browser";
 import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 import { useHabitStore } from "../store/habitStore";
@@ -57,6 +58,8 @@ type AuthContextValue = {
   ) => Promise<{ error: Error | null; needsEmailConfirmation: boolean }>;
   /** Google OAuth (PKCE + system browser). Configure provider + redirect URLs in Supabase. */
   signInWithGoogle: () => Promise<{ error: Error | null }>;
+  /** Native Sign in with Apple. Enable Apple provider in Supabase Auth before release. */
+  signInWithApple: () => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
 };
 
@@ -316,6 +319,49 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return { error: exchangeError ?? null };
   }, []);
 
+  const signInWithApple = useCallback(async () => {
+    const supabase = getSupabase();
+    if (!supabase) {
+      return { error: new Error("Supabase is not configured.") };
+    }
+    if (Platform.OS !== "ios") {
+      return { error: new Error("Apple sign-in is only available on iOS.") };
+    }
+
+    const available = await AppleAuthentication.isAvailableAsync();
+    if (!available) {
+      return { error: new Error("Apple sign-in is not available on this device.") };
+    }
+
+    let credential: AppleAuthentication.AppleAuthenticationCredential;
+    try {
+      credential = await AppleAuthentication.signInAsync({
+        requestedScopes: [
+          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+          AppleAuthentication.AppleAuthenticationScope.EMAIL,
+        ],
+      });
+    } catch (e) {
+      const code = typeof e === "object" && e !== null && "code" in e ? String(e.code) : "";
+      if (code === "ERR_REQUEST_CANCELED") {
+        return { error: null };
+      }
+      const msg = e instanceof Error ? e.message : "Apple sign-in was cancelled.";
+      return { error: new Error(msg) };
+    }
+
+    if (!credential.identityToken) {
+      return { error: new Error("No identity token returned from Apple.") };
+    }
+
+    const { data, error } = await supabase.auth.signInWithIdToken({
+      provider: "apple",
+      token: credential.identityToken,
+    });
+    if (data.session) setSession(data.session);
+    return { error: error ?? null };
+  }, []);
+
   const signOut = useCallback(async () => {
     const supabase = getSupabase();
     const uid = activeAuthUserIdRef.current ?? session?.user?.id ?? undefined;
@@ -366,6 +412,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       signIn,
       signUp,
       signInWithGoogle,
+      signInWithApple,
       signOut,
     }),
     [
@@ -380,6 +427,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       signIn,
       signUp,
       signInWithGoogle,
+      signInWithApple,
       signOut,
     ],
   );

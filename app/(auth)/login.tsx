@@ -9,7 +9,9 @@ import {
   ScrollView,
   StatusBar,
   Image,
+  Platform,
 } from "react-native";
+import * as AppleAuthentication from "expo-apple-authentication";
 import { useRouter } from "expo-router";
 import { Eye, EyeOff, MailCheck } from "lucide-react-native";
 import { Screen } from "../../src/components/Screen";
@@ -48,7 +50,7 @@ function AuthImageBackdrop({ isDark }: { isDark: boolean }) {
 export default function LoginScreen() {
   const router = useRouter();
   const { theme, isDark } = useTheme();
-  const { supabaseConfigured, signIn, signUp, signInWithGoogle, session } = useAuth();
+  const { supabaseConfigured, signIn, signUp, signInWithGoogle, signInWithApple, session } = useAuth();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -56,6 +58,8 @@ export default function LoginScreen() {
   const [isSignUp, setIsSignUp] = useState(false);
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [appleLoading, setAppleLoading] = useState(false);
+  const [appleAvailable, setAppleAvailable] = useState(false);
   const [focused, setFocused] = useState<FocusKey>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -68,6 +72,24 @@ export default function LoginScreen() {
     }
   }, [supabaseConfigured, session, router]);
 
+  useEffect(() => {
+    if (Platform.OS !== "ios") {
+      setAppleAvailable(false);
+      return;
+    }
+    let mounted = true;
+    void AppleAuthentication.isAvailableAsync()
+      .then((available) => {
+        if (mounted) setAppleAvailable(available);
+      })
+      .catch(() => {
+        if (mounted) setAppleAvailable(false);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
   const onGoogle = async () => {
     setGoogleLoading(true);
     try {
@@ -77,6 +99,18 @@ export default function LoginScreen() {
       }
     } finally {
       setGoogleLoading(false);
+    }
+  };
+
+  const onApple = async () => {
+    setAppleLoading(true);
+    try {
+      const { error } = await signInWithApple();
+      if (error) {
+        showAppAlert("Apple sign-in failed", error.message);
+      }
+    } finally {
+      setAppleLoading(false);
     }
   };
 
@@ -122,7 +156,7 @@ export default function LoginScreen() {
     }
   };
 
-  const busy = loading || googleLoading;
+  const busy = loading || googleLoading || appleLoading;
   const glassSurface = isDark ? "rgba(15,23,42,0.74)" : "rgba(248,250,252,0.96)";
   const glassBorder = isDark ? "rgba(148,163,184,0.26)" : "rgba(100,116,139,0.28)";
   const focusedBorder = isDark ? "rgba(129,140,248,0.84)" : "rgba(79,70,229,0.62)";
@@ -429,6 +463,24 @@ export default function LoginScreen() {
                   </View>
                 </TouchableOpacity>
               )}
+
+              {appleAvailable && (
+                appleLoading ? (
+                  <ActivityIndicator color={theme.colors.indigo[500]} style={{ marginTop: 12 }} />
+                ) : (
+                  <AppleAuthentication.AppleAuthenticationButton
+                    buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
+                    buttonStyle={
+                      isDark
+                        ? AppleAuthentication.AppleAuthenticationButtonStyle.WHITE
+                        : AppleAuthentication.AppleAuthenticationButtonStyle.BLACK
+                    }
+                    cornerRadius={14}
+                    style={styles.appleBtn}
+                    onPress={() => void onApple()}
+                  />
+                )
+              )}
             </>
           )}
         </View>
@@ -569,6 +621,12 @@ const styles = StyleSheet.create({
     backgroundColor: "transparent",
   },
   googleBtnText: { fontSize: 16, fontWeight: "700", backgroundColor: "transparent" },
+  appleBtn: {
+    width: "100%",
+    height: 52,
+    marginTop: 12,
+    marginBottom: 4,
+  },
   dividerRow: {
     flexDirection: "row",
     alignItems: "center",
