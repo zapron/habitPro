@@ -108,6 +108,10 @@ export type CommunityPlayerStory = {
   miniPosts: CommunityPlayerStoryPost[];
   totalPhotoMoments: number;
   hasMore?: boolean;
+  missionHasMore?: boolean;
+  miniHasMore?: boolean;
+  missionFetchedCount?: number;
+  miniFetchedCount?: number;
 };
 
 export type CommunityPlayerStoryPage = {
@@ -115,6 +119,8 @@ export type CommunityPlayerStoryPage = {
   miniPosts: CommunityPlayerStoryPost[];
   totalPhotoMoments: number;
   hasMore: boolean;
+  feedSource?: CommunityWinFeedSource;
+  fetchedCount?: number;
 };
 
 export type CommunityWinCheerer = {
@@ -853,20 +859,24 @@ export async function fetchCommunityPlayerStoryPage(input: {
   userId: string;
   offset: number;
   limit?: number;
+  feedSource?: CommunityWinFeedSource;
 }): Promise<{ ok: true; page: CommunityPlayerStoryPage } | { ok: false; error: string }> {
   const supabase = getSupabase();
   if (!supabase) return { ok: false, error: "Cloud sync not configured." };
 
   const pageSize = Math.max(10, Math.min(Math.floor(input.limit ?? 48), 120));
   const offset = Math.max(0, Math.floor(input.offset));
-  const { data: rowsRaw, error } = await supabase
+  let query = supabase
     .from("community_wins")
     .select(
       "id, user_id, mini_mission_id, title, completed_at, memory_note, memory_image_url, created_at, feed_source, streak_mission_day, streak_count_at_post, live_squad_id",
     )
     .eq("user_id", input.userId)
-    .order("created_at", { ascending: false })
-    .range(offset, offset + pageSize);
+    .order("created_at", { ascending: false });
+
+  if (input.feedSource) query = query.eq("feed_source", input.feedSource);
+
+  const { data: rowsRaw, error } = await query.range(offset, offset + pageSize);
 
   if (error) return { ok: false, error: error.message };
 
@@ -931,6 +941,8 @@ export async function fetchCommunityPlayerStoryPage(input: {
       miniPosts,
       totalPhotoMoments: posts.filter((post) => Boolean(post.memoryImageUrl)).length,
       hasMore,
+      feedSource: input.feedSource,
+      fetchedCount: pageRows.length,
     },
   };
 }
@@ -943,83 +955,21 @@ export async function fetchCommunityPlayerStory(
   if (!supabase) return { ok: false, error: "Cloud sync not configured." };
 
   const requestedLimit = Math.max(10, Math.min(Math.floor(limit), 120));
-  const [
-    profileResult,
-    ranks,
-    {
-      data: { user },
-    },
-    { data: winsRaw, error: winsErr },
-  ] = await Promise.all([
+  const [profileResult, ranks, missionPage, miniPage] = await Promise.all([
     fetchCommunityPlayerProfile(userId),
     fetchCommunityPlayerRanks(userId),
-    supabase.auth.getUser(),
-    supabase
-      .from("community_wins")
-      .select(
-        "id, user_id, mini_mission_id, title, completed_at, memory_note, memory_image_url, created_at, feed_source, streak_mission_day, streak_count_at_post, live_squad_id",
-      )
-      .eq("user_id", userId)
-      .order("created_at", { ascending: false })
-      .range(0, requestedLimit),
+    fetchCommunityPlayerStoryPage({ userId, offset: 0, limit: requestedLimit, feedSource: "habit_streak" }),
+    fetchCommunityPlayerStoryPage({ userId, offset: 0, limit: requestedLimit, feedSource: "mini" }),
   ]);
 
   if (profileResult.ok === false) return profileResult;
-  if (winsErr) return { ok: false, error: winsErr.message };
-
-  const rows = ((winsRaw ?? []) as Partial<CommunityWinRow>[])
-    .map((row) => {
-      if (typeof row.id !== "string") return null;
-      return {
-        id: row.id,
-        user_id: storyString(row.user_id, userId),
-        mini_mission_id: storyString(row.mini_mission_id),
-        title: storyString(row.title, "Community win"),
-        completed_at: storyString(row.completed_at, row.created_at ?? new Date(0).toISOString()),
-        memory_note: typeof row.memory_note === "string" ? row.memory_note : null,
-        memory_image_url: typeof row.memory_image_url === "string" ? row.memory_image_url : null,
-        created_at: storyString(row.created_at, row.completed_at ?? new Date(0).toISOString()),
-        feed_source: (row.feed_source ?? "mini") as CommunityWinFeedSource,
-        streak_mission_day:
-          typeof row.streak_mission_day === "number" && Number.isFinite(row.streak_mission_day)
-            ? row.streak_mission_day
-            : null,
-        streak_count_at_post:
-          typeof row.streak_count_at_post === "number" && Number.isFinite(row.streak_count_at_post)
-            ? row.streak_count_at_post
-            : null,
-        live_squad_id: typeof row.live_squad_id === "string" ? row.live_squad_id : null,
-      } satisfies CommunityWinRow;
-    })
-    .filter((row): row is CommunityWinRow => row !== null);
-
-  const hasMore = rows.length > requestedLimit;
-  const pageRows = rows.slice(0, requestedLimit);
-  const winIds = pageRows.map((row) => row.id);
-  const { data: cheersRaw } =
-    winIds.length > 0
-      ? await supabase.from("community_win_cheers").select("win_id, user_id").in("win_id", winIds)
-      : { data: [] as Array<{ win_id: string; user_id: string }> };
-
-  const cheerCountByWin = new Map<string, number>();
-  const viewerCheered = new Set<string>();
-  for (const cheer of cheersRaw ?? []) {
-    const winId = (cheer as { win_id?: unknown }).win_id;
-    const cheerUserId = (cheer as { user_id?: unknown }).user_id;
-    if (typeof winId !== "string") continue;
-    cheerCountByWin.set(winId, (cheerCountByWin.get(winId) ?? 0) + 1);
-    if (typeof cheerUserId === "string" && user?.id === cheerUserId) {
-      viewerCheered.add(winId);
-    }
-  }
-
-  const posts = pageRows.map((row) =>
-    normalizeStoryPost(row, cheerCountByWin.get(row.id) ?? 0, viewerCheered.has(row.id)),
-  );
-  const postsById = new Map(posts.map((post) => [post.id, post]));
-  const missionStories = await enrichMissionStoriesWithDescriptions(userId, groupMissionStories(pageRows, postsById));
-  const miniPosts = posts.filter((post) => post.feedSource === "mini");
-  const totalPhotoMoments = posts.filter((post) => Boolean(post.memoryImageUrl)).length;
+  if (missionPage.ok === false) return missionPage;
+  if (miniPage.ok === false) return miniPage;
+  const missionStories = missionPage.page.missionStories;
+  const miniPosts = miniPage.page.miniPosts;
+  const totalPhotoMoments = [...missionStories.flatMap((story) => story.posts), ...miniPosts].filter((post) =>
+    Boolean(post.memoryImageUrl),
+  ).length;
 
   return {
     ok: true,
@@ -1030,7 +980,12 @@ export async function fetchCommunityPlayerStory(
       missionStories,
       miniPosts,
       totalPhotoMoments,
-      hasMore,
+      hasMore: missionPage.page.hasMore || miniPage.page.hasMore,
+      missionHasMore: missionPage.page.hasMore,
+      miniHasMore: miniPage.page.hasMore,
+      missionFetchedCount:
+        missionPage.page.fetchedCount ?? missionStories.reduce((total, story) => total + story.postCount, 0),
+      miniFetchedCount: miniPage.page.fetchedCount ?? miniPosts.length,
     },
   };
 }

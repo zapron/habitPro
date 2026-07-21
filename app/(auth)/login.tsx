@@ -468,17 +468,27 @@ export default function LoginScreen() {
                 appleLoading ? (
                   <ActivityIndicator color={theme.colors.indigo[500]} style={{ marginTop: 12 }} />
                 ) : (
-                  <AppleAuthentication.AppleAuthenticationButton
-                    buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
-                    buttonStyle={
-                      isDark
-                        ? AppleAuthentication.AppleAuthenticationButtonStyle.WHITE
-                        : AppleAuthentication.AppleAuthenticationButtonStyle.BLACK
-                    }
-                    cornerRadius={14}
-                    style={styles.appleBtn}
+                  <TouchableOpacity
+                    style={[
+                      styles.socialBtn,
+                      {
+                        borderColor: glassBorder,
+                        backgroundColor: isDark ? "rgba(15,23,42,0.68)" : "rgba(248,250,252,0.96)",
+                      },
+                    ]}
                     onPress={() => void onApple()}
-                  />
+                    disabled={busy}
+                    activeOpacity={0.85}
+                    accessibilityRole="button"
+                    accessibilityLabel="Continue with Apple"
+                  >
+                    <View style={styles.socialBtnContent}>
+                      <Text style={[styles.appleMark, { color: fieldTextColor }]} accessibilityElementsHidden importantForAccessibility="no">
+                        
+                      </Text>
+                      <Text style={[styles.socialBtnText, { color: fieldTextColor }]}>Continue with Apple</Text>
+                    </View>
+                  </TouchableOpacity>
                 )
               )}
             </>
@@ -599,6 +609,20 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "800",
   },
+  socialBtn: {
+    borderWidth: 1,
+    borderRadius: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 4,
+    shadowColor: "#020617",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.1,
+    shadowRadius: 18,
+    elevation: 1,
+  },
   googleBtn: {
     borderWidth: 1,
     borderRadius: 14,
@@ -613,6 +637,13 @@ const styles = StyleSheet.create({
     shadowRadius: 18,
     elevation: 1,
   },
+  socialBtnContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 12,
+    backgroundColor: "transparent",
+  },
   googleBtnContent: {
     flexDirection: "row",
     alignItems: "center",
@@ -620,12 +651,15 @@ const styles = StyleSheet.create({
     gap: 12,
     backgroundColor: "transparent",
   },
+  socialBtnText: { fontSize: 16, fontWeight: "700", backgroundColor: "transparent" },
   googleBtnText: { fontSize: 16, fontWeight: "700", backgroundColor: "transparent" },
-  appleBtn: {
-    width: "100%",
-    height: 52,
-    marginTop: 12,
-    marginBottom: 4,
+  appleMark: {
+    fontSize: 23,
+    fontWeight: "900",
+    lineHeight: 24,
+    width: 22,
+    textAlign: "center",
+    backgroundColor: "transparent",
   },
   dividerRow: {
     flexDirection: "row",

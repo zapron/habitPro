@@ -1257,8 +1257,10 @@ export default function MyJourneyScreen() {
   const [activeTab, setActiveTab] = useState<StoryTab>(routeTab);
   const [publicStory, setPublicStory] = useState<CommunityPlayerStory | null>(null);
   const [loadingPublic, setLoadingPublic] = useState(true);
-  const [publicHasMore, setPublicHasMore] = useState(false);
-  const [publicFetchedCount, setPublicFetchedCount] = useState(0);
+  const [publicMissionHasMore, setPublicMissionHasMore] = useState(false);
+  const [publicMiniHasMore, setPublicMiniHasMore] = useState(false);
+  const [publicMissionFetchedCount, setPublicMissionFetchedCount] = useState(0);
+  const [publicMiniFetchedCount, setPublicMiniFetchedCount] = useState(0);
   const [loadingMoreHistory, setLoadingMoreHistory] = useState(false);
   const [missionVisibleCount, setMissionVisibleCount] = useState(MISSION_STORY_LIMIT);
   const [miniVisibleCount, setMiniVisibleCount] = useState(MINI_POST_LIMIT);
@@ -1285,8 +1287,10 @@ export default function MyJourneyScreen() {
     if (!userId) {
       setPublicStory(null);
       setPublicError("Sign in to view your public journey.");
-      setPublicHasMore(false);
-      setPublicFetchedCount(0);
+      setPublicMissionHasMore(false);
+      setPublicMiniHasMore(false);
+      setPublicMissionFetchedCount(0);
+      setPublicMiniFetchedCount(0);
       setLoadingPublic(false);
       return;
     }
@@ -1296,13 +1300,18 @@ export default function MyJourneyScreen() {
     const res = await fetchCommunityPlayerStory(userId, STORY_FETCH_LIMIT);
     if (res.ok === true) {
       setPublicStory(res.story);
-      setPublicHasMore(Boolean(res.story.hasMore));
-      setPublicFetchedCount(storyPagePostCount(res.story));
+      setPublicMissionHasMore(Boolean(res.story.missionHasMore ?? res.story.hasMore));
+      setPublicMiniHasMore(Boolean(res.story.miniHasMore ?? res.story.hasMore));
+      setPublicMissionFetchedCount(
+        res.story.missionFetchedCount ?? storyPagePostCount({ missionStories: res.story.missionStories, miniPosts: [] }),
+      );
+      setPublicMiniFetchedCount(res.story.miniFetchedCount ?? res.story.miniPosts.length);
       setMissionVisibleCount(MISSION_STORY_LIMIT);
       setMiniVisibleCount(MINI_POST_LIMIT);
     } else {
       setPublicError(res.error);
-      setPublicHasMore(false);
+      setPublicMissionHasMore(false);
+      setPublicMiniHasMore(false);
     }
     setLoadingPublic(false);
     setRefreshing(false);
@@ -1400,7 +1409,9 @@ export default function MyJourneyScreen() {
   const activeTabTotal = activeTab === "missions" ? activeMissions.length : activeMinis.length;
   const activeTabVisible = activeTab === "missions" ? visibleMissions.length : visibleMinis.length;
   const hasLocalHistoryMore = activeTabVisible < activeTabTotal;
-  const hasMoreHistory = hasLocalHistoryMore || publicHasMore;
+  const activePublicHasMore =
+    journeyMode === "public" ? (activeTab === "missions" ? publicMissionHasMore : publicMiniHasMore) : false;
+  const hasMoreHistory = hasLocalHistoryMore || activePublicHasMore;
 
   const onModeChange = useCallback((mode: JourneyMode) => {
     if (mode === journeyMode) return;
@@ -1421,24 +1432,30 @@ export default function MyJourneyScreen() {
       setMiniVisibleCount((count) => Math.min(count + MINI_POST_LIMIT, activeMinis.length));
       return;
     }
-    if (!userId || !publicHasMore || loadingMoreHistory) return;
+    const feedSource = activeTab === "missions" ? "habit_streak" : "mini";
+    const offset = activeTab === "missions" ? publicMissionFetchedCount : publicMiniFetchedCount;
+    const remoteHasMore = activeTab === "missions" ? publicMissionHasMore : publicMiniHasMore;
+    if (journeyMode !== "public" || !userId || !remoteHasMore || loadingMoreHistory) return;
 
     setLoadingMoreHistory(true);
     setPublicError(null);
     try {
       const res = await fetchCommunityPlayerStoryPage({
         userId,
-        offset: publicFetchedCount,
+        offset,
         limit: STORY_FETCH_LIMIT,
+        feedSource,
       });
       if (res.ok === true) {
         const pageCount = storyPagePostCount(res.page);
         setPublicStory((current) => (current ? mergePublicStoryPage(current, res.page) : current));
-        setPublicFetchedCount((count) => count + pageCount);
-        setPublicHasMore(res.page.hasMore);
         if (activeTab === "missions") {
+          setPublicMissionFetchedCount((count) => count + (res.page.fetchedCount ?? pageCount));
+          setPublicMissionHasMore(res.page.hasMore);
           setMissionVisibleCount((count) => count + MISSION_STORY_LIMIT);
         } else {
+          setPublicMiniFetchedCount((count) => count + (res.page.fetchedCount ?? pageCount));
+          setPublicMiniHasMore(res.page.hasMore);
           setMiniVisibleCount((count) => count + MINI_POST_LIMIT);
         }
       } else {
@@ -1456,8 +1473,11 @@ export default function MyJourneyScreen() {
     loadingMoreHistory,
     miniVisibleCount,
     missionVisibleCount,
-    publicFetchedCount,
-    publicHasMore,
+    journeyMode,
+    publicMiniFetchedCount,
+    publicMiniHasMore,
+    publicMissionFetchedCount,
+    publicMissionHasMore,
     userId,
   ]);
 
