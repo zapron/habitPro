@@ -182,6 +182,7 @@ export function LiveMiniInviteSheet({ visible, mission, onClose }: Props) {
     try {
       const freshPremium = await refreshPremiumAccess({ serverOnly: true, cachedAccessOk: true });
       if (freshPremium !== true) {
+        onClose();
         openUpsell("live_mini");
         return;
       }
@@ -208,6 +209,7 @@ export function LiveMiniInviteSheet({ visible, mission, onClose }: Props) {
       if (res.ok === false) {
         if (res.reason === "premium_required") {
           await refreshPremiumAccess({ force: true, serverOnly: true });
+          onClose();
           openUpsell("live_mini");
         } else {
           showToast(res.error, "error");
@@ -224,6 +226,7 @@ export function LiveMiniInviteSheet({ visible, mission, onClose }: Props) {
   }, [
     configured,
     mission,
+    onClose,
     openUpsell,
     refreshPremiumAccess,
     requireUsername,
@@ -249,6 +252,7 @@ export function LiveMiniInviteSheet({ visible, mission, onClose }: Props) {
       try {
         const freshPremium = await refreshPremiumAccess({ serverOnly: true, cachedAccessOk: true });
         if (freshPremium !== true) {
+          onClose();
           openUpsell("live_mini");
           return;
         }
@@ -265,6 +269,7 @@ export function LiveMiniInviteSheet({ visible, mission, onClose }: Props) {
         if (res.ok === false) {
           if (res.reason === "premium_required") {
             await refreshPremiumAccess({ force: true, serverOnly: true });
+            onClose();
             openUpsell("live_mini");
             return;
           }
@@ -279,7 +284,7 @@ export function LiveMiniInviteSheet({ visible, mission, onClose }: Props) {
         setInvitingId(null);
       }
     },
-    [loadStatuses, mission.liveSquadRole, openUpsell, refreshPremiumAccess, requireUsername, showToast, squadId, squadSettled, statusByUserId],
+    [loadStatuses, mission.liveSquadRole, onClose, openUpsell, refreshPremiumAccess, requireUsername, showToast, squadId, squadSettled, statusByUserId],
   );
 
   const openBoard = () => {

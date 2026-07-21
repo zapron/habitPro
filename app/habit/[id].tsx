@@ -879,6 +879,8 @@ export default function HabitDetail() {
                 if (isSupabaseConfigured() && session?.user) {
                     const freshPremium = await refreshPremiumAccess({ serverOnly: true, cachedAccessOk: true });
                     if (freshPremium !== true) {
+                        pendingMemoryRef.current = null;
+                        setMemoryUi(null);
                         openUpsell('community_publish');
                         return;
                     }
@@ -941,6 +943,8 @@ export default function HabitDetail() {
                 } else {
                     if (res.reason === "premium_required") {
                         await refreshPremiumAccess({ force: true, serverOnly: true });
+                        pendingMemoryRef.current = null;
+                        setMemoryUi(null);
                         openUpsell('community_publish');
                         return;
                     }
@@ -971,6 +975,8 @@ export default function HabitDetail() {
             if (next) {
                 const freshPremium = await refreshPremiumAccess({ serverOnly: true, cachedAccessOk: true });
                 if (freshPremium !== true) {
+                    pendingMemoryRef.current = null;
+                    setMemoryUi(null);
                     openUpsell('community_publish');
                     return;
                 }
@@ -1031,6 +1037,8 @@ export default function HabitDetail() {
                     } else {
                         if (res.reason === "premium_required") {
                             await refreshPremiumAccess({ force: true, serverOnly: true });
+                            pendingMemoryRef.current = null;
+                            setMemoryUi(null);
                             openUpsell('community_publish');
                             return;
                         }
@@ -1162,6 +1170,8 @@ export default function HabitDetail() {
                 if (next === 'public' && socialLocked) {
                     const freshPremium = await refreshPremiumAccess({ serverOnly: true, cachedAccessOk: true });
                     if (freshPremium !== true) {
+                        pendingMemoryRef.current = null;
+                        setMemoryUi(null);
                         openUpsell('visibility');
                         throw new Error('HabitPro Community is required for squad visibility.');
                     }

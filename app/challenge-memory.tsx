@@ -316,6 +316,7 @@ export default function ChallengeMemoryScreen() {
       if (!detail?.canSendSquadNudge) return;
       const freshPremium = await refreshPremiumAccess({ serverOnly: true, cachedAccessOk: true });
       if (freshPremium !== true) {
+        setCustomNoteOpen(false);
         openUpsell("squad_nudge");
         return;
       }
@@ -332,6 +333,7 @@ export default function ChallengeMemoryScreen() {
         );
         if (noteError) {
           if (reason === "premium_required") {
+            setCustomNoteOpen(false);
             await handleServerPremiumRequired("squad_nudge");
             return;
           }

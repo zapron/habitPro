@@ -78,8 +78,9 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
 
   const handleServerPremiumRequired = useCallback(async () => {
     await refreshPremiumAccess({ force: true, serverOnly: true });
+    onClose();
     openUpsell("group_mission");
-  }, [openUpsell, refreshPremiumAccess]);
+  }, [onClose, openUpsell, refreshPremiumAccess]);
 
   useEffect(() => {
     if (!visible || !habit.challengeGroupId || !configured || !signedIn) {
@@ -146,6 +147,7 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
     try {
       const freshPremium = await refreshPremiumAccess({ serverOnly: true, cachedAccessOk: true });
       if (freshPremium !== true) {
+        onClose();
         openUpsell("group_mission");
         return;
       }
@@ -169,7 +171,7 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
       creatingRef.current = false;
       setCreating(false);
     }
-  }, [configured, creating, signedIn, habit, showToast, openUpsell, requireUsername, refreshPremiumAccess, handleServerPremiumRequired]);
+  }, [configured, creating, signedIn, habit, showToast, onClose, openUpsell, requireUsername, refreshPremiumAccess, handleServerPremiumRequired]);
 
   const handleInvite = useCallback(
     async (userId: string) => {
@@ -189,6 +191,7 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
       try {
         const freshPremium = await refreshPremiumAccess({ serverOnly: true, cachedAccessOk: true });
         if (freshPremium !== true) {
+          onClose();
           openUpsell("group_mission");
           return;
         }
@@ -221,7 +224,7 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
         setInvitingId(null);
       }
     },
-    [habit.challengeGroupId, inviteeStatusById, invitingId, myUsername, showToast, openUpsell, requireUsername, refreshPremiumAccess, handleServerPremiumRequired],
+    [habit.challengeGroupId, inviteeStatusById, invitingId, myUsername, showToast, onClose, openUpsell, requireUsername, refreshPremiumAccess, handleServerPremiumRequired],
   );
 
   const openChallenge = () => {

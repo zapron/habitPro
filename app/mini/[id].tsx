@@ -1581,6 +1581,8 @@ export default function MiniMissionDetail() {
       : null;
     let canPublish = publishCloudReady && freshPremium === true;
     if (publishCloudReady && freshPremium !== true) {
+      setCompleteSheetOpen(false);
+      setTimerFrozenAtMs(null);
       openUpsell("community_publish");
     }
     if (canPublish) {
@@ -1644,6 +1646,8 @@ export default function MiniMissionDetail() {
       } else {
         if (res.reason === "premium_required") {
           await refreshPremiumAccess({ force: true, serverOnly: true });
+          setCompleteSheetOpen(false);
+          setTimerFrozenAtMs(null);
           openUpsell("community_publish");
           return;
         }

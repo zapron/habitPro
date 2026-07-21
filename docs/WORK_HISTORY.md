@@ -2,6 +2,20 @@
 
 This is a concise chronological log for future sessions. Keep secrets out of this file.
 
+## 2026-07-22
+
+### iOS Paywall Stuck Behind Sheets (nested Modal fix)
+
+- User reported iOS-only "stuck" behavior: tapping Invite in Live Squad, completing a mini mission with Community publish, and (per Supabase/RevenueCat investigation) other premium-gated actions did nothing visible on iOS while working fine on Android.
+- Investigated via RevenueCat MCP and Supabase MCP (both newly connected this session): confirmed RevenueCat webhook delivery has a real reliability bug (crashes on events with `$RCAnonymousID:...` as `app_user_id` instead of a UUID, ~30-40% of deliveries failing in edge function logs) but this was a red herring for the reported "stuck" behavior — the actual affected test user (`thategolifter` / `0367c122-a375-48aa-8a09-f1f4c8dbe1a1`) had zero purchase/subscription history in RevenueCat, so `is_premium: false` was correct, not stale.
+- Root cause: components that wrap themselves in their own `<Modal>` (Live Squad invite, streak repair, group mission, completion memory sheets, custom nudge note, community-player journey drawer) call `openUpsell(...)` from inside a handler while that Modal is still open. iOS frequently fails to present a second native `<Modal>` over a still-open one; Android's `Dialog`-backed `Modal` stacks more forgivingly, so this was iOS-only.
+- Fix: close the enclosing sheet before calling `openUpsell(...)`, in 8 files / 12 call sites — see `docs/CURRENT_WORK.md` "Latest Fix" section for the full file list.
+- Validated locally: `npm run android` (Android emulator, required `JAVA_HOME` pointed at Android Studio's bundled JDK and `android/local.properties` with `sdk.dir`, both local-machine setup, not committed) and `npx expo run:ios` (iOS Simulator, required adding `EXPO_PUBLIC_REVENUECAT_IOS_API_KEY` to local `.env`, pulled from RevenueCat via MCP). Both platforms confirmed working by the user after the fix.
+- Test account `raktim24@gmail.com` had `is_premium` manually set to `false` in Supabase during testing (to validate the free-user paywall path on a real linked Apple+Google+email account); not yet restored to premium.
+- Not fixed, deferred by user: the RevenueCat webhook anonymous-ID crash bug in `supabase/functions/revenuecat-webhook/index.ts`. Real bug, independent of the modal fix, still open.
+- Validation: `npx tsc --noEmit` clean.
+- Published to production OTA after user approval (see command/output logged at time of publish).
+
 ## 2026-07-21
 
 ### iOS Apple Login / RevenueCat Billing Prep

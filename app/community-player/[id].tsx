@@ -904,6 +904,7 @@ function MissionGalleryModal({
             ),
           );
           if (result.reason === "premium_required") {
+            onClose();
             openUpsell("community");
           } else {
             showToast(result.error, "error");
@@ -930,7 +931,7 @@ function MissionGalleryModal({
         });
       }
     },
-    [cheeringIds, openUpsell, requireUsername, session?.user, showToast, viewerOwnsJourney],
+    [cheeringIds, onClose, openUpsell, requireUsername, session?.user, showToast, viewerOwnsJourney],
   );
 
   const loadMoreJourney = useCallback(async () => {

@@ -1558,6 +1558,7 @@ export default function ChallengeDetailScreen() {
       }
       const freshPremium = await refreshPremiumAccess({ serverOnly: true, cachedAccessOk: true });
       if (freshPremium !== true) {
+        setCustomNoteToUserId(null);
         openUpsell("squad_nudge");
         return;
       }
@@ -1574,6 +1575,7 @@ export default function ChallengeDetailScreen() {
         const { error, reason } = await sendChallengeCustomNudge(challengeId, customNoteToUserId, text);
         if (error) {
           if (reason === "premium_required") {
+            setCustomNoteToUserId(null);
             await handleServerPremiumRequired("squad_nudge");
             return;
           }

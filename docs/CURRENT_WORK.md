@@ -1,6 +1,6 @@
 # HabitPro Current Work
 
-Last updated: 2026-07-21.
+Last updated: 2026-07-22.
 
 This file captures the current working state so future chats do not need the full conversation.
 
@@ -39,6 +39,26 @@ Current app version/build:
 - Runtime version: `1.1.34`
 - iOS build number: `35`
 - Android versionCode: `35`
+
+## Latest Fix: iOS Paywall Stuck Behind Sheets
+
+Root cause found and fixed:
+
+- Any component that wraps itself in its own `<Modal>` (Live Squad invite, streak repair, group mission, mission/mini completion memory sheet, custom nudge note, community-player mission journey drawer) and calls `openUpsell(...)` from inside a handler while that Modal is still open hits a known iOS limitation: a second native `<Modal>` presented while a first is still visible frequently fails to render/interact on iOS. Android's `Dialog`-backed `Modal` stacks more forgivingly, so this only showed up on iOS. It looked like tapping Invite/Complete/etc. did nothing ("stuck").
+- Fix: close the enclosing sheet (`onClose()` / the relevant `set...(false)` or `set...(null)`) immediately before calling `openUpsell(...)`, so only one native modal is ever presented at a time.
+- Fixed in 8 files, 12 call sites:
+  - `src/components/LiveMiniInviteSheet.tsx` (create + invite premium checks)
+  - `src/components/StreakRepairSheet.tsx` (group repair premium checks)
+  - `src/components/GroupChallengeSheet.tsx` (create + invite premium checks)
+  - `app/mini/[id].tsx` (`handleCompleteCommit`, mini mission completion + Community publish)
+  - `app/habit/[id].tsx` (`handleMemoryCommit`, `handleHabitMemoryCommunityChange`, `squadShareProp.onToggle` — main mission completion + Community publish + squad visibility, all rendered inside `StreakMemorySheet`)
+  - `app/challenge/[id].tsx` (`onSubmitCustomNote`, the `CustomNudgeModal` send handler)
+  - `app/challenge-memory.tsx` (same `CustomNudgeModal` pattern)
+  - `app/community-player/[id].tsx` (`MissionJourneyDrawer` cheer/like handler)
+- Trade-off: subscribing from inside one of these sheets now closes the sheet along with the paywall (previously intended to show the paywall on top and return to the same sheet). User must reopen the sheet after subscribing. Small UX cost for the flow actually working on iOS.
+- Validated: tested on Android emulator (`npm run android`, JDK via Android Studio's bundled `jbr`, `ANDROID_HOME`/`sdk.dir` configured locally) and iOS Simulator (`npx expo run:ios`, local `.env` needed `EXPO_PUBLIC_REVENUECAT_IOS_API_KEY` added — it was missing before). Both platforms confirmed working after the fix.
+- Not fixed in this session, still open: `supabase/functions/revenuecat-webhook/index.ts` crashes (~30-40% of webhook deliveries observed failing in Supabase edge function logs) when a RevenueCat event's `app_user_id` is a `$RCAnonymousID:...` string instead of a real UUID, because the webhook does `UPDATE profiles ... WHERE id = appUserId` without validating it's a UUID first. This can leave `profiles.is_premium` stale in either direction for any user whose event happens to hit it. Deferred; not yet fixed.
+- Test account note: `raktim24@gmail.com` (`f90d8ca4-ad7c-4ca8-9646-4633af4a53b3`) had `is_premium` manually set to `false` in Supabase during this session to test the free-user paywall path on a real linked account. Not yet restored as of this entry.
 
 ## Latest Product / Release Prep Changes
 

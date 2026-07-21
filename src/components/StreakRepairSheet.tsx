@@ -281,6 +281,7 @@ export function StreakRepairSheet({ visible, onClose, habit, eligible, onRequest
                 if (isGroup) {
                   const freshPremium = await refreshPremiumAccess({ serverOnly: true, cachedAccessOk: true });
                   if (freshPremium !== true) {
+                    onClose();
                     openUpsell("streak_repair");
                     return;
                   }
@@ -296,6 +297,7 @@ export function StreakRepairSheet({ visible, onClose, habit, eligible, onRequest
                 if (!res.ok) {
                   if ("reason" in res && res.reason === "premium_required") {
                     await refreshPremiumAccess({ force: true, serverOnly: true });
+                    onClose();
                     openUpsell("streak_repair");
                     return;
                   }
