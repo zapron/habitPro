@@ -29,6 +29,7 @@ import { useAuth } from "../../src/context/AuthContext";
 import { useNotificationGate } from "../../src/context/NotificationGateContext";
 import { useTheme } from "../../src/context/ThemeContext";
 import { useToast } from "../../src/context/ToastContext";
+import { useReducedMotion } from "../../src/hooks/useReducedMotion";
 import {
   acceptLiveMiniInvite,
   declineLiveMiniInvite,
@@ -600,6 +601,57 @@ const PulsingOnMissionDot = memo(function PulsingOnMissionDot({ color }: { color
   );
 });
 
+const LiveProgressSheen = memo(function LiveProgressSheen() {
+  const reduceMotion = useReducedMotion();
+  const sweep = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (reduceMotion) {
+      sweep.stopAnimation();
+      sweep.setValue(0);
+      return undefined;
+    }
+
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(sweep, {
+          toValue: 1,
+          duration: 1250,
+          easing: Easing.inOut(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.delay(420),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [reduceMotion, sweep]);
+
+  if (reduceMotion) return null;
+
+  const translateX = sweep.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-90, 260],
+  });
+  const opacity = sweep.interpolate({
+    inputRange: [0, 0.2, 0.74, 1],
+    outputRange: [0, 0.36, 0.36, 0],
+  });
+
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={[
+        styles.liveProgressSheen,
+        {
+          opacity,
+          transform: [{ translateX }, { rotate: "-18deg" }],
+        },
+      ]}
+    />
+  );
+});
+
 function ParticipantCard({
   row,
   rank,
@@ -607,6 +659,7 @@ function ParticipantCard({
   isMe,
   localMission,
   highlightFinish,
+  liveNowMs,
   onOpenMine,
   onOpenImage,
   onOpenPlayerJourney,
@@ -617,6 +670,7 @@ function ParticipantCard({
   isMe: boolean;
   localMission?: MiniMission;
   highlightFinish: boolean;
+  liveNowMs: number;
   onOpenMine: () => void;
   onOpenImage: (uri: string) => void;
   onOpenPlayerJourney: (userId: string, profile?: LiveMiniProfileLabel) => void;
@@ -635,7 +689,7 @@ function ParticipantCard({
     row.status === "completed"
       ? row.final_elapsed_seconds ?? null
       : row.status === "in_progress" && row.started_at
-        ? Math.max(0, Math.floor((Date.now() - new Date(row.started_at).getTime()) / 1000))
+        ? Math.max(0, Math.floor((liveNowMs - new Date(row.started_at).getTime()) / 1000))
         : null;
   const totalSeconds = Math.max(60, (totalMinutes ?? 1) * 60);
   const progress = elapsedSeconds == null ? 0 : Math.min(1, elapsedSeconds / totalSeconds);
@@ -775,7 +829,9 @@ function ParticipantCard({
                   backgroundColor: row.status === "completed" ? theme.colors.indigo[500] : theme.colors.cyan[500],
                 },
               ]}
-            />
+            >
+              {row.status === "in_progress" ? <LiveProgressSheen /> : null}
+            </View>
           </View>
           <View style={styles.progressMetaRow}>
             <Text style={[styles.progressMetaText, { color: theme.colors.textMuted }]}>
@@ -850,6 +906,7 @@ export default function LiveMiniSquadScreen() {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [finishHighlightIds, setFinishHighlightIds] = useState<Set<string>>(() => new Set());
+  const [liveNowMs, setLiveNowMs] = useState(() => Date.now());
   const userIdRef = useRef(userId);
   const liveSyncKeyRef = useRef<string | null>(null);
   const previousParticipantStatusRef = useRef<Record<string, LiveMiniParticipantStatus>>({});
@@ -1020,6 +1077,10 @@ export default function LiveMiniSquadScreen() {
   const squad = snapshot?.squad ?? null;
   const participants = snapshot?.participants ?? [];
   const myParticipant = participants.find((p) => p.user_id === userId);
+  const hasRunningParticipants = useMemo(
+    () => participants.some((p) => p.status === "in_progress" && Boolean(p.started_at)),
+    [participants],
+  );
   const squadSettled = useMemo(
     () => participants.length > 0 && participants.every((p) => isTerminalLiveMiniStatus(p.status)),
     [participants],
@@ -1051,6 +1112,15 @@ export default function LiveMiniSquadScreen() {
       }),
     [participants],
   );
+
+  useEffect(() => {
+    if (!hasRunningParticipants) return undefined;
+    setLiveNowMs(Date.now());
+    const timer = setInterval(() => {
+      setLiveNowMs(Date.now());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [hasRunningParticipants]);
 
   useEffect(() => {
     const previous = previousParticipantStatusRef.current;
@@ -1418,6 +1488,7 @@ export default function LiveMiniSquadScreen() {
               isMe={row.user_id === userId}
               localMission={row.user_id === userId ? localLiveMission : undefined}
               highlightFinish={finishHighlightIds.has(row.id)}
+              liveNowMs={liveNowMs}
               onOpenMine={() => {
                 const mid = row.local_mini_mission_id ?? localLiveMission?.id;
                 if (mid) router.push(`/mini/${mid}`);
@@ -1638,7 +1709,14 @@ const styles = StyleSheet.create({
   lockedPillText: { fontSize: 11, lineHeight: 14, fontWeight: "900" },
   progressBlock: { marginTop: 12, gap: 7 },
   resultTrack: { height: 10, borderRadius: 999, overflow: "hidden" },
-  resultFill: { height: "100%", borderRadius: 999 },
+  resultFill: { height: "100%", borderRadius: 999, overflow: "hidden" },
+  liveProgressSheen: {
+    position: "absolute",
+    top: -8,
+    bottom: -8,
+    width: 48,
+    backgroundColor: "rgba(255,255,255,0.72)",
+  },
   progressMetaRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
   progressMetaText: { fontSize: 11, lineHeight: 15, fontWeight: "800", fontVariant: ["tabular-nums"] },
   deadlineText: { fontSize: 12, lineHeight: 17, fontWeight: "700", marginTop: 10 },

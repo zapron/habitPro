@@ -23,6 +23,7 @@ import {
   REPAIR_MEMORY_NOTE_SQUAD,
 } from "../utils/repairStreakMemoryMerge";
 import { formatDateDisplay } from "../utils/dateDisplay";
+import { playMemoryFormationHaptics } from "../utils/hapticFeedback";
 import { storageThumbnailUri } from "../utils/imageThumbnail";
 import { traceSync } from "../lib/jsThreadProbe";
 
@@ -162,6 +163,7 @@ export function StreakMemoryGallery({
   const reduceMotion = useReducedMotion();
   const [open, setOpen] = useState<Entry | null>(null);
   const [viewerImageAspect, setViewerImageAspect] = useState<number | null>(null);
+  const formationHapticKeyRef = useRef<string | null>(null);
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
 
   const tileW = clamp((windowWidth - 42) / 3.06, 94, 122);
@@ -202,6 +204,7 @@ export function StreakMemoryGallery({
     open && typeof open.missionDay === "number" && open.missionDay > 0
       ? `Day ${open.missionDay}`
       : null;
+  const formationHapticKey = `${remotePeer ? "remote" : "own"}:${sectionTitle}:${entries[0]?.dateStr ?? "none"}:${entries.length}`;
 
   const modalRepairKicker =
     open?.memory?.repairSource === "squad"
@@ -249,6 +252,17 @@ export function StreakMemoryGallery({
       cancelled = true;
     };
   }, [modalHasRenderableImage, viewerUri]);
+
+  useEffect(() => {
+    if (entries.length === 0 || formationHapticKeyRef.current === formationHapticKey) {
+      return undefined;
+    }
+    formationHapticKeyRef.current = formationHapticKey;
+    return playMemoryFormationHaptics({
+      itemCount: entries.length,
+      reduceMotion,
+    });
+  }, [entries.length, formationHapticKey, reduceMotion]);
 
   if (entries.length === 0) return null;
 
