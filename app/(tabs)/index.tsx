@@ -20,6 +20,7 @@ import {
   Linking,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
 import { useFocusEffect, useIsFocused } from "@react-navigation/native";
@@ -82,6 +83,8 @@ const EMPTY_HABITS: Habit[] = [];
 const EMPTY_MINI_MISSIONS: MiniMission[] = [];
 const HOME_NOTIFICATION_COUNT_TTL_MS = 30_000;
 const HOME_NOTIFICATION_REFRESH_DELAY_MS = 600;
+/** Durable marker so the level-up celebration fires once per level, not on every Home visit/remount. */
+const LAST_CELEBRATED_LEVEL_KEY = "habitpro.lastCelebratedLevel";
 
 function getGreeting(): string {
   const hour = new Date().getHours();
@@ -623,12 +626,13 @@ export default function Home() {
   const headerSlide = useRef(new Animated.Value(-15)).current;
   const animXpFill = useRef(new Animated.Value(xpProgress)).current;
   const prevXpProgressRef = useRef(xpProgress);
-  const prevLevelRef = useRef(level);
   const [levelUpBurst, setLevelUpBurst] = useState<{ active: boolean; x: number; y: number }>({
     active: false,
     x: 0,
     y: 20,
   });
+  const lastCelebratedLevelRef = useRef<number | null>(null);
+  const [celebratedLevelReady, setCelebratedLevelReady] = useState(false);
 
   useEffect(() => {
     if (reduceMotion) {
@@ -666,19 +670,57 @@ export default function Home() {
     }).start();
   }, [animXpFill, reduceMotion, xpProgress]);
 
+  // Load the durable "last celebrated level" marker once hydration is real —
+  // comparing against an in-memory ref alone re-fired the celebration on every
+  // Home remount/focus refresh, since the ref started from whatever level was
+  // present before the persisted store finished rehydrating.
+  //
+  // `xp` (and therefore `level`) is deliberately forced to 0 whenever this
+  // screen is unfocused (see the useHabitStore selector above, a perf
+  // optimization) and snaps back to the real value on refocus. Both effects
+  // below must ignore that fake dip-and-recover — only ever read `level`
+  // while `isFocused` is true — or every tab-away-and-back would look like a
+  // fresh level-up.
   useEffect(() => {
-    if (level <= prevLevelRef.current) {
-      prevLevelRef.current = level;
+    if (!storeHydrated || !isFocused) return undefined;
+    let cancelled = false;
+    (async () => {
+      const stored = await AsyncStorage.getItem(LAST_CELEBRATED_LEVEL_KEY);
+      if (cancelled) return;
+      const parsed = stored != null ? parseInt(stored, 10) : NaN;
+      if (Number.isFinite(parsed)) {
+        lastCelebratedLevelRef.current = parsed;
+      } else {
+        // First time this marker has ever been set — seed it to the current
+        // level so existing progress doesn't trigger a retroactive toast.
+        lastCelebratedLevelRef.current = level;
+        void AsyncStorage.setItem(LAST_CELEBRATED_LEVEL_KEY, String(level));
+      }
+      setCelebratedLevelReady(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // Intentionally only re-runs when hydration/focus flips to true, not on every level change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storeHydrated, isFocused]);
+
+  useEffect(() => {
+    if (!celebratedLevelReady || lastCelebratedLevelRef.current === null) return;
+    if (!isFocused) return; // xp is forced to 0 while unfocused — never let that feed the comparison
+    if (level <= lastCelebratedLevelRef.current) {
+      lastCelebratedLevelRef.current = level;
       return;
     }
-    prevLevelRef.current = level;
+    lastCelebratedLevelRef.current = level;
+    void AsyncStorage.setItem(LAST_CELEBRATED_LEVEL_KEY, String(level));
     setLevelUpBurst({ active: false, x: 0, y: 20 });
     setTimeout(() => {
       setLevelUpBurst({ active: true, x: 0, y: 20 });
     }, 50);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     showToast(`Level up! You're now Level ${level}.`, "success", 2600);
-  }, [level, showToast]);
+  }, [level, showToast, celebratedLevelReady, isFocused]);
 
   useEffect(() => {
     const unsub = useHabitStore.persist.onFinishHydration(() =>

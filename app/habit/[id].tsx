@@ -44,8 +44,7 @@ import { subscribeSyncFailure, subscribeSyncSuccess } from '../../src/lib/syncQu
 import { backOrReplace } from '../../src/lib/navigation';
 import type { MissionVisibility } from '../../src/types/habit';
 import { ConfettiBurst } from '../../src/components/ConfettiBurst';
-import { ProgressRing } from '../../src/components/ProgressRing';
-import { StreakBanner } from '../../src/components/StreakBanner';
+import { StreakProgressCard } from '../../src/components/StreakProgressCard';
 import {
   calendarDateForHabitMissionDayIndex,
   calendarDateKeyForTimestamp,
@@ -1624,54 +1623,52 @@ export default function HabitDetail() {
                             <Text style={[styles.missionControlLabel, { color: theme.colors.textMuted }]} numberOfLines={1}>
                                 TYPE
                             </Text>
-                            <View style={styles.missionControlValueRow}>
-                                <Text style={[styles.missionControlValue, { color: theme.colors.textPrimary }]} numberOfLines={1}>
-                                    {missionVisibilityIsPublic ? "Public" : "Solo"}
-                                </Text>
-                                {Platform.OS === 'android' ? (
-                                    <TouchableOpacity
-                                        activeOpacity={0.84}
-                                        disabled={visibilityBusy}
-                                        onPress={() => handleMissionVisibilityChange(!missionVisibilityIsPublic)}
-                                        style={[
-                                            styles.missionControlAndroidSwitch,
-                                            {
-                                                backgroundColor: missionVisibilityIsPublic
-                                                    ? theme.colors.indigo[600]
-                                                    : theme.colors.border,
-                                            },
-                                            visibilityBusy && styles.missionControlSwitchBusy,
-                                        ]}
-                                        accessibilityRole="switch"
-                                        accessibilityState={{ checked: missionVisibilityIsPublic, disabled: visibilityBusy }}
-                                        accessibilityLabel="Mission visibility"
-                                    >
-                                        <View
-                                            style={[
-                                                styles.missionControlAndroidSwitchThumb,
-                                                missionVisibilityIsPublic
-                                                    ? styles.missionControlAndroidSwitchThumbOn
-                                                    : styles.missionControlAndroidSwitchThumbOff,
-                                            ]}
-                                        />
-                                    </TouchableOpacity>
-                                ) : (
-                                    <Switch
-                                        style={[styles.missionControlSwitch, styles.missionControlSwitchIos]}
-                                        value={missionVisibilityIsPublic}
-                                        disabled={visibilityBusy}
-                                        onValueChange={handleMissionVisibilityChange}
-                                        trackColor={{ false: theme.colors.border, true: theme.colors.indigo[600] }}
-                                        thumbColor={theme.colors.white}
-                                        ios_backgroundColor={theme.colors.border}
-                                    />
-                                )}
-                            </View>
+                            <Text style={[styles.missionControlValue, { color: theme.colors.textPrimary }]} numberOfLines={1}>
+                                {missionVisibilityIsPublic ? "Public" : "Solo"}
+                            </Text>
                         </View>
+                        {Platform.OS === 'android' ? (
+                            <TouchableOpacity
+                                activeOpacity={0.84}
+                                disabled={visibilityBusy}
+                                onPress={() => handleMissionVisibilityChange(!missionVisibilityIsPublic)}
+                                style={[
+                                    styles.missionControlAndroidSwitch,
+                                    {
+                                        backgroundColor: missionVisibilityIsPublic
+                                            ? theme.colors.indigo[600]
+                                            : theme.colors.border,
+                                    },
+                                    visibilityBusy && styles.missionControlSwitchBusy,
+                                ]}
+                                accessibilityRole="switch"
+                                accessibilityState={{ checked: missionVisibilityIsPublic, disabled: visibilityBusy }}
+                                accessibilityLabel="Mission visibility"
+                            >
+                                <View
+                                    style={[
+                                        styles.missionControlAndroidSwitchThumb,
+                                        missionVisibilityIsPublic
+                                            ? styles.missionControlAndroidSwitchThumbOn
+                                            : styles.missionControlAndroidSwitchThumbOff,
+                                    ]}
+                                />
+                            </TouchableOpacity>
+                        ) : (
+                            <View style={styles.missionControlSwitchWrapIos}>
+                                <Switch
+                                    value={missionVisibilityIsPublic}
+                                    disabled={visibilityBusy}
+                                    onValueChange={handleMissionVisibilityChange}
+                                    trackColor={{ false: theme.colors.border, true: theme.colors.indigo[600] }}
+                                    thumbColor={theme.colors.white}
+                                    ios_backgroundColor={theme.colors.border}
+                                />
+                            </View>
+                        )}
                     </View>
                 </View>
 
-                <StreakBanner streak={habit.streak} />
 
                 {eligibleRepair && repairStatus !== "applied" ? (
                   <View
@@ -1717,27 +1714,12 @@ export default function HabitDetail() {
                     </TouchableOpacity>
                   </View>
                 ) : null}
-                <View style={[styles.progressCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, borderRadius: theme.radius.lg, ...theme.shadow.card }]}>
-                    <View style={styles.progressRingRow}>
-                        <ProgressRing
-                            progress={totalDays > 0 ? effectiveCompletedCount / totalDays : 0}
-                            size={64}
-                            strokeWidth={6}
-                            color={isManual ? theme.colors.amber[500] : undefined}
-                            gradientEndColor={theme.colors.cyan[400]}
-                        >
-                            <Text style={[styles.progressRingPct, { color: theme.colors.textPrimary }]}>
-                                {totalDays > 0 ? Math.round((effectiveCompletedCount / totalDays) * 100) : 0}%
-                            </Text>
-                        </ProgressRing>
-                        <View style={styles.progressTextCol}>
-                            <Text style={[styles.progressLabel, { color: theme.colors.textSecondary, fontSize: theme.typography.micro }]}>Campaign Progress</Text>
-                            <Text style={[styles.progressValue, { color: theme.colors.indigo[400] }]}>
-                                {effectiveCompletedCount} <Text style={[styles.progressTotal, { color: theme.colors.textMuted }]}>/ {totalDays} days</Text>
-                            </Text>
-                        </View>
-                    </View>
-                </View>
+                <StreakProgressCard
+                    streak={habit.streak}
+                    completedCount={effectiveCompletedCount}
+                    totalDays={totalDays}
+                    ringColor={isManual ? theme.colors.amber[500] : undefined}
+                />
 
                 {eligibleRepair && habit ? (
                   <StreakRepairSheet
@@ -2212,10 +2194,13 @@ const styles = StyleSheet.create({
     missionControlsDivider: { width: StyleSheet.hairlineWidth, alignSelf: 'stretch', opacity: 0.9 },
     missionControlTextCol: { flex: 1, minWidth: 0 },
     missionControlLabel: { fontSize: 8, lineHeight: 10, fontWeight: '900', letterSpacing: 0.8 },
-    missionControlValueRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 6, marginTop: 2, minWidth: 0 },
     missionControlValue: { fontSize: 14, lineHeight: 17, fontWeight: '900', marginTop: 1, flexShrink: 1 },
-    missionControlSwitch: { transform: [{ scale: 0.76 }], marginLeft: 4, marginRight: -9, flexShrink: 0 },
-    missionControlSwitchIos: { transform: [{ scale: 0.84 }], marginLeft: 6, marginRight: -4, width: 54 },
+    missionControlSwitchWrapIos: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        transform: [{ scale: 0.84 }],
+        flexShrink: 0,
+    },
     missionControlSwitchBusy: { opacity: 0.64 },
     missionControlAndroidSwitch: {
         width: 38,
@@ -2289,13 +2274,6 @@ const styles = StyleSheet.create({
     repairCost: { fontSize: 12, fontWeight: "900", marginTop: 6 },
     repairBtn: { paddingHorizontal: 14, paddingVertical: 10, borderRadius: 14 },
     repairBtnText: { fontSize: 12, fontWeight: "900" },
-    progressCard: { padding: 16, marginBottom: 16, borderWidth: 1 },
-    progressRingRow: { flexDirection: 'row', alignItems: 'center', gap: 16 },
-    progressRingPct: { fontSize: 14, fontWeight: '900', fontVariant: ['tabular-nums'] },
-    progressTextCol: { flex: 1, minWidth: 0, gap: 4 },
-    progressLabel: { fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1 },
-    progressValue: { fontSize: 24, fontWeight: '800' },
-    progressTotal: { fontSize: 16 },
     gridHeaderRow: {
         flexDirection: 'row',
         alignItems: 'flex-end',

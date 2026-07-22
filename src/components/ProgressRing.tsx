@@ -43,7 +43,10 @@ export function ProgressRing({
 
   const cx = size / 2;
   const cy = size / 2;
-  const r = (size - strokeWidth) / 2;
+  // Leave a 1px buffer so the stroke's outer edge never sits exactly on the
+  // SVG canvas boundary — at zero margin it gets hard-clipped on some
+  // platforms/pixel ratios, showing up as a truncated ring edge.
+  const r = (size - strokeWidth) / 2 - 1;
   const circumference = 2 * Math.PI * r;
   const dashOffset = circumference * (1 - clamped);
 
