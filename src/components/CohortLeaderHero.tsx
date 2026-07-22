@@ -5,6 +5,7 @@ import type { AppTheme } from "../styles/theme";
 import type { Habit } from "../types/habit";
 import type { ProfileLabel } from "../lib/groupChallengesApi";
 import { levelFromTotalXp } from "../utils/xpLevel";
+import { avatarIdentityFor } from "../utils/avatarIdentity";
 import { CohortMastheadTrophyNarrative, type CohortMastheadModel } from "./CohortMasthead";
 import { CohortStreakPill } from "./CohortStreakPill";
 
@@ -61,6 +62,7 @@ type Props = {
   isDark: boolean;
   model: CohortMastheadModel;
   leaderName: string;
+  leaderUserId?: string;
   leaderLabel: ProfileLabel | undefined;
   leaderHabit: Habit | undefined;
   rankedMembers: RankedMember[];
@@ -71,11 +73,13 @@ export function CohortLeaderHero({
   isDark,
   model,
   leaderName,
+  leaderUserId,
   leaderLabel,
   leaderHabit,
   rankedMembers,
 }: Props) {
   const initials = initialsFromLabel(leaderLabel, leaderName);
+  const identity = avatarIdentityFor(leaderUserId ?? leaderName);
   const progressMembers =
     rankedMembers.length > 0
       ? rankedMembers.slice(0, 3)
@@ -95,9 +99,6 @@ export function CohortLeaderHero({
     leaderLabel?.xp != null && Number.isFinite(leaderLabel.xp) ? levelFromTotalXp(leaderLabel.xp) : null;
   const squadVisible = (leaderHabit?.visibility ?? "solo") === "public";
   const VisibilityIcon = squadVisible ? Eye : EyeOff;
-
-  const avatarBg = isDark ? "rgba(129, 140, 248, 0.22)" : "rgba(99, 102, 241, 0.14)";
-  const avatarBorder = isDark ? "rgba(129, 140, 248, 0.35)" : "rgba(99, 102, 241, 0.28)";
 
   const progressColors = [theme.colors.indigo[500], theme.colors.cyan[500], theme.colors.amber[500]];
 
@@ -119,10 +120,10 @@ export function CohortLeaderHero({
               <View
                 style={[
                   styles.avatar,
-                  { backgroundColor: avatarBg, borderColor: avatarBorder },
+                  { backgroundColor: identity.background, borderColor: identity.border },
                 ]}
               >
-                <Text style={[styles.avatarText, { color: theme.colors.indigo[400] }]}>{initials}</Text>
+                <Text style={[styles.avatarText, { color: identity.foreground }]}>{initials}</Text>
               </View>
               <View style={styles.heroTextCol}>
                 <View style={styles.nameLevelStreakRow}>

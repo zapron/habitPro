@@ -368,7 +368,7 @@ export default function JourneyMomentScreen() {
           accessibilityRole="button"
         >
           <LinearGradient
-            colors={isDark ? ["#4F46E5", "#0891B2", "#F59E0B"] : ["#4F46E5", "#06B6D4", "#F59E0B"]}
+            colors={isDark ? ["#6144E0", "#0FB8CE", "#F0940A"] : ["#4C2FC9", "#106E8C", "#D1720A"]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={styles.journeyButton}

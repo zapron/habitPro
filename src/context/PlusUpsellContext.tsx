@@ -4,11 +4,12 @@ import React, {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
-import { Linking, Modal, Platform, Pressable, ScrollView, Share, StyleSheet, View } from "react-native";
+import { Animated, Linking, Modal, Platform, Pressable, ScrollView, Share, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Check } from "lucide-react-native";
+import { Check, Crown } from "lucide-react-native";
 import { Text } from "../components/AppText";
 import { Button } from "../components/Button";
 import { PlusBadge } from "../components/PlusBadge";
@@ -39,12 +40,16 @@ type PlusUpsellContextValue = {
 };
 
 const PlusUpsellContext = createContext<PlusUpsellContextValue | null>(null);
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 const BENEFITS = [
   "Share wins and cheer each other on",
   "Join squads, invites, and group missions",
   "Publish streak moments and protect momentum",
 ];
+
+/** Cycle the brand accent trio across benefit rows instead of one repeated tint. */
+const BENEFIT_ACCENTS = ["indigo", "cyan", "amber"] as const;
 
 type UpsellBusy = null | "trial" | "monthly" | "yearly" | "restore" | "diagnostics";
 type UpsellPhase =
@@ -180,7 +185,7 @@ export function PlusUpsellProvider({
       <Modal
         visible={visible}
         transparent
-        animationType="fade"
+        animationType="none"
         onRequestClose={closeUpsell}
         statusBarTranslucent
         accessibilityViewIsModal
@@ -229,6 +234,19 @@ function BillingUpsellModal({
   const [busy, setBusy] = useState<UpsellBusy>(null);
   const [phase, setPhase] = useState<UpsellPhase>(null);
   const [purchaseError, setPurchaseError] = useState<string | null>(null);
+  const progress = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (visible) {
+      progress.setValue(0);
+      Animated.spring(progress, {
+        toValue: 1,
+        useNativeDriver: true,
+        speed: 16,
+        bounciness: 6,
+      }).start();
+    }
+  }, [visible, progress]);
 
   useEffect(() => {
     if (!visible) return;
@@ -412,22 +430,25 @@ function BillingUpsellModal({
         : "Starting trial..."
       : `Start ${trialLabel} free trial`;
 
+  const sheetTranslateY = progress.interpolate({ inputRange: [0, 1], outputRange: [40, 0] });
+
   return (
     <View style={styles.root} pointerEvents="box-none">
-      <Pressable
+      <AnimatedPressable
         style={[
           styles.backdrop,
           {
             backgroundColor: isDark
               ? "rgba(0,0,0,0.55)"
               : "rgba(15,23,42,0.45)",
+            opacity: progress,
           },
         ]}
         onPress={onClose}
         accessibilityRole="button"
         accessibilityLabel="Dismiss"
       />
-      <View
+      <Animated.View
         style={[
           styles.sheet,
           {
@@ -436,6 +457,8 @@ function BillingUpsellModal({
             borderRadius: theme.radius.lg,
             ...theme.shadow.card,
             marginBottom: Math.max(insetsBottom, 16),
+            opacity: progress,
+            transform: [{ translateY: sheetTranslateY }],
           },
         ]}
       >
@@ -473,26 +496,35 @@ function BillingUpsellModal({
             },
           ]}
         >
-          {BENEFITS.map((line) => (
-            <View key={line} style={styles.benefitRow}>
-              <View
-                style={[
-                  styles.checkDot,
-                  { backgroundColor: isDark ? "rgba(99, 102, 241, 0.22)" : "rgba(99, 102, 241, 0.10)" },
-                ]}
-              >
-                <Check size={13} color={theme.colors.indigo[400]} strokeWidth={3} />
+          {BENEFITS.map((line, index) => {
+            const accentKey = BENEFIT_ACCENTS[index % BENEFIT_ACCENTS.length];
+            const accentColor =
+              accentKey === "indigo"
+                ? theme.colors.indigo[400]
+                : accentKey === "cyan"
+                  ? theme.colors.cyan[400]
+                  : theme.colors.amber[500];
+            return (
+              <View key={line} style={styles.benefitRow}>
+                <View
+                  style={[
+                    styles.checkDot,
+                    { backgroundColor: isDark ? `${accentColor}33` : `${accentColor}1a`, borderColor: `${accentColor}55` },
+                  ]}
+                >
+                  <Check size={13} color={accentColor} strokeWidth={3} />
+                </View>
+                <Text
+                  style={[
+                    styles.benefitText,
+                    { color: theme.colors.textSecondary },
+                  ]}
+                >
+                  {line}
+                </Text>
               </View>
-              <Text
-                style={[
-                  styles.benefitText,
-                  { color: theme.colors.textSecondary },
-                ]}
-              >
-                {line}
-              </Text>
-            </View>
-          ))}
+            );
+          })}
         </View>
 
         <View
@@ -602,12 +634,29 @@ function BillingUpsellModal({
             style={{ marginTop: 8, opacity: canStartTrial ? 1 : 0.65 }}
           />
         ) : null}
-        <Button
-          title={yearlyButtonTitle}
-          onPress={() => void run("yearly")}
-          disabled={!canBuy}
-          style={{ marginTop: trialAvailable ? 10 : 8, opacity: canBuy ? 1 : 0.65 }}
-        />
+
+        <View
+          style={[
+            styles.featuredPlan,
+            {
+              borderColor: theme.colors.indigo[500],
+              backgroundColor: isDark ? "rgba(99, 102, 241, 0.10)" : "rgba(99, 102, 241, 0.06)",
+              marginTop: trialAvailable ? 14 : 10,
+            },
+          ]}
+        >
+          <View style={[styles.bestValueBadge, { backgroundColor: theme.colors.indigo[600] }]}>
+            <Crown size={11} color={theme.colors.white} fill={theme.colors.white} />
+            <Text style={[styles.bestValueBadgeText, { color: theme.colors.white }]}>BEST VALUE</Text>
+          </View>
+          <Button
+            title={yearlyButtonTitle}
+            onPress={() => void run("yearly")}
+            disabled={!canBuy}
+            style={{ opacity: canBuy ? 1 : 0.65 }}
+          />
+        </View>
+
         <Button
           title={monthlyButtonTitle}
           variant="secondary"
@@ -663,7 +712,7 @@ function BillingUpsellModal({
         </View>
 
         </ScrollView>
-      </View>
+      </Animated.View>
     </View>
   );
 }
@@ -724,6 +773,7 @@ const styles = StyleSheet.create({
     width: 22,
     height: 22,
     borderRadius: 11,
+    borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -745,6 +795,24 @@ const styles = StyleSheet.create({
     opacity: 0.9,
   },
   errorText: { fontSize: 12, lineHeight: 17, fontWeight: "800", marginTop: 8 },
+  featuredPlan: {
+    borderWidth: 1.5,
+    borderRadius: 18,
+    padding: 12,
+    paddingTop: 20,
+  },
+  bestValueBadge: {
+    position: "absolute",
+    top: -11,
+    alignSelf: "center",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+  },
+  bestValueBadgeText: { fontSize: 10, fontWeight: "900", letterSpacing: 0.6 },
   debugActions: { marginTop: 10 },
   debugBox: {
     borderWidth: 1,

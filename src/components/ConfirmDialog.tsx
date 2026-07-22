@@ -1,13 +1,17 @@
+import { useEffect, useRef } from "react";
 import { Text } from "./AppText";
 import {
   Modal,
-  View,
+  Animated,
   Pressable,
   StyleSheet,
+  View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "../context/ThemeContext";
 import { Button } from "./Button";
+
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 export type ConfirmDialogAction = {
   label: string;
@@ -41,24 +45,39 @@ export function ConfirmDialog({
 }: ConfirmDialogProps) {
   const { theme, isDark } = useTheme();
   const insets = useSafeAreaInsets();
+  const progress = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (visible) {
+      progress.setValue(0);
+      Animated.spring(progress, {
+        toValue: 1,
+        useNativeDriver: true,
+        speed: 18,
+        bounciness: 7,
+      }).start();
+    }
+  }, [visible, progress]);
+
+  const scale = progress.interpolate({ inputRange: [0, 1], outputRange: [0.92, 1] });
 
   return (
     <Modal
       visible={visible}
       transparent
-      animationType="fade"
+      animationType="none"
       onRequestClose={onRequestClose}
       statusBarTranslucent
       accessibilityViewIsModal
     >
-      <View style={styles.root}>
-        <Pressable
+      <Animated.View style={[styles.root, { opacity: progress }]}>
+        <AnimatedPressable
           style={[styles.backdrop, { backgroundColor: isDark ? "rgba(0,0,0,0.55)" : "rgba(15,23,42,0.45)" }]}
           onPress={dismissOnBackdrop ? onRequestClose : undefined}
           accessibilityRole={dismissOnBackdrop ? "button" : undefined}
           accessibilityLabel="Dismiss"
         />
-        <View
+        <Animated.View
           style={[
             styles.sheet,
             {
@@ -67,6 +86,7 @@ export function ConfirmDialog({
               borderRadius: theme.radius.lg,
               ...theme.shadow.card,
               marginBottom: Math.max(insets.bottom, 16),
+              transform: [{ scale }],
             },
           ]}
           accessibilityRole="none"
@@ -103,8 +123,8 @@ export function ConfirmDialog({
               />
             ))}
           </View>
-        </View>
-      </View>
+        </Animated.View>
+      </Animated.View>
     </Modal>
   );
 }

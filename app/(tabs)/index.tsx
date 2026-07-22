@@ -20,6 +20,7 @@ import {
   Linking,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
 import { useFocusEffect, useIsFocused } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
@@ -61,6 +62,8 @@ import { useTheme } from "../../src/context/ThemeContext";
 import { useReducedMotion } from "../../src/hooks/useReducedMotion";
 import { AnimatedFire } from "../../src/components/AnimatedFire";
 import { FireLottie, FIRE_LOTTIE_URI } from "../../src/components/FireLottie";
+import { ConfettiBurst } from "../../src/components/ConfettiBurst";
+import { useToast } from "../../src/context/ToastContext";
 import { getMiniRemainingMs } from "../../src/utils/miniMissionTime";
 import {
   isMainMissionPlayableOnHome,
@@ -305,6 +308,7 @@ export default function Home() {
   const { session, syncReady, syncError, retryHydrate } = useAuth();
   const { softUpdateAvailable, latestVersion, softUpdateUrl, softUpdateMessage } = useAppVersion();
   const reduceMotion = useReducedMotion();
+  const { showToast } = useToast();
   const { habits, cohortPeerHabits, miniMissions, xp } = useHabitStore(
     useShallow((s) => ({
       habits: isFocused ? s.habits : EMPTY_HABITS,
@@ -619,6 +623,12 @@ export default function Home() {
   const headerSlide = useRef(new Animated.Value(-15)).current;
   const animXpFill = useRef(new Animated.Value(xpProgress)).current;
   const prevXpProgressRef = useRef(xpProgress);
+  const prevLevelRef = useRef(level);
+  const [levelUpBurst, setLevelUpBurst] = useState<{ active: boolean; x: number; y: number }>({
+    active: false,
+    x: 0,
+    y: 20,
+  });
 
   useEffect(() => {
     if (reduceMotion) {
@@ -655,6 +665,20 @@ export default function Home() {
       useNativeDriver: true,
     }).start();
   }, [animXpFill, reduceMotion, xpProgress]);
+
+  useEffect(() => {
+    if (level <= prevLevelRef.current) {
+      prevLevelRef.current = level;
+      return;
+    }
+    prevLevelRef.current = level;
+    setLevelUpBurst({ active: false, x: 0, y: 20 });
+    setTimeout(() => {
+      setLevelUpBurst({ active: true, x: 0, y: 20 });
+    }, 50);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    showToast(`Level up! You're now Level ${level}.`, "success", 2600);
+  }, [level, showToast]);
 
   useEffect(() => {
     const unsub = useHabitStore.persist.onFinishHydration(() =>
@@ -862,6 +886,14 @@ export default function Home() {
                 >
                   LVL
                 </Text>
+                {levelUpBurst.active && (
+                  <ConfettiBurst
+                    active={levelUpBurst.active}
+                    isMilestone
+                    originX={levelUpBurst.x}
+                    originY={levelUpBurst.y}
+                  />
+                )}
               </View>
             </View>
           </View>

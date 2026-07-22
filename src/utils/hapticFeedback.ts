@@ -18,6 +18,18 @@ function runHaptic(task: Promise<void>): void {
   });
 }
 
+/** Light tap feedback for primary/secondary button presses. */
+export function triggerTapHaptic(): void {
+  if (Platform.OS === "web") return;
+  runHaptic(Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light));
+}
+
+/** Slightly heavier feedback for destructive/danger actions. */
+export function triggerWarningHaptic(): void {
+  if (Platform.OS === "web") return;
+  runHaptic(Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium));
+}
+
 export function playMemoryFormationHaptics({
   itemCount,
   reduceMotion = false,

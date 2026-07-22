@@ -1,6 +1,8 @@
-import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
+import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Text } from "../../src/components/AppText";
 import {
+  Animated,
+  Easing,
   View,
   StyleSheet,
   TouchableOpacity,
@@ -33,6 +35,7 @@ import { useTheme } from "../../src/context/ThemeContext";
 import { useHabitStore } from "../../src/store/habitStore";
 import { MiniMission } from "../../src/types/habit";
 import { useRemoteStoreRefreshOnFocus } from "../../src/hooks/useRemoteStoreRefreshOnFocus";
+import { useReducedMotion } from "../../src/hooks/useReducedMotion";
 import { backOrReplace } from "../../src/lib/navigation";
 import {
   getMiniMissionDisplayStatus,
@@ -318,6 +321,23 @@ export default function MiniMissionsScreen() {
   const [listNow, setListNow] = useState(Date.now());
   const [keepScreenOn, setKeepScreenOn] = useState(false);
   const isFocused = useIsFocused();
+  const reduceMotion = useReducedMotion();
+  const emptyIconScale = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    if (reduceMotion) {
+      emptyIconScale.setValue(1);
+      return undefined;
+    }
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(emptyIconScale, { toValue: 1.05, duration: 2000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(emptyIconScale, { toValue: 1, duration: 2000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [reduceMotion, emptyIconScale]);
 
   useEffect(() => {
     AsyncStorage.getItem(MINI_MISSION_KEEP_SCREEN_ON_KEY).then((v) => {
@@ -508,11 +528,22 @@ export default function MiniMissionsScreen() {
       <View style={styles.listWrap}>
         {filtered.length === 0 ? (
           <View style={styles.empty}>
-            {tab === "failed" ? (
-              <CircleX size={40} color={theme.colors.slate[500]} />
-            ) : (
-              <CircleCheck size={40} color={theme.colors.slate[500]} />
-            )}
+            <Animated.View
+              style={[
+                styles.emptyIconContainer,
+                {
+                  backgroundColor: theme.colors.surface,
+                  borderColor: theme.colors.border,
+                  transform: [{ scale: emptyIconScale }],
+                },
+              ]}
+            >
+              {tab === "failed" ? (
+                <CircleX size={40} color={theme.colors.slate[500]} />
+              ) : (
+                <CircleCheck size={40} color={theme.colors.slate[500]} />
+              )}
+            </Animated.View>
             <Text style={[styles.emptyTitle, { color: theme.colors.textPrimary, fontSize: theme.typography.h3 }]}>
               {tab === "active"
                 ? "No active mini missions"
@@ -531,6 +562,13 @@ export default function MiniMissionsScreen() {
                     ? "Create a mission and choose Start Later when you are ready."
                     : "Finish a mission to build momentum."}
             </Text>
+            {tab === "active" || tab === "queued" ? (
+              <Button
+                title="Create a Mini Mission"
+                onPress={() => router.push("/mini/create")}
+                style={styles.emptyButton}
+              />
+            ) : null}
           </View>
         ) : (
           <FlashList
@@ -669,8 +707,18 @@ const styles = StyleSheet.create({
   momentBadgeText: { fontSize: 11, fontWeight: "800" },
   // Empty state
   empty: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 24 },
-  emptyTitle: { marginTop: 12, marginBottom: 8, fontWeight: "700", textAlign: "center" },
+  emptyIconContainer: {
+    width: 94,
+    height: 94,
+    borderRadius: 9999,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    marginBottom: 16,
+  },
+  emptyTitle: { marginBottom: 8, fontWeight: "700", textAlign: "center" },
   emptyText: { textAlign: "center", marginBottom: 16 },
+  emptyButton: { width: "100%", maxWidth: 280 },
   fabWrap: {
     position: "absolute",
     zIndex: 20,

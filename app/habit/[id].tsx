@@ -44,6 +44,7 @@ import { subscribeSyncFailure, subscribeSyncSuccess } from '../../src/lib/syncQu
 import { backOrReplace } from '../../src/lib/navigation';
 import type { MissionVisibility } from '../../src/types/habit';
 import { ConfettiBurst } from '../../src/components/ConfettiBurst';
+import { ProgressRing } from '../../src/components/ProgressRing';
 import { StreakBanner } from '../../src/components/StreakBanner';
 import {
   calendarDateForHabitMissionDayIndex,
@@ -1717,14 +1718,24 @@ export default function HabitDetail() {
                   </View>
                 ) : null}
                 <View style={[styles.progressCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, borderRadius: theme.radius.lg, ...theme.shadow.card }]}>
-                    <View style={styles.progressHeader}>
-                        <Text style={[styles.progressLabel, { color: theme.colors.textSecondary, fontSize: theme.typography.micro }]}>Campaign Progress</Text>
-                        <Text style={[styles.progressValue, { color: theme.colors.indigo[400] }]}>
-                            {effectiveCompletedCount} <Text style={[styles.progressTotal, { color: theme.colors.textMuted }]}>/ {totalDays}</Text>
-                        </Text>
-                    </View>
-                    <View style={[styles.progressBarBackground, { backgroundColor: theme.colors.slate[700] }]}>
-                        <View style={[styles.progressBarFill, isManual && { backgroundColor: theme.colors.amber[500] }, { backgroundColor: theme.colors.indigo[500], width: `${(effectiveCompletedCount / totalDays) * 100}%` }]} />
+                    <View style={styles.progressRingRow}>
+                        <ProgressRing
+                            progress={totalDays > 0 ? effectiveCompletedCount / totalDays : 0}
+                            size={64}
+                            strokeWidth={6}
+                            color={isManual ? theme.colors.amber[500] : undefined}
+                            gradientEndColor={theme.colors.cyan[400]}
+                        >
+                            <Text style={[styles.progressRingPct, { color: theme.colors.textPrimary }]}>
+                                {totalDays > 0 ? Math.round((effectiveCompletedCount / totalDays) * 100) : 0}%
+                            </Text>
+                        </ProgressRing>
+                        <View style={styles.progressTextCol}>
+                            <Text style={[styles.progressLabel, { color: theme.colors.textSecondary, fontSize: theme.typography.micro }]}>Campaign Progress</Text>
+                            <Text style={[styles.progressValue, { color: theme.colors.indigo[400] }]}>
+                                {effectiveCompletedCount} <Text style={[styles.progressTotal, { color: theme.colors.textMuted }]}>/ {totalDays} days</Text>
+                            </Text>
+                        </View>
                     </View>
                 </View>
 
@@ -2279,12 +2290,12 @@ const styles = StyleSheet.create({
     repairBtn: { paddingHorizontal: 14, paddingVertical: 10, borderRadius: 14 },
     repairBtnText: { fontSize: 12, fontWeight: "900" },
     progressCard: { padding: 16, marginBottom: 16, borderWidth: 1 },
-    progressHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 10 },
+    progressRingRow: { flexDirection: 'row', alignItems: 'center', gap: 16 },
+    progressRingPct: { fontSize: 14, fontWeight: '900', fontVariant: ['tabular-nums'] },
+    progressTextCol: { flex: 1, minWidth: 0, gap: 4 },
     progressLabel: { fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1 },
     progressValue: { fontSize: 24, fontWeight: '800' },
     progressTotal: { fontSize: 16 },
-    progressBarBackground: { height: 10, borderRadius: 9999, overflow: 'hidden' },
-    progressBarFill: { height: '100%', borderRadius: 9999 },
     gridHeaderRow: {
         flexDirection: 'row',
         alignItems: 'flex-end',

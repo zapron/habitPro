@@ -52,6 +52,7 @@ import { usePlusUpsell } from "../../src/context/PlusUpsellContext";
 import { useNotificationGate } from "../../src/context/NotificationGateContext";
 import { useInviteBadge } from "../../src/context/InviteBadgeContext";
 import { isSupabaseConfigured } from "../../src/lib/env";
+import { avatarIdentityFor } from "../../src/utils/avatarIdentity";
 import {
   acceptInviteAndJoin,
   declineInvite,
@@ -508,6 +509,7 @@ const LeagueRow = memo(function LeagueRow({
   const displayName = (entry.displayName?.trim() || usernameLabel).replace(/^@+/, "");
   const showHandle = Boolean(entry.displayName);
   const playerLeague = lifetimeLeagueForLevel(entry.level, theme, isDark);
+  const identity = avatarIdentityFor(entry.userId);
   return (
     <TouchableOpacity
       onPress={() => onPress(entry)}
@@ -518,6 +520,8 @@ const LeagueRow = memo(function LeagueRow({
         styles.leagueRow,
         {
           backgroundColor: playerLeague.backgroundColor,
+          borderWidth: entry.isMe ? 1.5 : 0,
+          borderColor: entry.isMe ? theme.colors.indigo[400] : "transparent",
         },
       ]}
     >
@@ -530,8 +534,8 @@ const LeagueRow = memo(function LeagueRow({
       </View>
 
       <LevelXpRing level={entry.level} xpInLevel={xpInLevel} size={46} strokeWidth={3}>
-        <View style={[styles.leagueLevelOrb, { borderColor: theme.colors.border }]}>
-          <Text style={[styles.leagueLevelNum, { color: theme.colors.textPrimary }]}>{entry.level}</Text>
+        <View style={[styles.leagueLevelOrb, { backgroundColor: identity.background, borderColor: identity.border }]}>
+          <Text style={[styles.leagueLevelNum, { color: identity.foreground }]}>{entry.level}</Text>
           <Text style={[styles.leagueLevelLabel, { color: theme.colors.textMuted }]}>LVL</Text>
         </View>
       </LevelXpRing>

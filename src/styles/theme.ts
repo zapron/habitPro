@@ -75,9 +75,9 @@ const darkColors: ColorPalette = {
     400: "#94a3b8",
     200: "#e2e8f0",
   },
-  indigo: { 400: "#818cf8", 500: "#6366f1", 600: "#4f46e5" },
-  cyan: { 400: "#22d3ee", 500: "#06b6d4" },
-  amber: { 500: "#f59e0b" },
+  indigo: { 400: "#9B8AFB", 500: "#7C5CF2", 600: "#6144E0" },
+  cyan: { 400: "#2DD9E8", 500: "#0FB8CE" },
+  amber: { 500: "#F0940A" },
   yellow: { 400: "#fbbf24" },
   red: { 500: "#ef4444" },
   green: { 500: "#22c55e", 600: "#16a34a" },
@@ -103,9 +103,9 @@ const lightColors: ColorPalette = {
     400: "#64748b",
     200: "#1e293b",
   },
-  indigo: { 400: "#6366f1", 500: "#4f46e5", 600: "#4338ca" },
-  cyan: { 400: "#0891b2", 500: "#0e7490" },
-  amber: { 500: "#d97706" },
+  indigo: { 400: "#6D56E8", 500: "#5B3FDE", 600: "#4C2FC9" },
+  cyan: { 400: "#0C86A8", 500: "#106E8C" },
+  amber: { 500: "#D1720A" },
   yellow: { 400: "#eab308" },
   red: { 500: "#dc2626" },
   green: { 500: "#16a34a", 600: "#15803d" },
@@ -114,7 +114,7 @@ const lightColors: ColorPalette = {
 
 const darkShadow: ShadowSet = {
   glow: {
-    shadowColor: "#6366f1",
+    shadowColor: "#7C5CF2",
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.25,
     shadowRadius: 20,
@@ -131,7 +131,7 @@ const darkShadow: ShadowSet = {
 
 const lightShadow: ShadowSet = {
   glow: {
-    shadowColor: "#6366f1",
+    shadowColor: "#5B3FDE",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
     shadowRadius: 14,

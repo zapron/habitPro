@@ -1,17 +1,23 @@
+import { useRef } from "react";
 import { Text } from "./AppText";
 import {
-  ActivityIndicator,
-  TouchableOpacity,
-  TouchableOpacityProps,
-  StyleSheet,
-  StyleProp,
-  ViewStyle,
-  TextStyle,
+    ActivityIndicator,
+    Animated,
+    Pressable,
+    PressableProps,
+    StyleSheet,
+    StyleProp,
+    ViewStyle,
+    TextStyle,
+    GestureResponderEvent,
 } from "react-native";
 import type { ReactNode } from "react";
 import { useTheme } from "../context/ThemeContext";
+import { triggerTapHaptic, triggerWarningHaptic } from "../utils/hapticFeedback";
 
-interface ButtonProps extends TouchableOpacityProps {
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+
+interface ButtonProps extends Omit<PressableProps, "style"> {
     title: string;
     variant?: "primary" | "secondary" | "subtle" | "danger";
     icon?: ReactNode;
@@ -28,10 +34,14 @@ export function Button({
     style,
     textStyle,
     disabled,
+    onPressIn,
+    onPressOut,
+    onPress,
     ...props
 }: ButtonProps) {
     const { theme } = useTheme();
     const inactive = disabled || loading;
+    const scale = useRef(new Animated.Value(1)).current;
 
     const variantButton: ViewStyle =
         variant === "secondary"
@@ -54,18 +64,51 @@ export function Button({
                 : theme.colors.indigo[400];
     const buttonShadow = variant === "subtle" ? {} : theme.shadow.card;
 
+    const handlePressIn = (e: GestureResponderEvent) => {
+        if (!inactive) {
+            Animated.spring(scale, {
+                toValue: 0.96,
+                useNativeDriver: true,
+                speed: 40,
+                bounciness: 6,
+            }).start();
+        }
+        onPressIn?.(e);
+    };
+
+    const handlePressOut = (e: GestureResponderEvent) => {
+        Animated.spring(scale, {
+            toValue: 1,
+            useNativeDriver: true,
+            speed: 24,
+            bounciness: 8,
+        }).start();
+        onPressOut?.(e);
+    };
+
+    const handlePress = (e: GestureResponderEvent) => {
+        if (!inactive) {
+            if (variant === "danger") {
+                triggerWarningHaptic();
+            } else {
+                triggerTapHaptic();
+            }
+        }
+        onPress?.(e);
+    };
+
     return (
-        <TouchableOpacity
+        <AnimatedPressable
             style={[
                 styles.baseButton,
-                { borderRadius: theme.radius.md, ...buttonShadow },
+                { borderRadius: theme.radius.md, ...buttonShadow, transform: [{ scale }] },
                 variantButton,
                 inactive && styles.disabled,
                 style,
             ]}
-            activeOpacity={0.68}
-            delayPressIn={0}
-            delayPressOut={0}
+            onPressIn={handlePressIn}
+            onPressOut={handlePressOut}
+            onPress={handlePress}
             disabled={inactive}
             {...props}
         >
@@ -77,7 +120,7 @@ export function Button({
             <Text style={[styles.baseText, { fontSize: theme.typography.body }, variantText, textStyle]}>
                 {title}
             </Text>
-        </TouchableOpacity>
+        </AnimatedPressable>
     );
 }
 

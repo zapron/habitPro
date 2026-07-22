@@ -1,6 +1,6 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useId, useRef } from "react";
 import { Animated, View, StyleSheet, Easing } from "react-native";
-import Svg, { Circle, G } from "react-native-svg";
+import Svg, { Circle, Defs, G, LinearGradient, Stop } from "react-native-svg";
 import { useTheme } from "../context/ThemeContext";
 
 interface ProgressRingProps {
@@ -8,6 +8,8 @@ interface ProgressRingProps {
   size?: number;
   strokeWidth?: number;
   color?: string;
+  /** Second gradient stop. Only used when `color` is not provided. Defaults to the brand cyan. */
+  gradientEndColor?: string;
   glowOnNearComplete?: boolean;
   children?: React.ReactNode;
 }
@@ -22,17 +24,21 @@ export function ProgressRing({
   size = 52,
   strokeWidth = 3,
   color,
+  gradientEndColor,
   glowOnNearComplete = true,
   children,
 }: ProgressRingProps) {
   const { theme } = useTheme();
-  const activeColor = color ?? theme.colors.indigo[500];
+  const gradientId = useId();
   const glowPulse = useRef(new Animated.Value(0)).current;
 
   const clamped = Math.min(1, Math.max(0, progress));
   const isNearComplete = clamped >= 0.8;
   const isComplete = clamped >= 1;
-  const ringColor = isComplete ? theme.colors.green[500] : activeColor;
+  const useSolidColor = Boolean(color) || isComplete;
+  const solidColor = isComplete ? theme.colors.green[500] : color;
+  const gradientStart = color ?? theme.colors.indigo[500];
+  const gradientEnd = gradientEndColor ?? theme.colors.cyan[400];
   const bgColor = theme.colors.slate[700];
 
   const cx = size / 2;
@@ -70,10 +76,19 @@ export function ProgressRing({
     inputRange: [0, 1],
     outputRange: [0.3, 0.8],
   });
+  const glowColor = isComplete ? theme.colors.green[500] : gradientStart;
 
   return (
     <View style={[styles.container, { width: size, height: size, borderRadius: size / 2 }]}>
       <Svg width={size} height={size} style={StyleSheet.absoluteFill}>
+        {!useSolidColor ? (
+          <Defs>
+            <LinearGradient id={gradientId} x1="0%" y1="0%" x2="100%" y2="100%">
+              <Stop offset="0%" stopColor={gradientStart} />
+              <Stop offset="100%" stopColor={gradientEnd} />
+            </LinearGradient>
+          </Defs>
+        ) : null}
         <G transform={`rotate(-90 ${cx} ${cy})`}>
           <Circle
             cx={cx}
@@ -88,7 +103,7 @@ export function ProgressRing({
             cy={cy}
             r={r}
             fill="none"
-            stroke={ringColor}
+            stroke={useSolidColor ? solidColor : `url(#${gradientId})`}
             strokeWidth={strokeWidth}
             strokeLinecap="round"
             strokeDasharray={circumference}
@@ -106,7 +121,7 @@ export function ProgressRing({
               height: size + 8,
               borderRadius: (size + 8) / 2,
               borderWidth: 2,
-              borderColor: ringColor,
+              borderColor: glowColor,
               opacity: shadowOpacity,
             },
           ]}

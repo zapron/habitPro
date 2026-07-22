@@ -2505,6 +2505,7 @@ export default function ChallengeDetailScreen() {
                   isDark={isDark}
                   model={cohortBoard.model}
                   leaderName={cohortBoard.spotlight?.name ?? "Squad"}
+                  leaderUserId={cohortBoard.spotlight?.userId}
                   leaderLabel={
                     cohortBoard.spotlight ? profileLabels[cohortBoard.spotlight.userId] : undefined
                   }

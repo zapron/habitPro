@@ -1,6 +1,8 @@
 import { Text } from "../../src/components/AppText";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
+  Animated,
+  Easing,
   View,
   TextInput,
   TouchableOpacity,
@@ -64,6 +66,16 @@ export default function LoginScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [pendingSignupEmail, setPendingSignupEmail] = useState<string | null>(null);
+  const brandEntrance = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.spring(brandEntrance, {
+      toValue: 1,
+      useNativeDriver: true,
+      speed: 10,
+      bounciness: 9,
+    }).start();
+  }, [brandEntrance]);
 
   useEffect(() => {
     if (supabaseConfigured && session) {
@@ -181,7 +193,18 @@ export default function LoginScreen() {
         contentContainerStyle={styles.scrollContent}
       >
         <View style={[styles.form, { maxWidth: FORM_MAX_WIDTH }]}>
-          <View style={styles.header}>
+          <Animated.View
+            style={[
+              styles.header,
+              {
+                opacity: brandEntrance,
+                transform: [
+                  { scale: brandEntrance.interpolate({ inputRange: [0, 1], outputRange: [0.88, 1] }) },
+                  { translateY: brandEntrance.interpolate({ inputRange: [0, 1], outputRange: [14, 0] }) },
+                ],
+              },
+            ]}
+          >
             <View style={styles.brandRow}>
               <View
                 style={[
@@ -207,7 +230,7 @@ export default function LoginScreen() {
             <Text style={[styles.subtitle, { color: theme.colors.textSecondary }]}>
               Sign in to sync missions, streaks, and XP across devices.
             </Text>
-          </View>
+          </Animated.View>
 
           {!supabaseConfigured && (
             <View

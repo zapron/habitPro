@@ -65,6 +65,7 @@ import { getJourneyMiniGridLayout } from "../../src/utils/journeyMiniGrid";
 import { levelFromTotalXp, xpInCurrentLevel } from "../../src/utils/xpLevel";
 import { playerLeagueForLevel } from "../../src/utils/playerLeague";
 import { storageThumbnailUri } from "../../src/utils/imageThumbnail";
+import { avatarIdentityFor } from "../../src/utils/avatarIdentity";
 import type { AppTheme } from "../../src/styles/theme";
 
 type StoryTab = "missions" | "minis";
@@ -1274,6 +1275,7 @@ export default function CommunityPlayerStoryScreen() {
   const { openUpsell } = usePlusUpsell();
   const { requireUsername } = useUsernameGate();
   const userId = paramString(params.id);
+  const identity = avatarIdentityFor(userId);
   const routeTab = paramString(params.tab) === "minis" ? "minis" : "missions";
   const [story, setStory] = useState<CommunityPlayerStory | null>(null);
   const [activeTab, setActiveTab] = useState<StoryTab>(routeTab);
@@ -1627,8 +1629,8 @@ export default function CommunityPlayerStoryScreen() {
       >
         <View style={styles.hero}>
           <LevelXpRing level={level} xpInLevel={xpInLevel} size={94} strokeWidth={5}>
-            <View style={[styles.avatar, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
-              <Text style={[styles.avatarText, { color: theme.colors.textPrimary }]}>
+            <View style={[styles.avatar, { backgroundColor: identity.background, borderColor: identity.border }]}>
+              <Text style={[styles.avatarText, { color: identity.foreground }]}>
                 {initialsFromName(primaryName)}
               </Text>
             </View>

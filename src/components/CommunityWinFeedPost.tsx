@@ -31,6 +31,15 @@ import type { AppTheme } from "../styles/theme";
 import { levelFromTotalXp } from "../utils/xpLevel";
 import { playerLeagueForLevel } from "../utils/playerLeague";
 import { storageThumbnailUri } from "../utils/imageThumbnail";
+import { avatarIdentityFor } from "../utils/avatarIdentity";
+
+function initialsFromDisplay(name: string): string {
+  const trimmed = name.replace(/^@/, "").trim();
+  if (!trimmed) return "?";
+  const parts = trimmed.split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  return trimmed.slice(0, 2).toUpperCase();
+}
 
 /** Second tap within this gap counts as double-tap (cheer + burst). */
 const DOUBLE_TAP_GAP_MS = 280;
@@ -139,6 +148,8 @@ export const CommunityWinFeedPost = memo(function CommunityWinFeedPost({
   const normalizedHandle = win.username?.trim().toLowerCase() ?? null;
   const showHandle = Boolean(displayName && normalizedDisplayName !== normalizedHandle);
   const primaryName = displayName ?? handle;
+  const identity = avatarIdentityFor(win.user_id);
+  const initials = initialsFromDisplay(primaryName);
   const isFeed = variant === "feed";
   const noteText = (win.memory_note ?? "").trim();
   const hasNote = noteText.length > 0;
@@ -499,6 +510,14 @@ export const CommunityWinFeedPost = memo(function CommunityWinFeedPost({
             accessibilityRole="button"
             accessibilityLabel={`Open ${primaryName} player card`}
           >
+            <View
+              style={[
+                styles.postAvatar,
+                { backgroundColor: identity.background, borderColor: identity.border },
+              ]}
+            >
+              <Text style={[styles.postAvatarText, { color: identity.foreground }]}>{initials}</Text>
+            </View>
             <View style={styles.playerTextCol}>
               <View style={styles.playerNameLeagueRow}>
                 <Text style={[styles.playerName, { color: theme.colors.textPrimary }]} numberOfLines={1}>
@@ -688,8 +707,18 @@ const styles = StyleSheet.create({
     minWidth: 0,
     flexDirection: "row",
     alignItems: "center",
-    gap: 0,
+    gap: 10,
   },
+  postAvatar: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 1.5,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  postAvatarText: { fontSize: 12, fontWeight: "900", letterSpacing: -0.3 },
   playerTextCol: { flex: 1, minWidth: 0 },
   playerNameLeagueRow: { flexDirection: "row", alignItems: "center", gap: 6, minWidth: 0 },
   playerName: { fontSize: 15, lineHeight: 19, fontWeight: "900" },
