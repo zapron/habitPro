@@ -60,6 +60,20 @@ Root cause found and fixed:
 - Not fixed in this session, still open: `supabase/functions/revenuecat-webhook/index.ts` crashes (~30-40% of webhook deliveries observed failing in Supabase edge function logs) when a RevenueCat event's `app_user_id` is a `$RCAnonymousID:...` string instead of a real UUID, because the webhook does `UPDATE profiles ... WHERE id = appUserId` without validating it's a UUID first. This can leave `profiles.is_premium` stale in either direction for any user whose event happens to hit it. Deferred; not yet fixed.
 - Test account note: `raktim24@gmail.com` (`f90d8ca4-ad7c-4ca8-9646-4633af4a53b3`) had `is_premium` manually set to `false` in Supabase during this session to test the free-user paywall path on a real linked account. Not yet restored as of this entry.
 
+## Latest Fix: iOS Purchase Could Not Start (App Store Connect Account Setup)
+
+After the code fix above, the paywall opened correctly but tapping Subscribe still failed with "Purchase could not start. Make sure this app was installed from TestFlight or the App Store with a tester account." on a real TestFlight build. This was entirely App Store Connect / Apple account configuration, not app code. Diagnosed live via RevenueCat MCP (`get-product-store-state`) rather than guessing from the generic client error. Chain of blockers found and fixed, in order:
+
+1. Both `monthly`/`yearly` products showed `store_status.raw_store_status: MISSING_METADATA`.
+2. Missing Review Information screenshot on both products — physical-device screenshots kept failing App Store Connect's exact-dimension check (likely transfer/edit re-encoding). Fixed by capturing directly from a booted Simulator: `xcrun simctl io booted screenshot output.png` — guaranteed pixel-perfect native resolution.
+3. Still `MISSING_METADATA` after the screenshot — the **subscription group's own Localization** (display name/app name, separate from each product's own localization) was empty. Filled in via the group page's Localization section.
+4. Still `MISSING_METADATA` — **Privacy Policy URL** was empty under App Store Connect → General → App Privacy → "Edit" next to Privacy Policy (not the "App Information" page, which has no such field). Set to `https://habitpro-web.vercel.app/privacy`.
+5. Status changed to `READY_TO_SUBMIT` after those three, but purchases still failed. Root cause: **Business → Agreements, Tax and Banking** — the `Paid Apps Agreement` was still status `New` (only the `Free Apps Agreement` was Active, which doesn't cover paid subscriptions). Required completing Legal Entity info, signing the Paid Apps Agreement, a `W-8BEN` tax form (non-US individual — India/US treaty Article 12, 15% rate, "Income from the sale of applications"), and linking a bank account.
+6. Even after Agreements/Banking/Tax all showed Active, purchases still failed for a period — this was propagation delay (commonly ~24h reported for this class of Apple account change, not officially documented but consistent with real-world reports). Resolved on its own without any further changes once enough time had passed.
+7. The EU Digital Services Act "trader" compliance banner on the same Business page is unrelated/separate — safe to ignore for this issue.
+
+Full reusable checklist for this class of problem (any app, not just HabitPro) now lives in `.codex/skills/ios-iap-troubleshooting/SKILL.md` — read that first if this happens again here or on a different app.
+
 ## Latest Product / Release Prep Changes
 
 iOS/TestFlight setup:

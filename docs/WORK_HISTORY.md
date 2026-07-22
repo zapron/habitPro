@@ -16,6 +16,20 @@ This is a concise chronological log for future sessions. Keep secrets out of thi
 - Validation: `npx tsc --noEmit` clean.
 - Published to production OTA after user approval (see command/output logged at time of publish).
 
+### iOS "Purchase Could Not Start" (App Store Connect account setup, not code)
+
+- After the OTA above shipped the modal fix, the paywall opened correctly on TestFlight but tapping Subscribe still failed. This turned out to be entirely App Store Connect / Apple account configuration — no further app code changes were needed.
+- Diagnosed live via RevenueCat MCP (`get-product-store-state`) instead of guessing from the app's generic client-side error message. Chain of blockers, each confirmed via the API before moving to the next:
+  1. Both products (`monthly` id `prode4fcaf4068`, `yearly` id `prod44b7d98260`) showed `MISSING_METADATA`.
+  2. Missing Review Information screenshot — physical-device screenshots kept failing App Store Connect's exact-dimension check. Fixed by capturing pixel-perfect from Simulator: `xcrun simctl io booted screenshot`.
+  3. Still `MISSING_METADATA` — the subscription group's own Localization (separate from each product's localization) was empty. Filled in: display name "HabitPro Community", app name "HabitPro".
+  4. Still `MISSING_METADATA` — Privacy Policy URL was empty (App Store Connect → General → App Privacy → Edit, not "App Information"). Set to `https://habitpro-web.vercel.app/privacy`.
+  5. Status flipped to `READY_TO_SUBMIT`, but purchases still failed. Root cause: Business → Agreements, Tax and Banking — the `Paid Apps Agreement` was still `New` (only `Free Apps Agreement` was Active). Required Legal Entity info, signing the Paid Apps Agreement, a W-8BEN (India/US treaty, Article 12, 15%, "Income from the sale of applications"), and a linked bank account.
+  6. Even after Agreements/Banking/Tax showed Active, purchases failed for a period — propagation delay, commonly ~24h reported for this class of change. Resolved on its own with no further changes.
+- User confirmed working after the wait. No app code was touched in this part of the session.
+- Wrote a reusable, app-agnostic troubleshooting skill for this whole class of issue: `.codex/skills/ios-iap-troubleshooting/SKILL.md`. Read that first if a similar "purchase could not start" / empty offerings / MISSING_METADATA issue comes up again, on this app or any other.
+- RevenueCat MCP and Supabase MCP were connected mid-session (`.mcp.json`, not committed — local dev tooling config, intentionally left out of git) and were essential for diagnosing this without relying on the user manually screenshotting every dashboard page.
+
 ## 2026-07-21
 
 ### iOS Apple Login / RevenueCat Billing Prep

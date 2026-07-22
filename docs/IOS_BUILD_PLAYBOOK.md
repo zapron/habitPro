@@ -106,3 +106,7 @@ Before production App Review, plan for:
 - Screenshots.
 - In-app purchase/subscription products if RevenueCat is live.
 - Demo account or review notes.
+
+## In-App Purchase / Subscription Troubleshooting
+
+If a paywall doesn't open, or opens but purchases fail ("Purchase could not start...", empty offerings, `MISSING_METADATA`, `CONFIGURATION_ERROR`), use `.codex/skills/ios-iap-troubleshooting/SKILL.md`. It's written to be reusable for any app, not just HabitPro-specific. Most causes of the second class of failure turn out to be App Store Connect account setup (product screenshot dimensions, subscription group localization, Privacy Policy URL, or the Paid Apps Agreement/Tax/Banking not being Active) rather than app code — check that skill before assuming a rebuild is needed.
