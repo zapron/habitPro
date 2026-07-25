@@ -6,9 +6,12 @@ import {
   View,
   Image,
   Pressable,
+  ScrollView,
   StyleSheet,
   Modal,
   useWindowDimensions,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
   type StyleProp,
   type ViewStyle,
 } from "react-native";
@@ -17,13 +20,13 @@ import { Bookmark, ShieldCheck, X } from "lucide-react-native";
 import Svg, { ClipPath, Defs, Image as SvgImage, Path } from "react-native-svg";
 import { useTheme } from "../context/ThemeContext";
 import { useReducedMotion } from "../hooks/useReducedMotion";
-import type { StreakMemory } from "../types/habit";
+import type { StreakMemory, StreakMemoryTaskEntry } from "../types/habit";
 import {
   REPAIR_MEMORY_NOTE_SOLO,
   REPAIR_MEMORY_NOTE_SQUAD,
 } from "../utils/repairStreakMemoryMerge";
 import { formatDateDisplay } from "../utils/dateDisplay";
-import { playMemoryFormationHaptics } from "../utils/hapticFeedback";
+import { playMemoryFormationHaptics, triggerHexSpringHaptic } from "../utils/hapticFeedback";
 import { storageThumbnailUri } from "../utils/imageThumbnail";
 import { traceSync } from "../lib/jsThreadProbe";
 
@@ -153,6 +156,168 @@ function HoneycombBuildTile({
   return <Animated.View style={[style, animatedStyle]}>{children}</Animated.View>;
 }
 
+/** Time between shuffles; each tile picks a random offset within this so nearby hexes don't flip in sync. */
+/** Full repeat length of the wave — kept the same cycle-to-cycle so each tile's phase offset stays stable, instead of drifting into a fresh random gap every time. */
+const HEX_SPRING_WAVE_PERIOD_MS = 3600;
+/** How far behind the previous stacked tile (by grid order) each next one fires — small on purpose, so a spring visibly "hands off" to the next tile in quick succession. */
+const HEX_SPRING_WAVE_STAGGER_MS = 180;
+/** Small per-cycle jitter so the wave still feels organic, not a metronome. */
+const HEX_SPRING_WAVE_JITTER_MS = 150;
+/** Per-tick chance a due hex actually springs — a little randomness so it's not every single tile every single pass. */
+const HEX_SPRING_TRIGGER_PROBABILITY = 0.85;
+const HEX_SPRING_SHRINK_DURATION_MS = 170;
+const HEX_SPRING_SHRINK_SCALE = 0.55;
+const HEX_SPRING_FADE_MIN_OPACITY = 0.85;
+
+function hexSpringJitter(): number {
+  return (Math.random() * 2 - 1) * HEX_SPRING_WAVE_JITTER_MS;
+}
+
+/**
+ * The "living memory" idea, v2 — replaces the earlier fanned-stack shuffle. A day
+ * with 2+ logged task photos renders as a perfectly normal single hex (no visible
+ * stacking at rest); on a shared, repeating wave it does a quick spring "squish" —
+ * scales down, swaps to the next photo in the stack at the smallest point, springs
+ * back up, with a throttled light haptic timed to the swap.
+ *
+ * Each tile's phase is derived from its position in the grid (`waveIndex`) modulo
+ * a fixed period, staggered a little behind the previous stacked tile — so instead
+ * of every hex rolling an independent random delay (scattered, no visible
+ * relationship), tiles spring in a short rolling succession that reads as one
+ * continuous wave sweeping the grid, repeating every `HEX_SPRING_WAVE_PERIOD_MS`.
+ * A small per-cycle jitter plus a per-tick trigger probability keep it from
+ * looking perfectly mechanical.
+ *
+ * Cheaper than the fan it replaces: only one photo is ever mounted at a time (one
+ * Animated.Value for scale, one for opacity — no per-photo array, so the whole
+ * "stale ref array" crash class from the fan version doesn't apply here at all).
+ * The only extra cost is prefetching the other stack photos into the native image
+ * cache up front, so the swap at the bottom of the squish is instant instead of
+ * showing a load flash. Skipped entirely when reduceMotion is on.
+ */
+function HexSpringStack({
+  photos,
+  tileW,
+  tileH,
+  hexPath,
+  clipIdBase,
+  reduceMotion,
+  frontStrokeColor,
+  waveIndex,
+}: {
+  photos: string[];
+  tileW: number;
+  tileH: number;
+  hexPath: string;
+  clipIdBase: string;
+  reduceMotion: boolean;
+  frontStrokeColor: string;
+  /** This tile's position in the grid — derives its wave phase so stacked tiles spring in a short rolling succession instead of independently at random. */
+  waveIndex: number;
+}) {
+  const n = photos.length;
+  const [activeIndex, setActiveIndex] = useState(0);
+  const shownIndex = Math.min(activeIndex, Math.max(0, n - 1));
+  const scale = useRef(new Animated.Value(1)).current;
+  const opacity = useRef(new Animated.Value(1)).current;
+
+  const thumbUris = useMemo(
+    () => photos.map((uri) => storageThumbnailUri(uri, Math.round(tileW * 2.4), Math.round(tileH * 2.4)) ?? uri),
+    [photos, tileW, tileH],
+  );
+  const thumbUrisKey = thumbUris.join("|");
+
+  useEffect(() => {
+    // Warm the native image cache for every stacked photo up front — only one is
+    // ever rendered at a time, but the swap needs to be instant, not a fetch.
+    thumbUris.forEach((uri) => {
+      Image.prefetch(uri).catch(() => {});
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [thumbUrisKey]);
+
+  useEffect(() => {
+    if (reduceMotion || n < 2) return undefined;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout>;
+    // This tile's slot in the repeating wave — a fixed stagger behind the previous
+    // stacked tile in grid order, not a fresh random gap. Keeping the base delay
+    // between cycles constant (only the jitter varies) is what keeps the wave
+    // reading as one continuous sweep instead of drifting into unrelated timing.
+    const phase = (waveIndex * HEX_SPRING_WAVE_STAGGER_MS) % HEX_SPRING_WAVE_PERIOD_MS;
+
+    const tick = () => {
+      if (cancelled) return;
+      if (Math.random() < HEX_SPRING_TRIGGER_PROBABILITY) {
+        Animated.timing(scale, {
+          toValue: HEX_SPRING_SHRINK_SCALE,
+          duration: HEX_SPRING_SHRINK_DURATION_MS,
+          easing: Easing.in(Easing.quad),
+          useNativeDriver: true,
+          isInteraction: false,
+        }).start(() => {
+          if (cancelled) return;
+          setActiveIndex((prev) => (prev + 1) % n);
+          triggerHexSpringHaptic();
+          Animated.spring(scale, {
+            toValue: 1,
+            friction: 5,
+            tension: 140,
+            useNativeDriver: true,
+            isInteraction: false,
+          }).start();
+        });
+        Animated.timing(opacity, {
+          toValue: HEX_SPRING_FADE_MIN_OPACITY,
+          duration: HEX_SPRING_SHRINK_DURATION_MS,
+          easing: Easing.in(Easing.quad),
+          useNativeDriver: true,
+          isInteraction: false,
+        }).start(() => {
+          if (cancelled) return;
+          Animated.timing(opacity, {
+            toValue: 1,
+            duration: 260,
+            easing: Easing.out(Easing.quad),
+            useNativeDriver: true,
+            isInteraction: false,
+          }).start();
+        });
+      }
+      timer = setTimeout(tick, Math.max(200, HEX_SPRING_WAVE_PERIOD_MS + hexSpringJitter()));
+    };
+
+    timer = setTimeout(tick, Math.max(0, phase + hexSpringJitter()));
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [n, reduceMotion, scale, opacity, waveIndex]);
+
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={[styles.hexSvg, reduceMotion ? null : { opacity, transform: [{ scale }] }]}
+    >
+      <Svg width={tileW} height={tileH} viewBox={`0 0 ${tileW} ${tileH}`}>
+        <Defs>
+          <ClipPath id={clipIdBase}>
+            <Path d={hexPath} />
+          </ClipPath>
+        </Defs>
+        <SvgImage
+          href={{ uri: thumbUris[shownIndex] }}
+          width={tileW}
+          height={tileH}
+          preserveAspectRatio="xMidYMid slice"
+          clipPath={`url(#${clipIdBase})`}
+        />
+        <Path d={hexPath} fill="transparent" stroke={frontStrokeColor} strokeWidth={1.8} />
+      </Svg>
+    </Animated.View>
+  );
+}
+
 export function StreakMemoryGallery({
   entries,
   sectionTitle = "Your moments",
@@ -162,6 +327,8 @@ export function StreakMemoryGallery({
   const { theme, isDark } = useTheme();
   const reduceMotion = useReducedMotion();
   const [open, setOpen] = useState<Entry | null>(null);
+  /** Checklist missions only — which logged task the swipeable viewer is currently showing. */
+  const [galleryIndex, setGalleryIndex] = useState(0);
   const [viewerImageAspect, setViewerImageAspect] = useState<number | null>(null);
   const formationHapticKeyRef = useRef<string | null>(null);
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
@@ -194,11 +361,25 @@ export function StreakMemoryGallery({
     );
   }, [entries, honeycombColumns]);
 
+  /**
+   * Checklist missions only — swipeable multi-task viewer instead of the single memory
+   * below. Every logged task shows up, even ones logged with neither a photo nor a
+   * note ("just mark done") — matching the "own private view shows everything"
+   * convention already used for minis' MiniMomentCarousel, not the Community-share
+   * convention of dropping content-less entries.
+   */
+  const openTasks = useMemo(() => open?.memory?.tasks ?? [], [open?.memory?.tasks]);
+  const isGalleryOpen = openTasks.length > 0;
+  const clampedGalleryIndex = Math.min(galleryIndex, Math.max(0, openTasks.length - 1));
+  const activeTask: StreakMemoryTaskEntry | null = isGalleryOpen ? openTasks[clampedGalleryIndex] : null;
+  const activeTaskUri = activeTask?.proofUrls[0];
+  const activeTaskHasImage = Boolean(activeTaskUri && (!remotePeer || uriLoadsForRemoteViewer(activeTaskUri)));
+
   const viewerUri = open?.memory?.imageUrl || open?.memory?.imageUri;
-  const modalHasRenderableImage = Boolean(
-    viewerUri && (!remotePeer || uriLoadsForRemoteViewer(viewerUri)),
-  );
-  const modalNoteTrim = open?.memory?.note?.trim() ?? "";
+  const modalHasRenderableImage = isGalleryOpen
+    ? activeTaskHasImage
+    : Boolean(viewerUri && (!remotePeer || uriLoadsForRemoteViewer(viewerUri)));
+  const modalNoteTrim = isGalleryOpen ? activeTask?.note?.trim() ?? "" : open?.memory?.note?.trim() ?? "";
   const modalTextOnlyHero = Boolean(modalNoteTrim && !modalHasRenderableImage);
   const openDayLabel =
     open && typeof open.missionDay === "number" && open.missionDay > 0
@@ -207,11 +388,11 @@ export function StreakMemoryGallery({
   const formationHapticKey = `${remotePeer ? "remote" : "own"}:${sectionTitle}:${entries[0]?.dateStr ?? "none"}:${entries.length}`;
 
   const modalRepairKicker =
-    open?.memory?.repairSource === "squad"
+    !isGalleryOpen && open?.memory?.repairSource === "squad"
       ? "SQUAD REPAIR"
-      : open?.memory?.repairSource === "solo"
+      : !isGalleryOpen && open?.memory?.repairSource === "solo"
         ? "STREAK REPAIR"
-        : modalNoteTrim === REPAIR_MEMORY_NOTE_SQUAD || modalNoteTrim === REPAIR_MEMORY_NOTE_SOLO
+        : !isGalleryOpen && (modalNoteTrim === REPAIR_MEMORY_NOTE_SQUAD || modalNoteTrim === REPAIR_MEMORY_NOTE_SOLO)
           ? "STREAK REPAIR"
           : null;
   const memoryCardBg = theme.colors.surface;
@@ -224,14 +405,19 @@ export function StreakMemoryGallery({
   const maxViewerCardWidth = Math.min(windowWidth - 40, 420);
   const photoMaxWidth = maxViewerCardWidth - 20;
   const photoMaxHeight = Math.max(230, Math.min(windowHeight * 0.58, 500));
-  const viewerAspect = viewerImageAspect ?? 4 / 5;
+  /**
+   * Gallery mode uses a fixed 4:5 mat for every slide instead of measuring each task
+   * photo's real aspect ratio — keeps slide size constant while swiping (no layout
+   * jank mid-gesture) and avoids an Image.getSize call per task.
+   */
+  const viewerAspect = isGalleryOpen ? 4 / 5 : viewerImageAspect ?? 4 / 5;
   const naturalPhotoHeight = photoMaxWidth / viewerAspect;
   const viewerPhotoHeight = Math.min(naturalPhotoHeight, photoMaxHeight);
   const viewerPhotoWidth = Math.min(photoMaxWidth, viewerPhotoHeight * viewerAspect);
-  const viewerCardWidth = modalHasRenderableImage ? viewerPhotoWidth + 20 : maxViewerCardWidth;
+  const viewerCardWidth = modalHasRenderableImage || isGalleryOpen ? viewerPhotoWidth + 20 : maxViewerCardWidth;
 
   useEffect(() => {
-    if (!modalHasRenderableImage || !viewerUri) {
+    if (isGalleryOpen || !modalHasRenderableImage || !viewerUri) {
       setViewerImageAspect(null);
       return undefined;
     }
@@ -251,7 +437,7 @@ export function StreakMemoryGallery({
     return () => {
       cancelled = true;
     };
-  }, [modalHasRenderableImage, viewerUri]);
+  }, [isGalleryOpen, modalHasRenderableImage, viewerUri]);
 
   useEffect(() => {
     if (entries.length === 0 || formationHapticKeyRef.current === formationHapticKey) {
@@ -296,18 +482,39 @@ export function StreakMemoryGallery({
             >
               {column.items.map(({ entry: item, index, row }) => {
               const { dateStr, memory, missionDay } = item;
-              const displayUri = memory.imageUrl || memory.imageUri;
+              /**
+               * Checklist missions only: a day's memory logs into memory.tasks, never the
+               * classic memory.imageUrl/imageUri/note — those stay undefined forever for a
+               * checklist day (see handleTaskMemoryCommit in app/habit/[id].tsx). Before this,
+               * a checklist day's hex fell through every branch below to a blank fill, since
+               * nothing here ever looked at .tasks. Derive a cover photo/note from the first
+               * task that has one, and cap how many extra photos stack behind it (2, so render
+               * cost never scales with how many tasks a day actually has).
+               */
+              const taskEntries = memory.tasks ?? [];
+              const hasTasks = taskEntries.length > 0;
+              const taskPhotoUris = hasTasks
+                ? taskEntries
+                    .map((t) => t.proofUrls[0])
+                    .filter((u): u is string => Boolean(u) && (!remotePeer || uriLoadsForRemoteViewer(u)))
+                : [];
+              const taskCoverNote = hasTasks ? taskEntries.find((t) => t.note?.trim())?.note?.trim() : undefined;
+              const stackPhotos = taskPhotoUris.slice(0, 3);
+              const isStacked = stackPhotos.length > 1;
+
+              const displayUri = hasTasks ? stackPhotos[0] : memory.imageUrl || memory.imageUri;
               const showImage = Boolean(displayUri) && (!remotePeer || uriLoadsForRemoteViewer(displayUri));
               const thumbUri =
                 showImage && displayUri
                   ? storageThumbnailUri(displayUri, Math.round(tileW * 2.4), Math.round(tileH * 2.4))
                   : null;
               const hasLocalOnlyPhoto =
+                !hasTasks &&
                 remotePeer &&
                 Boolean(memory.imageUri) &&
                 !memory.imageUrl &&
                 !uriLoadsForRemoteViewer(memory.imageUri);
-              const noteTrim = memory.note?.trim() ?? "";
+              const noteTrim = hasTasks ? taskCoverNote ?? "" : memory.note?.trim() ?? "";
               const textOnlyThumb = !showImage && !hasLocalOnlyPhoto && noteTrim.length > 0;
               const isSquadRepair = memory.repairSource === "squad";
               const repairKicker =
@@ -334,56 +541,80 @@ export function StreakMemoryGallery({
                   style={[styles.hexTile, { width: tileW, height: tileH, left, top }]}
                 >
                   <Pressable
-                    onPress={() => setOpen({ dateStr, memory, missionDay })}
+                    onPress={() => {
+                      setGalleryIndex(0);
+                      setOpen({ dateStr, memory, missionDay });
+                    }}
                     style={styles.hexPressable}
                   >
-                    <Svg width={tileW} height={tileH} viewBox={`0 0 ${tileW} ${tileH}`} style={styles.hexSvg}>
-                      <Defs>
-                        <ClipPath id={clipId}>
-                          <Path d={hexPath} />
-                        </ClipPath>
-                      </Defs>
-                      {showImage ? (
-                        <SvgImage
-                          href={{ uri: thumbUri ?? displayUri! }}
-                          width={tileW}
-                          height={tileH}
-                          preserveAspectRatio="xMidYMid slice"
-                          clipPath={`url(#${clipId})`}
-                        />
-                      ) : (
-                        <Path
-                          d={hexPath}
-                          fill={
-                            isSquadRepair
-                              ? isDark
-                                ? "#082f49"
-                                : "#ecfeff"
-                              : textOnlyThumb
-                                ? isDark
-                                  ? "#21194a"
-                                  : "#eef2ff"
-                                : memoryCardBg
-                          }
-                        />
-                      )}
-                      <Path
-                        d={hexPath}
-                        fill="transparent"
-                        stroke={
+                    {isStacked ? (
+                      <HexSpringStack
+                        photos={stackPhotos}
+                        tileW={tileW}
+                        tileH={tileH}
+                        hexPath={hexPath}
+                        clipIdBase={clipId}
+                        reduceMotion={reduceMotion}
+                        waveIndex={index}
+                        frontStrokeColor={
                           isSquadRepair
                             ? isDark
                               ? "rgba(34, 211, 238, 0.58)"
                               : "rgba(6, 182, 212, 0.42)"
-                            : showImage
-                              ? isDark
-                                ? "rgba(255, 255, 255, 0.22)"
-                                : "rgba(255, 255, 255, 0.72)"
-                              : memoryBorder
+                            : isDark
+                              ? "rgba(255, 255, 255, 0.22)"
+                              : "rgba(255, 255, 255, 0.72)"
                         }
-                        strokeWidth={1.8}
                       />
-                    </Svg>
+                    ) : (
+                      <Svg width={tileW} height={tileH} viewBox={`0 0 ${tileW} ${tileH}`} style={styles.hexSvg}>
+                        <Defs>
+                          <ClipPath id={clipId}>
+                            <Path d={hexPath} />
+                          </ClipPath>
+                        </Defs>
+                        {showImage ? (
+                          <SvgImage
+                            href={{ uri: thumbUri ?? displayUri! }}
+                            width={tileW}
+                            height={tileH}
+                            preserveAspectRatio="xMidYMid slice"
+                            clipPath={`url(#${clipId})`}
+                          />
+                        ) : (
+                          <Path
+                            d={hexPath}
+                            fill={
+                              isSquadRepair
+                                ? isDark
+                                  ? "#082f49"
+                                  : "#ecfeff"
+                                : textOnlyThumb
+                                  ? isDark
+                                    ? "#21194a"
+                                    : "#eef2ff"
+                                  : memoryCardBg
+                            }
+                          />
+                        )}
+                        <Path
+                          d={hexPath}
+                          fill="transparent"
+                          stroke={
+                            isSquadRepair
+                              ? isDark
+                                ? "rgba(34, 211, 238, 0.58)"
+                                : "rgba(6, 182, 212, 0.42)"
+                              : showImage
+                                ? isDark
+                                  ? "rgba(255, 255, 255, 0.22)"
+                                  : "rgba(255, 255, 255, 0.72)"
+                                : memoryBorder
+                          }
+                          strokeWidth={1.8}
+                        />
+                      </Svg>
+                    )}
 
                     {isSquadRepair ? (
                       <View
@@ -412,7 +643,7 @@ export function StreakMemoryGallery({
                       >
                         <Text style={[styles.hexQuote, { color: theme.colors.indigo[400] }]}>{'\u201C'}</Text>
                         <Text style={[styles.hexKicker, { color: memoryKickerColor }]} numberOfLines={1}>
-                          {hasLocalOnlyPhoto ? "PHOTO" : repairKicker ?? "NOTE"}
+                          {hasLocalOnlyPhoto ? "PHOTO" : repairKicker ?? (hasTasks && !textOnlyThumb ? "LOGGED" : "NOTE")}
                         </Text>
                         {hasLocalOnlyPhoto ? (
                           <Text style={[styles.hexNotePreview, { color: theme.colors.textMuted }]} numberOfLines={2}>
@@ -422,7 +653,23 @@ export function StreakMemoryGallery({
                           <Text style={[styles.hexNotePreview, { color: memoryTextColor }]} numberOfLines={2}>
                             {noteTrim}
                           </Text>
+                        ) : hasTasks ? (
+                          <Text style={[styles.hexNotePreview, { color: theme.colors.textMuted }]} numberOfLines={1}>
+                            {taskEntries.length} task{taskEntries.length === 1 ? "" : "s"}
+                          </Text>
                         ) : null}
+                      </View>
+                    ) : null}
+
+                    {taskEntries.length > 1 ? (
+                      <View
+                        pointerEvents="none"
+                        style={[
+                          styles.hexCountChip,
+                          { backgroundColor: theme.colors.amber[500], borderColor: memoryCardBg },
+                        ]}
+                      >
+                        <Text style={styles.hexCountChipText}>{taskEntries.length}</Text>
                       </View>
                     ) : null}
 
@@ -457,15 +704,90 @@ export function StreakMemoryGallery({
       </View>
 
       <Modal visible={open !== null} transparent animationType="fade" onRequestClose={() => setOpen(null)}>
-        <Pressable style={styles.viewerBackdrop} onPress={() => setOpen(null)}>
-          <Pressable
+        {/*
+          Backdrop and inner wrapper are plain Views, not Pressable — an ancestor
+          Pressable steals the touch responder from a nested scrollable carousel on
+          iOS (the carousel renders but never slides). Already found and fixed once
+          before in CohortPeerStreakDots.tsx's DotViewerCarousel; see
+          app-architecture.md Known Caution Points. Closing now relies entirely on
+          the explicit X button below plus the Modal's own onRequestClose (Android
+          back gesture) instead of tap-to-close-on-backdrop.
+        */}
+        <View style={styles.viewerBackdrop}>
+          <View
             style={[
               styles.viewerInner,
               { backgroundColor: memoryShellBg, borderColor: memoryBorder, width: viewerCardWidth },
             ]}
-            onPress={(e) => e.stopPropagation()}
           >
-            {modalHasRenderableImage ? (
+            {isGalleryOpen ? (
+              <View style={{ width: viewerPhotoWidth, height: viewerPhotoHeight }}>
+                <ScrollView
+                  horizontal
+                  pagingEnabled
+                  showsHorizontalScrollIndicator={false}
+                  style={{ width: viewerPhotoWidth, height: viewerPhotoHeight }}
+                  contentContainerStyle={{ width: viewerPhotoWidth * openTasks.length }}
+                  onMomentumScrollEnd={(e: NativeSyntheticEvent<NativeScrollEvent>) => {
+                    if (viewerPhotoWidth <= 0) return;
+                    const idx = Math.round(e.nativeEvent.contentOffset.x / viewerPhotoWidth);
+                    setGalleryIndex(Math.max(0, Math.min(openTasks.length - 1, idx)));
+                  }}
+                >
+                  {openTasks.map((task) => {
+                    const taskUri = task.proofUrls[0];
+                    const taskUriLoads = Boolean(taskUri && (!remotePeer || uriLoadsForRemoteViewer(taskUri)));
+                    return (
+                    <View key={task.taskId} style={{ width: viewerPhotoWidth, height: viewerPhotoHeight }}>
+                      {taskUriLoads ? (
+                        <View
+                          style={[
+                            styles.viewerPhotoMat,
+                            { width: viewerPhotoWidth, height: viewerPhotoHeight, backgroundColor: isDark ? "#070b16" : "#f8fafc" },
+                          ]}
+                        >
+                          <Image source={{ uri: taskUri! }} style={styles.viewerImg} resizeMode="cover" />
+                        </View>
+                      ) : (
+                        <View
+                          style={[
+                            styles.viewerTextOnlyHero,
+                            {
+                              width: viewerPhotoWidth,
+                              height: viewerPhotoHeight,
+                              borderColor: memoryBorder,
+                              borderLeftColor: theme.colors.indigo[500],
+                              backgroundColor: memoryTextBg,
+                            },
+                          ]}
+                        >
+                          <Text style={[styles.viewerTextOnlyKicker, { color: memoryKickerColor }]}>
+                            {task.label.toUpperCase()}
+                          </Text>
+                          <Text style={[styles.viewerTextOnlyBody, { color: memoryTextColor }]}>
+                            {task.note?.trim() || "Marked complete — no note added."}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                    );
+                  })}
+                </ScrollView>
+                {openTasks.length > 1 ? (
+                  <View pointerEvents="none" style={styles.viewerDotsRow}>
+                    {openTasks.map((task, i) => (
+                      <View
+                        key={task.taskId}
+                        style={[
+                          styles.viewerDot,
+                          { backgroundColor: i === clampedGalleryIndex ? "#fff" : "rgba(255,255,255,0.4)" },
+                        ]}
+                      />
+                    ))}
+                  </View>
+                ) : null}
+              </View>
+            ) : modalHasRenderableImage ? (
               <View
                 style={[
                   styles.viewerPhotoMat,
@@ -522,7 +844,23 @@ export function StreakMemoryGallery({
                   <Text style={[styles.viewerDay, { color: theme.colors.indigo[400] }]}>{openDayLabel}</Text>
                 ) : null}
               </View>
-              {modalHasRenderableImage && modalNoteTrim ? (
+              {isGalleryOpen ? (
+                <View style={styles.viewerMetaTop}>
+                  <Text style={[styles.viewerTaskLabel, { color: theme.colors.textPrimary }]} numberOfLines={1}>
+                    {activeTask?.label}
+                  </Text>
+                  {openTasks.length > 1 ? (
+                    <Text style={[styles.viewerTaskCount, { color: theme.colors.textMuted }]}>
+                      {clampedGalleryIndex + 1} / {openTasks.length}
+                    </Text>
+                  ) : null}
+                </View>
+              ) : null}
+              {isGalleryOpen ? (
+                activeTaskHasImage && modalNoteTrim ? (
+                  <Text style={[styles.viewerNote, { color: theme.colors.textPrimary }]}>{modalNoteTrim}</Text>
+                ) : null
+              ) : modalHasRenderableImage && modalNoteTrim ? (
                 <Text style={[styles.viewerNote, { color: theme.colors.textPrimary }]}>{modalNoteTrim}</Text>
               ) : modalTextOnlyHero ? null : open?.memory.imageUri &&
                 remotePeer &&
@@ -541,8 +879,8 @@ export function StreakMemoryGallery({
             >
               <X size={22} color={theme.colors.textPrimary} />
             </Pressable>
-          </Pressable>
-        </Pressable>
+          </View>
+        </View>
       </Modal>
     </>
   );
@@ -568,11 +906,31 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: 0,
     top: 0,
+    zIndex: 2,
+  },
+  hexCountChip: {
+    position: "absolute",
+    top: 4,
+    right: 4,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    paddingHorizontal: 4,
+    borderWidth: 1.5,
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 5,
+  },
+  hexCountChipText: {
+    fontSize: 9,
+    fontWeight: "900",
+    color: "#1a1200",
   },
   hexOverlay: {
     ...StyleSheet.absoluteFillObject,
     alignItems: "center",
     justifyContent: "center",
+    zIndex: 3,
   },
   hexIconShell: {
     width: 30,
@@ -615,6 +973,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     borderWidth: 1,
     alignItems: "center",
+    zIndex: 3,
   },
   hexDayText: {
     fontSize: 9,
@@ -645,6 +1004,18 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   viewerImg: { width: "100%", height: "100%" },
+  viewerDotsRow: {
+    position: "absolute",
+    bottom: 10,
+    left: 0,
+    right: 0,
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 6,
+  },
+  viewerDot: { width: 6, height: 6, borderRadius: 3 },
+  viewerTaskLabel: { fontSize: 14, fontWeight: "800", flex: 1 },
+  viewerTaskCount: { fontSize: 11, fontWeight: "700", fontVariant: ["tabular-nums"] },
   viewerTextOnlyHero: {
     width: "100%",
     minHeight: 280,
