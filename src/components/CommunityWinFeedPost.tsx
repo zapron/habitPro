@@ -11,9 +11,13 @@ import {
   Pressable,
   StyleSheet,
   Animated,
+  Image,
+  FlatList,
   useWindowDimensions,
   type StyleProp,
   type ViewStyle,
+  type NativeSyntheticEvent,
+  type NativeScrollEvent,
 } from "react-native";
 import * as Haptics from "expo-haptics";
 import {
@@ -22,6 +26,8 @@ import {
   Camera,
   Radio,
   ThumbsUp,
+  Images,
+  ListChecks,
 } from "lucide-react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import type { CommunityWinFeedItem } from "../lib/communityWinsApi";
@@ -55,7 +61,7 @@ type Props = {
   expanded: boolean;
   reduceMotion: boolean;
   onToggleExpanded: () => void;
-  onOpenLightbox: (uri: string) => void;
+  onOpenLightbox: (images: string[], initialIndex?: number) => void;
   onOpenPlayer?: (win: CommunityWinFeedItem) => void;
   /** Returns whether the cheer API succeeded (optimistic list update in parent). */
   onCheer: (win: CommunityWinFeedItem) => Promise<boolean>;
@@ -124,6 +130,86 @@ function CheerBurstOverlay({
   );
 }
 
+/**
+ * Inline Instagram-style swipeable carousel for a catalog post's photos, used in
+ * place of a single static Image whenever `memory_gallery` has more than one item.
+ * Width is measured via onLayout rather than assumed, so paging stays correct
+ * across the "feed" (full window width) and "cards" (narrower) variants without
+ * either needing to match a precomputed estimate exactly.
+ */
+function PhotoCarousel({
+  images,
+  activeIndex,
+  onIndexChange,
+  onPressSlide,
+  estimatedWidth,
+  displayUriFor,
+}: {
+  images: string[];
+  activeIndex: number;
+  onIndexChange: (index: number) => void;
+  onPressSlide: () => void;
+  estimatedWidth: number;
+  displayUriFor: (uri: string) => string;
+}) {
+  const [slideWidth, setSlideWidth] = useState(estimatedWidth);
+
+  const onMomentumScrollEnd = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    if (slideWidth <= 0) return;
+    const idx = Math.round(e.nativeEvent.contentOffset.x / slideWidth);
+    onIndexChange(Math.max(0, Math.min(images.length - 1, idx)));
+  };
+
+  return (
+    <View
+      style={styles.carouselFill}
+      onLayout={(e) => {
+        const w = e.nativeEvent.layout.width;
+        if (w > 0 && Math.abs(w - slideWidth) > 1) setSlideWidth(w);
+      }}
+    >
+      <FlatList
+        data={images}
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        initialScrollIndex={activeIndex}
+        keyExtractor={(uri, index) => `${index}-${uri}`}
+        getItemLayout={(_, index) => ({ length: slideWidth, offset: slideWidth * index, index })}
+        onMomentumScrollEnd={onMomentumScrollEnd}
+        renderItem={({ item }) => (
+          <Pressable
+            onPress={onPressSlide}
+            style={{ width: slideWidth, height: "100%" }}
+            accessibilityRole="imagebutton"
+            accessibilityLabel="Photo: tap to view full screen"
+          >
+            <Image
+              source={{ uri: displayUriFor(item) }}
+              style={styles.photoImageFill}
+              resizeMode="cover"
+              accessibilityIgnoresInvertColors
+            />
+          </Pressable>
+        )}
+      />
+      {images.length > 1 ? (
+        <View pointerEvents="none" style={styles.dotsRow}>
+          {images.map((_, i) => (
+            <View
+              key={i}
+              style={[
+                styles.dot,
+                { backgroundColor: i === activeIndex ? "#fff" : "rgba(255,255,255,0.4)" },
+              ]}
+            />
+          ))}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
 export const CommunityWinFeedPost = memo(function CommunityWinFeedPost({
   win,
   variant,
@@ -151,7 +237,13 @@ export const CommunityWinFeedPost = memo(function CommunityWinFeedPost({
   const identity = avatarIdentityFor(win.user_id);
   const initials = initialsFromDisplay(primaryName);
   const isFeed = variant === "feed";
-  const noteText = (win.memory_note ?? "").trim();
+  const [activeGalleryIndex, setActiveGalleryIndex] = useState(0);
+  const galleryEntries = win.memory_gallery ?? null;
+  const activeGalleryItem =
+    galleryEntries && galleryEntries.length > 0
+      ? galleryEntries[Math.min(activeGalleryIndex, galleryEntries.length - 1)]
+      : null;
+  const noteText = (activeGalleryItem?.note ?? win.memory_note ?? "").trim();
   const hasNote = noteText.length > 0;
   const hasLongNote = noteText.length > 90 || noteText.includes("\n");
   /** Older rows used synthetic id before feed_source existed */
@@ -206,6 +298,20 @@ export const CommunityWinFeedPost = memo(function CommunityWinFeedPost({
         : null,
     [photoRenderWidth, win.memory_image_url],
   );
+  /** Full-res URLs for the lightbox — the catalog when present, else the single cover photo. */
+  const galleryImages = useMemo(() => {
+    if (win.memory_gallery && win.memory_gallery.length > 0) {
+      return win.memory_gallery.map((g) => g.imageUrl).filter(Boolean);
+    }
+    return win.memory_image_url ? [win.memory_image_url] : [];
+  }, [win.memory_gallery, win.memory_image_url]);
+
+  // FlashList recycles this component across different posts — reset the swipe
+  // position whenever the underlying win changes so a stale index from a
+  // previously-rendered post never carries over.
+  useEffect(() => {
+    setActiveGalleryIndex(0);
+  }, [win.id]);
 
   useEffect(() => {
     return () => {
@@ -246,14 +352,11 @@ export const CommunityWinFeedPost = memo(function CommunityWinFeedPost({
     }
   }, []);
 
-  const scheduleLightbox = useCallback(
-    (uri: string) => {
-      clearLightboxTimer();
-      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      onOpenLightbox(uri);
-    },
-    [clearLightboxTimer, onOpenLightbox],
-  );
+  const scheduleLightbox = useCallback(() => {
+    clearLightboxTimer();
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    onOpenLightbox(galleryImages, activeGalleryIndex);
+  }, [clearLightboxTimer, onOpenLightbox, galleryImages, activeGalleryIndex]);
 
   const onImageAreaPress = useCallback(
     (uri: string | null) => {
@@ -277,7 +380,7 @@ export const CommunityWinFeedPost = memo(function CommunityWinFeedPost({
         return;
       }
 
-      if (uri) scheduleLightbox(uri);
+      if (uri) scheduleLightbox();
     },
     [clearLightboxTimer, scheduleLightbox, isOwn, reduceMotion, runCheer, canCheer, onCheerBlocked],
   );
@@ -341,7 +444,61 @@ export const CommunityWinFeedPost = memo(function CommunityWinFeedPost({
         },
       ];
 
-  const imageBlock = win.memory_image_url ? (
+  const displayUriFor = useCallback(
+    (uri: string) =>
+      storageThumbnailUri(uri, photoRenderWidth * 2, (photoRenderWidth / COMMUNITY_PHOTO_ASPECT_RATIO) * 2),
+    [photoRenderWidth],
+  );
+
+  const imageBlock =
+    galleryImages.length > 1 ? (
+      <View style={photoFrameStyle}>
+        <PhotoCarousel
+          images={galleryImages}
+          activeIndex={activeGalleryIndex}
+          onIndexChange={setActiveGalleryIndex}
+          onPressSlide={() => onImageAreaPress(galleryImages[activeGalleryIndex] ?? null)}
+          estimatedWidth={photoRenderWidth}
+          displayUriFor={displayUriFor}
+        />
+        {isLiveSquadWin ? (
+          <View
+            pointerEvents="none"
+            style={[
+              styles.liveSquadPhotoBadge,
+              {
+                backgroundColor: isDark ? "rgba(8, 47, 73, 0.88)" : "rgba(236, 254, 255, 0.94)",
+                borderColor: isDark ? "rgba(34, 211, 238, 0.42)" : "rgba(6, 182, 212, 0.28)",
+              },
+            ]}
+          >
+            <Radio size={12} color={theme.colors.cyan[400]} strokeWidth={2.4} />
+            <Text style={[styles.liveSquadPhotoBadgeText, { color: theme.colors.cyan[400] }]} numberOfLines={1}>
+              Live Squad
+            </Text>
+          </View>
+        ) : null}
+        <View
+          pointerEvents="none"
+          style={[
+            styles.galleryCountBadge,
+            {
+              backgroundColor: isDark ? "rgba(15, 23, 42, 0.82)" : "rgba(255, 255, 255, 0.92)",
+              borderColor: isDark ? "rgba(255,255,255,0.22)" : "rgba(15, 23, 42, 0.14)",
+            },
+          ]}
+        >
+          <Images size={12} color={isDark ? "#fff" : theme.colors.textPrimary} strokeWidth={2.4} />
+          <Text
+            style={[styles.galleryCountBadgeText, { color: isDark ? "#fff" : theme.colors.textPrimary }]}
+            numberOfLines={1}
+          >
+            {galleryImages.length}
+          </Text>
+        </View>
+        <CheerBurstOverlay burstKey={burstKey} reduceMotion={reduceMotion} thumbColor={theme.colors.indigo[400]} />
+      </View>
+    ) : win.memory_image_url ? (
     <Pressable
       onPress={() => onImageAreaPress(win.memory_image_url)}
       accessibilityRole="imagebutton"
@@ -458,6 +615,15 @@ export const CommunityWinFeedPost = memo(function CommunityWinFeedPost({
             ) : null}
           </View>
         </LinearGradient>
+      ) : null}
+
+      {activeGalleryItem?.label ? (
+        <View style={[styles.taskNameRow, isFeed ? styles.padHFeed : styles.padCardInner]}>
+          <ListChecks size={13} color={theme.colors.indigo[400]} />
+          <Text style={[styles.taskNameText, { color: theme.colors.textPrimary }]} numberOfLines={1}>
+            {activeGalleryItem.label}
+          </Text>
+        </View>
       ) : null}
 
       {showMiniMissionBanner ? (
@@ -662,6 +828,35 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "rgba(255, 255, 255, 0.08)",
   },
+  carouselFill: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  dotsRow: {
+    position: "absolute",
+    bottom: 12,
+    left: 0,
+    right: 0,
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 5,
+  },
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  taskNameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingTop: 10,
+  },
+  taskNameText: {
+    fontSize: 13,
+    fontWeight: "800",
+    flexShrink: 1,
+  },
   liveSquadPhotoBadge: {
     position: "absolute",
     left: 14,
@@ -675,6 +870,23 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     paddingHorizontal: 10,
     paddingVertical: 6,
+  },
+  galleryCountBadge: {
+    position: "absolute",
+    right: 14,
+    top: 14,
+    minHeight: 26,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    borderRadius: 9999,
+    borderWidth: 1,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+  },
+  galleryCountBadgeText: {
+    fontSize: 12,
+    fontWeight: "800",
   },
   liveSquadPhotoBadgeText: {
     flexShrink: 1,

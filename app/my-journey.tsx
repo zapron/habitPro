@@ -1,8 +1,9 @@
 import { Text } from "../src/components/AppText";
 import type { ReactNode } from "react";
-import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  FlatList,
   Image,
   InteractionManager,
   Modal,
@@ -16,7 +17,7 @@ import {
   type StyleProp,
   type ViewStyle,
 } from "react-native";
-import type { ImageStyle, LayoutChangeEvent } from "react-native";
+import type { ImageStyle, LayoutChangeEvent, NativeScrollEvent, NativeSyntheticEvent } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
@@ -34,12 +35,12 @@ import {
   ThumbsUp,
   Trophy,
   User,
+  X,
   Zap,
 } from "lucide-react-native";
 import { useShallow } from "zustand/react/shallow";
 
 import { Screen } from "../src/components/Screen";
-import { CommunityWinImageLightbox } from "../src/components/CommunityWinImageLightbox";
 import { AnimatedCountText } from "../src/components/AnimatedCountText";
 import { LevelXpRing } from "../src/components/LevelXpRing";
 import { useAuth } from "../src/context/AuthContext";
@@ -51,6 +52,7 @@ import type { Habit, MiniMission, StreakMemory } from "../src/types/habit";
 import {
   fetchCommunityPlayerStory,
   fetchCommunityPlayerStoryPage,
+  type CommunityMemoryGalleryItem,
   type CommunityPlayerMissionStory,
   type CommunityPlayerProfile,
   type CommunityPlayerStory,
@@ -193,12 +195,56 @@ function memoryNote(memory: StreakMemory | undefined): string | null {
   return note ? note : null;
 }
 
+/** First task note found in log order — covers a checklist day where every task is text-only (no photo). */
+function firstTaskNote(memory: StreakMemory | undefined): string | null {
+  for (const task of memory?.tasks ?? []) {
+    const note = task.note?.trim();
+    if (note) return note;
+  }
+  return null;
+}
+
+/**
+ * Local-only mirror of `storyMemoryGallery` in communityWinsApi, but richer: since this
+ * feeds the private Journey view ("everything is visible," per the user), it also keeps
+ * a task that has only a note and no photo — `imageUrl: null` — rendered as a text-card
+ * slide in the gallery/lightbox instead of being dropped. Community-shared galleries
+ * never contain one of these (sharing only ever includes photo tasks); this is purely a
+ * local, private-view-only difference.
+ */
+function memoryTaskGallery(memory: StreakMemory | undefined): CommunityMemoryGalleryItem[] | null {
+  const tasks = memory?.tasks;
+  if (!tasks || tasks.length === 0) return null;
+  const items = tasks
+    .map((task): CommunityMemoryGalleryItem | null => {
+      const imageUrl = task.proofUrls[0]?.trim() || null;
+      const note = task.note?.trim() || null;
+      if (!imageUrl && !note) return null;
+      return { taskId: task.taskId, label: task.label, imageUrl, note };
+    })
+    .filter((item): item is CommunityMemoryGalleryItem => item !== null);
+  return items.length > 0 ? items : null;
+}
+
 function isPublicCommunityMemory(memory: StreakMemory | undefined, revoked?: boolean): boolean {
   return memory?.communityPosted === true && memory.communityFeedRevoked !== true && revoked !== true;
 }
 
 function isPrivateStoryPost(post: CommunityPlayerStoryPost): boolean {
   return post.id.startsWith("private-");
+}
+
+/**
+ * Full slide set for the lightbox — the catalog (mixed photo + text-only tasks) when
+ * present, else a single synthetic photo slide wrapping the classic cover photo.
+ */
+function journeySlidesForPost(post: CommunityPlayerStoryPost): CommunityMemoryGalleryItem[] {
+  if (post.memoryGallery && post.memoryGallery.length > 0) {
+    return post.memoryGallery;
+  }
+  return post.memoryImageUrl
+    ? [{ taskId: post.id, label: post.title, imageUrl: post.memoryImageUrl, note: null }]
+    : [];
 }
 
 function repairSourceForPost(post: CommunityPlayerStoryPost): "squad" | "solo" | null {
@@ -224,13 +270,22 @@ function privatePostFromMemory(input: {
   dayNumber?: number | null;
 }): CommunityPlayerStoryPost {
   const repairText = repairCopy(input.memory.repairSource);
+  const gallery = memoryTaskGallery(input.memory);
   return {
     id: input.id,
     title: input.title,
     completedAt: input.completedAt,
     createdAt: input.memory.createdAt || input.completedAt,
-    memoryNote: memoryNote(input.memory) ?? repairText,
-    memoryImageUrl: memoryImageUri(input.memory),
+    // Falls back to a task's note (e.g. a checklist day where every task is
+    // text-only, no photo anywhere) before falling back to repair copy.
+    memoryNote: memoryNote(input.memory) ?? firstTaskNote(input.memory) ?? repairText,
+    // Checklist days never write the legacy single-shot note/imageUrl fields (only
+    // .tasks) — fall back to the first task that actually has a photo (not just
+    // array index 0, which might be a text-only task) so grid tiles, photo counts,
+    // and every other place downstream that keys off memoryImageUrl still work,
+    // same as the cover-photo backfill already done when sharing to Community.
+    memoryImageUrl: memoryImageUri(input.memory) ?? gallery?.find((g) => g.imageUrl)?.imageUrl ?? null,
+    memoryGallery: gallery,
     feedSource: input.source,
     streakMissionDay: input.dayNumber ?? null,
     streakCountAtPost: input.dayNumber ?? null,
@@ -251,7 +306,8 @@ function buildPrivateStory(habits: readonly Habit[], minis: readonly MiniMission
       const imageUri = memoryImageUri(memory);
       const note = memoryNote(memory);
       const repair = memory.repairSource;
-      if (isPublicCommunityMemory(memory) || (!imageUri && !note && !repair)) continue;
+      const hasTasks = Boolean(memory.tasks && memory.tasks.length > 0);
+      if (isPublicCommunityMemory(memory) || (!imageUri && !note && !repair && !hasTasks)) continue;
 
       posts.push(
         privatePostFromMemory({
@@ -289,7 +345,8 @@ function buildPrivateStory(habits: readonly Habit[], minis: readonly MiniMission
     if (!memory || isPublicCommunityMemory(memory, mini.communityFeedRevoked)) continue;
     const imageUri = memoryImageUri(memory);
     const note = memoryNote(memory);
-    if (!imageUri && !note) continue;
+    const hasTasks = Boolean(memory.tasks && memory.tasks.length > 0);
+    if (!imageUri && !note && !hasTasks) continue;
 
     miniPosts.push(
       privatePostFromMemory({
@@ -649,7 +706,7 @@ function RecentProofBadge({
   size: number;
   theme: AppTheme;
   imagesEnabled: boolean;
-  onPress: (uri: string) => void;
+  onPress: (slides: CommunityMemoryGalleryItem[], initialIndex?: number) => void;
 }) {
   const uri = post.memoryImageUrl;
   const clipId = useMemo(
@@ -661,7 +718,7 @@ function RecentProofBadge({
 
   return (
     <Pressable
-      onPress={() => onPress(uri)}
+      onPress={() => onPress(journeySlidesForPost(post), 0)}
       accessibilityRole="imagebutton"
       accessibilityLabel={`Open ${post.title} proof`}
       style={[styles.recentProofBadge, { width: size, height: size }]}
@@ -715,7 +772,7 @@ function StoryPhotoTile({
   radius?: number;
   theme: AppTheme;
   imagesEnabled: boolean;
-  onPress?: (uri: string) => void;
+  onPress?: (slides: CommunityMemoryGalleryItem[], initialIndex?: number) => void;
   onMorePress?: () => void;
   tileStyle?: StyleProp<ViewStyle>;
   journeyMode: JourneyMode;
@@ -793,7 +850,7 @@ function StoryPhotoTile({
 
   return (
     <Pressable
-      onPress={onMorePress ?? (() => onPress?.(uri))}
+      onPress={onMorePress ?? (() => onPress?.(journeySlidesForPost(post), 0))}
       accessibilityRole="imagebutton"
       accessibilityLabel={`Open ${post.title} proof`}
     >
@@ -816,7 +873,7 @@ const MissionStoryCard = memo(function MissionStoryCard({
   theme: AppTheme;
   isDark: boolean;
   onOpenGallery: (story: CommunityPlayerMissionStory) => void;
-  onOpenImage: (uri: string) => void;
+  onOpenImage: (slides: CommunityMemoryGalleryItem[], initialIndex?: number) => void;
   photoSize: number;
   imagesEnabled: boolean;
   journeyMode: JourneyMode;
@@ -936,7 +993,7 @@ const MiniPostCard = memo(function MiniPostCard({
   theme: AppTheme;
   isDark: boolean;
   imagesEnabled: boolean;
-  onOpenImage: (uri: string) => void;
+  onOpenImage: (slides: CommunityMemoryGalleryItem[], initialIndex?: number) => void;
   journeyMode: JourneyMode;
 }) {
   const imageUri = post.memoryImageUrl;
@@ -944,6 +1001,8 @@ const MiniPostCard = memo(function MiniPostCard({
   const thumb = imageUri ? storageThumbnailUri(imageUri, Math.round(width * 2), Math.round(width * 2.25)) : null;
   const [useOriginal, setUseOriginal] = useState(false);
   const displayUri = useOriginal ? imageUri : thumb;
+  /** Checklist minis with only text-only tasks have no cover photo but still have slides to open. */
+  const hasTextOnlySlides = !imageUri && journeySlidesForPost(post).length > 0;
   const isPrivate = isPrivateStoryPost(post);
   const isSquadSave = isSquadSavedPost(post);
   const showPublicBadge = journeyMode === "private" && !isPrivate;
@@ -959,7 +1018,7 @@ const MiniPostCard = memo(function MiniPostCard({
   return (
     <View style={[styles.miniCard, { width, borderColor: isSquadSave ? theme.colors.cyan[500] : theme.colors.border, backgroundColor: theme.colors.surface }]}>
       {imageUri ? (
-        <Pressable onPress={() => onOpenImage(imageUri)} accessibilityRole="imagebutton" accessibilityLabel={`Open ${post.title} photo`}>
+        <Pressable onPress={() => onOpenImage(journeySlidesForPost(post), 0)} accessibilityRole="imagebutton" accessibilityLabel={`Open ${post.title} photo`}>
           <View style={[styles.miniImageWrap, { backgroundColor: theme.colors.surfaceElevated }]}>
             {imagesEnabled && displayUri ? (
               <Image
@@ -1002,29 +1061,35 @@ const MiniPostCard = memo(function MiniPostCard({
           </View>
         </Pressable>
       ) : (
-        <View style={[styles.miniTextOnlyTop, { backgroundColor: textOnlyBg }]}>
-          <View style={[styles.miniDatePill, { backgroundColor: DAY_PILL_BACKGROUND }]}>
-            <Text style={styles.dayPillText}>{storyDayLabel(post)}</Text>
+        <Pressable
+          onPress={hasTextOnlySlides ? () => onOpenImage(journeySlidesForPost(post), 0) : undefined}
+          accessibilityRole={hasTextOnlySlides ? "imagebutton" : undefined}
+          accessibilityLabel={hasTextOnlySlides ? `Open ${post.title}` : undefined}
+        >
+          <View style={[styles.miniTextOnlyTop, { backgroundColor: textOnlyBg }]}>
+            <View style={[styles.miniDatePill, { backgroundColor: DAY_PILL_BACKGROUND }]}>
+              <Text style={styles.dayPillText}>{storyDayLabel(post)}</Text>
+            </View>
+            <View style={styles.miniStatusGroup}>
+              {isPrivate ? (
+                <View style={[styles.miniIconPill, { backgroundColor: PRIVATE_BADGE_BACKGROUND }]}>
+                  <LockKeyhole size={11} color="#FFFFFF" />
+                </View>
+              ) : null}
+              {showPublicBadge ? (
+                <View style={[styles.miniIconPill, { backgroundColor: COMMUNITY_BADGE_BACKGROUND }]}>
+                  <Globe size={11} color="#FFFFFF" />
+                </View>
+              ) : null}
+              {showLikeBadge ? (
+                <View style={[styles.miniStatusPill, { backgroundColor: LIKE_BADGE_BACKGROUND }]}>
+                  <ThumbsUp size={11} color="#FFFFFF" fill="#FFFFFF" />
+                  <Text style={styles.miniStatusText}>{post.cheerCount}</Text>
+                </View>
+              ) : null}
+            </View>
           </View>
-          <View style={styles.miniStatusGroup}>
-            {isPrivate ? (
-              <View style={[styles.miniIconPill, { backgroundColor: PRIVATE_BADGE_BACKGROUND }]}>
-                <LockKeyhole size={11} color="#FFFFFF" />
-              </View>
-            ) : null}
-            {showPublicBadge ? (
-              <View style={[styles.miniIconPill, { backgroundColor: COMMUNITY_BADGE_BACKGROUND }]}>
-                <Globe size={11} color="#FFFFFF" />
-              </View>
-            ) : null}
-            {showLikeBadge ? (
-              <View style={[styles.miniStatusPill, { backgroundColor: LIKE_BADGE_BACKGROUND }]}>
-                <ThumbsUp size={11} color="#FFFFFF" fill="#FFFFFF" />
-                <Text style={styles.miniStatusText}>{post.cheerCount}</Text>
-              </View>
-            ) : null}
-          </View>
-        </View>
+        </Pressable>
       )}
       <View style={styles.miniBody}>
         <Text style={[styles.miniTitle, { color: theme.colors.textPrimary }]} numberOfLines={2}>
@@ -1056,7 +1121,7 @@ const MiniPostRow = memo(function MiniPostRow({
   theme: AppTheme;
   isDark: boolean;
   imagesEnabled: boolean;
-  onOpenImage: (uri: string) => void;
+  onOpenImage: (slides: CommunityMemoryGalleryItem[], initialIndex?: number) => void;
   journeyMode: JourneyMode;
 }) {
   return (
@@ -1090,7 +1155,7 @@ function GalleryMomentCard({
   width: number;
   theme: AppTheme;
   imagesEnabled: boolean;
-  onOpenImage: (uri: string) => void;
+  onOpenImage: (slides: CommunityMemoryGalleryItem[], initialIndex?: number) => void;
   journeyMode: JourneyMode;
 }) {
   const note = post.memoryNote?.trim() ?? "";
@@ -1144,7 +1209,7 @@ function MissionGalleryModal({
   theme: AppTheme;
   imagesEnabled: boolean;
   onClose: () => void;
-  onOpenImage: (uri: string) => void;
+  onOpenImage: (slides: CommunityMemoryGalleryItem[], initialIndex?: number) => void;
   journeyMode: JourneyMode;
 }) {
   const { width } = useWindowDimensions();
@@ -1245,6 +1310,169 @@ function RowSeparator() {
   return <View style={styles.rowSeparator} />;
 }
 
+/**
+ * Full-screen memory viewer for the Journey tab — same chrome as
+ * `CommunityWinImageLightbox` (dark backdrop, X close, "N / M" counter, paged swipe),
+ * but slide-aware: a task with only a note and no photo renders as a text card instead
+ * of being skipped. Journey-specific (not a `CommunityWinImageLightbox` prop change)
+ * because Community-shared galleries never actually contain a text-only entry — only
+ * the private, local-only side of this screen does.
+ */
+function JourneyMemoryLightbox({
+  visible,
+  slides,
+  initialIndex = 0,
+  onClose,
+}: {
+  visible: boolean;
+  slides: CommunityMemoryGalleryItem[];
+  initialIndex?: number;
+  onClose: () => void;
+}) {
+  const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const [activeIndex, setActiveIndex] = useState(initialIndex);
+  const [failedUris, setFailedUris] = useState<ReadonlySet<string>>(() => new Set());
+  const listRef = useRef<FlatList<CommunityMemoryGalleryItem>>(null);
+
+  useEffect(() => {
+    if (visible) setActiveIndex(initialIndex);
+  }, [visible, initialIndex]);
+
+  if (slides.length === 0) return null;
+
+  const onMomentumScrollEnd = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    if (width <= 0) return;
+    const idx = Math.round(e.nativeEvent.contentOffset.x / width);
+    setActiveIndex(Math.max(0, Math.min(slides.length - 1, idx)));
+  };
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <View style={journeyLightboxStyles.root}>
+        <Pressable
+          style={[journeyLightboxStyles.closeBtn, { top: insets.top + 8, right: Math.max(insets.right, 16) }]}
+          onPress={onClose}
+          hitSlop={12}
+          accessibilityRole="button"
+          accessibilityLabel="Close"
+        >
+          <View style={journeyLightboxStyles.closeInner}>
+            <X size={22} color="#fff" />
+          </View>
+        </Pressable>
+        {slides.length > 1 ? (
+          <View style={[journeyLightboxStyles.counterPill, { top: insets.top + 8 }]} pointerEvents="none">
+            <Text style={journeyLightboxStyles.counterText}>
+              {activeIndex + 1} / {slides.length}
+            </Text>
+          </View>
+        ) : null}
+        <FlatList
+          ref={listRef}
+          data={slides}
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          initialScrollIndex={initialIndex}
+          getItemLayout={(_, index) => ({ length: width, offset: width * index, index })}
+          keyExtractor={(item, index) => `${index}-${item.taskId}`}
+          onMomentumScrollEnd={onMomentumScrollEnd}
+          renderItem={({ item }) => {
+            const uri = item.imageUrl;
+            const failed = uri ? failedUris.has(uri) : false;
+            return (
+              <View style={[journeyLightboxStyles.imgWrap, { width }]}>
+                {uri && !failed ? (
+                  <Image
+                    source={{ uri }}
+                    style={journeyLightboxStyles.img}
+                    resizeMode="contain"
+                    onError={() => setFailedUris((prev) => (prev.has(uri) ? prev : new Set(prev).add(uri)))}
+                  />
+                ) : (
+                  <View style={journeyLightboxStyles.textCard}>
+                    {failed ? (
+                      <Text style={[journeyLightboxStyles.textCardNote, { color: "rgba(255,255,255,0.6)" }]}>
+                        Photo unavailable
+                      </Text>
+                    ) : (
+                      <Text style={journeyLightboxStyles.textCardNote} numberOfLines={10}>
+                        {item.note}
+                      </Text>
+                    )}
+                  </View>
+                )}
+              </View>
+            );
+          }}
+        />
+      </View>
+    </Modal>
+  );
+}
+
+const journeyLightboxStyles = StyleSheet.create({
+  root: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.92)",
+    justifyContent: "center",
+  },
+  closeBtn: {
+    position: "absolute",
+    zIndex: 2,
+  },
+  closeInner: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(0,0,0,0.55)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.2)",
+  },
+  counterPill: {
+    position: "absolute",
+    alignSelf: "center",
+    zIndex: 2,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.2)",
+  },
+  counterText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  imgWrap: {
+    height: "100%",
+    justifyContent: "center",
+    paddingHorizontal: 12,
+  },
+  img: {
+    width: "100%",
+    height: "100%",
+  },
+  textCard: {
+    width: "100%",
+    minHeight: 220,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 32,
+  },
+  textCardNote: {
+    fontSize: 17,
+    lineHeight: 25,
+    fontWeight: "700",
+    textAlign: "center",
+    color: "#fff",
+  },
+});
+
 export default function MyJourneyScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
@@ -1267,8 +1495,30 @@ export default function MyJourneyScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [publicError, setPublicError] = useState<string | null>(null);
   const [imagesEnabled, setImagesEnabled] = useState(false);
-  const [lightboxUri, setLightboxUri] = useState<string | null>(null);
+  const [lightboxSlides, setLightboxSlides] = useState<CommunityMemoryGalleryItem[]>([]);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
   const [selectedMission, setSelectedMission] = useState<CommunityPlayerMissionStory | null>(null);
+  // MissionGalleryModal is itself a full-screen Modal — opening the lightbox Modal
+  // on top of it (photo tap inside "View journey") hits the same "iOS can't stack a
+  // second native Modal" bug documented in app-architecture.md. Close the gallery
+  // modal before opening the lightbox and restore it afterward.
+  const missionBeforeLightboxRef = useRef<CommunityPlayerMissionStory | null>(null);
+  const openLightbox = useCallback(
+    (slides: CommunityMemoryGalleryItem[], initialIndex?: number) => {
+      missionBeforeLightboxRef.current = selectedMission;
+      if (selectedMission) setSelectedMission(null);
+      setLightboxSlides(slides);
+      setLightboxIndex(initialIndex ?? 0);
+    },
+    [selectedMission],
+  );
+  const closeLightbox = useCallback(() => {
+    setLightboxSlides([]);
+    if (missionBeforeLightboxRef.current) {
+      setSelectedMission(missionBeforeLightboxRef.current);
+      missionBeforeLightboxRef.current = null;
+    }
+  }, []);
   const [listWidth, setListWidth] = useState(0);
   const { xp, username, habits, miniMissions } = useHabitStore(
     useShallow((s) => ({
@@ -1490,7 +1740,7 @@ export default function MyJourneyScreen() {
             theme={theme}
             isDark={isDark}
             imagesEnabled={imagesEnabled}
-            onOpenImage={setLightboxUri}
+            onOpenImage={openLightbox}
             onOpenGallery={setSelectedMission}
             photoSize={missionPreviewPhotoSize}
             journeyMode={journeyMode}
@@ -1505,7 +1755,7 @@ export default function MyJourneyScreen() {
           theme={theme}
           isDark={isDark}
           imagesEnabled={imagesEnabled}
-          onOpenImage={setLightboxUri}
+          onOpenImage={openLightbox}
           journeyMode={journeyMode}
         />
       );
@@ -1629,7 +1879,7 @@ export default function MyJourneyScreen() {
                   size={recentProofSize}
                   theme={theme}
                   imagesEnabled={imagesEnabled}
-                  onPress={setLightboxUri}
+                  onPress={openLightbox}
                 />
                 <Text style={[styles.publicMomentTitle, { color: theme.colors.textSecondary }]} numberOfLines={1}>
                   {post.title}
@@ -1801,14 +2051,15 @@ export default function MyJourneyScreen() {
         theme={theme}
         imagesEnabled={imagesEnabled}
         onClose={() => setSelectedMission(null)}
-        onOpenImage={setLightboxUri}
+        onOpenImage={openLightbox}
         journeyMode={journeyMode}
       />
 
-      <CommunityWinImageLightbox
-        visible={Boolean(lightboxUri)}
-        imageUri={lightboxUri}
-        onClose={() => setLightboxUri(null)}
+      <JourneyMemoryLightbox
+        visible={lightboxSlides.length > 0}
+        slides={lightboxSlides}
+        initialIndex={lightboxIndex}
+        onClose={closeLightbox}
       />
     </Screen>
   );

@@ -2,8 +2,8 @@ import { Text } from "../src/components/AppText";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  FlatList,
   Image,
-  Modal,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -11,7 +11,9 @@ import {
   StyleSheet,
   TouchableOpacity,
   View,
+  useWindowDimensions,
 } from "react-native";
+import type { NativeScrollEvent, NativeSyntheticEvent } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -24,6 +26,7 @@ import {
   Flame,
   Globe,
   Heart,
+  ListChecks,
   Lock,
   MessageSquare,
   RefreshCw,
@@ -33,6 +36,7 @@ import {
 } from "lucide-react-native";
 import { CustomNudgeModal } from "../src/components/CustomNudgeModal";
 import { CommunityWinCheerersModal } from "../src/components/CommunityWinCheerersModal";
+import { CommunityWinImageLightbox } from "../src/components/CommunityWinImageLightbox";
 import { Screen } from "../src/components/Screen";
 import { useAuth } from "../src/context/AuthContext";
 import { usePlusUpsell } from "../src/context/PlusUpsellContext";
@@ -44,6 +48,7 @@ import {
   fetchChallengeMemoryDetail,
   type ChallengeMemoryDetail,
   type ChallengeMemoryStatus,
+  type ChallengeMemoryTaskEntry,
 } from "../src/lib/challengeMemoryDetail";
 import {
   listSentPresetNudgeKindsToday,
@@ -54,6 +59,7 @@ import { toggleCheer } from "../src/lib/communityWinsApi";
 import { adjustCachedUnreadNotificationCount, markNotificationRead } from "../src/lib/groupChallengesApi";
 import { backOrReplace } from "../src/lib/navigation";
 import { useRefreshPremiumAccess } from "../src/hooks/useRefreshPremiumAccess";
+import type { AppTheme } from "../src/styles/theme";
 import type { PresetChallengeNudgeKind } from "../src/types/groupChallenge";
 import { formatDateDisplay } from "../src/utils/dateDisplay";
 
@@ -109,6 +115,105 @@ function statusIcon(status: ChallengeMemoryStatus, photoSyncState: ChallengeMemo
   return XCircle;
 }
 
+/**
+ * `photoWrap`'s width resolves from a "100%" layout, so it isn't known synchronously —
+ * but starting the measurement at 0 and gating the whole `FlatList` behind it meant
+ * that on the rare occasion `onLayout` fired late, fired with a stale 0, or didn't
+ * fire again inside this screen, the carousel silently rendered nothing at all — a
+ * persistent blank/black card, for photo *and* text slides alike, since both sat
+ * behind the same gate. Seeding `slideWidth` with the screen width as a fallback means
+ * something always renders from the first frame; `onLayout` still refines it.
+ */
+function MemoryPhotoCarousel({
+  slides,
+  activeIndex,
+  onIndexChange,
+  onPressSlide,
+  resizeMode,
+}: {
+  slides: ChallengeMemoryTaskEntry[];
+  activeIndex: number;
+  onIndexChange: (index: number) => void;
+  onPressSlide: (index: number) => void;
+  resizeMode: "cover" | "contain";
+}) {
+  const { width: screenWidth } = useWindowDimensions();
+  const [slideWidth, setSlideWidth] = useState(() => Math.max(1, screenWidth));
+  const [failedUris, setFailedUris] = useState<ReadonlySet<string>>(() => new Set());
+
+  const onMomentumScrollEnd = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    if (slideWidth <= 0) return;
+    const idx = Math.round(e.nativeEvent.contentOffset.x / slideWidth);
+    onIndexChange(Math.max(0, Math.min(slides.length - 1, idx)));
+  };
+
+  return (
+    <View
+      style={StyleSheet.absoluteFillObject}
+      onLayout={(e) => {
+        const w = e.nativeEvent.layout.width;
+        if (w > 0 && Math.abs(w - slideWidth) > 1) setSlideWidth(w);
+      }}
+    >
+      <FlatList
+        data={slides}
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        initialScrollIndex={activeIndex}
+        keyExtractor={(item, index) => `${index}-${item.taskId}`}
+        getItemLayout={(_, index) => ({ length: slideWidth, offset: slideWidth * index, index })}
+        onMomentumScrollEnd={onMomentumScrollEnd}
+        renderItem={({ item, index }) => {
+          const uri = item.imageUrl;
+          const failed = uri ? failedUris.has(uri) : false;
+          if (uri && !failed) {
+            return (
+              <Pressable
+                onPress={() => onPressSlide(index)}
+                style={{ width: slideWidth, height: "100%" }}
+                accessibilityRole="imagebutton"
+                accessibilityLabel="Open photo full screen"
+              >
+                <Image
+                  source={{ uri }}
+                  style={styles.photo}
+                  resizeMode={resizeMode}
+                  onError={() => setFailedUris((prev) => (prev.has(uri) ? prev : new Set(prev).add(uri)))}
+                />
+              </Pressable>
+            );
+          }
+          return (
+            <View style={[styles.textSlide, { width: slideWidth }]}>
+              {failed ? (
+                <>
+                  <Camera size={24} color="rgba(255,255,255,0.6)" strokeWidth={2} />
+                  <Text style={[styles.textSlideNote, { color: "rgba(255,255,255,0.6)" }]}>Photo unavailable</Text>
+                </>
+              ) : (
+                <Text style={styles.textSlideNote} numberOfLines={10}>
+                  {item.note ?? item.label}
+                </Text>
+              )}
+            </View>
+          );
+        }}
+      />
+      {slides.length > 1 ? (
+        <View pointerEvents="none" style={styles.carouselDotsRow}>
+          {slides.map((_, i) => (
+            <View
+              key={i}
+              style={[styles.carouselDot, { backgroundColor: i === activeIndex ? "#fff" : "rgba(255,255,255,0.4)" }]}
+            />
+          ))}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
 const SQUAD_ACTIONS: Array<{
   kind: PresetChallengeNudgeKind | "custom_note";
   label: string;
@@ -149,12 +254,14 @@ export default function ChallengeMemoryScreen() {
   const [imageLoading, setImageLoading] = useState(false);
   const [imageFailed, setImageFailed] = useState(false);
   const [imageViewerOpen, setImageViewerOpen] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
   const [nudgeBusyKey, setNudgeBusyKey] = useState<string | null>(null);
   const [sentPresetNudgeKindsToday, setSentPresetNudgeKindsToday] = useState<Set<PresetChallengeNudgeKind>>(() => new Set());
   const [customNoteOpen, setCustomNoteOpen] = useState(false);
   const [cheerBusy, setCheerBusy] = useState(false);
   const [cheerersOpen, setCheerersOpen] = useState(false);
   const [noteExpanded, setNoteExpanded] = useState(false);
+  const [activeTaskIndex, setActiveTaskIndex] = useState(0);
   const actionInFlightRef = useRef(false);
 
   const socialLocked = !isPremium || premiumLoading;
@@ -226,8 +333,8 @@ export default function ChallengeMemoryScreen() {
   }, [detail?.imageUrl]);
 
   useEffect(() => {
-    setNoteExpanded(false);
-  }, [detail?.note]);
+    setActiveTaskIndex(0);
+  }, [detail?.dateStr, detail?.subjectUserId]);
 
   const openSquad = useCallback(() => {
     if (challengeId) {
@@ -405,8 +512,19 @@ export default function ChallengeMemoryScreen() {
   const showSyncedPhoto = detail?.status === "photo" && detail.photoSyncState === "synced" && detail.imageUrl && !imageFailed;
   const showCommunityWin = Boolean(detail?.communityWin);
   const showCommunityPhoto = Boolean(showSyncedPhoto && showCommunityWin);
-  const noteText = (detail?.note ?? "").trim();
+  const hasTaskGallery = Boolean(detail?.tasks && detail.tasks.length > 0);
+  const lightboxImages = hasTaskGallery
+    ? detail!.tasks.map((t) => t.imageUrl).filter((uri): uri is string => Boolean(uri))
+    : showSyncedPhoto && detail?.imageUrl
+      ? [detail.imageUrl]
+      : [];
+  const activeTask = hasTaskGallery ? (detail?.tasks[activeTaskIndex] ?? detail?.tasks[0] ?? null) : null;
+  const noteText = (activeTask?.note ?? detail?.note ?? "").trim();
   const hasLongNote = noteText.length > NOTE_COLLAPSE_LIMIT || noteText.includes("\n");
+
+  useEffect(() => {
+    setNoteExpanded(false);
+  }, [noteText]);
 
   return (
     <Screen>
@@ -451,29 +569,21 @@ export default function ChallengeMemoryScreen() {
         ) : (
           <>
             <View style={[styles.memoryPanel, { borderColor: theme.colors.border, backgroundColor: theme.colors.surface }]}>
-              {showSyncedPhoto ? (
-                <Pressable
-                  style={[styles.photoWrap, showCommunityPhoto && styles.communityPhotoWrap]}
-                  onPress={() => setImageViewerOpen(true)}
-                  accessibilityRole="imagebutton"
-                  accessibilityLabel="Open photo full screen"
-                >
-                  <Image
-                    source={{ uri: detail.imageUrl! }}
-                    style={styles.photo}
-                    resizeMode={showCommunityPhoto ? "cover" : "contain"}
-                    onLoadStart={() => setImageLoading(true)}
-                    onLoadEnd={() => setImageLoading(false)}
-                    onError={() => {
-                      setImageFailed(true);
-                      setImageLoading(false);
+              {hasTaskGallery ? (
+                <View style={[styles.photoWrap, showCommunityPhoto && styles.communityPhotoWrap]}>
+                  <MemoryPhotoCarousel
+                    slides={detail!.tasks}
+                    activeIndex={activeTaskIndex}
+                    onIndexChange={setActiveTaskIndex}
+                    onPressSlide={(taskIndex) => {
+                      const slide = detail!.tasks[taskIndex];
+                      if (!slide?.imageUrl) return;
+                      const photoIndex = lightboxImages.indexOf(slide.imageUrl);
+                      setLightboxIndex(Math.max(0, photoIndex));
+                      setImageViewerOpen(true);
                     }}
+                    resizeMode={showCommunityPhoto ? "cover" : "contain"}
                   />
-                  {imageLoading ? (
-                    <View style={[StyleSheet.absoluteFillObject, styles.photoLoading, { backgroundColor: "rgba(15,23,42,0.5)" }]}>
-                      <ActivityIndicator size="small" color="#fff" />
-                    </View>
-                  ) : null}
                   {showCommunityWin ? (
                     <View
                       style={[
@@ -499,7 +609,61 @@ export default function ChallengeMemoryScreen() {
                       </View>
                     </View>
                   ) : null}
-                </Pressable>
+                </View>
+              ) : showSyncedPhoto ? (
+                <View style={[styles.photoWrap, showCommunityPhoto && styles.communityPhotoWrap]}>
+                  <Pressable
+                    style={StyleSheet.absoluteFillObject}
+                    onPress={() => {
+                      setLightboxIndex(0);
+                      setImageViewerOpen(true);
+                    }}
+                    accessibilityRole="imagebutton"
+                    accessibilityLabel="Open photo full screen"
+                  >
+                    <Image
+                      source={{ uri: detail.imageUrl! }}
+                      style={styles.photo}
+                      resizeMode={showCommunityPhoto ? "cover" : "contain"}
+                      onLoadStart={() => setImageLoading(true)}
+                      onLoadEnd={() => setImageLoading(false)}
+                      onError={() => {
+                        setImageFailed(true);
+                        setImageLoading(false);
+                      }}
+                    />
+                    {imageLoading ? (
+                      <View style={[StyleSheet.absoluteFillObject, styles.photoLoading, { backgroundColor: "rgba(15,23,42,0.5)" }]}>
+                        <ActivityIndicator size="small" color="#fff" />
+                      </View>
+                    ) : null}
+                  </Pressable>
+                  {showCommunityWin ? (
+                    <View
+                      style={[
+                        styles.communityBadgeWrap,
+                        {
+                          shadowColor: "#4F46E5",
+                          shadowOpacity: isDark ? 0.42 : 0.28,
+                          shadowRadius: 9,
+                          shadowOffset: { width: 0, height: 0 },
+                          elevation: 5,
+                        },
+                      ]}
+                      accessibilityLabel="Community post"
+                    >
+                      <View
+                        style={[
+                          styles.communityBadgeHalo,
+                          { backgroundColor: isDark ? "rgba(79, 70, 229, 0.38)" : "rgba(79, 70, 229, 0.24)" },
+                        ]}
+                      />
+                      <View style={[styles.communityBadge, { backgroundColor: COMMUNITY_BADGE_BACKGROUND }]}>
+                        <Globe size={11} color="#FFFFFF" strokeWidth={2.35} />
+                      </View>
+                    </View>
+                  ) : null}
+                </View>
               ) : (
                 <View
                   style={[
@@ -590,6 +754,14 @@ export default function ChallengeMemoryScreen() {
                     </View>
                   ) : null}
                 </View>
+                {activeTask ? (
+                  <View style={styles.taskNameRow}>
+                    <ListChecks size={13} color={theme.colors.indigo[400]} strokeWidth={2.4} />
+                    <Text style={[styles.taskNameText, { color: theme.colors.textPrimary }]} numberOfLines={1}>
+                      {activeTask.label}
+                    </Text>
+                  </View>
+                ) : null}
                 {noteText ? (
                   <>
                     <Text
@@ -752,33 +924,12 @@ export default function ChallengeMemoryScreen() {
         )}
       </ScrollView>
 
-      <Modal
-        visible={imageViewerOpen && Boolean(detail?.imageUrl)}
-        transparent
-        animationType="fade"
-        statusBarTranslucent
-        onRequestClose={() => setImageViewerOpen(false)}
-      >
-        <Pressable style={styles.fullscreenBackdrop} onPress={() => setImageViewerOpen(false)}>
-          {detail?.imageUrl ? (
-            <Image source={{ uri: detail.imageUrl }} style={styles.fullscreenImage} resizeMode="contain" />
-          ) : null}
-          <Pressable
-            style={[
-              styles.fullscreenClose,
-              {
-                backgroundColor: "rgba(15,23,42,0.78)",
-                top: Math.max(insets.top, 42),
-              },
-            ]}
-            onPress={() => setImageViewerOpen(false)}
-            accessibilityRole="button"
-            accessibilityLabel="Close photo"
-          >
-            <XCircle size={28} color="#fff" />
-          </Pressable>
-        </Pressable>
-      </Modal>
+      <CommunityWinImageLightbox
+        visible={imageViewerOpen && lightboxImages.length > 0}
+        images={lightboxImages}
+        initialIndex={lightboxIndex}
+        onClose={() => setImageViewerOpen(false)}
+      />
 
       <CommunityWinCheerersModal
         visible={cheerersOpen}
@@ -1080,25 +1231,45 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     letterSpacing: 0,
   },
-  fullscreenBackdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.94)",
+  taskNameRow: {
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    padding: 12,
+    gap: 6,
+    marginTop: 10,
   },
-  fullscreenImage: {
-    width: "100%",
-    height: "100%",
+  taskNameText: {
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: "800",
+    flexShrink: 1,
   },
-  fullscreenClose: {
+  carouselDotsRow: {
     position: "absolute",
-    top: 42,
-    right: 18,
-    width: 44,
-    height: 44,
-    borderRadius: 999,
+    bottom: 12,
+    left: 0,
+    right: 0,
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 5,
+  },
+  carouselDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  textSlide: {
+    height: "100%",
     alignItems: "center",
     justifyContent: "center",
+    paddingHorizontal: 32,
+    gap: 10,
+  },
+  textSlideNote: {
+    fontSize: 17,
+    lineHeight: 25,
+    fontWeight: "700",
+    textAlign: "center",
+    color: "#fff",
   },
 });

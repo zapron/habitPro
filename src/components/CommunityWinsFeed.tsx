@@ -79,7 +79,8 @@ export function CommunityWinsFeed({
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [expandedById, setExpandedById] = useState<Record<string, boolean>>({});
-  const [lightboxUri, setLightboxUri] = useState<string | null>(null);
+  const [lightboxImages, setLightboxImages] = useState<string[]>([]);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
   const [cheerersSheet, setCheerersSheet] = useState<CheerersSheetState | null>(null);
   const itemsRef = useRef<CommunityWinFeedItem[]>([]);
   const initialLoadInFlight = useRef(false);
@@ -95,7 +96,8 @@ export function CommunityWinsFeed({
     setItems([]);
     setHasMore(Boolean(userId && isSupabaseConfigured()));
     setExpandedById({});
-    setLightboxUri(null);
+    setLightboxImages([]);
+    setLightboxIndex(0);
     setCheerersSheet(null);
     setLoading(Boolean(userId && isSupabaseConfigured()));
     setRefreshing(false);
@@ -331,7 +333,10 @@ export function CommunityWinsFeed({
           expanded={Boolean(expandedById[win.id])}
           reduceMotion={reduceMotion}
           onToggleExpanded={() => toggleExpanded(win.id)}
-          onOpenLightbox={(uri) => setLightboxUri(uri)}
+          onOpenLightbox={(images, initialIndex) => {
+            setLightboxImages(images);
+            setLightboxIndex(initialIndex ?? 0);
+          }}
           onOpenPlayer={openPlayerStory}
           onCheer={handleCheer}
           onOpenCheerers={(w) => setCheerersSheet({ winId: w.id, totalLikes: w.cheerCount })}
@@ -416,9 +421,10 @@ export function CommunityWinsFeed({
         showsVerticalScrollIndicator={false}
       />
       <CommunityWinImageLightbox
-        visible={lightboxUri !== null}
-        imageUri={lightboxUri}
-        onClose={() => setLightboxUri(null)}
+        visible={lightboxImages.length > 0}
+        images={lightboxImages}
+        initialIndex={lightboxIndex}
+        onClose={() => setLightboxImages([])}
       />
       <CommunityWinCheerersModal
         visible={cheerersSheet !== null}

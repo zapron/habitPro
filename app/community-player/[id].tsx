@@ -120,6 +120,13 @@ function storyDayLabel(post: CommunityPlayerStoryPost): string {
   return "Moment";
 }
 
+function galleryImagesForPost(post: CommunityPlayerStoryPost): string[] {
+  if (post.memoryGallery && post.memoryGallery.length > 0) {
+    return post.memoryGallery.map((g) => g.imageUrl).filter(Boolean);
+  }
+  return post.memoryImageUrl ? [post.memoryImageUrl] : [];
+}
+
 function sortTime(iso: string | undefined): number {
   if (!iso) return 0;
   const d = new Date(iso);
@@ -356,7 +363,7 @@ function StoryPhotoTile({
   radius?: number;
   theme: AppTheme;
   imagesEnabled: boolean;
-  onPress?: (uri: string) => void;
+  onPress?: (images: string[], initialIndex?: number) => void;
   onMorePress?: () => void;
   pillTone?: string;
   imageStyle?: StyleProp<ViewStyle>;
@@ -377,7 +384,7 @@ function StoryPhotoTile({
           onMorePress?.();
           return;
         }
-        onPress?.(uri);
+        onPress?.(galleryImagesForPost(post), 0);
       }}
       accessibilityRole={onPress ? "imagebutton" : "image"}
       accessibilityLabel={opensMore ? "View more journey photos" : `Open ${post.title} photo`}
@@ -423,7 +430,7 @@ function RecentProofBadge({
   size: number;
   theme: AppTheme;
   imagesEnabled: boolean;
-  onPress: (uri: string) => void;
+  onPress: (images: string[], initialIndex?: number) => void;
 }) {
   const uri = post.memoryImageUrl;
   const thumb = uri ? storageThumbnailUri(uri, Math.round(size * 2), Math.round(size * 2)) : null;
@@ -435,7 +442,7 @@ function RecentProofBadge({
 
   return (
     <Pressable
-      onPress={() => onPress(uri)}
+      onPress={() => onPress(galleryImagesForPost(post), 0)}
       accessibilityRole="imagebutton"
       accessibilityLabel={`Open ${post.title} proof`}
       style={[styles.recentProofBadge, { width: size, height: size }]}
@@ -490,7 +497,7 @@ function GalleryMomentCard({
   imageHeight: number;
   theme: AppTheme;
   imagesEnabled: boolean;
-  onOpenImage: (uri: string) => void;
+  onOpenImage: (images: string[], initialIndex?: number) => void;
   onToggleCheer: (post: CommunityPlayerStoryPost) => void;
   isOwn: boolean;
   cheerPending: boolean;
@@ -565,7 +572,7 @@ function MissionProofTile({
   height: number;
   theme: AppTheme;
   imagesEnabled: boolean;
-  onPress: (uri: string) => void;
+  onPress: (images: string[], initialIndex?: number) => void;
   onMorePress?: () => void;
   pillTone: string;
   extraCount?: number;
@@ -585,7 +592,7 @@ function MissionProofTile({
           onMorePress?.();
           return;
         }
-        onPress(uri);
+        onPress(galleryImagesForPost(post), 0);
       }}
       accessibilityRole="imagebutton"
       accessibilityLabel={opensMore ? "View more journey photos" : `Open ${post.title} photo`}
@@ -678,7 +685,7 @@ function MissionStoryCard({
   theme: AppTheme;
   isDark: boolean;
   onOpenGallery: () => void;
-  onOpenImage: (uri: string) => void;
+  onOpenImage: (images: string[], initialIndex?: number) => void;
   photoWidth: number;
   photoHeight: number;
   imagesEnabled: boolean;
@@ -794,7 +801,7 @@ function MissionGalleryModal({
   isDark: boolean;
   imagesEnabled: boolean;
   onClose: () => void;
-  onOpenImage: (uri: string) => void;
+  onOpenImage: (images: string[], initialIndex?: number) => void;
 }) {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
@@ -1142,7 +1149,7 @@ function MiniPostTile({
   width: number;
   theme: AppTheme;
   isDark: boolean;
-  onOpenImage: (uri: string) => void;
+  onOpenImage: (images: string[], initialIndex?: number) => void;
   onToggleCheer: (post: CommunityPlayerStoryPost) => void;
   isOwn: boolean;
   cheerPending: boolean;
@@ -1198,7 +1205,7 @@ function MiniPostTile({
       {hasImage ? (
         <View style={styles.miniImageFrame}>
           <Pressable
-            onPress={() => onOpenImage(post.memoryImageUrl as string)}
+            onPress={() => onOpenImage(galleryImagesForPost(post), 0)}
             accessibilityRole="imagebutton"
             accessibilityLabel={`Open ${post.title} photo`}
             style={styles.miniImagePressable}
@@ -1287,8 +1294,26 @@ export default function CommunityPlayerStoryScreen() {
   const [miniVisibleCount, setMiniVisibleCount] = useState(MINI_POST_LIMIT);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [lightboxUri, setLightboxUri] = useState<string | null>(null);
+  const [lightboxImages, setLightboxImages] = useState<string[]>([]);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
   const [selectedMission, setSelectedMission] = useState<CommunityPlayerMissionStory | null>(null);
+  const missionBeforeLightboxRef = useRef<CommunityPlayerMissionStory | null>(null);
+  const openLightbox = useCallback(
+    (images: string[], initialIndex?: number) => {
+      missionBeforeLightboxRef.current = selectedMission;
+      if (selectedMission) setSelectedMission(null);
+      setLightboxImages(images);
+      setLightboxIndex(initialIndex ?? 0);
+    },
+    [selectedMission],
+  );
+  const closeLightbox = useCallback(() => {
+    setLightboxImages([]);
+    if (missionBeforeLightboxRef.current) {
+      setSelectedMission(missionBeforeLightboxRef.current);
+      missionBeforeLightboxRef.current = null;
+    }
+  }, []);
   const [imagesEnabled, setImagesEnabled] = useState(false);
   const [miniCheeringIds, setMiniCheeringIds] = useState<Set<string>>(() => new Set());
   const recordedJourneyViewForRef = useRef<string | null>(null);
@@ -1743,7 +1768,7 @@ export default function CommunityPlayerStoryScreen() {
                     size={publicMomentPhotoSize}
                     theme={theme}
                     imagesEnabled={imagesEnabled}
-                    onPress={setLightboxUri}
+                    onPress={openLightbox}
                   />
                   <Text style={[styles.publicMomentTitle, { color: theme.colors.textSecondary }]} numberOfLines={1}>
                     {post.title}
@@ -1803,7 +1828,7 @@ export default function CommunityPlayerStoryScreen() {
                   theme={theme}
                   isDark={isDark}
                   imagesEnabled={imagesEnabled}
-                  onOpenImage={setLightboxUri}
+                  onOpenImage={openLightbox}
                   photoWidth={missionPreviewPhotoSize}
                   photoHeight={missionPreviewPhotoSize}
                   onOpenGallery={() => setSelectedMission(mission)}
@@ -1883,7 +1908,7 @@ export default function CommunityPlayerStoryScreen() {
                   theme={theme}
                   isDark={isDark}
                   imagesEnabled={imagesEnabled}
-                  onOpenImage={setLightboxUri}
+                  onOpenImage={openLightbox}
                   onToggleCheer={handleMiniCheer}
                   isOwn={viewerOwnsProfile}
                   cheerPending={miniCheeringIds.has(post.id)}
@@ -1962,13 +1987,14 @@ export default function CommunityPlayerStoryScreen() {
         isDark={isDark}
         imagesEnabled={imagesEnabled}
         onClose={() => setSelectedMission(null)}
-        onOpenImage={setLightboxUri}
+        onOpenImage={openLightbox}
       />
 
       <CommunityWinImageLightbox
-        visible={lightboxUri !== null}
-        imageUri={lightboxUri}
-        onClose={() => setLightboxUri(null)}
+        visible={lightboxImages.length > 0}
+        images={lightboxImages}
+        initialIndex={lightboxIndex}
+        onClose={closeLightbox}
       />
     </Screen>
   );

@@ -9,6 +9,15 @@ export type ChallengeMemoryCommunityWin = {
   viewerHasCheered: boolean;
 };
 
+export type ChallengeMemoryTaskEntry = {
+  taskId: string;
+  label: string;
+  note: string | null;
+  /** Null for a task logged with only a note — the client renders it as a text-card slide. */
+  imageUrl: string | null;
+  loggedAt: string | null;
+};
+
 export type ChallengeMemoryDetail = {
   viewerCanAccess: boolean;
   challengeId: string;
@@ -23,6 +32,7 @@ export type ChallengeMemoryDetail = {
   note: string | null;
   imageUrl: string | null;
   photoSyncState: PhotoSyncState;
+  tasks: ChallengeMemoryTaskEntry[];
   createdAt: string | null;
   updatedAt: string | null;
   communityWin: ChallengeMemoryCommunityWin | null;
@@ -82,6 +92,28 @@ function normalizeCommunityWin(value: unknown): ChallengeMemoryCommunityWin | nu
   };
 }
 
+function normalizeTaskGallery(value: unknown): ChallengeMemoryTaskEntry[] {
+  if (!Array.isArray(value)) return [];
+  const out: ChallengeMemoryTaskEntry[] = [];
+  for (const entry of value) {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) continue;
+    const row = entry as Record<string, unknown>;
+    const taskId = stringValue(row.taskId);
+    const label = stringValue(row.label);
+    const imageUrl = stringValue(row.imageUrl);
+    const note = stringValue(row.note);
+    if (!taskId || !label || (!imageUrl && !note)) continue;
+    out.push({
+      taskId,
+      label,
+      note,
+      imageUrl,
+      loggedAt: stringValue(row.loggedAt),
+    });
+  }
+  return out;
+}
+
 function normalizeDetail(value: unknown): ChallengeMemoryDetail | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const row = value as Record<string, unknown>;
@@ -104,6 +136,7 @@ function normalizeDetail(value: unknown): ChallengeMemoryDetail | null {
     note: stringValue(row.note),
     imageUrl: stringValue(row.imageUrl),
     photoSyncState: normalizePhotoSyncState(row.photoSyncState),
+    tasks: normalizeTaskGallery(row.tasks),
     createdAt: stringValue(row.createdAt),
     updatedAt: stringValue(row.updatedAt),
     communityWin: normalizeCommunityWin(row.communityWin),

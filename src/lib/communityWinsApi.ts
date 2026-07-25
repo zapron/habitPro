@@ -10,6 +10,24 @@ export function habitStreakCommunityWinId(habitId: string, memoryDateStr: string
 
 export type CommunityWinFeedSource = "mini" | "habit_streak";
 
+/**
+ * One task's photo within a habit-streak day's catalog. See docs/CATALOG_ARCHITECTURE.md.
+ * Optional/nullable everywhere — absent on every post that predates the catalog feature.
+ *
+ * `imageUrl` is `string | null` to also cover a text-only task (a note, no photo) — but
+ * Community-shared galleries (`community_wins.memory_gallery`, parsed by
+ * `storyMemoryGallery` below) never actually contain one: sharing intentionally only
+ * ever includes tasks with a photo. `null` only shows up in the purely local mirror of
+ * this shape built for the private Journey view (`app/my-journey.tsx`), which shows
+ * every logged task regardless of whether it has a photo.
+ */
+export type CommunityMemoryGalleryItem = {
+  taskId: string;
+  label: string;
+  note: string | null;
+  imageUrl: string | null;
+};
+
 export type CommunityWinRow = {
   id: string;
   user_id: string;
@@ -18,6 +36,7 @@ export type CommunityWinRow = {
   completed_at: string;
   memory_note: string | null;
   memory_image_url: string | null;
+  memory_gallery: CommunityMemoryGalleryItem[] | null;
   created_at: string;
   feed_source: CommunityWinFeedSource;
   streak_mission_day: number | null;
@@ -63,6 +82,8 @@ export type CommunityPlayerStoryPost = {
   createdAt: string;
   memoryNote: string | null;
   memoryImageUrl: string | null;
+  /** Present + non-empty means render as a swipeable catalog instead of a single image. */
+  memoryGallery: CommunityMemoryGalleryItem[] | null;
   feedSource: CommunityWinFeedSource;
   streakMissionDay: number | null;
   streakCountAtPost: number | null;
@@ -147,6 +168,8 @@ export async function postCommunityWin(input: {
   completedAt: string;
   memoryNote?: string | null;
   memoryImageUrl?: string | null;
+  /** Catalog posts (habit_streak or checklist mini). Omit/undefined leaves the column untouched on update. */
+  memoryGallery?: CommunityMemoryGalleryItem[] | null;
   /** Default mini. habit_streak enables streak feed styling + cheer copy. */
   feedSource?: CommunityWinFeedSource;
   streakMissionDay?: number | null;
@@ -187,6 +210,10 @@ export async function postCommunityWin(input: {
       completed_at: input.completedAt,
       memory_note: input.memoryNote ?? null,
       memory_image_url: input.memoryImageUrl ?? null,
+      // Omit entirely (rather than defaulting to null) when the caller doesn't pass it,
+      // so every existing call site — none of which know about catalogs — leaves this
+      // column completely untouched on upsert instead of clobbering it.
+      ...(input.memoryGallery !== undefined ? { memory_gallery: input.memoryGallery } : {}),
       feed_source: feedSource,
       streak_mission_day: streakDay,
       streak_count_at_post: streakCount,
@@ -313,6 +340,7 @@ function normalizeRpcCommunityWinItem(item: CommunityFeedRpcItem): CommunityWinF
     completed_at: typeof win.completed_at === "string" ? win.completed_at : new Date(0).toISOString(),
     memory_note: typeof win.memory_note === "string" ? win.memory_note : null,
     memory_image_url: typeof win.memory_image_url === "string" ? win.memory_image_url : null,
+    memory_gallery: storyMemoryGallery(win.memory_gallery),
     created_at: typeof win.created_at === "string" ? win.created_at : new Date(0).toISOString(),
     feed_source: (win.feed_source ?? "mini") as CommunityWinFeedSource,
     streak_mission_day:
@@ -443,7 +471,7 @@ export async function fetchCommunityWinsFeedPage(
   const { data: winsRaw, error: winsErr } = await supabase
     .from("community_wins")
     .select(
-      "id, user_id, mini_mission_id, title, completed_at, memory_note, memory_image_url, created_at, feed_source, streak_mission_day, streak_count_at_post, live_squad_id",
+      "id, user_id, mini_mission_id, title, completed_at, memory_note, memory_image_url, memory_gallery, created_at, feed_source, streak_mission_day, streak_count_at_post, live_squad_id",
     )
     .order("created_at", { ascending: false })
     .range(offset, offset + take - 1);
@@ -478,7 +506,7 @@ export async function fetchCommunityWinMoment(
   const { data, error } = await supabase
     .from("community_wins")
     .select(
-      "id, user_id, mini_mission_id, title, completed_at, memory_note, memory_image_url, created_at, feed_source, streak_mission_day, streak_count_at_post, live_squad_id",
+      "id, user_id, mini_mission_id, title, completed_at, memory_note, memory_image_url, memory_gallery, created_at, feed_source, streak_mission_day, streak_count_at_post, live_squad_id",
     )
     .eq("id", id)
     .maybeSingle();
@@ -497,6 +525,7 @@ export async function fetchCommunityWinMoment(
     completed_at: storyString(row.completed_at, row.created_at ?? new Date(0).toISOString()),
     memory_note: typeof row.memory_note === "string" ? row.memory_note : null,
     memory_image_url: typeof row.memory_image_url === "string" ? row.memory_image_url : null,
+    memory_gallery: storyMemoryGallery(row.memory_gallery),
     created_at: storyString(row.created_at, row.completed_at ?? new Date(0).toISOString()),
     feed_source: (row.feed_source ?? "mini") as CommunityWinFeedSource,
     streak_mission_day:
@@ -566,6 +595,25 @@ function storyString(value: unknown, fallback = ""): string {
   return typeof value === "string" ? value : fallback;
 }
 
+/** Defensive parse for the `memory_gallery` jsonb column — malformed/unexpected shapes fall back to null. */
+function storyMemoryGallery(value: unknown): CommunityMemoryGalleryItem[] | null {
+  if (!Array.isArray(value) || value.length === 0) return null;
+  const items = value
+    .map((entry): CommunityMemoryGalleryItem | null => {
+      if (!entry || typeof entry !== "object") return null;
+      const taskId = (entry as { taskId?: unknown }).taskId;
+      const label = (entry as { label?: unknown }).label;
+      const imageUrl = (entry as { imageUrl?: unknown }).imageUrl;
+      const note = (entry as { note?: unknown }).note;
+      if (typeof taskId !== "string" || typeof label !== "string" || typeof imageUrl !== "string") {
+        return null;
+      }
+      return { taskId, label, imageUrl, note: typeof note === "string" ? note : null };
+    })
+    .filter((entry): entry is CommunityMemoryGalleryItem => entry !== null);
+  return items.length > 0 ? items : null;
+}
+
 function normalizeStoryPost(
   row: CommunityWinRow,
   cheerCount: number,
@@ -578,6 +626,7 @@ function normalizeStoryPost(
     createdAt: row.created_at,
     memoryNote: row.memory_note ?? null,
     memoryImageUrl: row.memory_image_url ?? null,
+    memoryGallery: row.memory_gallery ?? null,
     feedSource: (row.feed_source ?? "mini") as CommunityWinFeedSource,
     streakMissionDay: row.streak_mission_day ?? null,
     streakCountAtPost: row.streak_count_at_post ?? null,
@@ -775,7 +824,7 @@ export async function fetchCommunityPlayerMissionJourneyPage(input: {
   let query = supabase
     .from("community_wins")
     .select(
-      "id, user_id, mini_mission_id, title, completed_at, memory_note, memory_image_url, created_at, feed_source, streak_mission_day, streak_count_at_post, live_squad_id",
+      "id, user_id, mini_mission_id, title, completed_at, memory_note, memory_image_url, memory_gallery, created_at, feed_source, streak_mission_day, streak_count_at_post, live_squad_id",
     )
     .eq("user_id", input.userId)
     .eq("feed_source", "habit_streak")
@@ -806,6 +855,7 @@ export async function fetchCommunityPlayerMissionJourneyPage(input: {
         completed_at: storyString(row.completed_at, row.created_at ?? new Date(0).toISOString()),
         memory_note: typeof row.memory_note === "string" ? row.memory_note : null,
         memory_image_url: typeof row.memory_image_url === "string" ? row.memory_image_url : null,
+        memory_gallery: storyMemoryGallery(row.memory_gallery),
         created_at: storyString(row.created_at, row.completed_at ?? new Date(0).toISOString()),
         feed_source: (row.feed_source ?? "habit_streak") as CommunityWinFeedSource,
         streak_mission_day:
@@ -869,7 +919,7 @@ export async function fetchCommunityPlayerStoryPage(input: {
   let query = supabase
     .from("community_wins")
     .select(
-      "id, user_id, mini_mission_id, title, completed_at, memory_note, memory_image_url, created_at, feed_source, streak_mission_day, streak_count_at_post, live_squad_id",
+      "id, user_id, mini_mission_id, title, completed_at, memory_note, memory_image_url, memory_gallery, created_at, feed_source, streak_mission_day, streak_count_at_post, live_squad_id",
     )
     .eq("user_id", input.userId)
     .order("created_at", { ascending: false });
@@ -891,6 +941,7 @@ export async function fetchCommunityPlayerStoryPage(input: {
         completed_at: storyString(row.completed_at, row.created_at ?? new Date(0).toISOString()),
         memory_note: typeof row.memory_note === "string" ? row.memory_note : null,
         memory_image_url: typeof row.memory_image_url === "string" ? row.memory_image_url : null,
+        memory_gallery: storyMemoryGallery(row.memory_gallery),
         created_at: storyString(row.created_at, row.completed_at ?? new Date(0).toISOString()),
         feed_source: (row.feed_source ?? "mini") as CommunityWinFeedSource,
         streak_mission_day:

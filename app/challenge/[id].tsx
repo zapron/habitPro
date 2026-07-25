@@ -395,6 +395,7 @@ const ParticipantCard = memo(function ParticipantCard({
           habit={habit}
           challengeId={challengeId}
           peerUsername={label?.username ?? null}
+          isSelf={myUserId === memberId}
           showIdentityRow={false}
           nowMs={nowMs}
         />

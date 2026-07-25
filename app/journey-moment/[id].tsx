@@ -80,7 +80,7 @@ export default function JourneyMomentScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [imageFailed, setImageFailed] = useState(false);
-  const [lightboxUri, setLightboxUri] = useState<string | null>(null);
+  const [lightboxImages, setLightboxImages] = useState<string[]>([]);
   const [cheerBusy, setCheerBusy] = useState(false);
   const [cheerersOpen, setCheerersOpen] = useState(false);
 
@@ -93,6 +93,13 @@ export default function JourneyMomentScreen() {
     [imageFailed, imageHeight, moment?.memory_image_url, width],
   );
   const isOwnMoment = Boolean(moment && session?.user?.id === moment.user_id);
+  const fullGalleryImages = useMemo(() => {
+    if (!moment) return [];
+    if (moment.memory_gallery && moment.memory_gallery.length > 0) {
+      return moment.memory_gallery.map((g) => g.imageUrl).filter(Boolean);
+    }
+    return moment.memory_image_url ? [moment.memory_image_url] : [];
+  }, [moment]);
 
   const load = useCallback(
     async (mode: "initial" | "refresh" = "initial") => {
@@ -287,7 +294,7 @@ export default function JourneyMomentScreen() {
         <View style={[styles.momentCard, { backgroundColor: cardBg, borderColor: border }]}>
           <Pressable
             style={[styles.mediaWrap, { height: hasImage ? imageHeight : 180, backgroundColor: mediaBg }]}
-            onPress={() => (moment.memory_image_url ? setLightboxUri(moment.memory_image_url) : undefined)}
+            onPress={() => (fullGalleryImages.length > 0 ? setLightboxImages(fullGalleryImages) : undefined)}
             disabled={!moment.memory_image_url}
             accessibilityRole={moment.memory_image_url ? "imagebutton" : undefined}
             accessibilityLabel={moment.memory_image_url ? "Open proof image" : undefined}
@@ -383,9 +390,9 @@ export default function JourneyMomentScreen() {
       </ScrollView>
 
       <CommunityWinImageLightbox
-        visible={Boolean(lightboxUri)}
-        imageUri={lightboxUri}
-        onClose={() => setLightboxUri(null)}
+        visible={lightboxImages.length > 0}
+        images={lightboxImages}
+        onClose={() => setLightboxImages([])}
       />
       <CommunityWinCheerersModal
         visible={cheerersOpen}
