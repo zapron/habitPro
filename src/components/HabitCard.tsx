@@ -11,10 +11,13 @@ import {
   Platform,
 } from "react-native";
 import { useRouter } from 'expo-router';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Flame, Check, CircleX, Plane, Gamepad2, Globe, Swords, Users } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
 import { Habit } from '../types/habit';
 import { needsMainMissionOutcome } from '../utils/mainMissionUi';
+import { useHabitStore } from '../store/habitStore';
+import { onAppReady } from '../lib/appReadySignal';
 import * as Haptics from 'expo-haptics';
 import { getEligibleStreakRepair } from "../utils/streakRepairEligibility";
 import { calendarDateForHabitMissionDayIndex, getHabitActiveMissionDaySlot } from "../utils/missionDaySlots";
@@ -24,6 +27,10 @@ import { prewarmChallengeStreaks } from "../lib/groupChallengesApi";
 
 const prewarmedGroupStreakIds = new Set<string>();
 const ANDROID_SEGMENTED_RING_DAY_LIMIT = 45;
+/** Per-card stagger for the "stack up from below" mount animation — capped so a long list's later cards don't wait forever. */
+const CARD_ENTRANCE_STAGGER_MS = 70;
+const CARD_ENTRANCE_STAGGER_CAP_MS = 480;
+const CARD_ENTRANCE_RISE_PX = 54;
 
 function clamp(n: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, n));
@@ -218,9 +225,11 @@ const LightweightMissionRing = memo(function LightweightMissionRing({
 interface HabitCardProps {
     item: Habit;
     nowMs: number;
+    /** Position in the currently rendered list — drives this card's entrance stagger delay when it first mounts (capped for long lists). */
+    index: number;
 }
 
-export const HabitCard = memo(({ item, nowMs }: HabitCardProps) => {
+export const HabitCard = memo(({ item, nowMs, index }: HabitCardProps) => {
     const router = useRouter();
     const { theme, isDark } = useTheme();
     const reduceMotion = useReducedMotion();
@@ -237,16 +246,32 @@ export const HabitCard = memo(({ item, nowMs }: HabitCardProps) => {
     const streakProgress = Math.min(item.streak / totalDays, 1);
     const repair = useMemo(() => getEligibleStreakRepair(item, nowMs), [item, nowMs]);
 
-    const streakCheckinAvailable = useMemo(() => {
-      if (missionWon || needsReport) return false;
-      if (item.status !== "active" || item.isCompleted) return false;
-      if (isManual && item.endDate && nowMs >= new Date(item.endDate).getTime()) return false;
+    /** Today's date key while a check-in is open for this mission; null when locked/already done. */
+    const activeCheckinDateStr = useMemo(() => {
+      if (missionWon || needsReport) return null;
+      if (item.status !== "active" || item.isCompleted) return null;
+      if (isManual && item.endDate && nowMs >= new Date(item.endDate).getTime()) return null;
       const slot = getHabitActiveMissionDaySlot(item, nowMs);
-      if (slot == null) return false;
+      if (slot == null) return null;
       const dateStr = calendarDateForHabitMissionDayIndex(item, slot - 1, nowMs);
-      if (!dateStr) return false;
-      return !completedDateSet.has(dateStr);
+      if (!dateStr) return null;
+      return completedDateSet.has(dateStr) ? null : dateStr;
     }, [missionWon, needsReport, item, nowMs, totalDays, isManual, completedDateSet]);
+    const streakCheckinAvailable = activeCheckinDateStr !== null;
+    const isChecklistMission = Boolean(item.taskChecklist && item.taskChecklist.length > 0);
+    const markChecklistDayComplete = useHabitStore((state) => state.markChecklistDayComplete);
+    const showQuickMarkComplete =
+      isChecklistMission && streakCheckinAvailable && !missionWon && !missionFailed;
+
+    const handleQuickMarkComplete = (event: { stopPropagation: () => void }) => {
+      event.stopPropagation();
+      if (!activeCheckinDateStr) return;
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      const changed = markChecklistDayComplete(item.id, activeCheckinDateStr);
+      if (changed) {
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+    };
 
     const pulse = useRef(new Animated.Value(0)).current;
     useEffect(() => {
@@ -301,6 +326,62 @@ export const HabitCard = memo(({ item, nowMs }: HabitCardProps) => {
     const pulseScale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.22] });
     const pulseOpacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.22, 0.62] });
 
+    // "Stack up from below" mount animation — fires once when this card first
+    // appears (initial list load, a tab switch that remounts the list, or a
+    // FlashList row rendering a not-yet-seen item while scrolling). Deliberately
+    // an empty dep array: this must NOT replay on every re-render (nowMs ticks
+    // every second) or on prop changes, only on mount.
+    //
+    // On the very first app launch, SplashGate mounts the whole app (this card
+    // included) *underneath* its splash overlay well before that overlay
+    // actually dismisses — so starting the spring immediately on mount meant it
+    // ran to completion invisibly behind the splash, and the user only ever saw
+    // it play on a later remount (switching tabs and back). `onAppReady` fires
+    // right when the splash has actually faded out on first launch, and fires
+    // immediately (synchronously) on every mount after that — same feel as
+    // before everywhere except the one place it was silently being wasted.
+    const entrance = useRef(new Animated.Value(reduceMotion ? 1 : 0)).current;
+    useEffect(() => {
+      if (reduceMotion) {
+        entrance.setValue(1);
+        return undefined;
+      }
+      let anim: Animated.CompositeAnimation | null = null;
+      const unsubscribe = onAppReady(() => {
+        const delay = Math.min(index * CARD_ENTRANCE_STAGGER_MS, CARD_ENTRANCE_STAGGER_CAP_MS);
+        anim = Animated.spring(entrance, {
+          toValue: 1,
+          delay,
+          friction: 6,
+          tension: 100,
+          useNativeDriver: true,
+          isInteraction: false,
+        });
+        anim.start();
+      });
+      return () => {
+        unsubscribe();
+        anim?.stop();
+      };
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+    const entranceStyle = reduceMotion
+      ? null
+      : {
+          opacity: entrance.interpolate({ inputRange: [0, 1], outputRange: [0, 1], extrapolate: 'clamp' as const }),
+          transform: [
+            {
+              // No clamp here — the spring's natural overshoot past 1 is what
+              // gives the "punched up by force" feel (a brief rise above rest
+              // before settling back), not just a plain ease-in.
+              translateY: entrance.interpolate({
+                inputRange: [0, 1],
+                outputRange: [CARD_ENTRANCE_RISE_PX, 0],
+              }),
+            },
+          ],
+        };
+
     const openHabit = () => {
         router.push(`/habit/${item.id}`);
         setTimeout(() => {
@@ -309,6 +390,7 @@ export const HabitCard = memo(({ item, nowMs }: HabitCardProps) => {
     };
 
     return (
+        <Animated.View style={entranceStyle}>
         <Pressable
             onPress={openHabit}
             accessibilityRole="button"
@@ -323,6 +405,13 @@ export const HabitCard = memo(({ item, nowMs }: HabitCardProps) => {
                 },
             ]}
         >
+            <LinearGradient
+                pointerEvents="none"
+                colors={["rgba(255,255,255,0.10)", "rgba(255,255,255,0)"]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={[styles.topHighlight, { borderTopLeftRadius: theme.radius.lg, borderTopRightRadius: theme.radius.lg }]}
+            />
             <View style={styles.cardContent}>
                     <View style={styles.pillRow}>
                         {isManual ? (
@@ -376,6 +465,18 @@ export const HabitCard = memo(({ item, nowMs }: HabitCardProps) => {
                             accessibilityLabel="Repair streak"
                           >
                             <Text style={[styles.repairCta, { color: theme.colors.amber[500] }]}>REPAIR</Text>
+                          </TouchableOpacity>
+                        ) : null}
+                        {showQuickMarkComplete ? (
+                          <TouchableOpacity
+                            onPress={handleQuickMarkComplete}
+                            activeOpacity={0.85}
+                            accessibilityRole="button"
+                            accessibilityLabel="Mark today complete"
+                          >
+                            <Text style={[styles.repairCta, { color: theme.colors.green[500] }]}>
+                              MARK COMPLETE
+                            </Text>
                           </TouchableOpacity>
                         ) : null}
                     </View>
@@ -529,6 +630,7 @@ export const HabitCard = memo(({ item, nowMs }: HabitCardProps) => {
               );
             })()}
         </Pressable>
+        </Animated.View>
     );
 });
 
@@ -540,6 +642,13 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
+    },
+    topHighlight: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        height: 18,
     },
     cardContent: { flex: 1 },
     pillRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 10, marginBottom: 8 },

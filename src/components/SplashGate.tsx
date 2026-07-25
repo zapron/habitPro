@@ -3,6 +3,7 @@ import { InteractionManager, View } from "react-native";
 import * as SplashScreen from "expo-splash-screen";
 
 import { useAuth } from "../context/AuthContext";
+import { markAppReady } from "../lib/appReadySignal";
 import { isSupabaseConfigured } from "../lib/env";
 import { countUnreadNotificationsCached } from "../lib/groupChallengesApi";
 import { useHabitStore } from "../store/habitStore";
@@ -70,6 +71,7 @@ export function SplashGate({ children }: Props) {
 
   const onDismissed = useCallback(() => {
     setOverlayMounted(false);
+    markAppReady();
   }, []);
 
   return (

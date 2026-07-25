@@ -401,8 +401,8 @@ export default function Home() {
     { paddingBottom: listBottomPad },
   ], [listBottomPad]);
   const renderHabitCard = useCallback(
-    ({ item }: { item: (typeof filteredHabits)[0] }) => (
-      <HabitCard item={item} nowMs={missionNow} />
+    ({ item, index }: { item: (typeof filteredHabits)[0]; index: number }) => (
+      <HabitCard item={item} nowMs={missionNow} index={index} />
     ),
     [missionNow],
   );
@@ -951,6 +951,13 @@ export default function Home() {
             },
           ]}
         >
+          <LinearGradient
+            pointerEvents="none"
+            colors={["rgba(255,255,255,0.10)", "rgba(255,255,255,0)"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={[styles.cardTopHighlight, { borderTopLeftRadius: theme.radius.md, borderTopRightRadius: theme.radius.md }]}
+          />
           <View style={styles.xpInfo}>
             <View style={styles.xpLeft}>
               <Zap
@@ -1099,6 +1106,13 @@ export default function Home() {
           activeOpacity={0.85}
           onPress={() => router.push("/mini")}
         >
+          <LinearGradient
+            pointerEvents="none"
+            colors={["rgba(255,255,255,0.10)", "rgba(255,255,255,0)"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={[styles.cardTopHighlight, { borderTopLeftRadius: theme.radius.lg, borderTopRightRadius: theme.radius.lg }]}
+          />
           <View style={styles.miniBannerLeft}>
             <View style={styles.commandIconMini}>
               {miniMissionStats.live > 0 ? (
@@ -1384,6 +1398,14 @@ export default function Home() {
 }
 
 const styles = StyleSheet.create({
+  /** Glass top-highlight shared by every Home card — matches Timer.tsx/StreakProgressCard.tsx on the mission detail screen. */
+  cardTopHighlight: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 18,
+  },
   rootCol: { flex: 1, minHeight: 0 },
   header: { marginBottom: HEADER_BOTTOM_GAP },
   headerGreetingRow: {
