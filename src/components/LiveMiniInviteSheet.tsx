@@ -200,6 +200,7 @@ export function LiveMiniInviteSheet({ visible, mission, onClose }: Props) {
             objective: mission.objective ?? null,
             plannedMinutes: mission.estimatedMinutes,
             startedAt: mission.startedAt ?? null,
+            taskChecklist: mission.taskChecklist ?? null,
           }),
         {
           slowMs: 900,

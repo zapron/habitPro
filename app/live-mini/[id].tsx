@@ -17,7 +17,7 @@ import {
 import { useFocusEffect } from "@react-navigation/native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ArrowLeft, Check, Flame, Info, Radio, Timer, Trophy, UserPlus, Users, X } from "lucide-react-native";
+import { ArrowLeft, Check, Flame, Info, ListChecks, Radio, Timer, Trophy, UserPlus, Users, X } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import { Text } from "../../src/components/AppText";
 import { LiveMiniInviteSheet } from "../../src/components/LiveMiniInviteSheet";
@@ -42,6 +42,7 @@ import {
 import { syncLiveMiniFromLocalMission } from "../../src/lib/liveMiniMissionProgress";
 import { backOrReplace } from "../../src/lib/navigation";
 import { traceAsync } from "../../src/lib/perfTrace";
+import { parseTaskChecklist } from "../../src/lib/sync";
 import { useHabitStore } from "../../src/store/habitStore";
 import type { MiniMission } from "../../src/types/habit";
 import type {
@@ -662,6 +663,7 @@ function ParticipantCard({
   liveNowMs,
   onOpenMine,
   onOpenImage,
+  onOpenGalleryTile,
   onOpenPlayerJourney,
 }: {
   row: LiveMiniParticipantRow;
@@ -673,6 +675,7 @@ function ParticipantCard({
   liveNowMs: number;
   onOpenMine: () => void;
   onOpenImage: (uri: string) => void;
+  onOpenGalleryTile: (item: { label: string; note: string | null; uri: string | null }) => void;
   onOpenPlayerJourney: (userId: string, profile?: LiveMiniProfileLabel) => void;
 }) {
   const { theme, isDark } = useTheme();
@@ -850,7 +853,47 @@ function ParticipantCard({
         </Text>
       ) : null}
 
-      {memoryImage ? (
+      {row.memory_gallery && row.memory_gallery.length > 0 ? (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.memoryGalleryStrip}
+          contentContainerStyle={styles.memoryGalleryStripContent}
+        >
+          {row.memory_gallery.map((item) => {
+            const uri = item.imageUrl ? withImageVersion(item.imageUrl, row.updated_at) : null;
+            const thumb = uri ? storageThumbnailUri(uri, 200, 200, 64) : null;
+            return (
+              <Pressable
+                key={item.taskId}
+                onPress={() => onOpenGalleryTile({ label: item.label, note: item.note, uri })}
+                accessibilityRole="button"
+                accessibilityLabel={`View ${item.label}`}
+                style={({ pressed }) => [styles.memoryGalleryTile, { opacity: pressed ? 0.9 : 1 }]}
+              >
+                {thumb ? (
+                  <Image source={{ uri: thumb }} style={styles.memoryGalleryTileImage} resizeMode="cover" />
+                ) : (
+                  <View
+                    style={[
+                      styles.memoryGalleryTileImage,
+                      styles.memoryGalleryTextTile,
+                      { backgroundColor: theme.colors.surfaceElevated, borderColor: theme.colors.border },
+                    ]}
+                  >
+                    <Text numberOfLines={4} style={[styles.memoryGalleryTileNote, { color: theme.colors.textSecondary }]}>
+                      {item.note ?? "Marked complete"}
+                    </Text>
+                  </View>
+                )}
+                <Text numberOfLines={1} style={[styles.memoryGalleryTileLabel, { color: theme.colors.textMuted }]}>
+                  {item.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+      ) : memoryImage ? (
         <Pressable
           onPress={() => onOpenImage(memoryImage)}
           accessibilityRole="button"
@@ -860,7 +903,7 @@ function ParticipantCard({
           <Image source={{ uri: memoryThumbnail ?? memoryImage }} style={styles.memoryImage} resizeMode="cover" />
         </Pressable>
       ) : null}
-      {row.memory_note ? (
+      {!(row.memory_gallery && row.memory_gallery.length > 0) && row.memory_note ? (
         <Text style={[styles.memoryNote, { color: theme.colors.textSecondary }]} numberOfLines={4}>
           {row.memory_note}
         </Text>
@@ -903,6 +946,8 @@ export default function LiveMiniSquadScreen() {
   const [selectedMinutes, setSelectedMinutes] = useState(15);
   const [manualMinutes, setManualMinutes] = useState("15");
   const [openImageUri, setOpenImageUri] = useState<string | null>(null);
+  /** Checklist mini missions only — a tapped gallery tile with no photo enlarges as a text card instead. */
+  const [openGalleryTile, setOpenGalleryTile] = useState<{ label: string; note: string | null } | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [finishHighlightIds, setFinishHighlightIds] = useState<Set<string>>(() => new Set());
@@ -1075,6 +1120,8 @@ export default function LiveMiniSquadScreen() {
   );
 
   const squad = snapshot?.squad ?? null;
+  /** Lets an invitee see what they're committing to before accepting, not just after tapping Mark Complete. */
+  const invitedTaskChecklist = useMemo(() => parseTaskChecklist(squad?.task_checklist), [squad?.task_checklist]);
   const participants = snapshot?.participants ?? [];
   const myParticipant = participants.find((p) => p.user_id === userId);
   const hasRunningParticipants = useMemo(
@@ -1200,6 +1247,10 @@ export default function LiveMiniSquadScreen() {
         startedAt,
         liveSquadId: squadId,
         liveSquadRole: "member",
+        // Adopts the creator's task checklist so joiners follow the same set of
+        // tasks, not just a flat photo/note completion. See
+        // docs/MINI_MISSION_CATALOG_ARCHITECTURE.md's Live Squad follow-up.
+        taskChecklist: parseTaskChecklist(squad.task_checklist),
       });
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       showToast("Joined Live Squad. Timer started.", "success");
@@ -1411,6 +1462,34 @@ export default function LiveMiniSquadScreen() {
                 Your timer starts as soon as you accept. Max duration is 8 hours.
                 {inviteExpiryLabel ? ` ${inviteExpiryLabel}.` : ""}
               </Text>
+
+              {invitedTaskChecklist && invitedTaskChecklist.length > 0 ? (
+                <View
+                  style={[
+                    styles.inviteChecklistCard,
+                    { backgroundColor: theme.colors.surfaceElevated, borderColor: theme.colors.border },
+                  ]}
+                >
+                  <View style={styles.inviteChecklistHeader}>
+                    <ListChecks size={15} color={theme.colors.cyan[400]} />
+                    <Text style={[styles.inviteChecklistTitle, { color: theme.colors.textPrimary }]}>
+                      {invitedTaskChecklist.length} task{invitedTaskChecklist.length === 1 ? "" : "s"} in this mission
+                    </Text>
+                  </View>
+                  {invitedTaskChecklist.map((task) => (
+                    <View key={task.id} style={styles.inviteChecklistRow}>
+                      <Check size={12} color={theme.colors.textMuted} />
+                      <Text style={[styles.inviteChecklistLabel, { color: theme.colors.textSecondary }]} numberOfLines={1}>
+                        {task.label}
+                      </Text>
+                    </View>
+                  ))}
+                  <Text style={[styles.inviteChecklistHint, { color: theme.colors.textMuted }]}>
+                    Pick enough time to log all of these before you accept.
+                  </Text>
+                </View>
+              ) : null}
+
               <FuelQuickMinutesStrip
                 presets={QUICK_MINUTES}
                 selectedMinutes={selectedMinutes}
@@ -1493,7 +1572,19 @@ export default function LiveMiniSquadScreen() {
                 const mid = row.local_mini_mission_id ?? localLiveMission?.id;
                 if (mid) router.push(`/mini/${mid}`);
               }}
-              onOpenImage={setOpenImageUri}
+              onOpenImage={(uri) => {
+                setOpenGalleryTile(null);
+                setOpenImageUri(uri);
+              }}
+              onOpenGalleryTile={(item) => {
+                if (item.uri) {
+                  setOpenGalleryTile(null);
+                  setOpenImageUri(item.uri);
+                } else {
+                  setOpenImageUri(null);
+                  setOpenGalleryTile({ label: item.label, note: item.note });
+                }
+              }}
               onOpenPlayerJourney={onOpenPlayerJourney}
             />
           ))}
@@ -1520,27 +1611,45 @@ export default function LiveMiniSquadScreen() {
       ) : null}
 
       <Modal
-        visible={openImageUri !== null}
+        visible={openImageUri !== null || openGalleryTile !== null}
         transparent
         animationType="fade"
-        onRequestClose={() => setOpenImageUri(null)}
+        onRequestClose={() => {
+          setOpenImageUri(null);
+          setOpenGalleryTile(null);
+        }}
       >
         <Pressable
           style={styles.imageViewerBackdrop}
-          onPress={() => setOpenImageUri(null)}
+          onPress={() => {
+            setOpenImageUri(null);
+            setOpenGalleryTile(null);
+          }}
           accessibilityRole="button"
-          accessibilityLabel="Close photo viewer"
+          accessibilityLabel="Close viewer"
         >
           <Pressable style={styles.imageViewerInner} onPress={(e) => e.stopPropagation()}>
             {openImageUri ? (
               <Image source={{ uri: openImageUri }} style={styles.imageViewerPhoto} resizeMode="contain" />
+            ) : openGalleryTile ? (
+              <View style={[styles.galleryTextCard, { backgroundColor: theme.colors.surface }]}>
+                <Text style={[styles.galleryTextCardLabel, { color: theme.colors.textPrimary }]}>
+                  {openGalleryTile.label}
+                </Text>
+                <Text style={[styles.galleryTextCardNote, { color: theme.colors.textSecondary }]}>
+                  {openGalleryTile.note ?? "Marked complete — no note added."}
+                </Text>
+              </View>
             ) : null}
             <TouchableOpacity
-              onPress={() => setOpenImageUri(null)}
+              onPress={() => {
+                setOpenImageUri(null);
+                setOpenGalleryTile(null);
+              }}
               activeOpacity={0.86}
               style={[styles.imageViewerClose, { backgroundColor: theme.colors.surface }]}
               accessibilityRole="button"
-              accessibilityLabel="Close photo"
+              accessibilityLabel="Close"
             >
               <X size={22} color={theme.colors.textPrimary} />
             </TouchableOpacity>
@@ -1622,6 +1731,12 @@ const styles = StyleSheet.create({
   acceptCard: { borderWidth: 1, borderRadius: 18, padding: 14, gap: 12, marginBottom: 18 },
   acceptTitle: { fontSize: 18, fontWeight: "900" },
   acceptBody: { fontSize: 13, lineHeight: 18, fontWeight: "600" },
+  inviteChecklistCard: { borderWidth: 1, borderRadius: 14, padding: 12, gap: 7 },
+  inviteChecklistHeader: { flexDirection: "row", alignItems: "center", gap: 7, marginBottom: 2 },
+  inviteChecklistTitle: { fontSize: 13, fontWeight: "800" },
+  inviteChecklistRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  inviteChecklistLabel: { flex: 1, minWidth: 0, fontSize: 13, fontWeight: "600" },
+  inviteChecklistHint: { fontSize: 11, lineHeight: 15, fontWeight: "600", marginTop: 4 },
   longPresetWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8, justifyContent: "space-between" },
   minutesInput: { borderWidth: 1, borderRadius: 14, paddingVertical: 12, paddingHorizontal: 14, fontSize: 20, fontWeight: "900", textAlign: "center" },
   acceptActions: { flexDirection: "row", gap: 10 },
@@ -1722,6 +1837,13 @@ const styles = StyleSheet.create({
   deadlineText: { fontSize: 12, lineHeight: 17, fontWeight: "700", marginTop: 10 },
   memoryImage: { width: "100%", aspectRatio: 1.8, borderRadius: 14, marginTop: 12 },
   memoryNote: { fontSize: 13, lineHeight: 19, fontWeight: "600", marginTop: 10 },
+  memoryGalleryStrip: { marginTop: 12 },
+  memoryGalleryStripContent: { gap: 8, paddingRight: 4 },
+  memoryGalleryTile: { width: 88 },
+  memoryGalleryTileImage: { width: 88, height: 88, borderRadius: 12 },
+  memoryGalleryTextTile: { borderWidth: 1, alignItems: "center", justifyContent: "center", padding: 6 },
+  memoryGalleryTileNote: { fontSize: 10, lineHeight: 13, fontWeight: "600", textAlign: "center" },
+  memoryGalleryTileLabel: { fontSize: 10, fontWeight: "700", marginTop: 4, textAlign: "center" },
   openMineButton: { minHeight: 42, borderWidth: 1, borderRadius: 14, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, marginTop: 12 },
   openMineText: { fontSize: 13, fontWeight: "900" },
   imageViewerBackdrop: {
@@ -1732,6 +1854,9 @@ const styles = StyleSheet.create({
   },
   imageViewerInner: { borderRadius: 18, overflow: "hidden" },
   imageViewerPhoto: { width: "100%", height: 420, backgroundColor: "#000" },
+  galleryTextCard: { width: "100%", minHeight: 200, padding: 24, justifyContent: "center", gap: 10 },
+  galleryTextCardLabel: { fontSize: 15, fontWeight: "800" },
+  galleryTextCardNote: { fontSize: 15, lineHeight: 22, fontWeight: "600" },
   imageViewerClose: {
     position: "absolute",
     top: 12,

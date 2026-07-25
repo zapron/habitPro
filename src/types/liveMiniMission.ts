@@ -19,8 +19,22 @@ export type LiveMiniSquadRow = {
   title: string;
   objective: string | null;
   status: LiveMiniSquadStatus;
+  /** Snapshot of the creator mission's task checklist at squad-creation time. Raw jsonb — parse with parseTaskChecklist. */
+  task_checklist: unknown;
   created_at: string;
   updated_at: string;
+};
+
+/**
+ * One task's photo/note within a Live Squad participant's completion memory. Same shape as
+ * `CommunityMemoryGalleryItem` (communityWinsApi.ts) but kept as a separate type per this
+ * codebase's per-surface porting convention (see docs/MINI_MISSION_CATALOG_ARCHITECTURE.md).
+ */
+export type LiveMiniMemoryGalleryItem = {
+  taskId: string;
+  label: string;
+  note: string | null;
+  imageUrl: string | null;
 };
 
 export type LiveMiniParticipantRow = {
@@ -39,6 +53,7 @@ export type LiveMiniParticipantRow = {
   final_elapsed_seconds: number | null;
   memory_note: string | null;
   memory_image_url: string | null;
+  memory_gallery: LiveMiniMemoryGalleryItem[] | null;
   created_at: string;
   updated_at: string;
 };

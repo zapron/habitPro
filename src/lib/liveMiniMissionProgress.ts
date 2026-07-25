@@ -1,7 +1,28 @@
-import type { MiniMission } from "../types/habit";
-import type { LiveMiniParticipantStatus } from "../types/liveMiniMission";
+import type { MiniMission, StreakMemoryTaskEntry } from "../types/habit";
+import type { LiveMiniMemoryGalleryItem, LiveMiniParticipantStatus } from "../types/liveMiniMission";
 import { getMiniRemainingMs } from "../utils/miniMissionTime";
 import { syncLiveMiniMissionProgress } from "./liveMiniMissionsApi";
+
+/**
+ * Checklist mini missions only (docs/MINI_MISSION_CATALOG_ARCHITECTURE.md Phase 3).
+ * Mirrors the squad-viewer precedent from the main-mission build (not the
+ * Community-share precedent) — text-only tasks (a note, no photo) are kept, not
+ * dropped, since this feeds a squad-facing surface, not a public feed post. Tasks
+ * logged with neither a note nor a photo ("just mark done") are kept too — every
+ * logged task should show up, not just the ones with proof.
+ */
+function buildLiveMiniMemoryGallery(
+  tasks: StreakMemoryTaskEntry[] | undefined,
+): LiveMiniMemoryGalleryItem[] | null {
+  if (!tasks || tasks.length === 0) return null;
+  const items = tasks.map((t): LiveMiniMemoryGalleryItem => ({
+    taskId: t.taskId,
+    label: t.label,
+    note: t.note ?? null,
+    imageUrl: /^https?:\/\//.test(t.proofUrls[0] ?? "") ? t.proofUrls[0] : null,
+  }));
+  return items.length > 0 ? items : null;
+}
 
 export function liveMiniStatusFromMission(
   mission: MiniMission,
@@ -38,6 +59,8 @@ export async function syncLiveMiniFromLocalMission(
     status === "completed"
       ? opts?.memoryImageUrl ?? completionMemory?.imageUrl ?? null
       : null;
+  const completedMemoryGallery =
+    status === "completed" ? buildLiveMiniMemoryGallery(completionMemory?.tasks) : null;
   await syncLiveMiniMissionProgress({
     squadId: mission.liveSquadId,
     localMiniMissionId: mission.id,
@@ -50,5 +73,6 @@ export async function syncLiveMiniFromLocalMission(
         : null,
     memoryNote: completedMemoryNote,
     memoryImageUrl: completedMemoryImageUrl,
+    memoryGallery: completedMemoryGallery,
   });
 }

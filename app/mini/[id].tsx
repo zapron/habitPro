@@ -62,7 +62,7 @@ import { MiniMissionFlightCountdown } from "../../src/components/MiniMissionFlig
 import { remainingMsToProgressiveCountdown } from "../../src/utils/flightCountdownDisplay";
 import { useTheme } from "../../src/context/ThemeContext";
 import { useHabitStore } from "../../src/store/habitStore";
-import type { MissionVisibility, StreakMemory } from "../../src/types/habit";
+import type { MissionVisibility, StreakMemory, StreakMemoryTaskEntry, TaskChecklistItem } from "../../src/types/habit";
 import {
   subscribeSyncFailure,
   subscribeSyncSuccess,
@@ -92,7 +92,10 @@ import {
   deleteMiniStreakMemoryImage,
   shouldUploadLocalStreakImage,
   uploadMiniStreakMemoryImage,
+  uploadMiniStreakTaskMemoryImage,
 } from "../../src/lib/streakMemoryStorage";
+import { MiniChecklistSheet } from "../../src/components/MiniChecklistSheet";
+import { MiniMomentCarousel } from "../../src/components/MiniMomentCarousel";
 import { syncLiveMiniFromLocalMission } from "../../src/lib/liveMiniMissionProgress";
 import { backOrReplace } from "../../src/lib/navigation";
 import { showAppAlert } from "../../src/context/AppDialogContext";
@@ -1170,12 +1173,27 @@ export default function MiniMissionDetail() {
   const [missionDetailsOpen, setMissionDetailsOpen] = useState(false);
   const [completionImageAspect, setCompletionImageAspect] = useState<number | null>(null);
   const [completionImageOpen, setCompletionImageOpen] = useState(false);
+  /** Checklist mini missions only — which logged task the full-screen viewer is currently showing. */
+  const [momentViewerIndex, setMomentViewerIndex] = useState(0);
   const [keepScreenOn, setKeepScreenOn] = useState(false);
   const [focusModeOpen, setFocusModeOpen] = useState(false);
   const [liveMiniSheetOpen, setLiveMiniSheetOpen] = useState(false);
   const [liveMiniSheetPrimed, setLiveMiniSheetPrimed] = useState(false);
   const [timerCheckInPromptOpen, setTimerCheckInPromptOpen] = useState(false);
   const timerCheckInPromptSeenRef = useRef<string | null>(null);
+  /** Checklist mini missions only — logged tasks held locally until "Complete Mission" finalizes them. */
+  const [draftTaskEntries, setDraftTaskEntries] = useState<Record<string, StreakMemoryTaskEntry>>({});
+  const [taskMemoryUi, setTaskMemoryUi] = useState<
+    | { kind: "create"; task: TaskChecklistItem }
+    | { kind: "view"; task: TaskChecklistItem; entry: StreakMemoryTaskEntry }
+    | null
+  >(null);
+  const [checklistCompleting, setChecklistCompleting] = useState(false);
+
+  useEffect(() => {
+    setDraftTaskEntries({});
+    setTaskMemoryUi(null);
+  }, [missionId]);
 
   const completionImageUri = useMemo(() => {
     return mission?.completionMemory?.imageUrl ?? mission?.completionMemory?.imageUri ?? null;
@@ -1658,6 +1676,154 @@ export default function MiniMissionDetail() {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   };
 
+  /**
+   * Checklist mini missions only (docs/MINI_MISSION_CATALOG_ARCHITECTURE.md Phase 2).
+   * Logs one task's note/photo into local draft state — held until "Complete Mission"
+   * finalizes the whole mini mission. Unlike habits' "first task logged completes the
+   * day" behavior, a mini mission only ever completes via one deliberate final action,
+   * so task logging here never touches mission status by itself. Photo upload is
+   * attempted immediately (task-scoped storage path, mirrors uploadHabitStreakTaskMemoryImage);
+   * on failure the local device URI is kept so the photo isn't lost, matching the
+   * habit-side checklist's same fallback.
+   */
+  const handleTaskMemoryCommit = async (memory: StreakMemory | null) => {
+    const ctx = taskMemoryUi;
+    if (!ctx || !mission) return;
+
+    let proofUrl = memory?.imageUrl?.trim() || undefined;
+    if (memory && !proofUrl && memory.imageUri) {
+      if (canUseStreakMemoryUpload() && shouldUploadLocalStreakImage(memory.imageUri)) {
+        try {
+          proofUrl = await uploadMiniStreakTaskMemoryImage({
+            miniMissionId: mission.id,
+            taskId: ctx.task.id,
+            localUri: memory.imageUri,
+          });
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          showAppAlert("Photo upload failed", msg, [{ text: "OK" }]);
+          proofUrl = memory.imageUri;
+        }
+      } else {
+        proofUrl = memory.imageUri;
+      }
+    }
+
+    const priorEntry = draftTaskEntries[ctx.task.id];
+    const taskEntry: StreakMemoryTaskEntry = {
+      taskId: ctx.task.id,
+      label: ctx.task.label,
+      note: memory?.note,
+      proofUrls: proofUrl ? [proofUrl] : [],
+      loggedAt: new Date().toISOString(),
+      includedInShare: priorEntry?.includedInShare,
+    };
+
+    setDraftTaskEntries((prev) => ({ ...prev, [ctx.task.id]: taskEntry }));
+    // StreakMemorySheet calls onClose() itself right after onCommit resolves — that
+    // handler closes taskMemoryUi and reopens the checklist sheet (see the mount below).
+  };
+
+  /**
+   * Finalizes a checklist mini mission from whatever tasks have been logged so far —
+   * logging zero tasks is allowed, same as a classic completion with no memory.
+   * Community publish (Phase 4) is a single toggle bundled with this one-shot action,
+   * mirroring the classic single-photo mini's toggle: only tasks with an uploaded
+   * photo are included in the shared gallery (matches the established
+   * Community-share convention of dropping text-only tasks — see
+   * docs/CATALOG_ARCHITECTURE.md §11). The sheet is closed before any alert/upsell
+   * call, not after — this is new code, so it follows the established
+   * close-before-open rule from the start rather than the still-open gap documented
+   * for the classic single-memory path in app-architecture.md Known Caution Points.
+   */
+  const handleChecklistCompleteCommit = async (opts?: { publishToCommunity?: boolean }) => {
+    if (!mission) return;
+    setChecklistCompleting(true);
+    try {
+      const tasks = Object.values(draftTaskEntries);
+      const cover = tasks.find((t) => /^https?:\/\//.test(t.proofUrls[0] ?? "")) ?? tasks[0];
+      const completedAt = new Date(timerFrozenAtMs ?? Date.now()).toISOString();
+      const completionMemory: StreakMemory | null =
+        tasks.length > 0
+          ? {
+              createdAt: new Date().toISOString(),
+              tasks,
+              ...(cover?.proofUrls[0] ? { imageUrl: cover.proofUrls[0] } : {}),
+              ...(cover?.note ? { note: cover.note } : {}),
+            }
+          : null;
+
+      const wantsPublish = opts?.publishToCommunity === true;
+      const gallery = tasks
+        .filter((t) => t.proofUrls[0] && /^https?:\/\//.test(t.proofUrls[0]))
+        .map((t) => ({ taskId: t.taskId, label: t.label, note: t.note ?? null, imageUrl: t.proofUrls[0] }));
+      const publishCloudReady =
+        wantsPublish && isSupabaseConfigured() && session?.user != null && gallery.length > 0;
+      const freshPremium = publishCloudReady
+        ? await refreshPremiumAccess({ serverOnly: true, cachedAccessOk: true })
+        : null;
+      let canPublish = publishCloudReady && freshPremium === true;
+      if (publishCloudReady && freshPremium !== true) {
+        setCompleteSheetOpen(false);
+        setTimerFrozenAtMs(null);
+        openUpsell("community_publish");
+      }
+
+      const lockCommunity = !canPublish;
+
+      useHabitStore.getState().completeMiniMission(mission.id, completionMemory, {
+        visibility: "solo",
+        communityFeedRevoked: lockCommunity,
+        completedAt,
+      });
+      const completedMission = useHabitStore.getState().getMiniMission(mission.id);
+      void syncLiveMiniFromLocalMission(completedMission, {
+        completedAt,
+        memoryNote: completionMemory?.note ?? null,
+        memoryImageUrl: completionMemory?.imageUrl ?? null,
+      });
+
+      if (canPublish) {
+        const ok = await requireUsername("community_post");
+        if (!ok) {
+          setCompleteSheetOpen(false);
+          setTimerFrozenAtMs(null);
+          showAppAlert("Username required", "Choose a username to publish to Community.", [{ text: "OK" }]);
+        } else {
+          const res = await postCommunityWin({
+            miniMissionId: mission.id,
+            title: mission.title,
+            completedAt,
+            memoryNote: gallery[0]?.note ?? null,
+            memoryImageUrl: gallery[0]?.imageUrl ?? null,
+            memoryGallery: gallery,
+            liveSquadId: mission.liveSquadId ?? null,
+          });
+          if (res.ok === true) {
+            useHabitStore.getState().setMiniMissionVisibility(mission.id, "public");
+            useHabitStore.getState().setMiniMissionCommunityFeedRevoked(mission.id, false);
+          } else if (res.reason === "premium_required") {
+            await refreshPremiumAccess({ force: true, serverOnly: true });
+            setCompleteSheetOpen(false);
+            setTimerFrozenAtMs(null);
+            openUpsell("community_publish");
+          } else {
+            setCompleteSheetOpen(false);
+            setTimerFrozenAtMs(null);
+            showAppAlert("Couldn’t publish", res.error, [{ text: "OK" }]);
+          }
+        }
+      }
+
+      setDraftTaskEntries({});
+      setCompleteSheetOpen(false);
+      setTimerFrozenAtMs(null);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } finally {
+      setChecklistCompleting(false);
+    }
+  };
+
   const handleVisibilityChange = (next: MissionVisibility) => {
     if (!mission) return;
     const prev = mission.visibility ?? "solo";
@@ -1729,12 +1895,16 @@ export default function MiniMissionDetail() {
             lastVisibilityRef.current = null;
             return;
           }
+          const postHocGallery = (mission.completionMemory?.tasks ?? [])
+            .filter((t) => t.proofUrls[0] && /^https?:\/\//.test(t.proofUrls[0]))
+            .map((t) => ({ taskId: t.taskId, label: t.label, note: t.note ?? null, imageUrl: t.proofUrls[0] }));
           const res = await postCommunityWin({
             miniMissionId: mission.id,
             title: mission.title,
             completedAt: mission.completedAt ?? new Date().toISOString(),
             memoryNote: mission.completionMemory?.note ?? null,
             memoryImageUrl: mission.completionMemory?.imageUrl ?? null,
+            ...(postHocGallery.length > 0 ? { memoryGallery: postHocGallery } : {}),
             liveSquadId: mission.liveSquadId ?? null,
           });
           if (res.ok === false) {
@@ -1870,23 +2040,67 @@ export default function MiniMissionDetail() {
         />
       </LazyMount>
 
-      <LazyMount visible={completeSheetOpen} unmountOnExit>
-        <StreakMemorySheet
-          visible={completeSheetOpen}
-          variant="mini"
-          mode="create"
-          missionTitle={mission.title}
-          dayLabel="1"
-          onClose={() => {
-            setCompleteSheetOpen(false);
-            setTimerFrozenAtMs(null);
-          }}
-          onCommit={handleCompleteCommit}
-          miniPublishAvailable={isSupabaseConfigured() && !!session?.user}
-          miniSquadShare={isLiveMiniMission}
-          plusCommunityOk={!socialLocked}
-        />
-      </LazyMount>
+      {mission.taskChecklist && mission.taskChecklist.length > 0 ? (
+        <>
+          <LazyMount visible={completeSheetOpen} unmountOnExit>
+            <MiniChecklistSheet
+              visible={completeSheetOpen && taskMemoryUi === null}
+              missionTitle={mission.title}
+              tasks={mission.taskChecklist}
+              loggedTasks={Object.values(draftTaskEntries)}
+              completing={checklistCompleting}
+              canPublishCommunity={isSupabaseConfigured() && !!session?.user && !socialLocked}
+              onSelectTask={(task) => {
+                const existing = draftTaskEntries[task.id];
+                setTaskMemoryUi(existing ? { kind: "view", task, entry: existing } : { kind: "create", task });
+              }}
+              onComplete={(opts) => void handleChecklistCompleteCommit(opts)}
+              onClose={() => {
+                setCompleteSheetOpen(false);
+                setTimerFrozenAtMs(null);
+              }}
+            />
+          </LazyMount>
+          <LazyMount visible={taskMemoryUi !== null} unmountOnExit>
+            <StreakMemorySheet
+              visible={taskMemoryUi !== null}
+              variant="mini"
+              mode={taskMemoryUi?.kind === "view" ? "view" : "create"}
+              viewMemory={
+                taskMemoryUi?.kind === "view"
+                  ? {
+                      createdAt: taskMemoryUi.entry.loggedAt,
+                      note: taskMemoryUi.entry.note,
+                      imageUrl: taskMemoryUi.entry.proofUrls[0],
+                    }
+                  : undefined
+              }
+              missionTitle={taskMemoryUi?.task.label ?? mission.title}
+              dayLabel="1"
+              onClose={() => setTaskMemoryUi(null)}
+              onCommit={taskMemoryUi?.kind !== "view" ? handleTaskMemoryCommit : undefined}
+            />
+          </LazyMount>
+        </>
+      ) : (
+        <LazyMount visible={completeSheetOpen} unmountOnExit>
+          <StreakMemorySheet
+            visible={completeSheetOpen}
+            variant="mini"
+            mode="create"
+            missionTitle={mission.title}
+            dayLabel="1"
+            onClose={() => {
+              setCompleteSheetOpen(false);
+              setTimerFrozenAtMs(null);
+            }}
+            onCommit={handleCompleteCommit}
+            miniPublishAvailable={isSupabaseConfigured() && !!session?.user}
+            miniSquadShare={isLiveMiniMission}
+            plusCommunityOk={!socialLocked}
+          />
+        </LazyMount>
+      )}
 
       <LazyMount visible={focusModeOpen} unmountOnExit unmountDelayMs={220}>
         <FocusMissionControlModal
@@ -2342,7 +2556,8 @@ export default function MiniMissionDetail() {
               {/* Moment captured */}
               {(mission.completionMemory?.imageUrl ||
                 mission.completionMemory?.imageUri ||
-                mission.completionMemory?.note) && (
+                mission.completionMemory?.note ||
+                (mission.completionMemory?.tasks && mission.completionMemory.tasks.length > 0)) && (
                 <View style={styles.completionMomentSection}>
                   <View style={styles.completionMomentHead}>
                     <Camera size={16} color={theme.colors.amber[500]} />
@@ -2350,53 +2565,66 @@ export default function MiniMissionDetail() {
                       Your moment
                     </Text>
                   </View>
-                  {completionImageUri ? (
-                    <Pressable
-                      onPress={() => setCompletionImageOpen(true)}
-                      accessibilityRole="button"
-                      accessibilityLabel="View moment photo"
-                      style={({ pressed }) => [{ opacity: pressed ? 0.92 : 1 }]}
-                    >
-                      <View
-                        style={[
-                          styles.completionImageWrap,
-                          {
-                            borderColor: theme.colors.border,
-                            backgroundColor: theme.colors.surfaceElevated,
-                          },
-                          completionImageAspect != null ? { aspectRatio: completionImageAspect } : null,
-                        ]}
-                      >
-                        <Image
-                          source={{ uri: completionImageUri }}
-                          style={styles.completionImage}
-                          resizeMode="cover"
-                          onLoad={(e) => {
-                            const w = e.nativeEvent.source?.width;
-                            const h = e.nativeEvent.source?.height;
-                            if (typeof w === "number" && typeof h === "number" && w > 0 && h > 0) {
-                              setCompletionImageAspect(w / h);
-                            }
-                          }}
-                        />
-                      </View>
-                    </Pressable>
-                  ) : null}
-                  {mission.completionMemory?.note ? (
-                    <View
-                      style={[
-                        styles.completionNoteBox,
-                        {
-                          borderColor: theme.colors.border,
-                          backgroundColor: theme.colors.surface,
-                        },
-                      ]}
-                    >
-                      <Text style={[styles.completionNoteText, { color: theme.colors.textPrimary }]}>
-                        {mission.completionMemory.note}
-                      </Text>
-                    </View>
-                  ) : null}
+                  {mission.completionMemory?.tasks && mission.completionMemory.tasks.length > 0 ? (
+                    <MiniMomentCarousel
+                      tasks={mission.completionMemory.tasks}
+                      onIndexChange={setMomentViewerIndex}
+                      onPressSlide={(index) => {
+                        setMomentViewerIndex(index);
+                        setCompletionImageOpen(true);
+                      }}
+                    />
+                  ) : (
+                    <>
+                      {completionImageUri ? (
+                        <Pressable
+                          onPress={() => setCompletionImageOpen(true)}
+                          accessibilityRole="button"
+                          accessibilityLabel="View moment photo"
+                          style={({ pressed }) => [{ opacity: pressed ? 0.92 : 1 }]}
+                        >
+                          <View
+                            style={[
+                              styles.completionImageWrap,
+                              {
+                                borderColor: theme.colors.border,
+                                backgroundColor: theme.colors.surfaceElevated,
+                              },
+                              completionImageAspect != null ? { aspectRatio: completionImageAspect } : null,
+                            ]}
+                          >
+                            <Image
+                              source={{ uri: completionImageUri }}
+                              style={styles.completionImage}
+                              resizeMode="cover"
+                              onLoad={(e) => {
+                                const w = e.nativeEvent.source?.width;
+                                const h = e.nativeEvent.source?.height;
+                                if (typeof w === "number" && typeof h === "number" && w > 0 && h > 0) {
+                                  setCompletionImageAspect(w / h);
+                                }
+                              }}
+                            />
+                          </View>
+                        </Pressable>
+                      ) : null}
+                      {mission.completionMemory?.note ? (
+                        <View
+                          style={[
+                            styles.completionNoteBox,
+                            {
+                              borderColor: theme.colors.border,
+                              backgroundColor: theme.colors.surface,
+                            },
+                          ]}
+                        >
+                          <Text style={[styles.completionNoteText, { color: theme.colors.textPrimary }]}>
+                            {mission.completionMemory.note}
+                          </Text>
+                        </View>
+                      ) : null}
+                    </>
+                  )}
                 </View>
               )}
             </>
@@ -2486,7 +2714,7 @@ export default function MiniMissionDetail() {
         )}
       </ScrollView>
 
-      {completionImageUri ? (
+      {completionImageUri || (mission.completionMemory?.tasks && mission.completionMemory.tasks.length > 0) ? (
         <Modal
           visible={completionImageOpen}
           transparent
@@ -2495,7 +2723,26 @@ export default function MiniMissionDetail() {
         >
           <Pressable style={styles.viewerBackdrop} onPress={() => setCompletionImageOpen(false)}>
             <Pressable style={styles.viewerInner} onPress={(e) => e.stopPropagation()}>
-              <Image source={{ uri: completionImageUri }} style={styles.viewerImg} resizeMode="contain" />
+              {mission.completionMemory?.tasks && mission.completionMemory.tasks.length > 0 ? (
+                mission.completionMemory.tasks[momentViewerIndex]?.proofUrls[0] ? (
+                  <Image
+                    source={{ uri: mission.completionMemory.tasks[momentViewerIndex].proofUrls[0] }}
+                    style={styles.viewerImg}
+                    resizeMode="contain"
+                  />
+                ) : (
+                  <View style={[styles.viewerTextCard, { backgroundColor: theme.colors.surface }]}>
+                    <Text style={[styles.viewerTextCardLabel, { color: theme.colors.textPrimary }]}>
+                      {mission.completionMemory.tasks[momentViewerIndex]?.label}
+                    </Text>
+                    <Text style={[styles.viewerTextCardNote, { color: theme.colors.textSecondary }]}>
+                      {mission.completionMemory.tasks[momentViewerIndex]?.note ?? "Marked complete — no note added."}
+                    </Text>
+                  </View>
+                )
+              ) : (
+                <Image source={{ uri: completionImageUri! }} style={styles.viewerImg} resizeMode="contain" />
+              )}
               <Pressable
                 onPress={() => setCompletionImageOpen(false)}
                 style={[styles.viewerClose, { backgroundColor: theme.colors.surface }]}
@@ -2697,6 +2944,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   viewerImg: { width: "100%", height: 420 },
+  viewerTextCard: { width: "100%", minHeight: 200, borderRadius: 18, padding: 24, justifyContent: "center", gap: 10 },
+  viewerTextCardLabel: { fontSize: 15, fontWeight: "800" },
+  viewerTextCardNote: { fontSize: 15, lineHeight: 22, fontWeight: "600" },
   viewerClose: {
     position: "absolute",
     top: 12,

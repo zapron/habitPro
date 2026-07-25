@@ -1,10 +1,12 @@
 import type {
+  LiveMiniMemoryGalleryItem,
   LiveMiniParticipantRow,
   LiveMiniParticipantStatus,
   LiveMiniSquadRow,
   LiveMiniSquadSnapshot,
 } from "../types/liveMiniMission";
 import type { PageRequest, PageResult } from "../types/paging";
+import type { TaskChecklistItem } from "../types/habit";
 import { getProfileLabelsForIds } from "./groupChallengesApi";
 import { getSupabase } from "./supabase";
 
@@ -90,6 +92,8 @@ export async function createLiveMiniSquad(input: {
   objective?: string | null;
   plannedMinutes: number;
   startedAt?: string | null;
+  /** Snapshot onto the squad so joiners' local mini missions can adopt the same checklist on accept. */
+  taskChecklist?: TaskChecklistItem[] | null;
 }): Promise<{ ok: true; squadId: string; snapshot?: LiveMiniSquadSnapshot | null } | Extract<LiveMiniActionResult, { ok: false }>> {
   const supabase = getSupabase();
   if (!supabase) return { ok: false, error: "Supabase not configured" };
@@ -108,6 +112,7 @@ export async function createLiveMiniSquad(input: {
       p_planned_minutes: input.plannedMinutes,
       p_started_at: input.startedAt ?? null,
       p_return_snapshot: true,
+      p_task_checklist: input.taskChecklist ?? null,
     });
     v2Data = data;
     v2Error = error;
@@ -126,6 +131,7 @@ export async function createLiveMiniSquad(input: {
     p_objective: input.objective ?? null,
     p_planned_minutes: input.plannedMinutes,
     p_started_at: input.startedAt ?? null,
+    p_task_checklist: input.taskChecklist ?? null,
   });
   if (error) return actionError(error);
   return { ok: true, squadId: String(data) };
@@ -210,6 +216,8 @@ export async function syncLiveMiniMissionProgress(input: {
   completedAt?: string | null;
   memoryNote?: string | null;
   memoryImageUrl?: string | null;
+  /** Per-task photo catalog for checklist mini missions. Still inert until Phase 3 wires a caller. */
+  memoryGallery?: LiveMiniMemoryGalleryItem[] | null;
 }): Promise<LiveMiniActionResult> {
   const supabase = getSupabase();
   if (!supabase) return { ok: false, error: "Supabase not configured" };
@@ -222,6 +230,7 @@ export async function syncLiveMiniMissionProgress(input: {
     p_completed_at: input.completedAt ?? null,
     p_memory_note: input.memoryNote ?? null,
     p_memory_image_url: input.memoryImageUrl ?? null,
+    p_memory_gallery: input.memoryGallery ?? null,
   });
   if (error) return actionError(error);
   return { ok: true };

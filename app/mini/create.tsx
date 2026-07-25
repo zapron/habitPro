@@ -2,7 +2,7 @@ import { Text } from "../../src/components/AppText";
 import { useEffect, useRef, useState } from "react";
 import { View, TextInput, TouchableOpacity, ScrollView, StyleSheet, StatusBar, Platform, InteractionManager } from "react-native";
 import { useRouter } from "expo-router";
-import { ArrowLeft, Check, Clock3, Plane } from "lucide-react-native";
+import { ArrowLeft, Check, Clock3, ListChecks, Plane, Plus, X } from "lucide-react-native";
 import { Screen } from "../../src/components/Screen";
 import { useHabitStore } from "../../src/store/habitStore";
 import { useTheme } from "../../src/context/ThemeContext";
@@ -11,7 +11,7 @@ import { FuelQuickMinutesStrip } from "../../src/components/fuel/FuelQuickMinute
 import { backOrReplace } from "../../src/lib/navigation";
 import { useNotificationGate } from "../../src/context/NotificationGateContext";
 import { showAppAlert } from "../../src/context/AppDialogContext";
-import type { MiniMissionCompletionMode } from "../../src/types/habit";
+import type { MiniMissionCompletionMode, TaskChecklistItem } from "../../src/types/habit";
 
 type StartMode = "now" | "later";
 
@@ -51,6 +51,7 @@ export default function CreateMiniMission() {
   const [completionMode, setCompletionMode] = useState<MiniMissionCompletionMode>("timer_check_in");
   const [focused, setFocused] = useState<"title" | "objective" | "minutes" | null>(null);
   const [creatingMode, setCreatingMode] = useState<StartMode | null>(null);
+  const [checklistItems, setChecklistItems] = useState<{ id: string; label: string }[]>([]);
   const scrollRef = useRef<ScrollView>(null);
   const titleInputRef = useRef<TextInput>(null);
   const objectiveInputYRef = useRef(0);
@@ -94,6 +95,19 @@ export default function CreateMiniMission() {
   const displayMins = totalMinutes % 60;
   const creating = creatingMode !== null;
 
+  const addChecklistItem = () => {
+    const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    setChecklistItems((items) => [...items, { id, label: "" }]);
+  };
+
+  const updateChecklistItem = (id: string, label: string) => {
+    setChecklistItems((items) => items.map((item) => (item.id === id ? { ...item, label } : item)));
+  };
+
+  const removeChecklistItem = (id: string) => {
+    setChecklistItems((items) => items.filter((item) => item.id !== id));
+  };
+
   const handleCreate = (mode: StartMode) => {
     if (creating) return;
     if (!title.trim()) {
@@ -105,6 +119,10 @@ export default function CreateMiniMission() {
       showAppAlert("Error", "Set at least one minute for this mission.");
       return;
     }
+    const taskChecklist: TaskChecklistItem[] = checklistItems
+      .map((item) => ({ id: item.id, label: item.label.trim() }))
+      .filter((item) => item.label.length > 0)
+      .map((item, index) => ({ id: item.id, label: item.label, order: index + 1 }));
 
     setCreatingMode(mode);
     void (async () => {
@@ -120,6 +138,7 @@ export default function CreateMiniMission() {
           estimatedMinutes: minutes,
           completionMode,
           startMode: mode,
+          taskChecklist,
         });
 
         if (mode === "now") {
@@ -229,6 +248,79 @@ export default function CreateMiniMission() {
           multiline
           textAlignVertical="top"
         />
+
+        <View style={styles.checklistHeaderRow}>
+          <ListChecks size={16} color={theme.colors.textSecondary} />
+          <Text
+            style={[
+              styles.label,
+              { color: theme.colors.textSecondary, fontSize: theme.typography.caption, marginBottom: 0 },
+            ]}
+          >
+            Task checklist (optional)
+          </Text>
+        </View>
+        <Text style={[styles.fieldHint, { color: theme.colors.textMuted }]}>
+          Break this mission into steps you log separately — like "Warm up" or "Cool down".
+          Leave empty to check in with one note and photo when you finish, as usual.
+        </Text>
+        {checklistItems.length > 0 ? (
+          <View
+            style={[
+              styles.checklistCard,
+              {
+                backgroundColor: theme.colors.surface,
+                borderColor: theme.colors.border,
+                borderRadius: theme.radius.lg,
+                ...theme.shadow.card,
+              },
+            ]}
+          >
+            {checklistItems.map((item, index) => (
+              <View key={item.id} style={styles.checklistRow}>
+                <Text style={[styles.checklistIndex, { color: theme.colors.textMuted }]}>
+                  {index + 1}
+                </Text>
+                <TextInput
+                  style={[
+                    styles.checklistInput,
+                    {
+                      backgroundColor: theme.colors.surfaceElevated,
+                      borderColor: theme.colors.border,
+                      color: theme.colors.textPrimary,
+                    },
+                  ]}
+                  placeholder="e.g., Warm up"
+                  placeholderTextColor={theme.colors.textMuted}
+                  value={item.label}
+                  onChangeText={(text) => updateChecklistItem(item.id, text)}
+                />
+                <TouchableOpacity
+                  onPress={() => removeChecklistItem(item.id)}
+                  hitSlop={10}
+                  accessibilityRole="button"
+                  accessibilityLabel="Remove task"
+                  style={[styles.checklistRemoveBtn, { borderColor: theme.colors.border }]}
+                >
+                  <X size={14} color={theme.colors.textMuted} />
+                </TouchableOpacity>
+              </View>
+            ))}
+          </View>
+        ) : null}
+        <TouchableOpacity
+          onPress={addChecklistItem}
+          activeOpacity={0.85}
+          style={[
+            styles.checklistAddBtn,
+            { borderColor: theme.colors.indigo[500], backgroundColor: `${theme.colors.indigo[500]}14` },
+          ]}
+        >
+          <Plus size={16} color={theme.colors.indigo[400]} />
+          <Text style={[styles.checklistAddText, { color: theme.colors.indigo[400] }]}>
+            Add task
+          </Text>
+        </TouchableOpacity>
 
         <Text style={[styles.label, { color: theme.colors.textSecondary, fontSize: theme.typography.caption }]}>Duration</Text>
         <Text style={[styles.fieldHint, { color: theme.colors.textMuted }]}>
@@ -533,4 +625,28 @@ const styles = StyleSheet.create({
   modeButtonDisabled: { opacity: 0.68 },
   modeText: { fontWeight: "800", fontSize: 14 },
   modeTextPrimary: { color: "#ffffff" },
+  checklistHeaderRow: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 6 },
+  checklistCard: { borderWidth: 1, padding: 10, gap: 8, marginBottom: 10 },
+  checklistRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  checklistIndex: { width: 16, fontSize: 12, fontWeight: "700", textAlign: "center" },
+  checklistInput: { flex: 1, borderWidth: 1, borderRadius: 12, paddingVertical: 10, paddingHorizontal: 12, fontSize: 14 },
+  checklistRemoveBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  checklistAddBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingVertical: 12,
+    marginBottom: 20,
+  },
+  checklistAddText: { fontSize: 13, fontWeight: "700" },
 });
