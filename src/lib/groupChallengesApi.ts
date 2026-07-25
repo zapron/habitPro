@@ -97,6 +97,9 @@ export async function createGroupChallengeFromHabit(
   if (habit.mode === "manual" && typeof habit.endDate === "string" && habit.endDate.trim().length > 0) {
     habitTemplate.endDate = habit.endDate.trim();
   }
+  if (habit.taskChecklist && habit.taskChecklist.length > 0) {
+    habitTemplate.taskChecklist = habit.taskChecklist;
+  }
 
   const { data: group, error: gErr } = await supabase
     .from("challenge_groups")

@@ -38,13 +38,27 @@ const calculateEndDate = (startIso: string, totalDays: number): string => {
   return d.toISOString();
 };
 
+/**
+ * A memory entry only counts as evidence the day was actually completed when it
+ * carries a classic marker (note/photo/check-in-only/repair). Checklist missions
+ * (docs/CATALOG_ARCHITECTURE.md "Mark Day Complete") deliberately write a
+ * tasks-only memory entry *before* the day is completed — logging a task no
+ * longer implies completion — so a bare `{ tasks: [...] }` entry must NOT be
+ * treated as proof the day should be force-added to completedDates. Getting this
+ * wrong reintroduces exactly the bug this feature was built to remove: logging
+ * the first task silently re-completing the day and firing the squad
+ * notification, then locking every other task as if the day had been finished.
+ */
+const hasClassicCompletionEvidence = (memory: StreakMemory | undefined): boolean =>
+  Boolean(memory?.note || memory?.imageUrl || memory?.imageUri || memory?.checkInOnly || memory?.repairSource);
+
 const completedDatesWithMemoryEvidence = (
   completedDates: string[] | undefined,
   streakMemories: Habit["streakMemories"] | undefined,
 ): string[] => {
-  const memoryDates = Object.keys(streakMemories ?? {}).filter((date) =>
-    /^\d{4}-\d{2}-\d{2}$/.test(date),
-  );
+  const memoryDates = Object.entries(streakMemories ?? {})
+    .filter(([date, memory]) => /^\d{4}-\d{2}-\d{2}$/.test(date) && hasClassicCompletionEvidence(memory))
+    .map(([date]) => date);
   return [...(completedDates ?? []), ...memoryDates];
 };
 
@@ -285,6 +299,7 @@ export const useHabitStore = create<HabitStore>()(
         endDate: endDateOverride,
         missionTimezone: missionTimezoneOverride,
         requestRemoteSync: shouldRequestRemoteSync = true,
+        taskChecklist,
       }) => {
         const now = startDateOverride ?? new Date().toISOString();
         const totalDays =
@@ -322,6 +337,7 @@ export const useHabitStore = create<HabitStore>()(
                 challengeCreatorTimezone: challengeCreatorTimezone ?? null,
               }
             : {}),
+          ...(taskChecklist && taskChecklist.length > 0 ? { taskChecklist } : {}),
         };
         set((state) => ({ habits: [...state.habits, newHabit] }));
         if (shouldRequestRemoteSync) {
@@ -535,6 +551,22 @@ export const useHabitStore = create<HabitStore>()(
         }));
         requestRemoteSync({ immediate: false });
       },
+      markChecklistDayComplete: (id, date, nowMs = Date.now()) => {
+        const habitBefore = get().habits.find((h) => h.id === id);
+        // A plain toggle would un-complete an already-completed day — this action
+        // means "complete", not "flip", so bail out instead of calling toggleCompletion.
+        if (!habitBefore || habitBefore.completedDates.includes(date)) return false;
+        const changed = get().toggleCompletion(id, date, nowMs);
+        if (!changed) return false;
+        const habitAfter = get().habits.find((h) => h.id === id);
+        if (habitAfter && !habitAfter.streakMemories?.[date]) {
+          get().setStreakMemory(id, date, {
+            createdAt: new Date().toISOString(),
+            checkInOnly: true,
+          });
+        }
+        return true;
+      },
       deleteHabit: (id) => {
         void recordAccountDeletedMissionId(getRemoteSyncUserId(), "habit", id);
         set((state) => {
@@ -676,6 +708,7 @@ export const useHabitStore = create<HabitStore>()(
         startedAt,
         liveSquadId,
         liveSquadRole,
+        taskChecklist,
       }) => {
         const now = createdAt ?? new Date().toISOString();
         const id = idOverride ??
@@ -698,6 +731,7 @@ export const useHabitStore = create<HabitStore>()(
           scheduledStartAt: startMode === "later" ? now : undefined,
           liveSquadId: liveSquadId ?? null,
           liveSquadRole: liveSquadRole ?? null,
+          ...(taskChecklist && taskChecklist.length > 0 ? { taskChecklist } : {}),
         };
 
         set((state) => ({
@@ -728,12 +762,16 @@ export const useHabitStore = create<HabitStore>()(
         const completedAt = opts?.completedAt ?? now;
         const mission = get().miniMissions.find((m) => m.id === id);
         let completionMemory: StreakMemory | undefined;
-        if (memory && (memory.note || memory.imageUri || memory.imageUrl)) {
+        if (
+          memory &&
+          (memory.note || memory.imageUri || memory.imageUrl || (memory.tasks && memory.tasks.length > 0))
+        ) {
           completionMemory = {
             createdAt: memory.createdAt ?? completedAt,
             ...(memory.note ? { note: memory.note } : {}),
             ...(memory.imageUri ? { imageUri: memory.imageUri } : {}),
             ...(memory.imageUrl ? { imageUrl: memory.imageUrl } : {}),
+            ...(memory.tasks && memory.tasks.length > 0 ? { tasks: memory.tasks } : {}),
           };
         }
         const visOverride = opts?.visibility;

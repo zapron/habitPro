@@ -20,12 +20,14 @@ import {
   User,
   Minus,
   Plus,
+  ListChecks,
+  X,
 } from "lucide-react-native";
 import { Button } from "../src/components/Button";
 import { Screen } from "../src/components/Screen";
 import { useTheme } from "../src/context/ThemeContext";
 import { useHabitStore } from "../src/store/habitStore";
-import type { HabitMode, MissionVisibility } from "../src/types/habit";
+import type { HabitMode, MissionVisibility, TaskChecklistItem } from "../src/types/habit";
 import { PlusBadge } from "../src/components/PlusBadge";
 import { usePremium } from "../src/context/PremiumContext";
 import { usePlusUpsell } from "../src/context/PlusUpsellContext";
@@ -50,6 +52,7 @@ export default function CreateHabit() {
   const [totalDays, setTotalDays] = useState(30);
   const [visibility, setVisibility] = useState<MissionVisibility>("solo");
   const [focused, setFocused] = useState<"title" | "desc" | null>(null);
+  const [checklistItems, setChecklistItems] = useState<{ id: string; label: string }[]>([]);
   const scrollRef = useRef<ScrollView>(null);
   const descriptionInputYRef = useRef(0);
   const keyboardScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -84,6 +87,19 @@ export default function CreateHabit() {
     setTotalDays((d) => Math.max(1, Math.min(365, d + delta)));
   };
 
+  const addChecklistItem = () => {
+    const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    setChecklistItems((items) => [...items, { id, label: "" }]);
+  };
+
+  const updateChecklistItem = (id: string, label: string) => {
+    setChecklistItems((items) => items.map((item) => (item.id === id ? { ...item, label } : item)));
+  };
+
+  const removeChecklistItem = (id: string) => {
+    setChecklistItems((items) => items.filter((item) => item.id !== id));
+  };
+
   const handleCreate = async () => {
     if (!title.trim()) {
       showAppAlert("Error", "Please enter a mission title.");
@@ -96,6 +112,11 @@ export default function CreateHabit() {
         return;
       }
     }
+    const taskChecklist: TaskChecklistItem[] = checklistItems
+      .map((item) => ({ id: item.id, label: item.label.trim() }))
+      .filter((item) => item.label.length > 0)
+      .map((item, index) => ({ id: item.id, label: item.label, order: index + 1 }));
+
     if (mode === "manual") {
       const days = Math.max(1, Math.min(365, totalDays));
       addHabit({
@@ -104,6 +125,7 @@ export default function CreateHabit() {
         mode,
         totalDays: days,
         visibility,
+        taskChecklist,
       });
     } else {
       addHabit({
@@ -111,6 +133,7 @@ export default function CreateHabit() {
         description: description.trim(),
         mode: "autopilot",
         visibility,
+        taskChecklist,
       });
     }
     router.replace("/");
@@ -451,6 +474,79 @@ export default function CreateHabit() {
           </>
         )}
 
+        <View style={styles.checklistHeaderRow}>
+          <ListChecks size={16} color={theme.colors.textSecondary} />
+          <Text
+            style={[
+              styles.label,
+              { color: theme.colors.textSecondary, fontSize: theme.typography.caption, marginBottom: 0 },
+            ]}
+          >
+            Task checklist (optional)
+          </Text>
+        </View>
+        <Text style={[styles.fieldHint, { color: theme.colors.textMuted }]}>
+          Break this mission into daily tasks you log separately — like "Drink water" or
+          "Go to the gym". Leave empty to check in with one note and photo per day, as usual.
+        </Text>
+        {checklistItems.length > 0 ? (
+          <View
+            style={[
+              styles.checklistCard,
+              {
+                backgroundColor: theme.colors.surface,
+                borderColor: theme.colors.border,
+                borderRadius: theme.radius.lg,
+                ...theme.shadow.card,
+              },
+            ]}
+          >
+            {checklistItems.map((item, index) => (
+              <View key={item.id} style={styles.checklistRow}>
+                <Text style={[styles.checklistIndex, { color: theme.colors.textMuted }]}>
+                  {index + 1}
+                </Text>
+                <TextInput
+                  style={[
+                    styles.checklistInput,
+                    {
+                      backgroundColor: theme.colors.surfaceElevated,
+                      borderColor: theme.colors.border,
+                      color: theme.colors.textPrimary,
+                    },
+                  ]}
+                  placeholder="e.g., Get up early"
+                  placeholderTextColor={theme.colors.textMuted}
+                  value={item.label}
+                  onChangeText={(text) => updateChecklistItem(item.id, text)}
+                />
+                <TouchableOpacity
+                  onPress={() => removeChecklistItem(item.id)}
+                  hitSlop={10}
+                  accessibilityRole="button"
+                  accessibilityLabel="Remove task"
+                  style={[styles.checklistRemoveBtn, { borderColor: theme.colors.border }]}
+                >
+                  <X size={14} color={theme.colors.textMuted} />
+                </TouchableOpacity>
+              </View>
+            ))}
+          </View>
+        ) : null}
+        <TouchableOpacity
+          onPress={addChecklistItem}
+          activeOpacity={0.85}
+          style={[
+            styles.checklistAddBtn,
+            { borderColor: theme.colors.indigo[500], backgroundColor: `${theme.colors.indigo[500]}14` },
+          ]}
+        >
+          <Plus size={16} color={theme.colors.indigo[400]} />
+          <Text style={[styles.checklistAddText, { color: theme.colors.indigo[400] }]}>
+            Add task
+          </Text>
+        </TouchableOpacity>
+
         <Text
           style={[
             styles.label,
@@ -639,5 +735,29 @@ const styles = StyleSheet.create({
     fontVariant: ["tabular-nums"],
   },
   daysSummary: { fontSize: 14, textAlign: "center" },
+  checklistHeaderRow: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 6 },
+  checklistCard: { borderWidth: 1, padding: 10, gap: 8, marginBottom: 10 },
+  checklistRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  checklistIndex: { width: 16, fontSize: 12, fontWeight: "700", textAlign: "center" },
+  checklistInput: { flex: 1, borderWidth: 1, borderRadius: 12, paddingVertical: 10, paddingHorizontal: 12, fontSize: 14 },
+  checklistRemoveBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  checklistAddBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingVertical: 12,
+    marginBottom: 20,
+  },
+  checklistAddText: { fontSize: 13, fontWeight: "700" },
   cta: { marginBottom: 20 },
 });

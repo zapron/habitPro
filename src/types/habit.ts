@@ -6,6 +6,27 @@ export type MissionReport = "accomplished" | "failed";
 /** Public = group mission members can see streak memory; solo = private to you. */
 export type MissionVisibility = "public" | "solo";
 
+/**
+ * One task's log entry within a day's memory. See docs/CATALOG_ARCHITECTURE.md.
+ * `proofUrls` is an array from day one — v1 UI only ever writes one entry, but this
+ * is the seam that lets "multiple proofs per task" slot in later without a migration.
+ */
+export interface StreakMemoryTaskEntry {
+  taskId: string;
+  /** Snapshot of the task's label at logging time — survives later checklist edits. */
+  label: string;
+  note?: string;
+  proofUrls: string[];
+  loggedAt: string;
+  /**
+   * Whether this task's photo is included the next time the day's catalog is
+   * shared/updated to Community. Defaults to true (absent = included) when a
+   * task is first logged; the user can uncheck it before or after sharing —
+   * same flag, same "Share/Update catalog" action either way.
+   */
+  includedInShare?: boolean;
+}
+
 /** Optional capture when marking a day complete. */
 export interface StreakMemory {
   note?: string;
@@ -25,6 +46,18 @@ export interface StreakMemory {
    * Prevents re-opening the capture sheet or toggling the day off with a normal tap.
    */
   checkInOnly?: boolean;
+  /**
+   * Per-task log entries for missions with a task checklist. Absent/empty means this
+   * day uses the classic single note+photo capture above, unchanged.
+   */
+  tasks?: StreakMemoryTaskEntry[];
+}
+
+/** One item in a mission's optional task checklist template. */
+export interface TaskChecklistItem {
+  id: string;
+  label: string;
+  order: number;
 }
 
 /** Lightweight cohort-only badge flags. Actual note/photo data is fetched on tap. */
@@ -73,6 +106,11 @@ export interface Habit {
   reminderTimeLocal?: string | null;
   /** After true, reminder time cannot be changed (one-time confirmation). */
   reminderLocked?: boolean;
+  /**
+   * Optional ordered task checklist for this mission. Null/absent means this mission
+   * uses the classic single note+photo memory flow, completely unchanged.
+   */
+  taskChecklist?: TaskChecklistItem[];
 }
 
 export type MiniMissionStatus =
@@ -109,6 +147,12 @@ export interface MiniMission {
   /** When set, this mini mission is attached to an async Live Squad. */
   liveSquadId?: string | null;
   liveSquadRole?: MiniMissionLiveRole | null;
+  /**
+   * Optional ordered task checklist for this mini mission. Null/absent means this mission
+   * uses the classic single note+photo completion memory flow, completely unchanged. See
+   * docs/MINI_MISSION_CATALOG_ARCHITECTURE.md.
+   */
+  taskChecklist?: TaskChecklistItem[];
 }
 
 export type AddHabitInput = {
@@ -128,6 +172,8 @@ export type AddHabitInput = {
   missionTimezone?: string | null;
   /** Advanced: skip automatic full-state sync when the caller performs an explicit server write. */
   requestRemoteSync?: boolean;
+  /** Optional task checklist — see docs/CATALOG_ARCHITECTURE.md. Empty/absent = classic mission. */
+  taskChecklist?: TaskChecklistItem[];
 };
 
 export type HabitStore = {
@@ -165,6 +211,14 @@ export type HabitStore = {
   setStreakMemory: (id: string, date: string, memory: StreakMemory | null) => void;
   /** Merge into an existing streak memory (e.g. Community flags); no-op if no memory for date. */
   patchStreakMemory: (id: string, date: string, patch: Partial<StreakMemory>) => void;
+  /**
+   * Checklist main missions only: explicit "Mark Day Complete" action. Toggles the
+   * day on (streak/XP/squad notification) — task-by-task logging no longer does
+   * this itself — and, if no task was logged, records a bare check-in memory so
+   * the day still has a recognizable moment. No-op (returns false) if the date is
+   * already completed or isn't toggleable.
+   */
+  markChecklistDayComplete: (id: string, date: string, nowMs?: number) => boolean;
   deleteHabit: (id: string) => void;
   /** No-op (returns false) when the habit is linked to a group mission — avoids cohort desync. */
   resetHabit: (id: string) => boolean;
@@ -181,6 +235,8 @@ export type HabitStore = {
     startedAt?: string;
     liveSquadId?: string | null;
     liveSquadRole?: MiniMissionLiveRole | null;
+    /** Optional task checklist — see docs/MINI_MISSION_CATALOG_ARCHITECTURE.md. Empty/absent = classic mini mission. */
+    taskChecklist?: TaskChecklistItem[];
   }) => string;
   setMiniMissionLiveSquad: (id: string, squadId: string | null, role: MiniMissionLiveRole | null) => void;
   setHabitVisibility: (id: string, visibility: MissionVisibility) => void;

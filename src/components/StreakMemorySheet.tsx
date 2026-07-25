@@ -76,6 +76,19 @@ type StreakMemorySheetProps = {
     visibility: "solo" | "public";
     onToggle: (nextPublic: boolean) => void | Promise<void>;
   };
+  /**
+   * create only: pre-populate the form with an already-logged note/photo (e.g.
+   * reopening a checklist task that isn't locked yet). Absent = blank form
+   * (existing behavior, unchanged).
+   */
+  prefill?: { note?: string; imageUri?: string };
+  /**
+   * create only: which "no edits" notice to show. Checklist tasks stay editable
+   * until the day is explicitly marked complete, so they use a different notice
+   * than the classic/mini flows where Save locks immediately. Default preserves
+   * existing copy.
+   */
+  noticeVariant?: "locks-on-save" | "editable-until-complete";
 };
 
 export const StreakMemorySheet = React.memo(function StreakMemorySheet({
@@ -93,6 +106,8 @@ export const StreakMemorySheet = React.memo(function StreakMemorySheet({
   habitViewCommunity,
   viewMemory,
   squadShare,
+  prefill,
+  noticeVariant = "locks-on-save",
 }: StreakMemorySheetProps) {
   const isMini = variant === "mini";
   const isView = mode === "view";
@@ -135,11 +150,14 @@ export const StreakMemorySheet = React.memo(function StreakMemorySheet({
     if (visible) {
       setSubmitting(false);
       if (!isView) {
-        setNote("");
-        setImageUri(undefined);
+        setNote(prefill?.note ?? "");
+        setImageUri(prefill?.imageUri ?? undefined);
         setPublishToCommunity(false);
       }
     }
+    // Intentionally excludes prefill from deps — it should only seed the form when
+    // the sheet transitions to visible, not re-stomp user edits on every re-render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible, isView]);
 
   useEffect(() => {
@@ -366,7 +384,9 @@ export const StreakMemorySheet = React.memo(function StreakMemorySheet({
   const isMemoryCreate = !isView;
   const isMiniCreate = !isView && isMini;
   const isHabitCreate = !isView && !isMini;
-  const stackMemoryActions = isMemoryCreate && windowW < 360;
+  /** Editing an already-logged, still-unlocked entry — "Just mark done" would silently wipe it, so hide it. */
+  const isEditingPrefill = isMemoryCreate && Boolean(prefill?.note || prefill?.imageUri);
+  const stackMemoryActions = isMemoryCreate && !isEditingPrefill && windowW < 360;
   /** Shown while onCommit runs (upload, check-in, optional Community publish). */
   const submittingPublishCopy =
     submitting && publishToCommunity && canPublishCommunity && Boolean(imageUri);
@@ -715,7 +735,7 @@ export const StreakMemorySheet = React.memo(function StreakMemorySheet({
                         { color: theme.colors.textPrimary, fontSize: theme.typography.h2 },
                       ]}
                     >
-                      Record this memory
+                      {isEditingPrefill ? "Edit this task" : "Record this memory"}
                     </Text>
                     <Text
                       style={[styles.sub, isMemoryCreate && styles.subMemory, { color: theme.colors.textSecondary }]}
@@ -755,7 +775,9 @@ export const StreakMemorySheet = React.memo(function StreakMemorySheet({
                             { color: isDark ? theme.colors.yellow[400] : theme.colors.amber[500] },
                           ]}
                         >
-                          No edits after you Save
+                          {noticeVariant === "editable-until-complete"
+                            ? "Editable until you mark the day complete"
+                            : "No edits after you Save"}
                         </Text>
                       </View>
                     </View>
@@ -976,41 +998,43 @@ export const StreakMemorySheet = React.memo(function StreakMemorySheet({
                       },
                     ]}
                   >
-                    <Pressable
-                      onPress={handleJustMarkDone}
-                      disabled={submitting}
-                      style={[
-                        styles.btnSecondary,
-                        styles.btnSecondaryMemory,
-                        stackMemoryActions && styles.btnMemoryStacked,
-                        {
-                          borderColor: theme.colors.border,
-                          backgroundColor: isDark ? "rgba(148, 163, 184, 0.12)" : theme.colors.slate[750],
-                          opacity: submitting ? 0.5 : 1,
-                        },
-                      ]}
-                    >
-                      <Text
+                    {!isEditingPrefill ? (
+                      <Pressable
+                        onPress={handleJustMarkDone}
+                        disabled={submitting}
                         style={[
-                          styles.btnSecondaryText,
-                          styles.btnSecondaryTextMemory,
-                          { color: theme.colors.textSecondary },
-                          Platform.OS === "android" ? styles.btnMemoryTextAndroid : null,
+                          styles.btnSecondary,
+                          styles.btnSecondaryMemory,
+                          stackMemoryActions && styles.btnMemoryStacked,
+                          {
+                            borderColor: theme.colors.border,
+                            backgroundColor: isDark ? "rgba(148, 163, 184, 0.12)" : theme.colors.slate[750],
+                            opacity: submitting ? 0.5 : 1,
+                          },
                         ]}
-                        numberOfLines={2}
-                        adjustsFontSizeToFit
-                        minimumFontScale={0.8}
                       >
-                        {isMini ? "Just Mark Complete" : "Just mark done"}
-                      </Text>
-                    </Pressable>
+                        <Text
+                          style={[
+                            styles.btnSecondaryText,
+                            styles.btnSecondaryTextMemory,
+                            { color: theme.colors.textSecondary },
+                            Platform.OS === "android" ? styles.btnMemoryTextAndroid : null,
+                          ]}
+                          numberOfLines={2}
+                          adjustsFontSizeToFit
+                          minimumFontScale={0.8}
+                        >
+                          {isMini ? "Just Mark Complete" : "Just mark done"}
+                        </Text>
+                      </Pressable>
+                    ) : null}
                     <Pressable
                       onPress={() => void handleSave()}
                       disabled={submitting}
                       style={[
                         styles.btnPrimary,
                         styles.btnPrimaryMemory,
-                        stackMemoryActions && styles.btnMemoryStacked,
+                        (stackMemoryActions || isEditingPrefill) && styles.btnMemoryStacked,
                         { backgroundColor: theme.colors.indigo[600], ...theme.shadow.glow, opacity: submitting ? 0.92 : 1 },
                       ]}
                     >

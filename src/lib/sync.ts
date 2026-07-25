@@ -5,6 +5,7 @@ import type {
   MissionReport,
   MissionVisibility,
   StreakMemory,
+  StreakMemoryTaskEntry,
 } from "../types/habit";
 import { getDerivedState } from "../utils/habitDerived";
 import {
@@ -20,7 +21,7 @@ import {
 } from "./streakMemoryStorage";
 
 const HABIT_ROW_SELECT =
-  "user_id, id, title, description, mode, visibility, start_date, end_date, completed_dates, streak, total_days, is_completed, status, streak_memories, challenge_group_id, challenge_creator_timezone, mission_timezone, mission_report, mission_report_at, reminder_enabled, reminder_time_local, reminder_locked";
+  "user_id, id, title, description, mode, visibility, start_date, end_date, completed_dates, streak, total_days, is_completed, status, streak_memories, challenge_group_id, challenge_creator_timezone, mission_timezone, mission_report, mission_report_at, reminder_enabled, reminder_time_local, reminder_locked, task_checklist";
 
 export type RemoteSnapshot = Pick<HabitStore, "habits" | "miniMissions" | "xp" | "username"> & {
   cohortPeerHabits: Habit[];
@@ -229,6 +230,38 @@ function parseMissionReport(v: unknown): MissionReport | undefined {
   return v === "accomplished" || v === "failed" ? v : undefined;
 }
 
+/** Defensive parse for the `task_checklist` jsonb column — malformed/unexpected shapes fall back to undefined. */
+export function parseTaskChecklist(v: unknown): Habit["taskChecklist"] {
+  if (!Array.isArray(v) || v.length === 0) return undefined;
+  const items = v
+    .map((entry) => {
+      if (!entry || typeof entry !== "object") return null;
+      const id = (entry as { id?: unknown }).id;
+      const label = (entry as { label?: unknown }).label;
+      const order = (entry as { order?: unknown }).order;
+      if (typeof id !== "string" || typeof label !== "string" || typeof order !== "number") {
+        return null;
+      }
+      return { id, label, order };
+    })
+    .filter((entry): entry is { id: string; label: string; order: number } => entry !== null);
+  return items.length > 0 ? items : undefined;
+}
+
+/**
+ * Mirrors habitStore.ts's hasClassicCompletionEvidence: a checklist day's
+ * tasks-only memory entry (logged, not yet Mark-Day-Complete'd — see
+ * docs/CATALOG_ARCHITECTURE.md) must not count as proof the day was completed,
+ * or every remote sync would silently re-complete the day the instant the first
+ * task syncs, firing the squad notification and locking the rest of the
+ * checklist as if "Mark Day Complete" had already been tapped.
+ */
+function hasClassicCompletionEvidence(memory: unknown): boolean {
+  if (!memory || typeof memory !== "object") return false;
+  const m = memory as Record<string, unknown>;
+  return Boolean(m.note || m.imageUrl || m.imageUri || m.checkInOnly || m.repairSource);
+}
+
 function habitFromRow(row: {
   user_id: string;
   id: string;
@@ -253,6 +286,7 @@ function habitFromRow(row: {
   reminder_enabled?: boolean | null;
   reminder_time_local?: string | null;
   reminder_locked?: boolean | null;
+  task_checklist?: unknown;
 }): Habit {
   const vis: MissionVisibility =
     row.visibility === "public" || row.visibility === "solo"
@@ -274,9 +308,9 @@ function habitFromRow(row: {
   const streakMemoriesMigrated = canonicalizeStreakMemoryKeys(row.start_date, streakMemoriesRaw, tdRow, stableTimeZone);
   const streakMemories =
     streakMemoriesMigrated === undefined ? undefined : (streakMemoriesMigrated as Habit["streakMemories"]);
-  const memoryCompletionDates = Object.keys(streakMemories ?? {}).filter((date) =>
-    /^\d{4}-\d{2}-\d{2}$/.test(date),
-  );
+  const memoryCompletionDates = Object.entries(streakMemories ?? {})
+    .filter(([date, memory]) => /^\d{4}-\d{2}-\d{2}$/.test(date) && hasClassicCompletionEvidence(memory))
+    .map(([date]) => date);
   const completedWithMemoryEvidence = [...completedDatesMigrated, ...memoryCompletionDates];
 
   const storedStreak = typeof row.streak === "number" && Number.isFinite(row.streak) ? row.streak : 0;
@@ -332,6 +366,7 @@ function habitFromRow(row: {
     challengeGroupId: row.challenge_group_id ?? null,
     challengeCreatorTimezone: row.challenge_creator_timezone ?? null,
     missionTimezone: row.mission_timezone ?? null,
+    taskChecklist: parseTaskChecklist(row.task_checklist),
   };
 }
 
@@ -359,7 +394,39 @@ function habitToRow(sessionUserId: string, h: Habit) {
     reminder_enabled: h.reminderEnabled ?? false,
     reminder_time_local: h.reminderTimeLocal ?? null,
     reminder_locked: h.reminderLocked ?? false,
+    task_checklist: h.taskChecklist ?? null,
   };
+}
+
+/** Defensive parse for a `completion_memory.tasks` jsonb array — malformed/unexpected shapes fall back to undefined. */
+function parseStreakMemoryTaskEntries(v: unknown): StreakMemoryTaskEntry[] | undefined {
+  if (!Array.isArray(v) || v.length === 0) return undefined;
+  const items = v
+    .map((entry): StreakMemoryTaskEntry | null => {
+      if (!entry || typeof entry !== "object") return null;
+      const e = entry as Record<string, unknown>;
+      const taskId = e.taskId;
+      const label = e.label;
+      const loggedAt = e.loggedAt;
+      if (typeof taskId !== "string" || typeof label !== "string" || typeof loggedAt !== "string") {
+        return null;
+      }
+      const note = typeof e.note === "string" ? e.note : undefined;
+      const proofUrls = Array.isArray(e.proofUrls)
+        ? e.proofUrls.filter((u): u is string => typeof u === "string")
+        : [];
+      const includedInShare = typeof e.includedInShare === "boolean" ? e.includedInShare : undefined;
+      return {
+        taskId,
+        label,
+        proofUrls,
+        loggedAt,
+        ...(note ? { note } : {}),
+        ...(includedInShare !== undefined ? { includedInShare } : {}),
+      };
+    })
+    .filter((entry): entry is StreakMemoryTaskEntry => entry !== null);
+  return items.length > 0 ? items : undefined;
 }
 
 function miniCompletionMemoryFromRow(
@@ -373,16 +440,18 @@ function miniCompletionMemoryFromRow(
     const note = typeof rec.note === "string" ? rec.note : undefined;
     const imageUri = typeof rec.imageUri === "string" ? rec.imageUri : undefined;
     const imageUrl = typeof rec.imageUrl === "string" ? rec.imageUrl : undefined;
+    const tasks = parseStreakMemoryTaskEntries(rec.tasks);
     const createdAt =
       typeof rec.createdAt === "string"
         ? rec.createdAt
         : new Date().toISOString();
-    if (!note && !imageUri && !imageUrl) return undefined;
+    if (!note && !imageUri && !imageUrl && !tasks) return undefined;
     return {
       createdAt,
       ...(note ? { note } : {}),
       ...(imageUri ? { imageUri } : {}),
       ...(imageUrl ? { imageUrl } : {}),
+      ...(tasks ? { tasks } : {}),
     };
   } catch {
     return undefined;
@@ -460,6 +529,7 @@ function miniFromRow(row: Record<string, unknown>): MiniMission {
       liveRoleRaw === "creator" || liveRoleRaw === "member"
         ? liveRoleRaw
         : null,
+    taskChecklist: parseTaskChecklist(miniRowValue(row, "task_checklist", "taskChecklist")),
   };
 }
 
@@ -545,6 +615,7 @@ function miniToRow(sessionUserId: string, m: MiniMission) {
     completion_memory: m.completionMemory ?? null,
     live_squad_id: m.liveSquadId ?? null,
     live_squad_role: m.liveSquadRole ?? null,
+    task_checklist: m.taskChecklist ?? null,
   };
 }
 
@@ -964,7 +1035,7 @@ export async function pullFromSupabase(
       supabase
         .from("mini_missions")
         .select(
-          "user_id, id, title, objective, visibility, community_feed_revoked, estimated_minutes, extended_minutes, completion_mode, status, created_at, scheduled_start_at, started_at, completed_at, completion_memory, live_squad_id, live_squad_role",
+          "user_id, id, title, objective, visibility, community_feed_revoked, estimated_minutes, extended_minutes, completion_mode, status, created_at, scheduled_start_at, started_at, completed_at, completion_memory, live_squad_id, live_squad_role, task_checklist",
         )
         .eq("user_id", userId),
       supabase.from("profiles").select("xp, username").eq("id", userId).maybeSingle(),

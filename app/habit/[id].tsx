@@ -23,6 +23,7 @@ import { View,
   Platform,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowLeft, Trash2, Lock, RotateCcw, Star, Plane, Gamepad2, Globe, User, Users, Info, Bell } from 'lucide-react-native';
@@ -65,13 +66,15 @@ import { StreakMemoryGallery } from '../../src/components/StreakMemoryGallery';
 import { GroupChallengeSheet } from '../../src/components/GroupChallengeSheet';
 import { MissionDetailsSheet } from '../../src/components/MissionDetailsSheet';
 import { StreakRepairSheet } from "../../src/components/StreakRepairSheet";
+import { ChecklistDaySheet } from '../../src/components/ChecklistDaySheet';
 import { LazyMount } from '../../src/components/LazyMount';
-import type { StreakMemory } from '../../src/types/habit';
+import type { StreakMemory, StreakMemoryTaskEntry, TaskChecklistItem } from '../../src/types/habit';
 import {
     canUseStreakMemoryUpload,
     deleteHabitStreakMemoryImages,
     shouldUploadLocalStreakImage,
     uploadHabitStreakMemoryImage,
+    uploadHabitStreakTaskMemoryImage,
 } from '../../src/lib/streakMemoryStorage';
 import { useAuth } from '../../src/context/AuthContext';
 import { usePremium } from '../../src/context/PremiumContext';
@@ -465,6 +468,7 @@ export default function HabitDetail() {
         repairHabitCompletedDatesFromMemories,
         setStreakMemory,
         patchStreakMemory,
+        markChecklistDayComplete,
         resetHabit,
         deleteHabit,
         setHabitVisibility,
@@ -476,6 +480,7 @@ export default function HabitDetail() {
         repairHabitCompletedDatesFromMemories: state.repairHabitCompletedDatesFromMemories,
         setStreakMemory: state.setStreakMemory,
         patchStreakMemory: state.patchStreakMemory,
+        markChecklistDayComplete: state.markChecklistDayComplete,
         resetHabit: state.resetHabit,
         deleteHabit: state.deleteHabit,
         setHabitVisibility: state.setHabitVisibility,
@@ -516,8 +521,16 @@ export default function HabitDetail() {
     useEffect(() => {
         if (!habit) return;
         const completedSet = new Set(habit.completedDates ?? []);
-        const hasMissingMemoryCompletion = Object.keys(habit.streakMemories ?? {}).some(
-            (dateStr) => /^\d{4}-\d{2}-\d{2}$/.test(dateStr) && !completedSet.has(dateStr),
+        // Mirrors habitStore's hasClassicCompletionEvidence: a checklist day's tasks-only
+        // memory entry (logged, not yet Mark-Day-Complete'd) must not trip this repair —
+        // only a classic note/photo/check-in/repair marker counts as proof the day should
+        // have been completed. Getting this wrong force-completes the day the instant the
+        // first task is logged, which is exactly what "Mark Day Complete" replaced.
+        const hasMissingMemoryCompletion = Object.entries(habit.streakMemories ?? {}).some(
+            ([dateStr, memory]) =>
+                /^\d{4}-\d{2}-\d{2}$/.test(dateStr) &&
+                !completedSet.has(dateStr) &&
+                Boolean(memory.note || memory.imageUrl || memory.imageUri || memory.checkInOnly || memory.repairSource),
         );
         if (hasMissingMemoryCompletion) {
             repairHabitCompletedDatesFromMemories(habit.id);
@@ -549,6 +562,23 @@ export default function HabitDetail() {
         | { kind: 'view'; memory: StreakMemory; dateStr: string; day: number }
         | null;
     const [memoryUi, setMemoryUi] = useState<MemoryUiState>(null);
+    // Checklist missions (docs/CATALOG_ARCHITECTURE.md Phase 2) — day tap opens this
+    // instead of memoryUi when habit.taskChecklist is present and non-empty.
+    const [checklistDayUi, setChecklistDayUi] = useState<{ dateStr: string; day: number; dayIndex: number } | null>(null);
+    type TaskMemoryUiState =
+        | {
+              kind: 'create';
+              dateStr: string;
+              day: number;
+              dayIndex: number;
+              task: TaskChecklistItem;
+              /** Re-opening an already-logged-but-unlocked task: seeds the sheet with its existing content. */
+              prefill?: { note?: string; imageUri?: string };
+          }
+        | { kind: 'view'; dateStr: string; day: number; dayIndex: number; task: TaskChecklistItem; entry: StreakMemoryTaskEntry }
+        | null;
+    const [taskMemoryUi, setTaskMemoryUi] = useState<TaskMemoryUiState>(null);
+    const [checklistShareBusy, setChecklistShareBusy] = useState(false);
     const [acceptedGroupMemberCount, setAcceptedGroupMemberCount] = useState<number>(0);
     const [groupSheetOpen, setGroupSheetOpen] = useState(false);
     const [missionDetailsOpen, setMissionDetailsOpen] = useState(false);
@@ -966,6 +996,299 @@ export default function HabitDetail() {
         ],
     );
 
+    /**
+     * Checklist missions only (docs/CATALOG_ARCHITECTURE.md Phase 2, revised). Saves
+     * one task's note+photo into streak_memories[date].tasks. Logging a task no
+     * longer completes the day itself — tasks stay editable (re-opening a logged
+     * task pre-fills this same sheet) until the user explicitly taps "Mark Day
+     * Complete" (handleMarkChecklistDayComplete below), which is what actually
+     * advances the streak/XP and fires the squad notification.
+     *
+     * No community-publish path yet — that's Phase 3. Photo upload is attempted
+     * immediately (task-scoped storage path, distinct from the per-day classic path
+     * so same-day tasks can't overwrite each other); if it fails or isn't available,
+     * the local device URI is kept so the photo isn't lost, but it stays local-only
+     * (not synced across devices, not usable for community sharing) until re-saved
+     * successfully or a later phase adds background upload support for tasks.
+     */
+    const handleTaskMemoryCommit = useCallback(
+        async (memory: StreakMemory | null) => {
+            const ctx = taskMemoryUi;
+            if (!ctx || !habit) return;
+
+            let proofUrl = memory?.imageUrl?.trim() || undefined;
+            if (memory && !proofUrl && memory.imageUri) {
+                if (canUseStreakMemoryUpload() && shouldUploadLocalStreakImage(memory.imageUri)) {
+                    try {
+                        proofUrl = await uploadHabitStreakTaskMemoryImage({
+                            habitId: habit.id,
+                            dateStr: ctx.dateStr,
+                            taskId: ctx.task.id,
+                            localUri: memory.imageUri,
+                        });
+                    } catch (e) {
+                        const msg = e instanceof Error ? e.message : String(e);
+                        showToast(msg, 'error');
+                        proofUrl = memory.imageUri;
+                    }
+                } else {
+                    proofUrl = memory.imageUri;
+                }
+            }
+
+            const existingTasks = habit.streakMemories?.[ctx.dateStr]?.tasks ?? [];
+            const priorEntry = existingTasks.find((t) => t.taskId === ctx.task.id);
+
+            const taskEntry: StreakMemoryTaskEntry = {
+                taskId: ctx.task.id,
+                label: ctx.task.label,
+                note: memory?.note,
+                proofUrls: proofUrl ? [proofUrl] : [],
+                loggedAt: new Date().toISOString(),
+                // Re-saving an already-logged task (new photo/note) must not silently
+                // reset a previous "exclude from share" choice back to included.
+                includedInShare: priorEntry?.includedInShare,
+            };
+
+            const nextTasks = [...existingTasks.filter((t) => t.taskId !== ctx.task.id), taskEntry];
+
+            if (habit.streakMemories?.[ctx.dateStr]) {
+                patchStreakMemory(habit.id, ctx.dateStr, { tasks: nextTasks });
+            } else {
+                setStreakMemory(habit.id, ctx.dateStr, {
+                    createdAt: new Date().toISOString(),
+                    tasks: nextTasks,
+                });
+            }
+
+            // StreakMemorySheet calls onClose() itself right after onCommit resolves —
+            // that handler closes taskMemoryUi and reopens the checklist, so this
+            // function doesn't need to touch taskMemoryUi state.
+        },
+        [habit, taskMemoryUi, setStreakMemory, patchStreakMemory, showToast],
+    );
+
+    /**
+     * Checklist missions only. The explicit "Mark Day Complete" action — the only
+     * thing that now advances the streak/XP and fires the squad checklist
+     * notification for a checklist day (see docs/CATALOG_ARCHITECTURE.md). Works
+     * with zero, some, or all tasks logged: the store action backfills a bare
+     * check-in memory if nothing was logged, so the day still has a moment.
+     */
+    const handleMarkChecklistDayComplete = useCallback(
+        (dateStr: string, day: number, dayIndex: number) => {
+            if (!habit) return;
+            const changed = markChecklistDayComplete(habit.id, dateStr);
+            if (!changed) {
+                showToast(LOCKED_CHECKIN_MSG, 'info', 5000);
+                return;
+            }
+            const isMilestone = milestones.includes(day);
+            fireCompletionCelebration(dayIndex, day, isMilestone);
+            setChecklistDayUi(null);
+        },
+        [habit, markChecklistDayComplete, milestones, fireCompletionCelebration, showToast],
+    );
+
+    /**
+     * Checklist missions only (docs/CATALOG_ARCHITECTURE.md Phase 3+). Removes this
+     * day's catalog from Community entirely — same one-way-door semantics as the
+     * classic flow's revoke (handleHabitMemoryCommunityChange below): once removed,
+     * communityFeedRevoked blocks ever re-sharing this day. Also reached
+     * automatically from handleChecklistDayShare when unchecking every task leaves
+     * nothing to publish, rather than erroring on an already-shared day.
+     */
+    const handleChecklistDayUnshare = useCallback(
+        (dateStr: string) => {
+            if (!habit) return;
+            // Close this Modal before opening the confirm Modal — iOS can't reliably
+            // present a second native Modal over an already-open one (same bug class
+            // as the original paywall nested-modal fix, and the one just above in
+            // handleHabitMemoryCommunityChange). Capture the day context so the
+            // checklist can be reopened after Cancel, an error, or a successful removal.
+            const dayCtx = checklistDayUi;
+            setChecklistDayUi(null);
+            const reopenChecklist = () => {
+                if (dayCtx) setChecklistDayUi(dayCtx);
+            };
+            showAppAlert(
+                'Remove from Community?',
+                'This removes this day’s catalog from the feed. You won’t be able to share this day again.',
+                [
+                    { text: 'Cancel', style: 'cancel', onPress: reopenChecklist },
+                    {
+                        text: 'Remove',
+                        style: 'destructive',
+                        onPress: () => {
+                            void (async () => {
+                                setChecklistShareBusy(true);
+                                try {
+                                    const del = await deleteCommunityWin(habitStreakCommunityWinId(habit.id, dateStr));
+                                    if (del.ok === false) {
+                                        showAppAlert('Couldn’t remove', del.error, [{ text: 'OK', onPress: reopenChecklist }]);
+                                        return;
+                                    }
+                                    patchStreakMemory(habit.id, dateStr, {
+                                        communityPosted: false,
+                                        communityFeedRevoked: true,
+                                    });
+                                    reopenChecklist();
+                                } finally {
+                                    setChecklistShareBusy(false);
+                                }
+                            })();
+                        },
+                    },
+                ],
+            );
+        },
+        [habit, patchStreakMemory, checklistDayUi],
+    );
+
+    /** Flips one task's "include in the next share/update" flag. Local-only — does not publish by itself. */
+    const handleToggleTaskInclusion = useCallback(
+        (dateStr: string, taskId: string) => {
+            if (!habit) return;
+            const tasks = habit.streakMemories?.[dateStr]?.tasks ?? [];
+            const nextTasks = tasks.map((t) =>
+                t.taskId === taskId ? { ...t, includedInShare: t.includedInShare === false } : t,
+            );
+            patchStreakMemory(habit.id, dateStr, { tasks: nextTasks });
+        },
+        [habit, patchStreakMemory],
+    );
+
+    /**
+     * Shares (or updates) this day's catalog. Reuses postCommunityWin's existing
+     * upsert-on-(user_id, mini_mission_id) behavior — a second share for the same
+     * day updates the same feed post in place rather than creating a duplicate or
+     * bumping it to the top of anyone's feed (created_at is never touched by the
+     * upsert payload). Only tasks with includedInShare !== false AND an
+     * already-uploaded (https) photo are included — unchecked tasks, and tasks
+     * whose photo upload failed and is still local-only, are silently left out
+     * rather than blocking the whole share.
+     */
+    const handleChecklistDayShare = useCallback(
+        async (dateStr: string, day: number) => {
+            if (!habit) return;
+            // Every showAppAlert below must close checklistDayUi's Modal first —
+            // iOS can't reliably present a second native Modal over an already-open
+            // one. Capture the context once (without closing yet, since some paths
+            // — e.g. delegating to handleChecklistDayUnshare — need the sheet to
+            // still be open when they run) and reopen after a plain info alert is
+            // dismissed. The two premium-required paths deliberately do NOT reopen,
+            // matching the established "closing the sheet along with the paywall"
+            // pattern used everywhere else openUpsell is called from inside a sheet.
+            const dayCtx = checklistDayUi;
+            const reopenChecklist = () => {
+                if (dayCtx) setChecklistDayUi(dayCtx);
+            };
+            const mem = habit.streakMemories?.[dateStr];
+            if (mem?.communityFeedRevoked) {
+                setChecklistDayUi(null);
+                showAppAlert(
+                    'Can’t share',
+                    'This day was removed from Community and can’t be shared again.',
+                    [{ text: 'OK', onPress: reopenChecklist }],
+                );
+                return;
+            }
+            const tasks = mem?.tasks ?? [];
+            const gallery = tasks
+                .filter((t) => t.includedInShare !== false && t.proofUrls[0] && /^https?:\/\//.test(t.proofUrls[0]))
+                .map((t) => ({
+                    taskId: t.taskId,
+                    label: t.label,
+                    note: t.note ?? null,
+                    imageUrl: t.proofUrls[0],
+                }));
+
+            if (gallery.length === 0) {
+                if (mem?.communityPosted) {
+                    // Every task got unchecked on an already-shared day — remove the
+                    // whole post rather than leave an empty catalog published. Sheet
+                    // is still open here; handleChecklistDayUnshare manages its own
+                    // close/reopen around its own confirm Modal.
+                    handleChecklistDayUnshare(dateStr);
+                    return;
+                }
+                setChecklistDayUi(null);
+                showAppAlert(
+                    'Photo required',
+                    'Log at least one task with a photo before sharing this day’s catalog.',
+                    [{ text: 'OK', onPress: reopenChecklist }],
+                );
+                return;
+            }
+            if (!isSupabaseConfigured()) {
+                setChecklistDayUi(null);
+                showAppAlert('Can’t publish', 'Cloud sync isn’t configured.', [{ text: 'OK', onPress: reopenChecklist }]);
+                return;
+            }
+            if (!session?.user) {
+                setChecklistDayUi(null);
+                showAppAlert('Sign in to publish', 'Sign in to share this catalog in Community.', [{ text: 'OK', onPress: reopenChecklist }]);
+                return;
+            }
+            const freshPremium = await refreshPremiumAccess({ serverOnly: true, cachedAccessOk: true });
+            if (freshPremium !== true) {
+                setChecklistDayUi(null);
+                openUpsell('community_publish');
+                return;
+            }
+
+            setChecklistShareBusy(true);
+            try {
+                const ok = await requireUsername("community_post");
+                if (!ok) {
+                    setChecklistDayUi(null);
+                    showAppAlert('Username required', 'Choose a username to publish to Community.', [{ text: 'OK', onPress: reopenChecklist }]);
+                    return;
+                }
+                const res = await postCommunityWin({
+                    miniMissionId: habitStreakCommunityWinId(habit.id, dateStr),
+                    title: habit.title,
+                    completedAt: habit.streakMemories?.[dateStr]?.createdAt ?? new Date().toISOString(),
+                    memoryNote: gallery[0].note,
+                    memoryImageUrl: gallery[0].imageUrl,
+                    memoryGallery: gallery,
+                    feedSource: "habit_streak",
+                    streakMissionDay: day,
+                    streakCountAtPost: habit.streak,
+                });
+                if (res.ok === true) {
+                    patchStreakMemory(habit.id, dateStr, { communityPosted: true });
+                    showToast(
+                        `Shared ${gallery.length} photo${gallery.length === 1 ? '' : 's'} to Community.`,
+                        'success',
+                    );
+                } else {
+                    if (res.reason === "premium_required") {
+                        await refreshPremiumAccess({ force: true, serverOnly: true });
+                        setChecklistDayUi(null);
+                        openUpsell('community_publish');
+                        return;
+                    }
+                    setChecklistDayUi(null);
+                    showAppAlert('Couldn’t publish', res.error, [{ text: 'OK', onPress: reopenChecklist }]);
+                }
+            } finally {
+                setChecklistShareBusy(false);
+            }
+        },
+        [
+            habit,
+            session?.user,
+            refreshPremiumAccess,
+            requireUsername,
+            patchStreakMemory,
+            showToast,
+            openUpsell,
+            handleChecklistDayUnshare,
+            checklistDayUi,
+        ],
+    );
+
     const handleHabitMemoryCommunityChange = useCallback(
         async (next: boolean, dateStr: string, day: number) => {
             if (!habitId || !habit) return;
@@ -1052,11 +1375,24 @@ export default function HabitDetail() {
             }
 
             if (!mem.communityPosted) return;
+            // Close this Modal before opening the confirm Modal — iOS can't reliably
+            // present a second native Modal over an already-open one (same bug class
+            // as the original paywall nested-modal fix). Capture the current view so
+            // it can be restored after Cancel, an error, or a successful removal —
+            // StreakMemorySheet's viewMemory prop reads live habit.streakMemories over
+            // this snapshot anyway, so restoring the same reference is safe even after
+            // the underlying memory changes.
+            const viewToRestore = memoryUi;
+            pendingMemoryRef.current = null;
+            setMemoryUi(null);
+            const reopenView = () => {
+                if (viewToRestore) setMemoryUi(viewToRestore);
+            };
             showAppAlert(
                 'Remove from Community?',
                 'This removes this moment from the feed. You won’t be able to share this check-in to Community again.',
                 [
-                    { text: 'Cancel', style: 'cancel' },
+                    { text: 'Cancel', style: 'cancel', onPress: reopenView },
                     {
                         text: 'Remove',
                         style: 'destructive',
@@ -1066,13 +1402,14 @@ export default function HabitDetail() {
                                 try {
                                     const del = await deleteCommunityWin(habitStreakCommunityWinId(habit.id, dateStr));
                                     if (del.ok === false) {
-                                        showAppAlert('Couldn’t remove', del.error, [{ text: 'OK' }]);
+                                        showAppAlert('Couldn’t remove', del.error, [{ text: 'OK', onPress: reopenView }]);
                                         return;
                                     }
                                     patchStreakMemory(habit.id, dateStr, {
                                         communityPosted: false,
                                         communityFeedRevoked: true,
                                     });
+                                    reopenView();
                                 } finally {
                                     setHabitCommunityBusy(false);
                                 }
@@ -1082,7 +1419,7 @@ export default function HabitDetail() {
                 ],
             );
         },
-        [habit, habitId, session?.user, patchStreakMemory, showToast, openUpsell, refreshPremiumAccess],
+        [habit, habitId, session?.user, patchStreakMemory, showToast, openUpsell, refreshPremiumAccess, memoryUi],
     );
 
     const configured = isSupabaseConfigured();
@@ -1263,6 +1600,15 @@ export default function HabitDetail() {
         const canInteract = activeSlot !== null && day === activeSlot;
         const toggleable = isHabitCalendarDateToggleable(currentHabit, dateStr, pressNow);
 
+        if (currentHabit.taskChecklist && currentHabit.taskChecklist.length > 0) {
+            if (!wasCompleted && !toggleable) {
+                showToast(LOCKED_CHECKIN_MSG, 'info', 5000);
+                return;
+            }
+            setChecklistDayUi({ dateStr, day, dayIndex });
+            return;
+        }
+
         if (!wasCompleted) {
             if (!toggleable) {
                 showToast(LOCKED_CHECKIN_MSG, 'info', 5000);
@@ -1412,6 +1758,121 @@ export default function HabitDetail() {
                 />
             </LazyMount>
 
+            {habit.taskChecklist && habit.taskChecklist.length > 0 ? (
+                <>
+                    <ChecklistDaySheet
+                        visible={checklistDayUi !== null}
+                        day={checklistDayUi?.day ?? 1}
+                        missionTitle={habit.title}
+                        tasks={habit.taskChecklist}
+                        loggedTasks={
+                            checklistDayUi ? habit.streakMemories?.[checklistDayUi.dateStr]?.tasks ?? [] : []
+                        }
+                        dayCompleted={
+                            checklistDayUi ? habit.completedDates.includes(checklistDayUi.dateStr) : false
+                        }
+                        alreadyShared={
+                            checklistDayUi
+                                ? habit.streakMemories?.[checklistDayUi.dateStr]?.communityPosted === true
+                                : false
+                        }
+                        revoked={
+                            checklistDayUi
+                                ? habit.streakMemories?.[checklistDayUi.dateStr]?.communityFeedRevoked === true
+                                : false
+                        }
+                        sharing={checklistShareBusy}
+                        onShare={() => {
+                            if (!checklistDayUi) return;
+                            void handleChecklistDayShare(checklistDayUi.dateStr, checklistDayUi.day);
+                        }}
+                        onUnshare={() => {
+                            if (!checklistDayUi) return;
+                            handleChecklistDayUnshare(checklistDayUi.dateStr);
+                        }}
+                        onToggleTaskInclusion={(taskId) => {
+                            if (!checklistDayUi) return;
+                            handleToggleTaskInclusion(checklistDayUi.dateStr, taskId);
+                        }}
+                        onMarkComplete={() => {
+                            if (!checklistDayUi) return;
+                            handleMarkChecklistDayComplete(
+                                checklistDayUi.dateStr,
+                                checklistDayUi.day,
+                                checklistDayUi.dayIndex,
+                            );
+                        }}
+                        onSelectTask={(task) => {
+                            if (!checklistDayUi) return;
+                            const dayCtx = checklistDayUi;
+                            const dayCompleted = habit.completedDates.includes(dayCtx.dateStr);
+                            const existing = habit.streakMemories?.[dayCtx.dateStr]?.tasks?.find(
+                                (t) => t.taskId === task.id,
+                            );
+                            // Close this Modal before opening the task's StreakMemorySheet Modal —
+                            // iOS can't reliably present a second native Modal over an already-open
+                            // one (same class of bug as the earlier paywall nested-modal fix).
+                            setChecklistDayUi(null);
+                            if (dayCompleted) {
+                                // Locked: only already-logged tasks have anything to show.
+                                if (existing) {
+                                    setTaskMemoryUi({ kind: 'view', ...dayCtx, task, entry: existing });
+                                } else {
+                                    setChecklistDayUi(dayCtx);
+                                }
+                                return;
+                            }
+                            // Not yet locked — always editable, pre-filled if already logged.
+                            setTaskMemoryUi({
+                                kind: 'create',
+                                ...dayCtx,
+                                task,
+                                prefill: existing
+                                    ? { note: existing.note, imageUri: existing.proofUrls[0] }
+                                    : undefined,
+                            });
+                        }}
+                        onClose={() => setChecklistDayUi(null)}
+                    />
+                    <StreakMemorySheet
+                        visible={taskMemoryUi !== null}
+                        mode={taskMemoryUi?.kind === 'view' ? 'view' : 'create'}
+                        noticeVariant="editable-until-complete"
+                        prefill={taskMemoryUi?.kind === 'create' ? taskMemoryUi.prefill : undefined}
+                        viewMemory={
+                            taskMemoryUi?.kind === 'view'
+                                ? {
+                                      createdAt: taskMemoryUi.entry.loggedAt,
+                                      note: taskMemoryUi.entry.note,
+                                      imageUrl: taskMemoryUi.entry.proofUrls[0],
+                                  }
+                                : undefined
+                        }
+                        missionTitle={taskMemoryUi?.task.label ?? habit.title}
+                        dayLabel={taskMemoryUi ? String(taskMemoryUi.day) : '1'}
+                        onClose={() => {
+                            // Called automatically after a successful onCommit too (see
+                            // StreakMemorySheet's internal submit flow) — reopen the checklist
+                            // so the user lands back on it to log the next task, instead of
+                            // dropping back to the mission screen after every single task.
+                            if (taskMemoryUi) {
+                                setChecklistDayUi({
+                                    dateStr: taskMemoryUi.dateStr,
+                                    day: taskMemoryUi.day,
+                                    dayIndex: taskMemoryUi.dayIndex,
+                                });
+                            }
+                            setTaskMemoryUi(null);
+                        }}
+                        onCommit={
+                            taskMemoryUi?.kind !== 'view'
+                                ? (memory) => handleTaskMemoryCommit(memory)
+                                : undefined
+                        }
+                    />
+                </>
+            ) : null}
+
             <ScrollView
                 showsVerticalScrollIndicator={false}
                 keyboardShouldPersistTaps="handled"
@@ -1548,6 +2009,13 @@ export default function HabitDetail() {
                         },
                     ]}
                 >
+                    <LinearGradient
+                        pointerEvents="none"
+                        colors={["rgba(255,255,255,0.10)", "rgba(255,255,255,0)"]}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 0 }}
+                        style={[styles.missionControlsTopHighlight, { borderTopLeftRadius: theme.radius.lg, borderTopRightRadius: theme.radius.lg }]}
+                    />
                     <TouchableOpacity
                         activeOpacity={reminderLockedTime ? 1 : 0.84}
                         onPress={reminderLockedTime ? undefined : openReminderEditor}
@@ -2170,6 +2638,13 @@ const styles = StyleSheet.create({
         paddingVertical: 10,
         paddingHorizontal: 12,
         gap: 10,
+    },
+    missionControlsTopHighlight: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        height: 18,
     },
     missionControlPane: {
         flex: 1,

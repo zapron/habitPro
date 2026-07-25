@@ -63,7 +63,7 @@ import {
   type ProfileLabel,
 } from "../../src/lib/groupChallengesApi";
 import { subscribeSyncSuccess } from "../../src/lib/syncQueue";
-import { upsertRemoteHabit } from "../../src/lib/sync";
+import { parseTaskChecklist, upsertRemoteHabit } from "../../src/lib/sync";
 import { traceAsync } from "../../src/lib/perfTrace";
 import { startJsStallProbe, traceSync } from "../../src/lib/jsThreadProbe";
 import { waitForHabitPersistIdle } from "../../src/lib/chunkedHabitPersistStorage";
@@ -1150,6 +1150,7 @@ export default function CompeteScreen() {
       const description = typeof tpl.description === "string" ? tpl.description : undefined;
       const tplEnd =
         typeof tpl.endDate === "string" && tpl.endDate.trim().length > 0 ? tpl.endDate.trim() : undefined;
+      const taskChecklist = parseTaskChecklist(tpl.taskChecklist);
       const startIso = inviteeHabitStartIsoFromGroupStartDate(group.start_date, group.creator_timezone);
 
       const existingHabit = useHabitStore.getState().habits.find((h) => h.challengeGroupId === group.id);
@@ -1167,6 +1168,7 @@ export default function CompeteScreen() {
             missionTimezone: group.creator_timezone,
             startDate: startIso,
             endDate: mode === "manual" ? tplEnd : undefined,
+            taskChecklist,
             requestRemoteSync: false,
           }),
         );
