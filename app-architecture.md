@@ -328,6 +328,23 @@ Performance notes:
 - Memory image uploads happen before pushing memory state when possible.
 - `src/lib/accountBackup.ts` saves throttled account snapshots around remote pushes and focus refreshes.
 
+**Gotcha (found 2026-07-23, cost real debugging time — read before adding any new
+synced habit/mini field):** `pushFullState()` does not do a plain Supabase
+`.upsert()`. It calls the RPC `rpc_sync_dirty_state`, which parses the client's JSON
+via `jsonb_to_recordset(payload) as x(id text, title text, ...)` — an **explicit
+column list** in the RPC's own SQL. Any field the client sends that isn't named in
+that list is silently dropped by `jsonb_to_recordset` — no error, nothing in any log.
+A new column can exist on the table, be read/written correctly by every client
+function, be fully `tsc`-clean, and still never reach the database, because the RPC
+in between never learned about it. When adding a new synced field: update the table,
+update `habitFromRow`/`habitToRow` (or the mini-mission equivalents) in `sync.ts`,
+**and** add the field to `rpc_sync_dirty_state`'s recordset column list + insert
+column list + `on conflict do update set` clause (new migration). Separately check
+`rpc_focus_delta_v1` (the read/pull side) — that one uses `to_jsonb(h)` on the whole
+row, so it does *not* need a matching update, but don't assume every RPC behaves the
+same way; verify each one. See `supabase/migrations/20260723090000_sync_dirty_state_task_checklist.sql`
+for the real fix and `docs/CATALOG_ARCHITECTURE.md` §2.5/Phase 2 for the full story.
+
 ## Auth
 
 Auth context:
@@ -400,7 +417,8 @@ Important related components:
 - `src/components/StreakMemoryGallery.tsx`
 - `src/components/StreakRepairSheet.tsx`
 - `src/components/MissionDetailsSheet.tsx`
-- `src/components/StreakBanner.tsx`
+- `src/components/StreakProgressCard.tsx` (merged streak-intensity + progress-ring card; replaced the old `StreakBanner.tsx`, which was deleted)
+- `src/components/ChecklistDaySheet.tsx` (multi-task checklist missions only — see `docs/CATALOG_ARCHITECTURE.md`)
 
 Important helpers:
 
@@ -417,6 +435,12 @@ Memory behavior:
 - Public/community memories can become `community_wins`.
 - Image uploads are coordinated during sync.
 - Saved moments render above the Active Trail/grid through `src/components/StreakMemoryGallery.tsx`.
+- Missions with a non-empty `habit.taskChecklist` use a separate, opt-in path: tapping
+  a day opens `ChecklistDaySheet` instead of the classic `StreakMemorySheet`, each
+  task logs into `streak_memories[date].tasks` (not the flat `note`/`imageUrl`
+  fields), and the day completes on the *first* task logged, not when every task is
+  done. Every mission without a checklist is completely unaffected — see
+  `docs/CATALOG_ARCHITECTURE.md` for the full design and phased rollout status.
 - The moment gallery is a two-row wide rounded hex/honeycomb strip. It uses horizontal `FlashList` columns so only nearby SVG/image tiles mount.
 - Each honeycomb tile may use SVG clipping (`ClipPath` + `SvgImage`) and storage thumbnails. This is visually heavier on Android than ordinary rectangular `Image` cards, so keep virtualization and batching intact.
 - The gallery uses React Native's built-in `Animated` API for its subtle build-in animation. Avoid importing `react-native-reanimated` into this component for Expo Go testing unless Worklets native and JS versions match.
@@ -618,6 +642,12 @@ Fallback behavior:
 - If viewer is not a member or detail cannot resolve, show unavailable state.
 - Be careful with habit IDs/user IDs/date IDs; remote markers and actual details must match.
 
+Catalog feature status: this screen does **not** yet show multi-task catalogs. It
+reads `streak_memories[date]` through its own dedicated fetch
+(`challengeMemoryDetail.ts`), separate from `communityWinsApi.ts` / `community_wins`
+entirely, so the gallery/carousel work done for the main Community feed doesn't reach
+it automatically. See `docs/CATALOG_ARCHITECTURE.md` §6 (explicitly deferred).
+
 ## Community Feed
 
 Screen:
@@ -638,6 +668,16 @@ Purpose:
 - Supports pagination.
 - Supports likes/cheers.
 - Supports opening detail moments and public player journeys.
+- Multi-task catalog posts (`memory_gallery` on the `community_wins` row) render as
+  an inline swipeable carousel (`PhotoCarousel`, defined inside
+  `CommunityWinFeedPost.tsx`) with a dot indicator and a per-slide task-name/note
+  caption, instead of a single static photo. Single-photo posts — everything that
+  predates this feature — are completely unaffected; they never reach that code path.
+  Tapping still opens `CommunityWinImageLightbox` full-screen, now gallery-capable
+  (`images: string[]`, was a single `imageUri`) and landing on the exact photo
+  swiped to. `my-journey.tsx` and `community-player/[id].tsx` still use the old
+  single-image-only call pattern — not yet upgraded, see
+  `docs/CATALOG_ARCHITECTURE.md` §5/Phase 4.
 
 Important tables:
 
@@ -1031,6 +1071,7 @@ General UI conventions in this app:
 - Do not commit unless explicitly asked.
 - Do not reset/revert unrelated local changes.
 - Treat Supabase migrations and RPCs as part of the app contract.
+- `rpc_sync_dirty_state` (the habit/mini push RPC) parses an explicit column list via `jsonb_to_recordset` — a new synced field needs a migration to add it there too, or it's silently dropped with no error. See the Sync Architecture section above.
 - Notification routes exist in two places and must stay aligned.
 - Cohort dot markers are intentionally lightweight; do not reintroduce full memory payload loading into member list rows.
 - Repairs can show declined even with enough approvals if backend `status` is declined; display must follow backend state.
@@ -1043,6 +1084,19 @@ General UI conventions in this app:
 - OTA updates must match the installed binary runtime version; native/config changes require a new build.
 - Realtime subscriptions should use unique channel names where needed and be removed on cleanup.
 - Pending delete/reset queues are intentional sync state. Do not clear them until the matching remote operation succeeds.
+- **iOS cannot reliably present a second native `<Modal>` while one is already open** — it silently fails (no crash, no error, the second modal just never appears); Android's Dialog-backed `Modal` tolerates it, which is why this class of bug is always reported as "works on Android, not on iOS." This is not just about `openUpsell`/the paywall (the original fix, 8 files/12 call sites — see `docs/WORK_HISTORY.md` 2026-07-22): `showAppAlert` (`src/context/AppDialogContext.tsx`) also renders through a real `<Modal>`, not a native OS alert as the name might suggest, so calling `showAppAlert(...)` from inside a handler while any sheet/modal is still open hits the exact same bug. Found and fixed twice more on 2026-07-23 (catalog "Remove from Community," and a latent pre-existing bug in the classic single-memory revoke flow, `handleHabitMemoryCommunityChange` in `app/habit/[id].tsx`) — both fixed the same way: close the enclosing Modal immediately before calling `showAppAlert`/`openUpsell`, capture what was open so it can be reopened afterward if appropriate. **Known still-open instance, not yet fixed**: `handleMemoryCommit` in `app/habit/[id].tsx` (~lines 886-963) calls `showAppAlert` for several publish-time validation errors while `StreakMemorySheet`'s Modal is still open (it only auto-closes after `onCommit` resolves) — structurally trickier to fix than the others since closing the sheet early, mid-async-operation, could look premature; needs its own careful pass. When adding any new confirm/error dialog inside a sheet: default to assuming this bug applies and close-before-open, don't assume `showAppAlert` is safe just because it isn't literally named `Modal`.
+
+Also not limited to `showAppAlert`/`openUpsell` — any two full-screen `<Modal>`s stacking has the same problem. Found (and fixed) a third and fourth instance on 2026-07-23 in `app/my-journey.tsx` and `app/community-player/[id].tsx`: each has a `MissionGalleryModal` (a full-screen photo-gallery `<Modal>`) that opened `CommunityWinImageLightbox` (another `<Modal>`) on top of itself when a photo tile inside it was tapped. Fixed identically in both files with a `missionBeforeLightboxRef` + unified `openLightbox`/`closeLightbox` handler pair: opening the lightbox closes `MissionGalleryModal` first (remembering which mission story was open), closing the lightbox reopens it.
+
+- **A horizontal swipe carousel that gates rendering behind an `onLayout`-measured width, starting from `useState(0)`, can render nothing at all, forever.** Found in `DotViewerCarousel` (`src/components/CohortPeerStreakDots.tsx`) and `MemoryPhotoCarousel` (`app/challenge-memory.tsx`) on 2026-07-24 — both used `{slideWidth > 0 ? <FlatList .../> : null}` with `slideWidth` seeded at `0`. Content inside a `<Modal>` can get a layout pass measured before the Modal has actually taken its final size (a known RN quirk), and if `onLayout` never fires again with a corrected value, the gate never opens. Reported by the user as a sporadic solid-black card. Fix: seed the width from `useWindowDimensions()` (with known insets subtracted where relevant) instead of `0`, and never gate the `FlatList` on the measurement — let `onLayout` only refine an already-valid value. `app/my-journey.tsx`'s `JourneyMemoryLightbox` never had this bug, because it reads `useWindowDimensions()` directly instead of measuring via `onLayout` — prefer that pattern for any new full-bleed horizontal carousel.
+- **`maybeCompressImageForUpload` (`src/lib/streakMemoryStorage.ts`) can silently upload a full, uncompressed camera original.** It resizes to 1280px width + JPEG quality 0.82 via `expo-image-manipulator`, but the resize step can throw on some Android `content://` URIs; before 2026-07-24 the `catch` had no retry and no logging, silently falling back to the raw picked file (several MB). Confirmed via direct Supabase Storage query: 16% of uploaded files were over 1 MB and accounted for 52% of total bucket bytes. Fixed with a compress-only retry tier plus `console.warn` logging on both failure tiers — but if Storage usage climbs unexpectedly again, check these logs first before assuming the compression settings themselves need changing.
+- **A photo uploaded from an iOS device can render as a blank/black image specifically on Android viewers, while working everywhere else.** Root cause, confirmed by downloading real uploaded files from both platforms and parsing their raw JPEG markers directly (not guessed): iOS's native image encoder (via `expo-image-manipulator`'s iOS-native implementation) embeds a wide-gamut ICC color profile (JPEG `APP2` markers, commonly Display P3) in its output; Android's native encoder does not. Some Android image decoders fail to render a JPEG with that profile embedded at all, while iOS decodes either version — with or without the profile — fine natively. `expo-image-manipulator`'s `SaveOptions` has no option to control this (checked its type definitions directly — only `compress`/`format`/`base64` exist). Fixed in `readImageBytesForUpload` (`src/lib/streakMemoryStorage.ts`) with a hand-rolled `stripIccProfile()` byte-level pass that removes `APP2` segments from any JPEG before upload, applied to every upload path. This only removes the color-space *hint*; pixel data is untouched, verified by re-parsing a stripped real file and confirming identical dimensions with zero `APP2` markers remaining. If a future report says "photo works on iOS but not Android" (or the reverse) for any image-serving feature, check for this exact pattern before assuming a networking/permissions issue.
+- **On Android, content that gets mounted into an already-open native `<Modal>` can silently fail to render, even though the exact same content mounts fine when it's present from the Modal's first visible frame.** Found in `CohortPeerStreakDots.tsx`'s memory viewer on 2026-07-24: opening your *own* day's memory resolves synchronously (local state), so the Modal opens with final content already in place, and always worked. Opening a *peer's* day goes through an async RPC — the Modal opened first showing a "Loading moment…" state, then the same already-open Modal swapped in the real photo once the fetch resolved. On Android specifically, that in-place content swap silently failed to render at all (solid black), for every peer, every mission type, regardless of who captured the photo or what platform they were on — confirmed by testing the same account on iOS (worked) vs. Android (failed) and by confirming the image URL loads fine in a browser on the same Android device (ruling out network/file/server issues entirely). iOS's modal presentation doesn't have this quirk.
+  - **First fix attempt, tried and reverted**: keying the `<Modal>` on a content-category string (`loading-<date>` / `content-<date>` / etc.) so React fully unmounts/remounts the native modal window when the category changes. This "fixed" Android but broke iOS the same way — rapidly tearing down and re-presenting a native `<Modal>` in the same instant is itself a source of glitches on *both* platforms, since native modal presentation/dismissal takes real wall-clock time and isn't synchronized with React's reconciliation. Do not use `key`-forced remounts on `<Modal>` as a fix for this class of problem.
+  - **Actual fix**: never open the Modal until the async data is fully ready — matching the `isSelf` pattern that never had this problem on either platform. The loading state moved *outside* the Modal entirely (a small `ActivityIndicator` shown on the tapped dot itself, via a `pendingTap` state), and `setOpen(...)` is only ever called once, with complete data. The Modal now only ever mounts with final content already in place, on both the peer and self paths alike — it never needs to update or remount mid-flight at all. When a Modal's content depends on an async fetch, prefer delaying the Modal's `visible` transition until the data is ready over trying to show/swap a loading state inside an already-open Modal — that in-between state is what caused both the original bug and the failed first fix attempt.
+- **Changing what a data field *means* requires auditing every place that already derives from its old meaning, not just the place that writes it.** The "Mark Day Complete" redesign (2026-07-25, `docs/CATALOG_ARCHITECTURE.md` addendum) changed checklist missions so that logging a task writes a `streakMemories[date]` entry *before* the day is completed — breaking a previously-safe assumption ("any memory entry for a date is proof that date should be in `completedDates`") that three independent, pre-existing self-heal call sites all relied on: `habitStore.ts`'s `completedDatesWithMemoryEvidence` (backing both `repairHabitCompletedDatesFromMemories` and `onRehydrateStorage`, so it also refires on every app cold start), a matching `useEffect` in `app/habit/[id].tsx`, and `src/lib/sync.ts`'s `habitFromRow` (runs on every remote pull/delta sync — the one that made the bug reproduce fastest). All three force-added a date to `completedDates` the instant its first task was logged, silently re-completing the day and firing the squad notification early. Fixed by requiring a *classic* marker (`note`/`imageUrl`/`imageUri`/`checkInOnly`/`repairSource`) before counting a memory as completion evidence, not mere key presence. When changing an existing field/flag's meaning, grep for every reader of it first — the bug surfaces where the reader is, not where the writer changed.
+- **`useEffect` runs after render — a ref sized to match a prop at render time, then "corrected" for a changed prop inside a `useEffect`, has a window where the render reads a too-short/stale ref.** Found in `StreakMemoryGallery.tsx`'s hex-stack shuffle animation (2026-07-26): one `Animated.Value` per stacked photo lived in a `useRef` array sized to the current photo count, resized inside a `useEffect` when the count grew. The render that *first* saw a 2-photo day gain a 3rd task (logging it while that day's hex tile was still mounted on screen) indexed the not-yet-resized array, got `undefined`, and called `undefined.interpolate(...)` — a hard crash, identical on iOS and Android since it's a plain JS `TypeError`, not anything native. Only triggered by an *update* to an already-mounted component; a fresh mount always sizes correctly from its `useState`/`useRef` initializer, which is why it only reproduced on a task's 3rd-and-later log, never the 1st or 2nd. Fixed by moving the resize into a plain, guarded `if` block in the render body (mutating a ref during render takes effect immediately for that same render; a paired `setState` call there is React's documented "adjust state while rendering" pattern, safe as long as it's guarded so it can't loop). When a ref/array needs to track a prop that can grow while the owning component stays mounted, do the resize synchronously in the render body, not in an effect.
+- **`SplashGate` (`src/components/SplashGate.tsx`) mounts the real app content immediately, *underneath* its splash overlay** — the overlay is a separate absolutely-positioned layer on top (`AnimatedSplashOverlay`, z-index 9999), not something the real screens render behind a gate for. A mount-triggered animation (e.g. `HabitCard`'s stack-up entrance, added 2026-07-26) that starts immediately in a `useEffect` on mount will therefore run to completion *behind the still-opaque splash* on the very first cold launch (the overlay's minimum display time is 2.4s+), and the user only ever sees it play on a later remount (tab switch, navigating back) — never on actual app startup, which is usually the one moment it matters most. Fixed with a one-shot signal, `src/lib/appReadySignal.ts` (`markAppReady()` called from `SplashGate`'s `onDismissed`; `onAppReady(callback)` fires immediately if already latched, otherwise waits) — any "first impression" mount animation should start inside `onAppReady(...)`, not directly in its own effect, or check this pattern before assuming a "the animation isn't working" report is about the animation's tuning rather than its timing.
 
 ## Where To Start For Common Changes
 
@@ -1053,6 +1107,7 @@ General UI conventions in this app:
 - Squad activity: `src/components/SquadActivitySection.tsx`, `src/lib/challengeCohort.ts`.
 - Repairs: `src/lib/streakRepairApi.ts`, `src/components/StreakRepairSheet.tsx`.
 - Community feed: `src/components/CommunityWinsFeed.tsx`, `src/lib/communityWinsApi.ts`.
+- Multi-task checklist missions / community catalog (in progress): read `docs/CATALOG_ARCHITECTURE.md` first — it is the source of truth for this feature's data model, phased rollout, and open items. Key files: `app/create.tsx` (checklist creation), `src/components/ChecklistDaySheet.tsx` + `app/habit/[id].tsx` (`handleTaskMemoryCommit`, `handleChecklistDayShare`, `handleChecklistDayUnshare`, `handleToggleTaskInclusion`) for logging/sharing, `src/components/PhotoCarousel` (inline component inside `CommunityWinFeedPost.tsx`) + `CommunityWinImageLightbox.tsx` for the swipeable gallery.
 - Public journey: `app/community-player/[id].tsx`, `app/my-journey.tsx`.
 - Leaderboard/search: `app/(tabs)/compete.tsx`, `src/lib/weeklyLeaderboardApi.ts`.
 - Live minis: `app/live-mini/[id].tsx`, `src/lib/liveMiniMissionsApi.ts`.

@@ -141,6 +141,82 @@ Do not treat this as a tiny UI toggle. It touches local state, Supabase RPCs, Li
 - Live Mini invite sheet content is keyboard-scrollable so iPhone keyboards do not cover username search/results.
 - Live Mini board cards use Supabase render thumbnails for inline memory images; tap-to-view still opens the full image.
 
+### Multi-Task Checklist Missions / Community Catalog (main + mini, shipped)
+
+- `docs/CATALOG_ARCHITECTURE.md` (main missions) and
+  `docs/MINI_MISSION_CATALOG_ARCHITECTURE.md` (mini missions/Live Squad) are the
+  single sources of truth for design decisions — read them first, don't
+  reconstruct from code alone.
+- A mission (main or mini) can optionally have a task checklist (e.g. "get up
+  early," "eat healthy," "gym"); each task logs its own note+photo. Both the
+  main-mission and mini-mission versions are fully built, migrated, and
+  confirmed working end-to-end by the user on iOS and Android, including Live
+  Squad checklist propagation to invited members and a task-checklist preview
+  before accepting an invite.
+- **Revised 2026-07-25** — day/mission completion is no longer implied by the
+  first task logged. See "Mark Day Complete" below; this is the current
+  behavior, not the original Phase-2 decision documented in
+  `CATALOG_ARCHITECTURE.md`'s earlier sections (that doc has an addendum at the
+  bottom recording the change).
+- Still deferred, not forgotten: the Journey grid's "×N" photo-count badge, and
+  a dedicated visual design pass beyond what's shipped so far (see "Home Screen
+  Premium UI Pass" below, which is a separate, later initiative).
+- One real bug worth knowing about generally, not just for this feature: the
+  habit/mini push RPC (`rpc_sync_dirty_state`) parses an explicit column list
+  and silently drops any field not named in it. See `app-architecture.md` Sync
+  Architecture section before adding any new synced field to `habits` or
+  `mini_missions`.
+- Durable patterns from this feature's build, documented in full in
+  `app-architecture.md` Known Caution Points: (1) iOS embeds a wide-gamut ICC
+  color profile in uploaded photos that some Android decoders can't render —
+  stripped at upload time in `streakMemoryStorage.ts`; (2) on Android, a
+  `<Modal>`'s content can silently fail to render if it's swapped in *after*
+  the Modal is already open — never open the Modal until data is ready, don't
+  force a remount via `key`; (3) changing what a data field *means* (e.g. "a
+  memory entry exists" no longer implying "the day is complete") requires
+  auditing every reader of the old meaning, not just the writer — this exact
+  gap re-broke the Mark Day Complete redesign below via three unrelated
+  pre-existing self-heal call sites; (4) a ref/array sized to a prop that can
+  grow while a component stays mounted must be resized synchronously in the
+  render body, not inside a `useEffect` (effects run after render, so the
+  in-between render can index a too-short array and crash).
+
+### Mark Day Complete (Checklist Notification-Timing Redesign, shipped 2026-07-25)
+
+- Checklist main missions only. Logging a task no longer completes the day or
+  fires the squad notification by itself — tasks stay editable (re-opening a
+  logged-but-unlocked task pre-fills it) until the user taps the explicit
+  **Mark Day Complete** button in `ChecklistDaySheet`, or the quick one-tap
+  "MARK COMPLETE" action on the Home mission card (`HabitCard.tsx`). That
+  action is the only thing that now advances streak/XP and fires the squad
+  notification. Full design rationale and negotiation history in
+  `docs/CURRENT_WORK.md`; no backend/DB changes were needed (confirmed by
+  reading `tg_habits_notify_challenge_squad_checkin`,
+  `rpc_challenge_memory_detail_v1`, and `process-streak-reminders` in full —
+  all react purely to `completed_dates`, which is unaffected by *when* that
+  array gets written).
+- A real regression surfaced during on-device testing right after this shipped
+  (see the caution-point cross-reference above) — already found and fixed, not
+  an open issue.
+
+### Home Screen Premium UI Pass (in progress, started 2026-07-26)
+
+- User wants a full visual overhaul, screen by screen, toward a more premium
+  finish while keeping the app's existing flavor — iterative and turn-by-turn
+  right now, not yet formalized into `app-architecture.md` (user said they'll
+  ask for that when ready).
+- Shipped so far (Home tab): a static glass top-highlight (ported from the
+  mission detail screen's Timer/StreakProgressCard cards) on every Home card,
+  and a spring "stack up from below" mount animation for mission cards with a
+  per-card stagger. Also shipped, separately, on the mission detail screen's
+  honeycomb memory gallery: living-memory hex animations (see
+  `docs/CURRENT_WORK.md` for the fan-stack → spring-squish → wave-timing
+  iteration history) — arguably part of the same "make it feel alive" design
+  direction, done slightly earlier the same day.
+- Full detail, including a bug where the entrance animation played invisibly
+  behind the splash screen on cold start (fixed via `src/lib/appReadySignal.ts`),
+  in `docs/CURRENT_WORK.md`'s top section.
+
 ### Main Mission Visibility Sync
 
 - Main mission Solo/Public visibility is sent by the client and must be persisted by `rpc_sync_dirty_state`.
