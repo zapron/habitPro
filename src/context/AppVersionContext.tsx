@@ -20,10 +20,19 @@ type AppVersionContextValue = {
   latestVersion: string | null;
   downloadUrl: string | null;
   forceMessage: string | null;
+  /** Premium force-update card content, sourced from the matching release row. */
+  forceImageUrl: string | null;
+  forceChangelog: string[];
+  forceChangelogUrl: string | null;
   softUpdateUrl: string | null;
   softUpdateMessage: string | null;
   loading: boolean;
   refresh: () => Promise<void>;
+  // TEMP-DEV-SIM: __DEV__-only override so the force-update block screen can be
+  // previewed live without touching the real Supabase policy row (which would
+  // block real users). Remove once the premium force-update visual is done.
+  devSimulateForceUpdate: boolean;
+  setDevSimulateForceUpdate: (value: boolean) => void;
 };
 
 const AppVersionContext = createContext<AppVersionContextValue | null>(null);
@@ -41,10 +50,30 @@ function pickLatestRelease(
   return [...matching].sort((a, b) => compareSemver(b.version, a.version))[0] ?? null;
 }
 
+/**
+ * Fallback for release rows without a structured `changelog` array yet (or
+ * before that column exists in the DB at all) — turns a free-text notes/
+ * force_update_message string into bullet lines by splitting on newlines and
+ * stripping common list-item prefixes ("1) ", "2. ", "- ", "* ").
+ */
+function parseChangelogFallback(text: string | null): string[] {
+  if (!text) return [];
+  return text
+    .split("\n")
+    .map((line) => line.trim().replace(/^(\d+[).]|[-*])\s*/, ""))
+    .filter((line) => line.length > 0);
+}
+
 export function AppVersionProvider({ children }: { children: React.ReactNode }) {
   const [policy, setPolicy] = useState<AppVersionPolicyRow | null>(null);
   const [releases, setReleases] = useState<AppVersionReleaseRow[]>([]);
   const [loading, setLoading] = useState(true);
+  // TEMP-DEV-SIM: see devSimulateForceUpdate on AppVersionContextValue above.
+  const [devSimulateForceUpdate, setDevSimulateForceUpdateState] = useState(false);
+  const setDevSimulateForceUpdate = useCallback((value: boolean) => {
+    if (!__DEV__) return;
+    setDevSimulateForceUpdateState(value);
+  }, []);
 
   const currentVersion = useMemo(() => getRuntimeAppVersion(), []);
   const nativeBuildLabel = useMemo(() => getRuntimeNativeBuildLabel(), []);
@@ -75,11 +104,14 @@ export function AppVersionProvider({ children }: { children: React.ReactNode }) 
   }, [refresh]);
 
   const {
-    needsForceUpdate,
+    needsForceUpdate: computedNeedsForceUpdate,
     softUpdateAvailable,
     latestVersion,
     downloadUrl,
     forceMessage,
+    forceImageUrl,
+    forceChangelog,
+    forceChangelogUrl,
     softUpdateUrl,
     softUpdateMessage,
   } = useMemo(() => {
@@ -90,6 +122,9 @@ export function AppVersionProvider({ children }: { children: React.ReactNode }) 
         latestVersion: null as string | null,
         downloadUrl: null as string | null,
         forceMessage: null as string | null,
+        forceImageUrl: null as string | null,
+        forceChangelog: [] as string[],
+        forceChangelogUrl: null as string | null,
         softUpdateUrl: null as string | null,
         softUpdateMessage: null as string | null,
       };
@@ -106,21 +141,30 @@ export function AppVersionProvider({ children }: { children: React.ReactNode }) 
     const url = platform === "ios" ? policy.ios_download_url : policy.android_download_url;
     const trimmedUrl = typeof url === "string" && url.trim().length > 0 ? url.trim() : null;
     const msg = typeof policy.force_update_message === "string" ? policy.force_update_message : null;
+    const matchingRelease = latestRelease && latestRelease.version === latest ? latestRelease : null;
     const releaseUrl =
-      latestRelease && latestRelease.version === latest && typeof latestRelease.download_url === "string"
-        ? latestRelease.download_url.trim()
-        : "";
+      matchingRelease && typeof matchingRelease.download_url === "string" ? matchingRelease.download_url.trim() : "";
     const softUrl = releaseUrl.length > 0 ? releaseUrl : trimmedUrl;
-    const notes =
-      latestRelease && latestRelease.version === latest && typeof latestRelease.notes === "string"
-        ? latestRelease.notes.trim()
-        : "";
+    const notes = matchingRelease && typeof matchingRelease.notes === "string" ? matchingRelease.notes.trim() : "";
     const softMessage =
       notes.length > 0
         ? notes
         : latest
           ? `Version ${latest} is available. Update when you have a minute.`
           : null;
+    const imageUrl =
+      matchingRelease && typeof matchingRelease.image_url === "string" && matchingRelease.image_url.trim().length > 0
+        ? matchingRelease.image_url.trim()
+        : null;
+    const structuredChangelog =
+      matchingRelease && Array.isArray(matchingRelease.changelog)
+        ? matchingRelease.changelog.filter((line): line is string => typeof line === "string" && line.trim().length > 0)
+        : [];
+    const changelog = structuredChangelog.length > 0 ? structuredChangelog : parseChangelogFallback(notes || msg);
+    const changelogUrl =
+      matchingRelease && typeof matchingRelease.changelog_url === "string" && matchingRelease.changelog_url.trim().length > 0
+        ? matchingRelease.changelog_url.trim()
+        : null;
     if (!min || !min.trim()) {
       return {
         needsForceUpdate: false,
@@ -128,6 +172,9 @@ export function AppVersionProvider({ children }: { children: React.ReactNode }) 
         latestVersion: latest,
         downloadUrl: trimmedUrl,
         forceMessage: msg,
+        forceImageUrl: imageUrl,
+        forceChangelog: changelog,
+        forceChangelogUrl: changelogUrl,
         softUpdateUrl: softUrl,
         softUpdateMessage: softMessage,
       };
@@ -141,10 +188,17 @@ export function AppVersionProvider({ children }: { children: React.ReactNode }) 
       latestVersion: latest,
       downloadUrl: trimmedUrl,
       forceMessage: msg,
+      forceImageUrl: imageUrl,
+      forceChangelog: changelog,
+      forceChangelogUrl: changelogUrl,
       softUpdateUrl: softUrl,
       softUpdateMessage: softMessage,
     };
   }, [policy, releases, currentVersion]);
+
+  // TEMP-DEV-SIM: __DEV__-only override, layered on top of the real computed
+  // value rather than threaded into the memo above — see devSimulateForceUpdate.
+  const needsForceUpdate = __DEV__ && devSimulateForceUpdate ? true : computedNeedsForceUpdate;
 
   const value = useMemo(
     () => ({
@@ -157,10 +211,15 @@ export function AppVersionProvider({ children }: { children: React.ReactNode }) 
       latestVersion,
       downloadUrl,
       forceMessage,
+      forceImageUrl,
+      forceChangelog,
+      forceChangelogUrl,
       softUpdateUrl,
       softUpdateMessage,
       loading,
       refresh,
+      devSimulateForceUpdate,
+      setDevSimulateForceUpdate,
     }),
     [
       policy,
@@ -172,10 +231,15 @@ export function AppVersionProvider({ children }: { children: React.ReactNode }) 
       latestVersion,
       downloadUrl,
       forceMessage,
+      forceImageUrl,
+      forceChangelog,
+      forceChangelogUrl,
       softUpdateUrl,
       softUpdateMessage,
       loading,
       refresh,
+      devSimulateForceUpdate,
+      setDevSimulateForceUpdate,
     ],
   );
 

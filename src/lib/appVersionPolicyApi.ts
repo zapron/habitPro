@@ -18,6 +18,12 @@ export type AppVersionReleaseRow = {
   platform: "android" | "ios" | "all";
   download_url: string | null;
   notes: string | null;
+  /** Optional hero image for the force-update screen's premium card. */
+  image_url: string | null;
+  /** Optional structured bullet-point changelog; falls back to `notes` when null. */
+  changelog: string[] | null;
+  /** Optional link to a full changelog / release notes page. */
+  changelog_url: string | null;
   created_at: string;
 };
 

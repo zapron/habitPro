@@ -23,6 +23,7 @@ import { ForceUpdateModal } from "../src/components/ForceUpdateModal";
 import { SplashGate } from "../src/components/SplashGate";
 import { AppLaunchNotificationNudge } from "../src/components/AppLaunchNotificationNudge";
 import { OtaUpdateManager } from "../src/components/OtaUpdateManager";
+import { DevUpdateSimPanel } from "../src/components/DevUpdateSimPanel"; // TEMP-DEV-SIM
 import { SyncManager } from "../src/components/SyncManager";
 import { SyncToast } from "../src/components/SyncToast";
 import { NetworkRequiredGate } from "../src/components/NetworkRequiredGate";
@@ -40,7 +41,8 @@ function RootLayoutNav() {
   const pathname = usePathname();
   const router = useRouter();
   const requireAuth = isSupabaseConfigured();
-  const { needsForceUpdate, downloadUrl, forceMessage } = useAppVersion();
+  const { needsForceUpdate, downloadUrl, forceMessage, latestVersion, forceImageUrl, forceChangelog, forceChangelogUrl } =
+    useAppVersion();
 
   useEffect(() => {
     void setupNotifications();
@@ -347,8 +349,17 @@ function RootLayoutNav() {
       <Stack screenOptions={{ headerShown: false }} />
       <ToastHost />
       <SyncToast />
-      <ForceUpdateModal visible={needsForceUpdate} downloadUrl={downloadUrl} message={forceMessage} />
+      <ForceUpdateModal
+        visible={needsForceUpdate}
+        downloadUrl={downloadUrl}
+        message={forceMessage}
+        version={latestVersion}
+        imageUrl={forceImageUrl}
+        changelog={forceChangelog}
+        changelogUrl={forceChangelogUrl}
+      />
       <NetworkRequiredGate />
+      <DevUpdateSimPanel />{/* TEMP-DEV-SIM */}
     </View>
   );
 }
