@@ -30,23 +30,6 @@ export function triggerWarningHaptic(): void {
   runHaptic(Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium));
 }
 
-const HEX_SPRING_HAPTIC_THROTTLE_MS = 900;
-let lastHexSpringHapticAt = 0;
-
-/**
- * Throttled light tap for the hex "spring" photo-shuffle idle animation
- * (StreakMemoryGallery.tsx). Several stacked hexes can each independently
- * decide to spring within the same instant — this caps it to one haptic per
- * short window across the whole grid instead of a buzzy pile-up.
- */
-export function triggerHexSpringHaptic(): void {
-  if (Platform.OS === "web") return;
-  const now = Date.now();
-  if (now - lastHexSpringHapticAt < HEX_SPRING_HAPTIC_THROTTLE_MS) return;
-  lastHexSpringHapticAt = now;
-  runHaptic(Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light));
-}
-
 export function playMemoryFormationHaptics({
   itemCount,
   reduceMotion = false,

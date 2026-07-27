@@ -26,7 +26,7 @@ import {
   REPAIR_MEMORY_NOTE_SQUAD,
 } from "../utils/repairStreakMemoryMerge";
 import { formatDateDisplay } from "../utils/dateDisplay";
-import { playMemoryFormationHaptics, triggerHexSpringHaptic } from "../utils/hapticFeedback";
+import { playMemoryFormationHaptics } from "../utils/hapticFeedback";
 import { storageThumbnailUri } from "../utils/imageThumbnail";
 import { traceSync } from "../lib/jsThreadProbe";
 
@@ -156,76 +156,77 @@ function HoneycombBuildTile({
   return <Animated.View style={[style, animatedStyle]}>{children}</Animated.View>;
 }
 
-/** Time between shuffles; each tile picks a random offset within this so nearby hexes don't flip in sync. */
-/** Full repeat length of the wave — kept the same cycle-to-cycle so each tile's phase offset stays stable, instead of drifting into a fresh random gap every time. */
-const HEX_SPRING_WAVE_PERIOD_MS = 3600;
-/** How far behind the previous stacked tile (by grid order) each next one fires — small on purpose, so a spring visibly "hands off" to the next tile in quick succession. */
-const HEX_SPRING_WAVE_STAGGER_MS = 180;
-/** Small per-cycle jitter so the wave still feels organic, not a metronome. */
-const HEX_SPRING_WAVE_JITTER_MS = 150;
-/** Per-tick chance a due hex actually springs — a little randomness so it's not every single tile every single pass. */
-const HEX_SPRING_TRIGGER_PROBABILITY = 0.85;
-const HEX_SPRING_SHRINK_DURATION_MS = 170;
-const HEX_SPRING_SHRINK_SCALE = 0.55;
-const HEX_SPRING_FADE_MIN_OPACITY = 0.85;
+type HexFrame = { type: "photo"; uri: string } | { type: "text"; note: string };
 
-function hexSpringJitter(): number {
-  return (Math.random() * 2 - 1) * HEX_SPRING_WAVE_JITTER_MS;
+/** Random window each hex independently redraws its next transition from — no shared phase, so tiles never read as one mechanical sweep. */
+const HEX_FADE_MIN_INTERVAL_MS = 2600;
+const HEX_FADE_MAX_INTERVAL_MS = 6400;
+const HEX_FADE_OUT_MS = 560;
+const HEX_FADE_IN_MS = 640;
+/** Brief pause at full black between the old frame disappearing and the next one starting to appear. */
+const HEX_FADE_BLACK_HOLD_MS = 90;
+
+function hexFadeInterval(): number {
+  return HEX_FADE_MIN_INTERVAL_MS + Math.random() * (HEX_FADE_MAX_INTERVAL_MS - HEX_FADE_MIN_INTERVAL_MS);
 }
 
 /**
- * The "living memory" idea, v2 — replaces the earlier fanned-stack shuffle. A day
- * with 2+ logged task photos renders as a perfectly normal single hex (no visible
- * stacking at rest); on a shared, repeating wave it does a quick spring "squish" —
- * scales down, swaps to the next photo in the stack at the smallest point, springs
- * back up, with a throttled light haptic timed to the swap.
+ * The "living memory" idea, v3 — replaces the earlier synchronized spring-squish
+ * wave. A day with 2+ logged tasks (photo or text note) renders as a perfectly
+ * normal single hex; independently of every other hex on the grid, it periodically
+ * fades to black, swaps to the next frame — photo or text note, whichever that
+ * task actually has — and fades back in. Each tile redraws its own random interval
+ * every cycle, with no shared phase or stagger, so the grid never reads as one
+ * scripted sweep; with enough tiles firing at their own pace it still reads as a
+ * slow, living wave, just an emergent one instead of a choreographed one.
  *
- * Each tile's phase is derived from its position in the grid (`waveIndex`) modulo
- * a fixed period, staggered a little behind the previous stacked tile — so instead
- * of every hex rolling an independent random delay (scattered, no visible
- * relationship), tiles spring in a short rolling succession that reads as one
- * continuous wave sweeping the grid, repeating every `HEX_SPRING_WAVE_PERIOD_MS`.
- * A small per-cycle jitter plus a per-tick trigger probability keep it from
- * looking perfectly mechanical.
- *
- * Cheaper than the fan it replaces: only one photo is ever mounted at a time (one
- * Animated.Value for scale, one for opacity — no per-photo array, so the whole
- * "stale ref array" crash class from the fan version doesn't apply here at all).
- * The only extra cost is prefetching the other stack photos into the native image
- * cache up front, so the swap at the bottom of the squish is instant instead of
- * showing a load flash. Skipped entirely when reduceMotion is on.
+ * Only one frame is ever mounted at a time (a single Animated.Value for opacity),
+ * so cost doesn't scale with stack size. Photos are prefetched into the native
+ * image cache up front so the swap at the black midpoint is instant. Skipped
+ * entirely when reduceMotion is on.
  */
-function HexSpringStack({
-  photos,
+function HexFadeStack({
+  frames,
   tileW,
   tileH,
   hexPath,
   clipIdBase,
   reduceMotion,
   frontStrokeColor,
-  waveIndex,
+  textFillColor,
+  quoteColor,
+  kickerColor,
+  noteColor,
 }: {
-  photos: string[];
+  frames: HexFrame[];
   tileW: number;
   tileH: number;
   hexPath: string;
   clipIdBase: string;
   reduceMotion: boolean;
   frontStrokeColor: string;
-  /** This tile's position in the grid — derives its wave phase so stacked tiles spring in a short rolling succession instead of independently at random. */
-  waveIndex: number;
+  textFillColor: string;
+  quoteColor: string;
+  kickerColor: string;
+  noteColor: string;
 }) {
-  const n = photos.length;
+  const n = frames.length;
   const [activeIndex, setActiveIndex] = useState(0);
   const shownIndex = Math.min(activeIndex, Math.max(0, n - 1));
-  const scale = useRef(new Animated.Value(1)).current;
   const opacity = useRef(new Animated.Value(1)).current;
 
-  const thumbUris = useMemo(
-    () => photos.map((uri) => storageThumbnailUri(uri, Math.round(tileW * 2.4), Math.round(tileH * 2.4)) ?? uri),
-    [photos, tileW, tileH],
+  const photoUris = useMemo(
+    () => frames.filter((f): f is Extract<HexFrame, { type: "photo" }> => f.type === "photo").map((f) => f.uri),
+    [frames],
   );
-  const thumbUrisKey = thumbUris.join("|");
+  const thumbUris = useMemo(
+    () =>
+      new Map(
+        photoUris.map((uri) => [uri, storageThumbnailUri(uri, Math.round(tileW * 2.4), Math.round(tileH * 2.4)) ?? uri]),
+      ),
+    [photoUris, tileW, tileH],
+  );
+  const thumbUrisKey = photoUris.join("|");
 
   useEffect(() => {
     // Warm the native image cache for every stacked photo up front — only one is
@@ -240,64 +241,46 @@ function HexSpringStack({
     if (reduceMotion || n < 2) return undefined;
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout>;
-    // This tile's slot in the repeating wave — a fixed stagger behind the previous
-    // stacked tile in grid order, not a fresh random gap. Keeping the base delay
-    // between cycles constant (only the jitter varies) is what keeps the wave
-    // reading as one continuous sweep instead of drifting into unrelated timing.
-    const phase = (waveIndex * HEX_SPRING_WAVE_STAGGER_MS) % HEX_SPRING_WAVE_PERIOD_MS;
 
     const tick = () => {
       if (cancelled) return;
-      if (Math.random() < HEX_SPRING_TRIGGER_PROBABILITY) {
-        Animated.timing(scale, {
-          toValue: HEX_SPRING_SHRINK_SCALE,
-          duration: HEX_SPRING_SHRINK_DURATION_MS,
-          easing: Easing.in(Easing.quad),
-          useNativeDriver: true,
-          isInteraction: false,
-        }).start(() => {
-          if (cancelled) return;
-          setActiveIndex((prev) => (prev + 1) % n);
-          triggerHexSpringHaptic();
-          Animated.spring(scale, {
-            toValue: 1,
-            friction: 5,
-            tension: 140,
-            useNativeDriver: true,
-            isInteraction: false,
-          }).start();
-        });
-        Animated.timing(opacity, {
-          toValue: HEX_SPRING_FADE_MIN_OPACITY,
-          duration: HEX_SPRING_SHRINK_DURATION_MS,
-          easing: Easing.in(Easing.quad),
-          useNativeDriver: true,
-          isInteraction: false,
-        }).start(() => {
+      Animated.timing(opacity, {
+        toValue: 0,
+        duration: HEX_FADE_OUT_MS,
+        easing: Easing.inOut(Easing.quad),
+        useNativeDriver: true,
+        isInteraction: false,
+      }).start(() => {
+        if (cancelled) return;
+        setActiveIndex((prev) => (prev + 1) % n);
+        timer = setTimeout(() => {
           if (cancelled) return;
           Animated.timing(opacity, {
             toValue: 1,
-            duration: 260,
-            easing: Easing.out(Easing.quad),
+            duration: HEX_FADE_IN_MS,
+            easing: Easing.inOut(Easing.quad),
             useNativeDriver: true,
             isInteraction: false,
           }).start();
-        });
-      }
-      timer = setTimeout(tick, Math.max(200, HEX_SPRING_WAVE_PERIOD_MS + hexSpringJitter()));
+        }, HEX_FADE_BLACK_HOLD_MS);
+      });
+      timer = setTimeout(tick, hexFadeInterval());
     };
 
-    timer = setTimeout(tick, Math.max(0, phase + hexSpringJitter()));
+    // Independent random start — no shared phase with any other tile.
+    timer = setTimeout(tick, Math.random() * HEX_FADE_MAX_INTERVAL_MS);
     return () => {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [n, reduceMotion, scale, opacity, waveIndex]);
+  }, [n, reduceMotion, opacity]);
+
+  const frame = frames[shownIndex];
 
   return (
     <Animated.View
       pointerEvents="none"
-      style={[styles.hexSvg, reduceMotion ? null : { opacity, transform: [{ scale }] }]}
+      style={[styles.hexSvg, { width: tileW, height: tileH }, reduceMotion ? null : { opacity }]}
     >
       <Svg width={tileW} height={tileH} viewBox={`0 0 ${tileW} ${tileH}`}>
         <Defs>
@@ -305,15 +288,30 @@ function HexSpringStack({
             <Path d={hexPath} />
           </ClipPath>
         </Defs>
-        <SvgImage
-          href={{ uri: thumbUris[shownIndex] }}
-          width={tileW}
-          height={tileH}
-          preserveAspectRatio="xMidYMid slice"
-          clipPath={`url(#${clipIdBase})`}
-        />
+        {frame.type === "photo" ? (
+          <SvgImage
+            href={{ uri: thumbUris.get(frame.uri) ?? frame.uri }}
+            width={tileW}
+            height={tileH}
+            preserveAspectRatio="xMidYMid slice"
+            clipPath={`url(#${clipIdBase})`}
+          />
+        ) : (
+          <Path d={hexPath} fill={textFillColor} />
+        )}
         <Path d={hexPath} fill="transparent" stroke={frontStrokeColor} strokeWidth={1.8} />
       </Svg>
+      {frame.type === "text" ? (
+        <View style={[styles.hexOverlay, { paddingHorizontal: tileW * 0.18 }]} pointerEvents="none">
+          <Text style={[styles.hexQuote, { color: quoteColor }]}>{"“"}</Text>
+          <Text style={[styles.hexKicker, { color: kickerColor }]} numberOfLines={1}>
+            NOTE
+          </Text>
+          <Text style={[styles.hexNotePreview, { color: noteColor }]} numberOfLines={2}>
+            {frame.note}
+          </Text>
+        </View>
+      ) : null}
     </Animated.View>
   );
 }
@@ -340,7 +338,12 @@ export function StreakMemoryGallery({
   const tileYStep = tileH * 0.75 + combGap;
   const middleRowOffset = tileW * 0.5 + combGap * 0.5;
   const honeycombColumns = Math.max(1, Math.ceil(entries.length / HONEYCOMB_ROWS));
-  const honeycombStageHeight = 4 + tileH + tileYStep * (HONEYCOMB_ROWS - 1);
+  // Only the very first moment (the whole gallery is a single hex, nothing stacked
+  // below it yet) gets a shrunk single-row stage — from the second moment onward
+  // there's always at least one full two-row column, so the usual height stays
+  // exactly as it was.
+  const honeycombRowsToShow = entries.length <= 1 ? 1 : HONEYCOMB_ROWS;
+  const honeycombStageHeight = 4 + tileH + tileYStep * (honeycombRowsToShow - 1);
   const honeycombFootprintWidth = tileW + middleRowOffset;
   const honeycombColumnMarginRight = tileXStep - honeycombFootprintWidth;
   const hexPath = roundedHexPath(tileW, tileH, 6);
@@ -500,7 +503,23 @@ export function StreakMemoryGallery({
                 : [];
               const taskCoverNote = hasTasks ? taskEntries.find((t) => t.note?.trim())?.note?.trim() : undefined;
               const stackPhotos = taskPhotoUris.slice(0, 3);
-              const isStacked = stackPhotos.length > 1;
+              /**
+               * Every task's own frame — a photo if it has one, else its text note —
+               * so the hex rotates through whatever each task actually logged instead of
+               * only ever cycling photos. Capped at 3 so timer/prefetch cost stays flat.
+               */
+              const stackFrames: HexFrame[] = hasTasks
+                ? taskEntries
+                    .map((t): HexFrame | null => {
+                      const uri = t.proofUrls[0];
+                      if (uri && (!remotePeer || uriLoadsForRemoteViewer(uri))) return { type: "photo", uri };
+                      const note = t.note?.trim();
+                      return note ? { type: "text", note } : null;
+                    })
+                    .filter((f): f is HexFrame => f !== null)
+                    .slice(0, 3)
+                : [];
+              const isStacked = stackFrames.length > 1;
 
               const displayUri = hasTasks ? stackPhotos[0] : memory.imageUrl || memory.imageUri;
               const showImage = Boolean(displayUri) && (!remotePeer || uriLoadsForRemoteViewer(displayUri));
@@ -548,14 +567,13 @@ export function StreakMemoryGallery({
                     style={styles.hexPressable}
                   >
                     {isStacked ? (
-                      <HexSpringStack
-                        photos={stackPhotos}
+                      <HexFadeStack
+                        frames={stackFrames}
                         tileW={tileW}
                         tileH={tileH}
                         hexPath={hexPath}
                         clipIdBase={clipId}
                         reduceMotion={reduceMotion}
-                        waveIndex={index}
                         frontStrokeColor={
                           isSquadRepair
                             ? isDark
@@ -565,6 +583,10 @@ export function StreakMemoryGallery({
                               ? "rgba(255, 255, 255, 0.22)"
                               : "rgba(255, 255, 255, 0.72)"
                         }
+                        textFillColor={isDark ? "#21194a" : "#eef2ff"}
+                        quoteColor={theme.colors.indigo[400]}
+                        kickerColor={memoryKickerColor}
+                        noteColor={memoryTextColor}
                       />
                     ) : (
                       <Svg width={tileW} height={tileH} viewBox={`0 0 ${tileW} ${tileH}`} style={styles.hexSvg}>
