@@ -1,5 +1,7 @@
 import { Text } from "./AppText";
+import { memo } from "react";
 import {
+  Animated,
   Modal,
   View,
   TouchableOpacity,
@@ -11,7 +13,10 @@ import { useRouter } from "expo-router";
 import { X, Globe, User } from "lucide-react-native";
 import type { Habit, MiniMission } from "../types/habit";
 import { useTheme } from "../context/ThemeContext";
+import type { AppTheme } from "../styles/theme";
 import { getMiniMissionDisplayStatus } from "../utils/miniMissionTime";
+import { GlassTopHighlight } from "./GlassTopHighlight";
+import { useListCardEntrance } from "../hooks/useListCardEntrance";
 
 export type HubListModalProps = {
   visible: boolean;
@@ -51,16 +56,24 @@ function miniStatusColor(m: MiniMission, now: number, theme: ReturnType<typeof u
   return theme.colors.amber[500];
 }
 
-export function HubListModal(props: HubListModalProps) {
-  const { visible, onClose, title, emptyHint } = props;
-  const { theme } = useTheme();
-  const insets = useSafeAreaInsets();
-  const router = useRouter();
-
-  const renderHabit = ({ item }: { item: Habit }) => {
-    const VisIcon = item.visibility === "public" ? Globe : User;
-    const visColor = item.visibility === "public" ? theme.colors.cyan[400] : theme.colors.indigo[400];
-    return (
+const HubHabitRow = memo(function HubHabitRow({
+  item,
+  index,
+  theme,
+  router,
+  onClose,
+}: {
+  item: Habit;
+  index: number;
+  theme: AppTheme;
+  router: ReturnType<typeof useRouter>;
+  onClose: () => void;
+}) {
+  const entranceStyle = useListCardEntrance(index);
+  const VisIcon = item.visibility === "public" ? Globe : User;
+  const visColor = item.visibility === "public" ? theme.colors.cyan[400] : theme.colors.indigo[400];
+  return (
+    <Animated.View style={entranceStyle}>
       <TouchableOpacity
         style={[rowStyles.row, { borderColor: theme.colors.border, backgroundColor: theme.colors.surfaceElevated }]}
         onPress={() => {
@@ -69,6 +82,7 @@ export function HubListModal(props: HubListModalProps) {
         }}
         activeOpacity={0.85}
       >
+        <GlassTopHighlight radius={14} />
         <View style={rowStyles.rowMain}>
           <Text style={[rowStyles.rowTitle, { color: theme.colors.textPrimary }]} numberOfLines={2}>
             {item.title}
@@ -86,14 +100,29 @@ export function HubListModal(props: HubListModalProps) {
           </View>
         </View>
       </TouchableOpacity>
-    );
-  };
+    </Animated.View>
+  );
+});
 
-  const renderMini = ({ item }: { item: MiniMission }) => {
-    const VisIcon = item.visibility === "public" ? Globe : User;
-    const visColor = item.visibility === "public" ? theme.colors.cyan[400] : theme.colors.indigo[400];
-    const now = Date.now();
-    return (
+const HubMiniRow = memo(function HubMiniRow({
+  item,
+  index,
+  theme,
+  router,
+  onClose,
+}: {
+  item: MiniMission;
+  index: number;
+  theme: AppTheme;
+  router: ReturnType<typeof useRouter>;
+  onClose: () => void;
+}) {
+  const entranceStyle = useListCardEntrance(index);
+  const VisIcon = item.visibility === "public" ? Globe : User;
+  const visColor = item.visibility === "public" ? theme.colors.cyan[400] : theme.colors.indigo[400];
+  const now = Date.now();
+  return (
+    <Animated.View style={entranceStyle}>
       <TouchableOpacity
         style={[rowStyles.row, { borderColor: theme.colors.border, backgroundColor: theme.colors.surfaceElevated }]}
         onPress={() => {
@@ -102,6 +131,7 @@ export function HubListModal(props: HubListModalProps) {
         }}
         activeOpacity={0.85}
       >
+        <GlassTopHighlight radius={14} />
         <View style={rowStyles.rowMain}>
           <Text style={[rowStyles.rowTitle, { color: theme.colors.textPrimary }]} numberOfLines={2}>
             {item.title}
@@ -119,8 +149,23 @@ export function HubListModal(props: HubListModalProps) {
           </View>
         </View>
       </TouchableOpacity>
-    );
-  };
+    </Animated.View>
+  );
+});
+
+export function HubListModal(props: HubListModalProps) {
+  const { visible, onClose, title, emptyHint } = props;
+  const { theme } = useTheme();
+  const insets = useSafeAreaInsets();
+  const router = useRouter();
+
+  const renderHabit = ({ item, index }: { item: Habit; index: number }) => (
+    <HubHabitRow item={item} index={index} theme={theme} router={router} onClose={onClose} />
+  );
+
+  const renderMini = ({ item, index }: { item: MiniMission; index: number }) => (
+    <HubMiniRow item={item} index={index} theme={theme} router={router} onClose={onClose} />
+  );
 
   const empty = props.items.length === 0;
 
