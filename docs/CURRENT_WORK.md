@@ -1,10 +1,415 @@
 # HabitPro Current Work
 
-Last updated: 2026-07-26 (Home screen UI pass in progress).
+Last updated: 2026-07-27 (Migration applied by user; multi-photo stack badge added to journey/player-story cards and extended into the "View journey" gallery modal; every full-screen photo lightbox in the app now shows a dot carousel indicator and per-slide caption text; day-grid checklist progress arc shipped, plus a real pre-existing "day completes on first task logged" bug fixed).
+
+## Latest Feature: Day-Grid Checklist Progress Arc (2026-07-27)
+
+Multi-task checklist day in `app/habit/[id].tsx`'s "N-Day Grid": 0/1-task or
+nothing-logged-yet days are untouched (same pulsing cyan square). Once some
+(not all) of 2+ tasks are logged, the same pulsing square gains a green ratio
+arc (`TaskProgressArc`, new). Once all tasks are logged — or the day is
+genuinely marked complete — the cell shows the exact same pre-existing
+completed-day ring (`HabitGridBrandRing`, cyan/indigo, untouched) as a preview,
+before the pulse stops. An earlier attempt at a two-tone concentric-circle
+redesign (blue outer / green inner, flipping fully green at 100%) was tried,
+rejected, and fully reverted per explicit feedback — this simpler arc-inside-
+the-existing-square approach is what shipped.
+
+**Real bug found and fixed during testing**: `effectiveCompletedDates`
+(line ~743) unioned `habit.completedDates` with *every date that has any
+`streakMemories` entry at all* — a pre-existing mechanism from before the
+checklist feature existed, when logging a memory and completing the day were
+the same action. For a checklist mission, logging just the *first* task now
+creates a tasks-only `streakMemories` entry, which this code silently treated
+as "completed" — making the whole grid (and the new arc feature) show every
+checklist day as instantly done the moment any task was logged, regardless of
+Mark Day Complete. Fixed with the same guard already used elsewhere in this
+file (`hasMissingMemoryCompletion`): a memory only counts toward "effectively
+completed" if it has real completion evidence (`note`/`imageUrl`/`imageUri`/
+`checkInOnly`/`repairSource`), not just the presence of `.tasks`. Classic
+(non-checklist) missions are unaffected, since saving a memory there already
+is the completing action. `npx tsc --noEmit` and `git diff --check` clean.
 
 This file captures the current working state so future chats do not need the full conversation.
 
-## Latest Feature (In Progress): Home Screen Premium UI Pass (started 2026-07-26)
+## Latest Feature: Lightbox Carousel Indicator + Captions, Everywhere (2026-07-27)
+
+Two follow-up requests after the bare-task/stack-badge work above:
+
+1. **Stack badge should also appear inside the "View journey" gallery modal**
+   (`MissionGalleryModal`/`GalleryMomentCard`), not just the main scrolling cards —
+   previously deliberately excluded from that modal per an earlier, unrelated scope
+   boundary (glass shimmer/entrance). This is a different, purely informational
+   feature, so it now applies there too. `StoryPhotoTile` in both
+   `app/my-journey.tsx` and `app/community-player/[id].tsx` lost its
+   circle-shape-only gate; the badge now renders in rounded/masonry mode as well,
+   repositioned to bottom-left in my-journey.tsx's rounded case (bottom-right is
+   already the like-badge's corner there) and bottom-right in community-player's
+   `GalleryMomentCard` (its cheer pill sits top-right there, so no clash).
+
+2. **No visual "this is a carousel" cue, and captions never showed.** Tapping a
+   multi-photo card opened a swipeable lightbox with only a small "N / M" text
+   counter (or nothing, depending on which lightbox) — no dots — and a task's
+   `note` was silently dropped before ever reaching the lightbox on every path
+   except `my-journey.tsx`'s already slide-aware one.
+
+   Fixed by making **every** full-screen photo lightbox in the app slide-aware
+   with a dot row:
+   - `src/components/CommunityWinImageLightbox.tsx` — the shared lightbox used by
+     `CommunityWinsFeed`/`CommunityWinFeedPost`, `app/journey-moment/[id].tsx`,
+     `app/community-player/[id].tsx`, and `app/challenge-memory.tsx`'s photo-zoom.
+     Prop changed from `images: string[]` to `slides: CommunityLightboxSlide[]`
+     (`{ imageUrl: string | null; note?: string | null }`) — a photo+note slide now
+     shows the note as a caption bar over the bottom of the photo; a note-only
+     slide (no photo at all) renders as a centered text card; a dot row appears
+     under the counter whenever there's more than one slide. All 4 call sites
+     updated to build slides instead of bare URL arrays, preserving each task's
+     `note` (previously discarded via `.map(g => g.imageUrl)`) —
+     `community-player/[id].tsx`'s `galleryImagesForPost` renamed
+     `gallerySlidesForPost` and now keeps `note` while still requiring `imageUrl`
+     (public-feed policy: photo-only, but photo+text tasks keep their caption).
+     `challenge-memory.tsx`'s own call wraps its (deliberately photo-only, since
+     its inline carousel already shows notes) `lightboxImages` as
+     `{ imageUrl, note: null }` — no behavior change there beyond gaining dots.
+   - `app/my-journey.tsx`'s local `JourneyMemoryLightbox` (already slide-aware for
+     text-only entries) gained the same caption-bar-over-photo treatment (it
+     previously only showed `note` in the no-photo fallback branch, never
+     alongside an actual photo) plus the same dot row.
+
+   `app/habit/[id].tsx`, `app/mini/[id].tsx`, and `app/challenge/[id].tsx` don't
+   use any lightbox component at all, so nothing to change there.
+
+`npx tsc --noEmit` and `git diff --check` clean across all 9 touched files.
+
+## Latest Fix: Bare Checklist Tasks Missing From Squad Carousel + My Journey (2026-07-26)
+
+Audited a reported gap against an explicit three-tier policy: (1) squad/notification
+carousel should show all 4 ways a checklist task can be logged — photo, photo+note,
+note-only, or "bare" (opened the task, attached nothing, just committed); (2) the
+public Community feed should show only photo-bearing tasks (confirmed already
+correct, no change); (3) private My Journey should show photo/photo+note/note-only,
+excluding only bare. Found two real, separate bugs against that policy:
+
+- **Squad carousel dropped bare tasks.** `rpc_challenge_memory_detail_v1`'s
+  `v_task_gallery` query required `proofUrls[0] like 'http%' OR note is not null` —
+  a bare task (neither) matched nothing and silently never reached the client, even
+  though every array element in `streakMemories[date].tasks` already represents a
+  deliberate user action (only tasks never opened at all are absent — confirmed via
+  `handleTaskMemoryCommit` in `app/habit/[id].tsx`, which always appends an entry on
+  commit regardless of content). Fixed via new migration
+  `supabase/migrations/20260726090000_challenge_memory_detail_bare_tasks.sql`
+  (removes the WHERE filter entirely — every logged task is now included) plus the
+  matching redundant client-side filter in `src/lib/challengeMemoryDetail.ts:105`
+  (`normalizeTaskGallery`), relaxed to only require `taskId`/`label`. The carousel
+  renderer (`app/challenge-memory.tsx:187-198`) already falls back to the task's own
+  `label` when both `imageUrl` and `note` are null, so no renderer change was needed.
+  **Migration written but NOT applied** — needs `supabase db push` or an explicit
+  request to apply via MCP.
+
+- **My Journey's public/private merge silently dropped private text-only tasks.**
+  `app/my-journey.tsx`'s `dedupeStoryPostsPreferPublic` fully replaced a private
+  post with its public counterpart whenever the same day existed in both (to pick up
+  real cheer counts/social metadata) — but the public post's `memoryGallery` is
+  intentionally photo-only by design (see `CommunityMemoryGalleryItem` doc comment
+  in `communityWinsApi.ts`), so any note-only tasks that day had privately vanished
+  from the merged "complete" view the moment that same day was also shared
+  publicly. Fixed by adding `mergeMemoryGalleries()` — unions both galleries by
+  `taskId` (public wins on overlap, private's extra note-only entries are kept) —
+  and using it instead of a full replace. Private-only days (never shared) were
+  already unaffected; this only bit on days that existed in both public and private
+  form. `npx tsc --noEmit` and `git diff --check` clean for both fixes.
+## Latest Feature: Player Story Screen — Glass Shimmer + Entrance (2026-07-26)
+
+Same premium-UI pass applied to `app/community-player/[id].tsx` — the screen
+reached by tapping a username (public "player story" equivalent of My
+Journey). Plain `ScrollView`, not FlashList, so mount-based entrance is the
+right and safe choice here (no recycling/viewability risk like My Journey's
+masonry tab).
+
+Shimmer added to: `statPanel`, `segmentRow` (Missions/Minis tabs), both
+`storyEmptyState` cards ("no public missions/minis yet"), `MissionStoryCard`
+(missions list), and `MiniPostTile` (minis grid). `MissionGalleryModal`/
+`GalleryMomentCard` (the "View journey" modal opened from a mission card)
+deliberately left untouched, mirroring the same scoping the user set for My
+Journey's equivalent modal.
+
+Entrance: `MissionStoryCard` uses the existing slide-up `useListCardEntrance`
+(per user request — "stack animation on public"), wrapped in its own
+`Animated.View` since each card is the sole item in its row (vertical list,
+no sibling-stretch risk). `MiniPostTile` uses the fade+scale
+`useCardMaterialize` ("appearance animation on minis"), merged directly onto
+the tile's own styled element rather than wrapped in an extra `Animated.View`
+— `miniGrid` has no `alignItems` override (defaults to `stretch`), and an
+extra wrapper level would break that the same way it did on My Journey's
+mini-grid earlier this session. `npx tsc --noEmit` and `git diff --check`
+clean.
+
+## Reverted: My Journey — Viewport-Triggered Card Entrance (2026-07-26)
+
+Attempted, pushed to preview + production, then **reverted** after the user's
+on-device screenshots showed a real regression, not just a missed nicety.
+
+The change below ("Viewport-Triggered Card Entrance") replaced the mount-based
+entrance with FlashList's `onViewableItemsChanged`/`viewabilityConfig`, so
+cards would start hidden (opacity 0) until they scrolled into view. On
+real-device testing (both the Missions and the masonry Minis tab, on initial
+load, no scrolling yet), this produced a large blank gap between the header
+and the first visibly-animated card — several card-heights of empty space,
+with the first "revealed" card sitting well below where it should render.
+Since this happened on **both** tabs (masonry and plain list alike), it isn't
+a masonry-specific bug — most likely the initial viewability pass is computed
+against transient/stale layout metrics (this screen's `ListHeaderComponent`
+height changes after async data loads: XP ring, recent-photos strip, stats),
+so the first check misjudges which rows are actually on-screen and never
+correctly retriggers for the ones near the top. Whatever the precise
+mechanism, it made real content invisible/mispositioned on a normal cold
+open — worse than the "everything animates on mount, before you scroll"
+cosmetic issue it was meant to fix.
+
+**Reverted in full**: `MissionStoryCard`/`MiniPostCard` are back to calling
+`useListCardEntrance(index)`/`useCardMaterialize(index)` directly (mount-based,
+as before), `my-journey.tsx` no longer has the `Map`-based entrance-value
+registries, `onViewableItemsChanged`, or `viewabilityConfig`, and the two hook
+files no longer export the standalone `listCardEntranceStyle`/
+`cardMaterializeStyle` helper functions added for this attempt (removed as
+dead code once no longer used). `npx tsc --noEmit` and `git diff --check`
+clean. **Needs to be pushed as an OTA to undo the still-live broken preview/
+production update** (update groups `1333a7ab-8c2b-42ea-9f9c-654d4231488c` /
+`d5ba591a-b9fa-45fc-84bd-dc1a469d5142`) before this note is fully resolved.
+
+True scroll-triggered entrance (only animate a card the first time it's
+actually visible, not on mount) is still a valid, unfulfilled request — a
+future attempt should look at manually tracking each cell's `onLayout`
+position against the list's own scroll offset instead of relying on
+FlashList's built-in viewability callback, given the bug just found here.
+
+## My Journey — Viewport-Triggered Card Entrance (2026-07-26, reverted above)
+
+The true-masonry + materialize entrance above was pushed to `production` as
+well as `preview` (update group `1beaaf7e-f697-421e-9fd5-deba9a4b9f13`) after
+the user asked to ship it. Immediately after, the user reported the entrance
+animation didn't feel connected to scrolling: it looked like every card had
+already finished animating by the time they scrolled to see it, rather than
+each card animating in as it entered the viewport.
+
+Root cause: both entrance hooks (`useListCardEntrance` on the Missions tab,
+`useCardMaterialize` on the Minis tab) fired their animation in a `useEffect`
+on **mount** — but FlashList mounts/pre-renders rows ahead of the visible
+window (draw-distance/overscan), so most rows had already finished animating
+before the user ever scrolled to them. Worse, since FlashList recycles cell
+component instances, a recycled cell reused for a *different* item would keep
+whatever `Animated.Value` its previous occupant left at `1`, so newly-scrolled
+items appearing in a recycled slot wouldn't animate at all — a second,
+independent reason the animation only seemed to "happen at load."
+
+Fix: replaced mount-triggered animation with FlashList's native
+`onViewableItemsChanged`/`viewabilityConfig` (`itemVisiblePercentThreshold:
+15`). Each entrance hook was split into a plain style function
+(`listCardEntranceStyle`/`cardMaterializeStyle`, exported from the existing
+hook files) that just renders from an externally-supplied `Animated.Value`,
+with no internal effect. `my-journey.tsx` now owns two `Map<string,
+Animated.Value>` registries (mission-story-key and mini-post-id, in a
+screen-level `useRef` so recycling-safe — keyed by stable data id, not
+component instance) plus a `Set` of already-fired keys. `onViewableItemsChanged`
+starts the spring/timing animation the first time a given key is reported
+viewable, and never replays it once fired — so switching tabs back and forth,
+pull-to-refresh on already-seen items, and "Load more" pagination (new keys
+just aren't in the registry yet, so they animate in normally when scrolled to)
+all behave correctly. A small capped stagger (40ms/item, 160ms cap) still
+ripples across items that become viewable in the same batch (e.g. the initial
+screenful, or a fast scroll). `viewabilityConfig` is a module-level constant
+(FlashList warns against changing it on the fly).
+
+`npx tsc --noEmit` and `git diff --check` clean. **Not yet pushed as an
+OTA** — this needs on-device confirmation that scroll-triggered entrance
+actually feels right (and that viewability tracking doesn't fight masonry's
+own measurement pass) before shipping.
+
+## Latest Feature: My Journey Mini-Grid — True Masonry Layout (2026-07-26)
+
+Fourth round of back-and-forth on the same mini-grid entrance animation (see
+the three follow-up entries directly below this one for the earlier attempts
+and why each fell short). User's final ask: keep cards sized to their own
+content (no stretch), pack them Lego-tight with **zero wasted space**
+between rows in different columns, and replace the slide-up entrance with a
+non-directional "materialize" appearance instead, specifically because a
+synchronized slide between differently-sized siblings is what caused the
+earlier "leveling" illusion in the first place.
+
+- **True masonry**: `@shopify/flash-list` v2.0.2 (already in use) has a
+  native `masonry: true` mode built exactly for this — independent per-column
+  packing, requires React Native's New Architecture (already on via
+  `app.json`'s `newArchEnabled: true`). Removed `MiniPostRow` and
+  `chunkPosts` entirely (no more pre-grouping posts into fixed-size pairs);
+  `StoryRow`'s `"mini-row"` variant became a flat `"mini"` variant (one post
+  per row item), and `MiniPostCard` is now FlashList's direct `renderItem`
+  result for the Minis tab, with `numColumns={miniColumnCount}` and
+  `masonry={activeTab === "minis"}` (Missions tab keeps `numColumns={1}`,
+  masonry off, unaffected). Deliberately did **not** set
+  `optimizeItemArrangement` — it rebalances column heights by reordering
+  items, which would break this feed's chronological order; slightly uneven
+  columns are the right trade-off, not shuffled dates.
+- Masonry's column slot width is computed by FlashList as a *raw*
+  `availableWidth / columnCount` — it does not know about the existing
+  `getJourneyMiniGridLayout` gap-aware `tileWidth` (which assumes a
+  `flexDirection: "row"` layout). Computed a separate `masonrySlotWidth`
+  locally in `my-journey.tsx` and left `miniGridGap` as each card's own
+  `marginRight`/`marginBottom` instead, so packed cards don't touch. Scope
+  stayed limited to `my-journey.tsx` — `community-player/[id].tsx` (a
+  different screen, out of scope per the user's earlier explicit
+  instruction) still uses the original `getJourneyMiniGridLayout` tileWidth
+  and row-pairing, untouched.
+- **New entrance animation**: `src/hooks/useCardMaterialize.ts` — opacity +
+  scale (0.88→1) via `Animated.timing`/ease-out, no translateY, no spring
+  overshoot. Used only by `MiniPostCard`; `MissionStoryCard` and every other
+  screen keep the existing slide-up `useListCardEntrance` untouched, since
+  only the mini-grid ever had the differently-sized-siblings problem that
+  motivated the change.
+
+**Not yet tested on-device** — flagged to the user ahead of time as the real
+risk here: FlashList's masonry mode is called out in its own type definitions
+as "New arch only," a newer code path than the plain list used everywhere
+else, and this is its first use in the app. Needs real verification of
+scrolling, "Load more" pagination, and pull-to-refresh interacting correctly
+with masonry before calling this done — a clean `tsc`/diff-check does not
+cover any of that. `npx tsc --noEmit` and `git diff --check` clean.
+
+## Latest Feature: Premium UI Pass — My Journey Screen (2026-07-26)
+
+Fourth screen in the iterative UI pass. Scope explicitly limited by the user
+to `app/my-journey.tsx` itself (the Private/Public + Missions/Minis screen) —
+explicitly **excluding** `MissionGalleryModal` and `GalleryMomentCard` (the
+full-screen gallery that opens after tapping a mission's "View journey"),
+since that's a different "screen" in the user's mental model even though it's
+technically a Modal within the same file, not a separate route.
+
+Shimmer added to: `statPanel` (the rank/photos/cheers stats card),
+`modeToggle` (`StoryToggle`, the Private/Public tab control), `missionCard`
+(`MissionStoryCard`, the main per-mission feed card), `miniCard`
+(`MiniPostCard`, the mini-mission grid card), and both `emptyState` cards
+(public-error and no-memories-yet). No stack-up entrance animation this
+round — only shimmer was requested for this screen. `segmentRow` (the
+Missions/Minis tab row) was deliberately skipped: unlike `modeToggle`, it has
+no shared card-like background/border, just two independently-styled pill
+buttons — nothing to put a card highlight on.
+
+`npx tsc --noEmit` and `git diff --check` clean; confirmed via diff inspection
+that nothing near `MissionGalleryModal`/`GalleryMomentCard` was touched.
+
+**Follow-up, same day**: user asked for the stack-up entrance here too — it
+had been deliberately left off in the pass above since only shimmer was
+requested, but that scope call wasn't surfaced to the user at the time, so it
+read as a miss rather than a choice. Added to `MissionStoryCard` and
+`MiniPostCard` (both already proper `memo`'d components — hooks-safe). Since
+this is now the third place needing the exact same "stack up from below"
+math (`HabitCard.tsx` inline, `compete.tsx`'s local `useListCardEntrance`, now
+this), extracted a shared `src/hooks/useListCardEntrance.ts` — used here, but
+`compete.tsx`'s already-shipped local copy was deliberately left alone rather
+than retrofitted (same "don't touch working, already-pushed code without a
+reason" call as `GlassTopHighlight` not being retrofitted into Timer.tsx).
+`MiniPostRow` (wraps up to 2 `MiniPostCard`s per row) passes its own row
+index to every card in the row, so cards animate row-by-row rather than each
+individually staggering — a deliberate simplification since column count
+isn't available inside the row component. `renderRow`'s `ListRenderItem`
+callback threads the FlashList-provided `index` through to both card types.
+`npx tsc --noEmit` and `git diff --check` clean.
+
+**Bug found via screenshot, fixed same day (two-part)**: `MiniPostCard`'s
+cards sit two per row inside `MiniPostRow`. First issue — wrapping each card
+in a separate `<Animated.View>` (the same pattern used everywhere else) made
+the *wrapper*, not the actual bordered card, the row's direct flex child; the
+card inside only sized to its own content, leaving a gap in the taller
+wrapper for any shorter card. Fixed by applying `entranceStyle` directly on
+the same element that already carries `styles.miniCard` (making it an
+`Animated.View` in place, rather than adding a wrapping level).
+
+Second issue, found only after that fix: `styles.miniGridRow` had
+`alignItems: "stretch"` (true original, predates this session's changes) —
+with the wrapper bug fixed, stretch now correctly force-matched both cards in
+a row to the taller one's height. User clarified that was never actually
+wanted: the original "Lego" intent was for each card to size to its *own*
+content (title + 0-2 line caption) independent of its row sibling, not
+matched/stretched. Changed `miniGridRow` to `alignItems: "flex-start"` so
+each card sits at its own natural height, cards starting flush at the same
+top edge and ending wherever their own content ends. General lesson: an
+entrance-animation wrapper is only layout-transparent when the parent uses
+plain top-to-bottom flow — inside any `alignItems`-sensitive row, animate the
+actual sized element in place instead of adding a wrapper around it; and
+"stretch" vs "flex-start" is a real product decision, not a default to leave
+unquestioned. `npx tsc --noEmit` and `git diff --check` clean.
+
+**Third round, same day — perception issue, not a layout bug**: user reported
+that even with correctly-different resting heights, the two cards in a
+`MiniPostRow` still *looked* the same size while the stack-up animation was
+actually playing, only showing their real distinct heights once it settled.
+Root cause: both cards in a row were passed the same `index`, so both ran the
+identical `Animated.spring` curve — same delay, same start/end values, frame-
+for-frame identical motion. Two elements moving in perfect lockstep get
+grouped by the eye into one implied shape ("common fate" — a real Gestalt
+grouping effect), so the pair reads as a uniform block while moving even
+though neither card's actual height ever changed. Fixed by giving each card
+in the row its own stagger step (`index * 2 + i`, i.e. true reading-order
+position) instead of sharing the row's index — the two cards no longer
+animate in perfect sync, so each one's real size stays legible throughout
+the motion, not just at rest. `npx tsc --noEmit` and `git diff --check`
+clean.
+
+## Latest Feature: Premium UI Pass — Compete Screen (2026-07-26)
+
+Third screen in the iterative UI pass, after Home and squad/cohort. Extended
+the glass top-highlight across `app/(tabs)/compete.tsx` — the top
+Challenges/Leaderboard segment control, `LeagueRow` (weekly leaderboard rows,
++ its loading skeleton), `ActiveChallengeCard` (active-challenge cards),
+`catalogCard` (browse-templates cards), both invite card renderers
+(`renderGroupInviteCard`/`renderLiveMiniInviteCard`, + their skeleton), the
+recent-wins card, and every generic empty/error-state card.
+
+`LeagueRow` and `ActiveChallengeCard` also got the stack-up spring entrance —
+both are proper components (`LeagueRow` already `memo`'d, rendered via
+FlashList `renderItem` with `index`; `ActiveChallengeCard` a plain function
+component rendered via `.map()`, also given an `index` prop), so unlike the
+squad screen's repair cards, hooks are safe here. Extracted a reusable
+`useListCardEntrance(index)` hook (same math as `ParticipantCard`'s inline
+version) shared by both. `LeagueRow`'s entrance replays for newly-appended
+rows after "Load more" on the leaderboard, same mechanism as the squad
+screen's "Load more members."
+
+**Same scope note as the squad screen**: `catalogCard`, and both invite-card
+renderers, are rendered inline (`.map()`/plain helper functions, not their own
+components) — static shimmer only, no entrance, for the same hooks-safety
+reason documented there. Extracting them would be a bigger follow-up if full
+parity is wanted.
+
+`npx tsc --noEmit` and `git diff --check` clean.
+
+## Premium UI Pass — Squad/Cohort Screen (2026-07-26)
+
+Second screen in the iterative UI pass, after Home. Extended the glass
+top-highlight to every card on `app/challenge/[id].tsx` (the squad/cohort
+detail screen — Streaks/Activity/Repairs tabs): the tab bar itself
+(`detailTabs`), `CohortLeaderHero` (leaderboard spotlight card), every
+`ParticipantCard` row (+ its loading skeleton), `SquadActivitySection`'s
+accordion card, and both repair-request card states (skeleton + real).
+Extracted a shared `src/components/GlassTopHighlight.tsx` for this and all
+future additions (existing Home/mission-detail cards left as-is, already
+shipped — only new additions use the shared component going forward).
+
+`ParticipantCard` also got the Home screen's spring "stack up from below"
+mount animation, staggered by list position — replays for newly-appended rows
+after "Load more members" since each gets a genuinely fresh mount/key, giving
+the requested "stack up on Load More" feel for the leaderboard specifically.
+
+**Scope note, not done**: the Repairs tab's individual request cards are
+rendered inline inside a `.map()` in the screen component itself (not their
+own component like `ParticipantCard`), so they can't safely use per-item
+`useRef`/`useEffect` hooks — only the static shimmer was added there, not the
+stack-up entrance. Extracting them into a `RepairRequestCard` component would
+be needed for parity; not attempted without being asked, given the size of
+that block (~300 lines of tightly-coupled inline logic).
+
+`npx tsc --noEmit` and `git diff --check` clean.
+
+## Home Screen Premium UI Pass (started 2026-07-26)
 
 User wants a full visual overhaul, screen by screen, evolving toward a more
 premium finish while keeping the app's existing flavor — explicitly asked to be
