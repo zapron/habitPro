@@ -27,6 +27,17 @@ import { prewarmChallengeStreaks } from "../lib/groupChallengesApi";
 
 const prewarmedGroupStreakIds = new Set<string>();
 const ANDROID_SEGMENTED_RING_DAY_LIMIT = 45;
+/** Streak ring's rendered size. */
+const HABIT_RING_SIZE = 56;
+/**
+ * Extra top margin on the ring whenever its status label renders above it (see
+ * `cardStreakTopRight`) — keeps a fixed clearance between the card's own top edge
+ * and the label, regardless of how tall `cardContent`'s content ends up being (a
+ * plain 0 margin let the label land almost flush against the card's top padding on
+ * short cards, since the ring — and the label pinned above it — could get centered
+ * very close to the row's own top).
+ */
+const HABIT_RING_LABEL_GAP = 22;
 /** Per-card stagger for the "stack up from below" mount animation — capped so a long list's later cards don't wait forever. */
 const CARD_ENTRANCE_STAGGER_MS = 70;
 const CARD_ENTRANCE_STAGGER_CAP_MS = 480;
@@ -262,6 +273,17 @@ export const HabitCard = memo(({ item, nowMs, index }: HabitCardProps) => {
     const markChecklistDayComplete = useHabitStore((state) => state.markChecklistDayComplete);
     const showQuickMarkComplete =
       isChecklistMission && streakCheckinAvailable && !missionWon && !missionFailed;
+    /** Tasks logged so far for today's not-yet-completed checklist day — same gate as the quick Mark Complete action. */
+    const totalChecklistTasks = item.taskChecklist?.length ?? 0;
+    const loggedChecklistTasks =
+      showQuickMarkComplete && activeCheckinDateStr
+        ? (item.streakMemories?.[activeCheckinDateStr]?.tasks?.length ?? 0)
+        : 0;
+    const taskProgressLabel = showQuickMarkComplete
+      ? loggedChecklistTasks >= totalChecklistTasks
+        ? "All tasks logged"
+        : `${loggedChecklistTasks}/${totalChecklistTasks} tasks pending`
+      : null;
 
     const handleQuickMarkComplete = (event: { stopPropagation: () => void }) => {
       event.stopPropagation();
@@ -414,110 +436,115 @@ export const HabitCard = memo(({ item, nowMs, index }: HabitCardProps) => {
             />
             <View style={styles.cardContent}>
                     <View style={styles.pillRow}>
-                        {isManual ? (
-                            <Gamepad2 size={14} color={theme.colors.amber[500]} />
-                        ) : (
-                            <Plane size={14} color={theme.colors.cyan[400]} />
-                        )}
-                        {(item.visibility ?? 'solo') === 'public' && (
-                            <Globe size={14} color={theme.colors.cyan[400]} />
-                        )}
-                        {Boolean(item.challengeGroupId) && (
-                            <Swords size={14} color={theme.colors.indigo[400]} />
-                        )}
-                        {streakCheckinAvailable && !missionWon && !missionFailed ? (
-                            <View
-                                style={styles.pulseGlyphWrap}
-                                accessibilityLabel="Streak check-in available"
-                                accessibilityRole="image"
-                            >
-                                <Animated.View
-                                    pointerEvents="none"
+                            {isManual ? (
+                                <Gamepad2 size={14} color={theme.colors.amber[500]} />
+                            ) : (
+                                <Plane size={14} color={theme.colors.cyan[400]} />
+                            )}
+                            {(item.visibility ?? 'solo') === 'public' && (
+                                <Globe size={14} color={theme.colors.cyan[400]} />
+                            )}
+                            {Boolean(item.challengeGroupId) && (
+                                <Swords size={14} color={theme.colors.indigo[400]} />
+                            )}
+                            {streakCheckinAvailable && !missionWon && !missionFailed ? (
+                                <View
+                                    style={styles.pulseGlyphWrap}
+                                    accessibilityLabel="Streak check-in available"
+                                    accessibilityRole="image"
+                                >
+                                    <Animated.View
+                                        pointerEvents="none"
+                                        style={[
+                                            styles.pulseGlyphHalo,
+                                            {
+                                                borderColor: theme.colors.cyan[400],
+                                                backgroundColor: "rgba(34, 211, 238, 0.10)",
+                                                transform: [{ scale: reduceMotion ? 1 : pulseScale }],
+                                                opacity: reduceMotion ? 0.5 : pulseOpacity,
+                                            },
+                                        ]}
+                                    />
+                                </View>
+                            ) : null}
+                            {item.missionReport === 'accomplished' && (
+                                <Text style={[styles.reportPillText, { color: theme.colors.green[500] }]}>ACCOMPLISHED</Text>
+                            )}
+                            {needsReport && (
+                                <Text style={[styles.reportPillText, { color: theme.colors.amber[500] }]}>REVIEW DUE</Text>
+                            )}
+                            {repair && !missionWon && !missionFailed && !needsReport ? (
+                              <TouchableOpacity
+                                onPress={() => {
+                                  void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                  router.push({
+                                    pathname: `/habit/${item.id}`,
+                                    params: { repair: "1", repairDate: repair.dateStr },
+                                  });
+                                }}
+                                activeOpacity={0.85}
+                                accessibilityRole="button"
+                                accessibilityLabel="Repair streak"
+                              >
+                                <Text style={[styles.repairCta, { color: theme.colors.amber[500] }]}>REPAIR</Text>
+                              </TouchableOpacity>
+                            ) : null}
+                            {taskProgressLabel ? (
+                                <View
                                     style={[
-                                        styles.pulseGlyphHalo,
-                                        {
-                                            borderColor: theme.colors.cyan[400],
-                                            backgroundColor: "rgba(34, 211, 238, 0.10)",
-                                            transform: [{ scale: reduceMotion ? 1 : pulseScale }],
-                                            opacity: reduceMotion ? 0.5 : pulseOpacity,
-                                        },
+                                        styles.taskProgressPill,
+                                        loggedChecklistTasks >= totalChecklistTasks
+                                            ? {
+                                                  borderColor: isDark ? 'rgba(34, 197, 94, 0.5)' : 'rgba(21, 128, 61, 0.32)',
+                                                  backgroundColor: isDark ? 'rgba(34, 197, 94, 0.12)' : 'rgba(34, 197, 94, 0.08)',
+                                              }
+                                            : {
+                                                  borderColor: isDark ? 'rgba(34, 211, 238, 0.5)' : 'rgba(8, 145, 178, 0.32)',
+                                                  backgroundColor: isDark ? 'rgba(34, 211, 238, 0.12)' : 'rgba(34, 211, 238, 0.08)',
+                                              },
                                     ]}
-                                />
-                            </View>
-                        ) : null}
-                        {item.missionReport === 'accomplished' && (
-                            <Text style={[styles.reportPillText, { color: theme.colors.green[500] }]}>ACCOMPLISHED</Text>
-                        )}
-                        {needsReport && (
-                            <Text style={[styles.reportPillText, { color: theme.colors.amber[500] }]}>REVIEW DUE</Text>
-                        )}
-                        {repair && !missionWon && !missionFailed && !needsReport ? (
-                          <TouchableOpacity
-                            onPress={() => {
-                              void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                              router.push({
-                                pathname: `/habit/${item.id}`,
-                                params: { repair: "1", repairDate: repair.dateStr },
-                              });
-                            }}
-                            activeOpacity={0.85}
-                            accessibilityRole="button"
-                            accessibilityLabel="Repair streak"
-                          >
-                            <Text style={[styles.repairCta, { color: theme.colors.amber[500] }]}>REPAIR</Text>
-                          </TouchableOpacity>
-                        ) : null}
-                        {showQuickMarkComplete ? (
-                          <TouchableOpacity
-                            onPress={handleQuickMarkComplete}
-                            activeOpacity={0.85}
-                            accessibilityRole="button"
-                            accessibilityLabel="Mark today complete"
-                          >
-                            <Text style={[styles.repairCta, { color: theme.colors.green[500] }]}>
-                              MARK COMPLETE
-                            </Text>
-                          </TouchableOpacity>
-                        ) : null}
+                                >
+                                    <Text
+                                        style={[
+                                            styles.taskProgressPillText,
+                                            {
+                                                color:
+                                                    loggedChecklistTasks >= totalChecklistTasks
+                                                        ? theme.colors.green[500]
+                                                        : theme.colors.cyan[500],
+                                            },
+                                        ]}
+                                        numberOfLines={1}
+                                    >
+                                        {taskProgressLabel}
+                                    </Text>
+                                </View>
+                            ) : null}
                     </View>
 
-                    <View>
-                        <Text style={[styles.cardTitle, { color: theme.colors.textPrimary, fontSize: theme.typography.h3 }]}>{item.title}</Text>
-                        {item.description ? (
-                            <Text style={[styles.cardDescription, { color: theme.colors.textSecondary }]} numberOfLines={1}>
-                                {item.description}
-                            </Text>
-                        ) : null}
-                    </View>
+                    <Text style={[styles.cardTitle, { color: theme.colors.textPrimary, fontSize: theme.typography.h3 }]}>{item.title}</Text>
 
-                    {!missionFailed || item.challengeGroupId ? (
+                    {showQuickMarkComplete || item.challengeGroupId ? (
                       <View style={styles.cardStats}>
-                          {!missionFailed ? (
-                            <View>
-                            <Text
+                          {showQuickMarkComplete ? (
+                            <TouchableOpacity
+                                onPress={handleQuickMarkComplete}
+                                activeOpacity={0.82}
                                 style={[
-                                    styles.cardStreak,
-                                    missionWon
-                                        ? { color: theme.colors.green[500] }
-                                        : needsReport
-                                            ? { color: theme.colors.amber[500] }
-                                        : item.streak >= 14
-                                            ? { color: '#fbbf24' }
-                                            : item.streak >= 7
-                                                ? { color: '#f59e0b' }
-                                                : item.streak > 0
-                                                    ? { color: theme.colors.amber[500] }
-                                                    : { color: theme.colors.textMuted },
+                                    styles.markCompleteButton,
+                                    {
+                                        borderColor: isDark ? 'rgba(34, 197, 94, 0.72)' : 'rgba(21, 128, 61, 0.42)',
+                                        backgroundColor: isDark ? 'rgba(34, 197, 94, 0.13)' : 'rgba(34, 197, 94, 0.10)',
+                                    },
                                 ]}
-                                numberOfLines={1}
+                                accessibilityRole="button"
+                                accessibilityLabel="Mark today complete"
                             >
-                                {missionWon
-                                    ? 'Completed!'
-                                    : needsReport
-                                      ? 'Confirm mission outcome'
-                                      : `${Math.round(campaignProgress * 100)}% Complete`}
-                            </Text>
-                            </View>
+                                <Check size={12} color={theme.colors.green[500]} strokeWidth={2.8} />
+                                <Text style={[styles.markCompleteButtonText, { color: theme.colors.green[500] }]} numberOfLines={1}>
+                                    Mark Complete
+                                </Text>
+                            </TouchableOpacity>
                           ) : null}
                           {item.challengeGroupId ? (
                             <TouchableOpacity
@@ -527,19 +554,18 @@ export const HabitCard = memo(({ item, nowMs, index }: HabitCardProps) => {
                                 }}
                                 activeOpacity={0.82}
                                 style={[
-                                    styles.groupStreakPill,
+                                    styles.groupStreakButton,
                                     {
                                         borderColor: isDark ? 'rgba(245, 158, 11, 0.72)' : 'rgba(217, 119, 6, 0.42)',
                                         backgroundColor: isDark ? 'rgba(245, 158, 11, 0.13)' : 'rgba(245, 158, 11, 0.10)',
-                                        shadowColor: theme.colors.amber[500],
                                     },
                                 ]}
                                 accessibilityRole="button"
                                 accessibilityLabel="View group streaks"
                             >
-                                <Users size={13} color={theme.colors.amber[500]} strokeWidth={2.6} />
-                                <Text style={[styles.groupStreakPillText, { color: theme.colors.amber[500] }]}>
-                                    View Group Streaks
+                                <Users size={12} color={theme.colors.amber[500]} strokeWidth={2.6} />
+                                <Text style={[styles.groupStreakButtonText, { color: theme.colors.amber[500] }]} numberOfLines={1}>
+                                    Group Streaks
                                 </Text>
                             </TouchableOpacity>
                           ) : null}
@@ -548,14 +574,45 @@ export const HabitCard = memo(({ item, nowMs, index }: HabitCardProps) => {
             </View>
 
             {(() => {
-              const ringSize = 56;
+              const ringSize = HABIT_RING_SIZE;
               const strokeWidth = 4;
               const slot = getHabitActiveMissionDaySlot(item, nowMs);
               const useLightweightRing =
                 Platform.OS === "android" && totalDays > ANDROID_SEGMENTED_RING_DAY_LIMIT;
 
               return (
-                <View style={[styles.ringWrap, { width: ringSize, height: ringSize }]}>
+                <View
+                  style={[
+                    styles.ringWrap,
+                    { width: ringSize, height: ringSize },
+                    !missionFailed && { marginTop: HABIT_RING_LABEL_GAP },
+                  ]}
+                >
+                  {!missionFailed ? (
+                    <Text
+                        style={[
+                            styles.cardStreakTopRight,
+                            missionWon
+                                ? { color: theme.colors.green[500] }
+                                : needsReport
+                                    ? { color: theme.colors.amber[500] }
+                                : item.streak >= 14
+                                    ? { color: '#fbbf24' }
+                                    : item.streak >= 7
+                                        ? { color: '#f59e0b' }
+                                        : item.streak > 0
+                                            ? { color: theme.colors.amber[500] }
+                                            : { color: theme.colors.textMuted },
+                        ]}
+                        numberOfLines={1}
+                    >
+                        {missionWon
+                            ? 'Completed!'
+                            : needsReport
+                              ? 'Confirm mission outcome'
+                              : `${Math.round(campaignProgress * 100)}% Complete`}
+                    </Text>
+                  ) : null}
                   {!missionWon && !missionFailed && useLightweightRing ? (
                     <LightweightMissionRing
                       ringSize={ringSize}
@@ -652,6 +709,28 @@ const styles = StyleSheet.create({
     },
     cardContent: { flex: 1 },
     pillRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 10, marginBottom: 8 },
+    // Anchored to `ringWrap` itself (not `cardContent`) via `bottom: '100%'` — sits
+    // flush above wherever the ring visually ends up, regardless of how tall
+    // `cardContent`'s own content is. Anchoring to cardContent instead (the previous
+    // approach) broke on short cards: `card`'s row centers cardContent and the ring
+    // against each other by whichever is taller, so on a short card the ring's own
+    // top could land above where this text assumed clear space, and the two visibly
+    // collided. `right: 0` lines the text's right edge up with the ring's; an
+    // explicit `width` (rather than leaving it to size from content) is required
+    // here — an absolutely positioned node with only `right` set still got an
+    // ellipsis-truncated single line in practice, so a fixed width wide enough for
+    // the longest status string ("Confirm mission outcome") is used instead, with
+    // `textAlign: 'right'` keeping shorter strings flush with the ring.
+    cardStreakTopRight: {
+        position: 'absolute',
+        bottom: '100%',
+        right: 0,
+        width: 170,
+        marginBottom: 6,
+        fontWeight: '600',
+        fontSize: 12,
+        textAlign: 'right',
+    },
     reportPillText: { fontSize: 10, fontWeight: '800', letterSpacing: 0.8 },
     repairCta: { fontSize: 10, fontWeight: "900", letterSpacing: 0.9 },
     pulseGlyphWrap: {
@@ -676,29 +755,47 @@ const styles = StyleSheet.create({
     ringCenterInner: { alignItems: "center", justifyContent: "center" },
     ringInner: { alignItems: 'center', justifyContent: 'center', paddingTop: 2 },
     cardTitle: { fontWeight: '800', marginBottom: 4, flexShrink: 1 },
-    cardDescription: { fontSize: 14 },
-    cardStats: { flexDirection: 'row', alignItems: 'center', marginTop: 10, flexWrap: 'wrap', gap: 6 },
+    taskProgressPill: {
+        borderWidth: 1,
+        borderRadius: 9999,
+        paddingVertical: 3,
+        paddingHorizontal: 9,
+        flexShrink: 0,
+    },
+    taskProgressPillText: { fontSize: 10.5, fontWeight: '800', letterSpacing: 0.2 },
+    cardStats: { flexDirection: 'row', alignItems: 'center', marginTop: 10, flexWrap: 'nowrap', gap: 6 },
     cardStreak: { fontWeight: '600', fontSize: 12 },
     cardProgress: { flexShrink: 0 },
-    groupStreakPill: {
+    groupStreakButton: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
-        alignSelf: 'center',
-        gap: 5,
-        minHeight: 34,
-        paddingVertical: 6,
-        paddingHorizontal: 11,
-        borderRadius: 9999,
+        gap: 4,
+        minHeight: 30,
+        paddingVertical: 5,
+        paddingHorizontal: 8,
+        borderRadius: 10,
         borderWidth: 1,
-        flexShrink: 0,
+        flexShrink: 1,
+        minWidth: 0,
         overflow: 'hidden',
-        shadowOpacity: 0.18,
-        shadowRadius: 8,
-        shadowOffset: { width: 0, height: 3 },
-        elevation: 2,
     },
-    groupStreakPillText: { fontSize: 10.5, fontWeight: '900', letterSpacing: 0 },
+    groupStreakButtonText: { fontSize: 10, fontWeight: '900', letterSpacing: 0, flexShrink: 1 },
+    markCompleteButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 4,
+        minHeight: 30,
+        paddingVertical: 5,
+        paddingHorizontal: 8,
+        borderRadius: 10,
+        borderWidth: 1,
+        flexShrink: 1,
+        minWidth: 0,
+        overflow: 'hidden',
+    },
+    markCompleteButtonText: { fontSize: 10, fontWeight: '900', letterSpacing: 0, flexShrink: 1 },
     progressText: { fontWeight: '700', fontSize: 18 },
     streakNumber: { fontWeight: "800", fontSize: 12.5, letterSpacing: -0.15, lineHeight: 15 },
     streakMicroLabel: { fontSize: 8.5, fontWeight: "900", letterSpacing: 1.0, marginTop: 1 },
