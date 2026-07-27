@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AppState } from "react-native";
 import * as Updates from "expo-updates";
-import { useAppDialog } from "../context/AppDialogContext";
 import { useAppVersion } from "../context/AppVersionContext";
 import { useToast } from "../context/ToastContext";
+import { OtaUpdateReadySheet } from "./OtaUpdateReadySheet";
 
 const FIRST_CHECK_DELAY_MS = 6_000;
 const FOREGROUND_CHECK_COOLDOWN_MS = 15 * 60_000;
@@ -14,16 +14,34 @@ function otaEnabled(): boolean {
   return !__DEV__ && Updates.isEnabled;
 }
 
+// TEMP-DEV-SIM: lets a __DEV__-only debug toggle open the "Update ready" sheet
+// without a real OTA download, since otaEnabled() is always false in __DEV__.
+// Remove this along with the toggle once the premium OTA/force-update visuals
+// are done and no longer need live preview.
+let devTriggerOtaReadySheet: (() => void) | null = null;
+export function simulateOtaUpdateReady(): void {
+  if (!__DEV__) return;
+  devTriggerOtaReadySheet?.();
+}
+
 export function OtaUpdateManager() {
   const { needsForceUpdate } = useAppVersion();
-  const { showAlert } = useAppDialog();
   const { showToast } = useToast();
   const { isUpdatePending } = Updates.useUpdates();
   const checkingRef = useRef(false);
   const lastCheckAtRef = useRef(0);
   const readyPromptShownRef = useRef(false);
+  const [readyVisible, setReadyVisible] = useState(false);
+
+  useEffect(() => {
+    devTriggerOtaReadySheet = () => setReadyVisible(true);
+    return () => {
+      devTriggerOtaReadySheet = null;
+    };
+  }, []);
 
   const applyDownloadedUpdate = useCallback(() => {
+    setReadyVisible(false);
     showToast("Applying update...", "info", 1200);
     setTimeout(() => {
       void Updates.reloadAsync().catch((e) => {
@@ -35,16 +53,8 @@ export function OtaUpdateManager() {
   const promptForReload = useCallback(() => {
     if (readyPromptShownRef.current) return;
     readyPromptShownRef.current = true;
-    showAlert(
-      "Update ready",
-      "A small HabitPro refresh has downloaded. Restart now to apply it, or it will apply the next time you open the app.",
-      [
-        { text: "Later", style: "cancel" },
-        { text: "Restart now", onPress: applyDownloadedUpdate },
-      ],
-      { cancelable: true },
-    );
-  }, [applyDownloadedUpdate, showAlert]);
+    setReadyVisible(true);
+  }, []);
 
   const checkForOtaUpdate = useCallback(
     async (reason: CheckReason) => {
@@ -94,5 +104,11 @@ export function OtaUpdateManager() {
     promptForReload();
   }, [isUpdatePending, needsForceUpdate, promptForReload]);
 
-  return null;
+  return (
+    <OtaUpdateReadySheet
+      visible={readyVisible}
+      onLater={() => setReadyVisible(false)}
+      onRestart={applyDownloadedUpdate}
+    />
+  );
 }
