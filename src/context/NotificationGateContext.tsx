@@ -1,8 +1,9 @@
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { Animated, Easing, Modal, Pressable, StyleSheet, View } from "react-native";
-import { Bell } from "lucide-react-native";
+import { Bell, Flame, Timer, Users, type LucideIcon } from "lucide-react-native";
 import { Text } from "../components/AppText";
 import { Button } from "../components/Button";
+import { GlassTopHighlight } from "../components/GlassTopHighlight";
 import { useReducedMotion } from "../hooks/useReducedMotion";
 import type { AppTheme } from "../styles/theme";
 import { useTheme } from "./ThemeContext";
@@ -58,6 +59,18 @@ function titleForReason(reason: NotificationGateReason): string {
       return "Stay on track with HabitPro";
   }
 }
+
+/**
+ * "Permission priming" for the app_launch ask — a short, specific benefit list
+ * reads as more persuasive (and more premium) than one dense paragraph. Other
+ * reasons keep their single-sentence body via bodyForReason below; this is
+ * additive only to app_launch.
+ */
+const APP_LAUNCH_BENEFITS: { Icon: LucideIcon; label: string }[] = [
+  { Icon: Flame, label: "Streak protection — never lose progress silently" },
+  { Icon: Timer, label: "Timer alerts — know when a mission's about to end" },
+  { Icon: Users, label: "Squad updates — see when your crew finishes" },
+];
 
 function bodyForReason(reason: NotificationGateReason): string {
   switch (reason) {
@@ -188,6 +201,7 @@ function NotificationPermissionSheet({
             },
           ]}
         >
+          <GlassTopHighlight radius={theme.radius.lg} />
           <View style={[styles.sheetAccentBar, { backgroundColor: accent }]} />
           <View style={[styles.iconWrap, { backgroundColor: accentSoft }]}>
             <Bell size={26} color={accent} strokeWidth={2.2} />
@@ -200,7 +214,20 @@ function NotificationPermissionSheet({
           ) : (
             <Text style={[styles.title, { color: theme.colors.textPrimary }]}>{titleForReason(reason)}</Text>
           )}
-          <Text style={[styles.body, { color: theme.colors.textSecondary }]}>{bodyForReason(reason)}</Text>
+          {reason === "app_launch" ? (
+            <View style={styles.benefitList}>
+              {APP_LAUNCH_BENEFITS.map(({ Icon, label }) => (
+                <View key={label} style={styles.benefitRow}>
+                  <View style={[styles.benefitIconWrap, { backgroundColor: accentSoft }]}>
+                    <Icon size={14} color={accent} strokeWidth={2.4} />
+                  </View>
+                  <Text style={[styles.benefitLabel, { color: theme.colors.textSecondary }]}>{label}</Text>
+                </View>
+              ))}
+            </View>
+          ) : (
+            <Text style={[styles.body, { color: theme.colors.textSecondary }]}>{bodyForReason(reason)}</Text>
+          )}
           {status === "denied" && !canAskAgain ? (
             <Text style={[styles.note, { color: theme.colors.amber[500] }]}>
               You previously denied notifications. Turn them back on from Settings.
@@ -387,6 +414,17 @@ const styles = StyleSheet.create({
   },
   title: { fontSize: 18, fontWeight: "900", letterSpacing: -0.2, marginBottom: 8, lineHeight: 24 },
   body: { fontSize: 14, lineHeight: 20, fontWeight: "600" },
+  benefitList: { gap: 10 },
+  benefitRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  benefitIconWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 9,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  benefitLabel: { flex: 1, fontSize: 13, lineHeight: 18, fontWeight: "600" },
   note: { fontSize: 12.5, lineHeight: 17, fontWeight: "700", marginTop: 10 },
   actions: { gap: 10, marginTop: 16 },
 });
