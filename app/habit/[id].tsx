@@ -293,6 +293,37 @@ const HabitGridBrandRing = React.memo(function HabitGridBrandRing({
     );
 });
 
+/**
+ * Overlay drawn inside today's existing pulsing square once the user has logged at
+ * least one (but not all) of a multi-task checklist day — a green arc in ratio to
+ * tasks logged / total. Purely additive: the square keeps its cyan border, its day
+ * number, and its pulse animation exactly as before; this just adds the arc on top.
+ */
+const TaskProgressArc = React.memo(function TaskProgressArc({ progress }: { progress: number }) {
+    const { theme } = useTheme();
+    const c = 21;
+    const r = 17;
+    const circ = 2 * Math.PI * r;
+    const dash = circ * Math.min(1, Math.max(0, progress));
+
+    return (
+        <Svg width="100%" height="100%" viewBox="0 0 42 42" style={StyleSheet.absoluteFill} pointerEvents="none">
+            <G transform={`rotate(-90 ${c} ${c})`}>
+                <Circle
+                    cx={c}
+                    cy={c}
+                    r={r}
+                    stroke={theme.colors.green[500]}
+                    strokeWidth={3}
+                    fill="none"
+                    strokeLinecap="round"
+                    strokeDasharray={`${dash} ${circ - dash}`}
+                />
+            </G>
+        </Svg>
+    );
+});
+
 const AnimatedDayCell = React.memo(function AnimatedDayCell({
     day,
     dayIndex,
@@ -305,6 +336,8 @@ const AnimatedDayCell = React.memo(function AnimatedDayCell({
     hasMomentMedia,
     repaired,
     repairSource,
+    checklistLogged,
+    checklistTotal,
     onPress,
     isSheetOpen,
     optimizeForScroll,
@@ -320,6 +353,9 @@ const AnimatedDayCell = React.memo(function AnimatedDayCell({
     hasMomentMedia: boolean;
     repaired: boolean;
     repairSource?: "squad" | "solo";
+    /** Only set for the current mission day — tasks logged so far / total checklist tasks (0/0 for classic missions, or missions with a single task, where a ratio isn't meaningful). */
+    checklistLogged?: number;
+    checklistTotal?: number;
     onPress: (dayIndex: number, day: number) => void;
     isSheetOpen: boolean;
     optimizeForScroll: boolean;
@@ -330,8 +366,20 @@ const AnimatedDayCell = React.memo(function AnimatedDayCell({
     const shimmer = useRef(new Animated.Value(0)).current;
     const todayPulse = useRef(new Animated.Value(1)).current;
 
+    // A multi-task (2+) checklist day only shows the ratio arc; 0 or 1 tasks stays
+    // on the plain existing flow below, since there's no meaningful ratio to draw.
+    const hasMultiTaskChecklist = typeof checklistTotal === 'number' && checklistTotal >= 2;
+    const allTasksLogged = hasMultiTaskChecklist && (checklistLogged ?? 0) >= (checklistTotal ?? 0);
+    // All tasks logged, but Mark Day Complete not pressed yet — previews the exact
+    // same completed-marker look as a real completed day (step 3 of the flow).
+    const showPreCompleteBadge = isCurrentMissionDay && !isCompleted && allTasksLogged;
+    // Some (not all) tasks logged — draws the green ratio arc inside the still-pulsing square (step 2).
+    const showProgressArc =
+        isCurrentMissionDay && !isCompleted && hasMultiTaskChecklist && !allTasksLogged && (checklistLogged ?? 0) > 0;
+    const visuallyDone = isCompleted || showPreCompleteBadge;
+
     useEffect(() => {
-        if (reduceMotion || !(isCurrentMissionDay && !isCompleted) || isSheetOpen) {
+        if (reduceMotion || !(isCurrentMissionDay && !visuallyDone) || isSheetOpen) {
             todayPulse.stopAnimation();
             todayPulse.setValue(1);
             return undefined;
@@ -344,7 +392,7 @@ const AnimatedDayCell = React.memo(function AnimatedDayCell({
         );
         loop.start();
         return () => loop.stop();
-    }, [reduceMotion, isCurrentMissionDay, isCompleted, todayPulse, isSheetOpen]);
+    }, [reduceMotion, isCurrentMissionDay, visuallyDone, todayPulse, isSheetOpen]);
 
     useEffect(() => {
         if (reduceMotion || optimizeForScroll || !(isMilestone && isCompleted)) return;
@@ -384,7 +432,7 @@ const AnimatedDayCell = React.memo(function AnimatedDayCell({
 
     const dayButtonStyle = [
         styles.dayButton,
-        isCompleted
+        visuallyDone
             ? [
                 styles.dayButtonCompleted,
                 {
@@ -394,12 +442,12 @@ const AnimatedDayCell = React.memo(function AnimatedDayCell({
                 },
             ]
             : [styles.dayButtonIncomplete, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }],
-        isCompleted && isMilestone && !optimizeForScroll && styles.dayButtonMilestone,
-        isCurrentMissionDay && !isCompleted && { borderColor: theme.colors.cyan[400], borderWidth: 2 },
+        visuallyDone && isMilestone && !optimizeForScroll && styles.dayButtonMilestone,
+        isCurrentMissionDay && !visuallyDone && { borderColor: theme.colors.cyan[400], borderWidth: 2 },
         locked && styles.dayButtonFuture,
     ];
 
-    const animatedScale = isCurrentMissionDay && !isCompleted ? Animated.multiply(scale, todayPulse) : scale;
+    const animatedScale = isCurrentMissionDay && !visuallyDone ? Animated.multiply(scale, todayPulse) : scale;
 
     return (
         <Animated.View
@@ -418,7 +466,7 @@ const AnimatedDayCell = React.memo(function AnimatedDayCell({
                 delayPressIn={0}
                 disabled={!(canInteract || (isCompleted && hasStreakRecord))}
             >
-                {isCompleted ? (
+                {visuallyDone ? (
                     <Animated.View style={[styles.badgeWrap, isMilestone && { opacity: shimmerOpacity }]}>
                         <HabitGridBrandRing
                             day={day}
@@ -432,7 +480,10 @@ const AnimatedDayCell = React.memo(function AnimatedDayCell({
                 ) : locked ? (
                     <Lock size={15} color={theme.colors.textMuted} />
                 ) : isCurrentMissionDay ? (
-                    <Text style={[styles.dayText, styles.currentDayText, { color: theme.colors.cyan[400] }]}>{day}</Text>
+                    <View style={styles.badgeWrap}>
+                        <Text style={[styles.dayText, styles.currentDayText, { color: theme.colors.cyan[400] }]}>{day}</Text>
+                        {showProgressArc ? <TaskProgressArc progress={(checklistLogged ?? 0) / (checklistTotal ?? 1)} /> : null}
+                    </View>
                 ) : (
                     <Text style={[styles.dayText, isCurrentMissionDay ? { color: theme.colors.cyan[400] } : { color: theme.colors.textMuted }]}>{day}</Text>
                 )}
@@ -691,8 +742,20 @@ export default function HabitDetail() {
 
     const memoryCompletionDates = useMemo(
         () =>
-            Object.keys(habit?.streakMemories ?? {})
-                .filter((dateStr) => /^\d{4}-\d{2}-\d{2}$/.test(dateStr))
+            Object.entries(habit?.streakMemories ?? {})
+                // A checklist day's tasks-only memory (logged, not yet Mark-Day-Complete'd)
+                // must not count as "completed" here — only real completion evidence does.
+                // Same guard as the hasMissingMemoryCompletion check below; getting this
+                // wrong force-completes a checklist day the instant its first task is
+                // logged, which is exactly what the explicit Mark Day Complete action
+                // replaced. Classic (non-checklist) memories always satisfy this anyway,
+                // since saving one there is itself the completing action.
+                .filter(
+                    ([dateStr, memory]) =>
+                        /^\d{4}-\d{2}-\d{2}$/.test(dateStr) &&
+                        Boolean(memory.note || memory.imageUrl || memory.imageUri || memory.checkInOnly || memory.repairSource),
+                )
+                .map(([dateStr]) => dateStr)
                 .sort((a, b) => a.localeCompare(b)),
         [habit?.streakMemories],
     );
@@ -1061,11 +1124,28 @@ export default function HabitDetail() {
                 });
             }
 
+            // Once every checklist task has a logged entry, there's nothing left to
+            // decide — auto-fire the same action "Mark Day Complete" triggers (advances
+            // the streak/XP, fires the squad completion notification), so the user
+            // never has to tap a now-redundant button after their last task.
+            // markChecklistDayComplete reads the store fresh, so it already sees the
+            // patch/set above even though this function's own `habit` closure is stale.
+            const currentTaskIds = new Set((habit.taskChecklist ?? []).map((t) => t.id));
+            const loggedIds = new Set(nextTasks.filter((t) => currentTaskIds.has(t.taskId)).map((t) => t.taskId));
+            const allTasksNowLogged = currentTaskIds.size > 0 && loggedIds.size >= currentTaskIds.size;
+            if (allTasksNowLogged) {
+                const changed = markChecklistDayComplete(habit.id, ctx.dateStr);
+                if (changed) {
+                    const isMilestone = milestones.includes(ctx.day);
+                    fireCompletionCelebration(ctx.dayIndex, ctx.day, isMilestone);
+                }
+            }
+
             // StreakMemorySheet calls onClose() itself right after onCommit resolves —
             // that handler closes taskMemoryUi and reopens the checklist, so this
             // function doesn't need to touch taskMemoryUi state.
         },
-        [habit, taskMemoryUi, setStreakMemory, patchStreakMemory, showToast],
+        [habit, taskMemoryUi, setStreakMemory, patchStreakMemory, markChecklistDayComplete, milestones, fireCompletionCelebration, showToast],
     );
 
     /**
@@ -1838,6 +1918,7 @@ export default function HabitDetail() {
                         visible={taskMemoryUi !== null}
                         mode={taskMemoryUi?.kind === 'view' ? 'view' : 'create'}
                         noticeVariant="editable-until-complete"
+                        hideCommunityPublish
                         prefill={taskMemoryUi?.kind === 'create' ? taskMemoryUi.prefill : undefined}
                         viewMemory={
                             taskMemoryUi?.kind === 'view'
@@ -2359,6 +2440,18 @@ export default function HabitDetail() {
                         );
                         const repaired = repairedDateSet.has(dateStr);
                         const repairSource = streakMem?.repairSource;
+                        const checklistTotal = isCurrentMissionDay ? (habit.taskChecklist?.length ?? 0) : 0;
+                        // Count only entries matching a CURRENT checklist task id — same as
+                        // ChecklistDaySheet's own "N/M logged" count. A raw `tasks.length` would
+                        // over-count if any stale/orphaned entries exist (e.g. the checklist was
+                        // edited after some tasks were logged against the old item ids), which
+                        // could prematurely trigger the "all logged" completed-preview badge.
+                        const checklistLogged = isCurrentMissionDay
+                            ? (() => {
+                                  const currentTaskIds = new Set((habit.taskChecklist ?? []).map((t) => t.id));
+                                  return (streakMem?.tasks ?? []).filter((t) => currentTaskIds.has(t.taskId)).length;
+                              })()
+                            : 0;
 
                         return (
                             <AnimatedDayCell
@@ -2374,6 +2467,8 @@ export default function HabitDetail() {
                                 hasMomentMedia={hasMomentMedia}
                                 repaired={repaired}
                                 repairSource={repairSource}
+                                checklistLogged={checklistLogged}
+                                checklistTotal={checklistTotal}
                                 onPress={handleDayPress} // Stable callback reference
                                 isSheetOpen={memoryUi !== null}
                                 optimizeForScroll={optimizeGridScrollForLongGrid}

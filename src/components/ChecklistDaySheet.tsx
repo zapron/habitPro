@@ -98,9 +98,24 @@ export function ChecklistDaySheet({
         >
           <View style={styles.header}>
             <View style={styles.headerText}>
-              <Text style={[styles.title, { color: theme.colors.textPrimary }]} numberOfLines={1}>
-                Day {day}
-              </Text>
+              <View style={styles.titleRow}>
+                <Text style={[styles.title, { color: theme.colors.textPrimary }]} numberOfLines={1}>
+                  Day {day}
+                </Text>
+                {dayCompleted ? (
+                  <View
+                    style={[
+                      styles.completedBadge,
+                      { borderColor: theme.colors.green[500], backgroundColor: `${theme.colors.green[500]}14` },
+                    ]}
+                  >
+                    <Check size={10} color={theme.colors.green[500]} strokeWidth={3} />
+                    <Text style={[styles.completedBadgeText, { color: theme.colors.green[500] }]} numberOfLines={1}>
+                      Day complete
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
               <Text style={[styles.sub, { color: theme.colors.textMuted }]} numberOfLines={1}>
                 {missionTitle} · {loggedCount}/{tasks.length} logged
               </Text>
@@ -163,7 +178,7 @@ export function ChecklistDaySheet({
                       }}
                       hitSlop={8}
                       accessibilityRole="button"
-                      accessibilityLabel={included ? "Included in shared catalog — tap to exclude" : "Excluded from shared catalog — tap to include"}
+                      accessibilityLabel={included ? "Included in Community — tap to exclude" : "Excluded from Community — tap to include"}
                       style={styles.includeToggle}
                     >
                       {included ? (
@@ -195,17 +210,7 @@ export function ChecklistDaySheet({
                 Mark Day Complete
               </Text>
             </Pressable>
-          ) : (
-            <View
-              style={[
-                styles.completedPill,
-                { borderColor: theme.colors.green[500], backgroundColor: `${theme.colors.green[500]}14` },
-              ]}
-            >
-              <Check size={13} color={theme.colors.green[500]} strokeWidth={3} />
-              <Text style={[styles.completedPillText, { color: theme.colors.green[500] }]}>Day complete</Text>
-            </View>
-          )}
+          ) : null}
 
           {revoked ? (
             <Text style={[styles.revokedNote, { color: theme.colors.textMuted }]}>
@@ -232,10 +237,10 @@ export function ChecklistDaySheet({
                 )}
                 <Text style={[styles.shareBtnText, { color: theme.colors.indigo[400] }]}>
                   {sharing
-                    ? "Sharing…"
+                    ? "Publishing…"
                     : alreadyShared
-                      ? `Update shared catalog (${includedCount})`
-                      : `Share catalog (${includedCount} photo${includedCount === 1 ? "" : "s"})`}
+                      ? `Update on Community (${includedCount})`
+                      : `Publish to Community (${includedCount} photo${includedCount === 1 ? "" : "s"})`}
                 </Text>
               </Pressable>
               {alreadyShared ? (
@@ -280,7 +285,19 @@ const styles = StyleSheet.create({
   },
   header: { flexDirection: "row", alignItems: "flex-start", gap: 10, marginBottom: 14 },
   headerText: { flex: 1, minWidth: 0 },
-  title: { fontSize: 18, fontWeight: "800", letterSpacing: -0.2 },
+  titleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  title: { fontSize: 18, fontWeight: "800", letterSpacing: -0.2, flexShrink: 1 },
+  completedBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    borderWidth: 1,
+    borderRadius: 9999,
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+    flexShrink: 0,
+  },
+  completedBadgeText: { fontSize: 11, fontWeight: "800", letterSpacing: 0.2 },
   sub: { fontSize: 12, fontWeight: "600", marginTop: 2 },
   closeBtn: {
     width: 30,
@@ -327,19 +344,6 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   completeBtnText: { fontSize: 14, fontWeight: "800" },
-  completedPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    alignSelf: "center",
-    gap: 6,
-    borderWidth: 1,
-    borderRadius: 9999,
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    marginTop: 4,
-  },
-  completedPillText: { fontSize: 12, fontWeight: "800", letterSpacing: 0.3 },
   shareBtn: {
     flexDirection: "row",
     alignItems: "center",

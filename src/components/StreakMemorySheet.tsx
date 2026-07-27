@@ -89,6 +89,13 @@ type StreakMemorySheetProps = {
    * existing copy.
    */
   noticeVariant?: "locks-on-save" | "editable-until-complete";
+  /**
+   * create + habit only: hides the "Publish to Community" toggle. Publishing
+   * happens at the day level (the checklist's own "Publish to Community"
+   * button, covering the whole catalog) — an individual task within a
+   * multi-task day has no meaningful per-task publish choice of its own.
+   */
+  hideCommunityPublish?: boolean;
 };
 
 export const StreakMemorySheet = React.memo(function StreakMemorySheet({
@@ -108,6 +115,7 @@ export const StreakMemorySheet = React.memo(function StreakMemorySheet({
   squadShare,
   prefill,
   noticeVariant = "locks-on-save",
+  hideCommunityPublish = false,
 }: StreakMemorySheetProps) {
   const isMini = variant === "mini";
   const isView = mode === "view";
@@ -380,7 +388,12 @@ export const StreakMemorySheet = React.memo(function StreakMemorySheet({
     canPublishCommunity,
   ]);
 
-  const maxSheetView = Math.min(windowH * 0.88, 560);
+  // Was capped at a fixed 560px on top of the 88% ceiling — on most phones that's
+  // noticeably shorter than the screen actually allows, forcing a scroll to see the
+  // photo, description, and publish toggle together even though there was room.
+  // Just cap at 90% of the window now; the ScrollView below still kicks in on its
+  // own once real content (e.g. a long note) actually exceeds that.
+  const maxSheetView = windowH * 0.9;
   const isMemoryCreate = !isView;
   const isMiniCreate = !isView && isMini;
   const isHabitCreate = !isView && !isMini;
@@ -920,7 +933,7 @@ export const StreakMemorySheet = React.memo(function StreakMemorySheet({
                       </View>
                     ) : null}
 
-                    {isMini || isHabitCreate ? (
+                    {(isMini || isHabitCreate) && !hideCommunityPublish ? (
                       <View
                         style={[
                           styles.communityPublishRow,
