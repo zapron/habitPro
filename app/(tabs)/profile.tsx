@@ -43,6 +43,8 @@ import {
   Crown,
 } from "lucide-react-native";
 import { Screen } from "../../src/components/Screen";
+import { GlassTopHighlight } from "../../src/components/GlassTopHighlight";
+import { useListCardEntrance } from "../../src/hooks/useListCardEntrance";
 import { useTheme } from "../../src/context/ThemeContext";
 import { useAuth } from "../../src/context/AuthContext";
 import { usePremium } from "../../src/context/PremiumContext";
@@ -690,6 +692,7 @@ function ModelScoreCard({
         },
       ]}
     >
+      <GlassTopHighlight radius={16} />
       <View style={styles.modelScoreHeader}>
         <View style={styles.modelScoreTitleWrap}>
           <Text style={[styles.modelScoreTitle, { color: theme.colors.textPrimary }]} numberOfLines={1}>
@@ -743,6 +746,7 @@ function RawStatTile({
         },
       ]}
     >
+      <GlassTopHighlight radius={15} />
       <Text style={[styles.rawStatValue, { color }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.68}>
         {value}
       </Text>
@@ -783,6 +787,7 @@ function InsightSignalCard({
         },
       ]}
     >
+      <GlassTopHighlight radius={14} />
       <View style={styles.signalHeader}>
         <Text style={[styles.signalTitle, { color }]} numberOfLines={1}>
           {title}
@@ -1336,6 +1341,22 @@ export default function ProfileScreen() {
   const appVersion = useAppVersion();
   const router = useRouter();
 
+  // Stack-up entrance for the screen's top-level cards, in the fixed visual
+  // order they appear — called unconditionally (Rules of Hooks) even though
+  // several of these cards render conditionally below; an unused entrance
+  // style for a card that doesn't render this pass is harmless.
+  const entranceSyncError = useListCardEntrance(0);
+  const entranceRecovery = useListCardEntrance(1);
+  const entranceHero = useListCardEntrance(2);
+  const entrancePlus = useListCardEntrance(3);
+  const entranceMomentum = useListCardEntrance(4);
+  const entranceMathLeft = useListCardEntrance(5);
+  const entranceMathRight = useListCardEntrance(6);
+  const entranceModelBoard = useListCardEntrance(7);
+  const entranceRawBoard = useListCardEntrance(8);
+  const entranceCommitment = useListCardEntrance(9);
+  const entranceVersion = useListCardEntrance(10);
+
   return (
     <Screen>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={theme.colors.background} />
@@ -1387,12 +1408,14 @@ export default function ProfileScreen() {
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: bottomPad }} keyboardShouldPersistTaps="handled">
         {cloudSyncBlocked ? (
+          <Animated.View style={entranceSyncError}>
           <View
             style={[
               styles.syncErrorCard,
               { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, ...theme.shadow.card },
             ]}
           >
+            <GlassTopHighlight radius={18} />
             <Text style={[styles.syncErrorTitle, { color: theme.colors.textPrimary }]}>Cloud sync paused</Text>
             <Text style={[styles.syncErrorBody, { color: theme.colors.textSecondary }]}>
               We could not safely load your account data. Remote writes are blocked until retry succeeds.
@@ -1407,15 +1430,18 @@ export default function ProfileScreen() {
               <Text style={styles.syncRetryText}>Retry Sync</Text>
             </TouchableOpacity>
           </View>
+          </Animated.View>
         ) : null}
 
         {showRecoveryBackups ? (
+          <Animated.View style={entranceRecovery}>
           <View
             style={[
               styles.recoveryCard,
               { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, ...theme.shadow.card },
             ]}
           >
+            <GlassTopHighlight radius={18} />
             <View style={styles.recoveryHeader}>
               <View
                 style={[
@@ -1446,6 +1472,7 @@ export default function ProfileScreen() {
                       { backgroundColor: theme.colors.surfaceElevated, borderColor: theme.colors.border },
                     ]}
                   >
+                    <GlassTopHighlight radius={14} />
                     <View style={styles.recoveryRowText}>
                       <Text style={[styles.recoveryReason, { color: theme.colors.textPrimary }]} numberOfLines={1}>
                         {backupReasonLabel(backup.reason)}
@@ -1472,8 +1499,10 @@ export default function ProfileScreen() {
               })}
             </View>
           </View>
+          </Animated.View>
         ) : null}
 
+        <Animated.View style={entranceHero}>
         <LinearGradient
           colors={
             isDark
@@ -1484,6 +1513,7 @@ export default function ProfileScreen() {
           end={{ x: 1, y: 1 }}
           style={[styles.hero, { borderColor: theme.colors.border, ...theme.shadow.card }]}
         >
+          <GlassTopHighlight radius={20} />
           <View style={styles.heroRingColumn}>
             <LevelXpRing level={level} xpInLevel={xpInLevel} size={94} strokeWidth={3}>
               <View
@@ -1606,8 +1636,10 @@ export default function ProfileScreen() {
             </Pressable>
           </View>
         </LinearGradient>
+        </Animated.View>
 
         {!accountHydrating && !profileIsPremium ? (
+          <Animated.View style={entrancePlus}>
           <TouchableOpacity
             style={[
               styles.plusCard,
@@ -1618,6 +1650,7 @@ export default function ProfileScreen() {
             accessibilityRole="button"
             accessibilityLabel="View HabitPro Community"
           >
+            <GlassTopHighlight radius={18} />
             <PlusBadge withFlame size="md" />
             <Text style={[styles.plusCardTitle, { color: theme.colors.textPrimary }]}>Unlock social features</Text>
             <Text style={[styles.plusCardBody, { color: theme.colors.textSecondary }]}>
@@ -1625,10 +1658,12 @@ export default function ProfileScreen() {
             </Text>
             <Text style={[styles.plusCardCta, { color: theme.colors.indigo[400] }]}>View HabitPro Community</Text>
           </TouchableOpacity>
+          </Animated.View>
         ) : null}
 
         <Text style={[styles.sectionLabel, { color: theme.colors.textMuted }]}>GROWTH ENGINE</Text>
 
+        <Animated.View style={entranceMomentum}>
         <View
           style={[
             styles.momentumCard,
@@ -1639,6 +1674,7 @@ export default function ProfileScreen() {
             },
           ]}
         >
+          <GlassTopHighlight radius={18} />
           <View style={styles.momentumHead}>
             <View style={styles.momentumTitleBlock}>
               <View style={styles.cardTitleRow}>
@@ -1716,14 +1752,17 @@ export default function ProfileScreen() {
             </View>
           </View>
         </View>
+        </Animated.View>
 
         <View style={styles.mathCardRow}>
+          <Animated.View style={[{ flex: 1 }, entranceMathLeft]}>
           <View
             style={[
               styles.mathCard,
               { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, ...theme.shadow.card },
             ]}
           >
+            <GlassTopHighlight radius={16} />
             <View style={styles.cardTitleRow}>
               <TrendingUp size={16} color={theme.colors.green[500]} />
               <Text style={[styles.mathCardTitle, { color: theme.colors.textPrimary }]}>Level forecast</Text>
@@ -1739,13 +1778,16 @@ export default function ProfileScreen() {
               {profileMath.projectedLevelDays ? `${profileMath.projectedLevelDays}d estimate` : "Needs points"}
             </Text>
           </View>
+          </Animated.View>
 
+          <Animated.View style={[{ flex: 1 }, entranceMathRight]}>
           <View
             style={[
               styles.mathCard,
               { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, ...theme.shadow.card },
             ]}
           >
+            <GlassTopHighlight radius={16} />
             <View style={styles.cardTitleRow}>
               <Activity size={16} color={theme.colors.cyan[400]} />
               <Text style={[styles.mathCardTitle, { color: theme.colors.textPrimary }]}>Reliability</Text>
@@ -1771,14 +1813,17 @@ export default function ProfileScreen() {
               {profileMath.consistency}% consistency · best {profileMath.bestDayLabel}
             </Text>
           </View>
+          </Animated.View>
         </View>
 
+        <Animated.View style={entranceModelBoard}>
         <View
           style={[
             styles.statsBoard,
             { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, ...theme.shadow.card },
           ]}
         >
+          <GlassTopHighlight radius={18} />
           <View style={styles.statsBoardHeader}>
             <View style={styles.cardTitleRow}>
               <BarChart3 size={17} color={theme.colors.indigo[400]} />
@@ -1802,13 +1847,16 @@ export default function ProfileScreen() {
             ))}
           </View>
         </View>
+        </Animated.View>
 
+        <Animated.View style={entranceRawBoard}>
         <View
           style={[
             styles.statsBoard,
             { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, ...theme.shadow.card },
           ]}
         >
+          <GlassTopHighlight radius={18} />
           <View style={styles.statsBoardHeader}>
             <View style={styles.cardTitleRow}>
               <BarChart3 size={17} color={theme.colors.cyan[400]} />
@@ -1844,15 +1892,18 @@ export default function ProfileScreen() {
             ))}
           </View>
         </View>
+        </Animated.View>
 
         <Text style={[styles.sectionLabel, { color: theme.colors.textMuted }]}>COMMITMENT LOAD</Text>
 
+        <Animated.View style={entranceCommitment}>
         <View
           style={[
             styles.commitmentCard,
             { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, ...theme.shadow.card },
           ]}
         >
+          <GlassTopHighlight radius={18} />
           <TouchableOpacity
             style={styles.commitmentRow}
             onPress={() => setHubSheet({ mode: "habits-all" })}
@@ -1936,19 +1987,23 @@ export default function ProfileScreen() {
             </TouchableOpacity>
           </View>
         </View>
+        </Animated.View>
 
         <Text style={[styles.sectionLabel, { color: theme.colors.textMuted, marginTop: 4, opacity: 0.85 }]}>APP VERSION</Text>
+        <Animated.View style={entranceVersion}>
         <View
           style={[
             styles.versionCard,
             { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, ...theme.shadow.card },
           ]}
         >
+          <GlassTopHighlight radius={14} />
           <Text style={[styles.versionPrimary, { color: theme.colors.textPrimary }]}>
             v{appVersion.currentVersion}
             {appVersion.nativeBuildLabel ? ` (${appVersion.nativeBuildLabel})` : ""}
           </Text>
         </View>
+        </Animated.View>
       </ScrollView>
 
       <LazyMount visible={hubSheet !== null} unmountOnExit>

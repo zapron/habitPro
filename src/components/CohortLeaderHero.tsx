@@ -8,6 +8,7 @@ import { levelFromTotalXp } from "../utils/xpLevel";
 import { avatarIdentityFor } from "../utils/avatarIdentity";
 import { CohortMastheadTrophyNarrative, type CohortMastheadModel } from "./CohortMasthead";
 import { CohortStreakPill } from "./CohortStreakPill";
+import { GlassTopHighlight } from "./GlassTopHighlight";
 
 function initialsFromLabel(label: ProfileLabel | undefined, fallbackName: string): string {
   const dn = label?.displayName?.trim();
@@ -113,6 +114,7 @@ export function CohortLeaderHero({
         },
       ]}
     >
+      <GlassTopHighlight radius={18} />
       <View style={styles.inner}>
         {model.kind !== "sync_prompt" && leaderHabit ? (
           <>

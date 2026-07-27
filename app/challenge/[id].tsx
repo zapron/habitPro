@@ -7,6 +7,8 @@ import React, {
   useRef,
   useState } from "react";
 import {
+  Animated,
+  Easing,
   View,
   ScrollView,
   TouchableOpacity,
@@ -42,6 +44,8 @@ import { CohortStreakPill } from "../../src/components/CohortStreakPill";
 import { SquadActivitySection } from "../../src/components/SquadActivitySection";
 import { MissionDetailsSheet } from "../../src/components/MissionDetailsSheet";
 import { Button } from "../../src/components/Button";
+import { GlassTopHighlight } from "../../src/components/GlassTopHighlight";
+import { useReducedMotion } from "../../src/hooks/useReducedMotion";
 import { useTheme } from "../../src/context/ThemeContext";
 import { useToast } from "../../src/context/ToastContext";
 import { useAuth } from "../../src/context/AuthContext";
@@ -242,6 +246,8 @@ type ParticipantCardProps = {
   theme: any;
   isDark: boolean;
   nowMs: number;
+  /** Position in the currently rendered list — drives this card's entrance stagger delay when it first mounts (capped for long lists). */
+  index: number;
 };
 
 type ParticipantCardSkeletonProps = {
@@ -249,12 +255,18 @@ type ParticipantCardSkeletonProps = {
   isDark: boolean;
 };
 
+/** Per-card stagger for the "stack up from below" mount animation — capped so a long list's later cards don't wait forever. Also replays for newly appended rows after "Load more members," since each gets a fresh mount. */
+const PARTICIPANT_CARD_ENTRANCE_STAGGER_MS = 70;
+const PARTICIPANT_CARD_ENTRANCE_STAGGER_CAP_MS = 480;
+const PARTICIPANT_CARD_ENTRANCE_RISE_PX = 42;
+
 const ParticipantCardSkeleton = memo(function ParticipantCardSkeleton({
   themedStyles,
   isDark,
 }: ParticipantCardSkeletonProps) {
   return (
     <View style={[styles.participantCard, themedStyles.card]}>
+      <GlassTopHighlight radius={18} />
       <View style={styles.participantSkeletonHeader}>
         <View style={styles.participantSkeletonTitleCluster}>
           <ShimmerBlock isDark={isDark} height={20} radius={10} style={{ width: "58%" }} />
@@ -307,12 +319,55 @@ const ParticipantCard = memo(function ParticipantCard({
   theme,
   isDark,
   nowMs,
+  index,
 }: ParticipantCardProps) {
   const nameOnCard = participantDisplayName(label);
   const xpForLevel = label?.xp != null ? label.xp : myUserId === memberId ? myXp : null;
   const memberLevel = xpForLevel != null ? levelFromTotalXp(xpForLevel) : null;
   const squadVisible = (habit?.visibility ?? "solo") === "public";
   const VisibilityIcon = squadVisible ? Eye : EyeOff;
+  const reduceMotion = useReducedMotion();
+
+  // "Stack up from below" mount animation — same pattern as HabitCard.tsx on
+  // the Home screen. Fires once per fresh mount: initial page load, or a
+  // newly appended row after "Load more members" (a fresh key React hasn't
+  // rendered before). Empty dep array is deliberate — must not replay on
+  // ordinary re-renders (nowMs, nudge state, etc.), only on mount.
+  const entrance = useRef(new Animated.Value(reduceMotion ? 1 : 0)).current;
+  useEffect(() => {
+    if (reduceMotion) {
+      entrance.setValue(1);
+      return undefined;
+    }
+    const delay = Math.min(
+      index * PARTICIPANT_CARD_ENTRANCE_STAGGER_MS,
+      PARTICIPANT_CARD_ENTRANCE_STAGGER_CAP_MS,
+    );
+    const anim = Animated.spring(entrance, {
+      toValue: 1,
+      delay,
+      friction: 6,
+      tension: 100,
+      useNativeDriver: true,
+      isInteraction: false,
+    });
+    anim.start();
+    return () => anim.stop();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const entranceStyle = reduceMotion
+    ? null
+    : {
+        opacity: entrance.interpolate({ inputRange: [0, 1], outputRange: [0, 1], extrapolate: "clamp" as const }),
+        transform: [
+          {
+            translateY: entrance.interpolate({
+              inputRange: [0, 1],
+              outputRange: [PARTICIPANT_CARD_ENTRANCE_RISE_PX, 0],
+            }),
+          },
+        ],
+      };
 
   const handleNudgePress = useCallback((kind: PresetChallengeNudgeKind) => {
     void onSendNudge(memberId, kind);
@@ -331,7 +386,9 @@ const ParticipantCard = memo(function ParticipantCard({
   }, [label, memberId, onOpenPlayerJourney]);
 
   return (
+    <Animated.View style={entranceStyle}>
     <View style={[styles.participantCard, themedStyles.card]}>
+      <GlassTopHighlight radius={18} />
       <View style={styles.participantHeaderRow}>
         <View style={styles.participantNameLevelCluster}>
           <Pressable
@@ -420,6 +477,7 @@ const ParticipantCard = memo(function ParticipantCard({
         />
       ) : null}
     </View>
+    </Animated.View>
   );
 });
 
@@ -1864,6 +1922,7 @@ export default function ChallengeDetailScreen() {
               },
             ]}
           >
+            <GlassTopHighlight radius={18} />
             {detailTabs.map((tab) => {
               const active = activeTab === tab.key;
               const attentionBadge = tab.key === "repairs" && tab.count === "!";
@@ -1955,6 +2014,7 @@ export default function ChallengeDetailScreen() {
                     },
                   ]}
                 >
+                  <GlassTopHighlight radius={16} />
                   <View style={styles.repairCompactHead}>
                     <View
                       style={[
@@ -2108,6 +2168,7 @@ export default function ChallengeDetailScreen() {
                     },
                   ]}
                 >
+                  <GlassTopHighlight radius={16} />
                   <View style={styles.repairCompactHead}>
                     <Pressable
                       onPress={() => setExpandedRepairId((prev) => (prev === r.id ? null : r.id))}
@@ -2535,9 +2596,10 @@ export default function ChallengeDetailScreen() {
               ) : visibleSortedMemberIds.length === 0 ? (
                 <Text style={{ color: theme.colors.textSecondary }}>No streaks loaded yet.</Text>
               ) : (
-                visibleSortedMemberIds.map((memberId) => (
+                visibleSortedMemberIds.map((memberId, index) => (
                   <ParticipantCard
                     key={memberId}
+                    index={index}
                     challengeId={challengeId}
                     memberId={memberId}
                     label={profileLabels[memberId]}

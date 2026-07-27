@@ -69,6 +69,7 @@ import { startJsStallProbe, traceSync } from "../../src/lib/jsThreadProbe";
 import { waitForHabitPersistIdle } from "../../src/lib/chunkedHabitPersistStorage";
 import { PlusBadge } from "../../src/components/PlusBadge";
 import { ShimmerBlock } from "../../src/components/ShimmerBlock";
+import { GlassTopHighlight } from "../../src/components/GlassTopHighlight";
 import { useRefreshPremiumAccess } from "../../src/hooks/useRefreshPremiumAccess";
 import { useReducedMotion } from "../../src/hooks/useReducedMotion";
 import { LevelXpRing } from "../../src/components/LevelXpRing";
@@ -390,6 +391,7 @@ function ActiveChallengeCard({
   theme,
   isDark,
   onRequestAbandon,
+  index,
 }: {
   enrollment: ChallengeEnrollment;
   habits: Habit[];
@@ -397,7 +399,10 @@ function ActiveChallengeCard({
   theme: ReturnType<typeof useTheme>["theme"];
   isDark: boolean;
   onRequestAbandon: () => void;
+  index: number;
 }) {
+  // Must run before the early-return below — hooks can't be called conditionally.
+  const entranceStyle = useListCardEntrance(index);
   const template = getChallengeTemplate(enrollment.templateId);
   if (!template) return null;
 
@@ -412,12 +417,14 @@ function ActiveChallengeCard({
       : `${Math.min(progress.current, template.target)} / ${template.target}`;
 
   return (
+    <Animated.View style={entranceStyle}>
     <View
       style={[
         styles.activeCard,
         { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, ...theme.shadow.card },
       ]}
     >
+      <GlassTopHighlight radius={16} />
       <View style={styles.activeCardTop}>
         <View style={{ flex: 1 }}>
           <Text style={[styles.activeTitle, { color: theme.colors.textPrimary }]}>{template.title}</Text>
@@ -442,7 +449,49 @@ function ActiveChallengeCard({
         <Text style={[styles.progressText, { color: theme.colors.cyan[400] }]}>{progressLabel}</Text>
       </View>
     </View>
+    </Animated.View>
   );
+}
+
+/** Per-card stagger for the "stack up from below" mount animation — same pattern as HabitCard.tsx/ParticipantCard, capped so a long list's later cards don't wait forever. Replays for newly appended rows after a "Load more" action, since each gets a fresh mount. */
+const LIST_CARD_ENTRANCE_STAGGER_MS = 70;
+const LIST_CARD_ENTRANCE_STAGGER_CAP_MS = 480;
+const LIST_CARD_ENTRANCE_RISE_PX = 42;
+
+function useListCardEntrance(index: number) {
+  const reduceMotion = useReducedMotion();
+  const entrance = useRef(new Animated.Value(reduceMotion ? 1 : 0)).current;
+  useEffect(() => {
+    if (reduceMotion) {
+      entrance.setValue(1);
+      return undefined;
+    }
+    const delay = Math.min(index * LIST_CARD_ENTRANCE_STAGGER_MS, LIST_CARD_ENTRANCE_STAGGER_CAP_MS);
+    const anim = Animated.spring(entrance, {
+      toValue: 1,
+      delay,
+      friction: 6,
+      tension: 100,
+      useNativeDriver: true,
+      isInteraction: false,
+    });
+    anim.start();
+    return () => anim.stop();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  return reduceMotion
+    ? null
+    : {
+        opacity: entrance.interpolate({ inputRange: [0, 1], outputRange: [0, 1], extrapolate: "clamp" as const }),
+        transform: [
+          {
+            translateY: entrance.interpolate({
+              inputRange: [0, 1],
+              outputRange: [LIST_CARD_ENTRANCE_RISE_PX, 0],
+            }),
+          },
+        ],
+      };
 }
 
 function leaderboardAccent(rank: number, theme: ReturnType<typeof useTheme>["theme"]) {
@@ -497,12 +546,15 @@ const LeagueRow = memo(function LeagueRow({
   theme,
   isDark,
   onPress,
+  index,
 }: {
   entry: WeeklyLeaderboardEntry;
   theme: ReturnType<typeof useTheme>["theme"];
   isDark: boolean;
   onPress: (entry: WeeklyLeaderboardEntry) => void;
+  index: number;
 }) {
+  const entranceStyle = useListCardEntrance(index);
   const accent = leaderboardAccent(entry.rankPosition, theme);
   const xpInLevel = xpInCurrentLevel(entry.xp);
   const usernameLabel = entry.username.replace(/^@+/, "");
@@ -511,6 +563,7 @@ const LeagueRow = memo(function LeagueRow({
   const playerLeague = lifetimeLeagueForLevel(entry.level, theme, isDark);
   const identity = avatarIdentityFor(entry.userId);
   return (
+    <Animated.View style={entranceStyle}>
     <TouchableOpacity
       onPress={() => onPress(entry)}
       activeOpacity={0.82}
@@ -525,6 +578,7 @@ const LeagueRow = memo(function LeagueRow({
         },
       ]}
     >
+      <GlassTopHighlight radius={16} />
       <View style={styles.leagueRankSlot}>
         {entry.rankPosition === 1 ? (
           <Crown size={22} color={accent} fill={accent} />
@@ -571,6 +625,7 @@ const LeagueRow = memo(function LeagueRow({
         </View>
       </View>
     </TouchableOpacity>
+    </Animated.View>
   );
 });
 
@@ -1493,6 +1548,7 @@ export default function CompeteScreen() {
           },
         ]}
       >
+        <GlassTopHighlight radius={16} />
         {pending ? (
           <Animated.View
             pointerEvents="none"
@@ -1661,6 +1717,7 @@ export default function CompeteScreen() {
     if (pending) {
       return (
         <View key={`group:${inv.id}`} style={cardStyle}>
+          <GlassTopHighlight radius={16} />
           <Animated.View
             pointerEvents="none"
             style={[
@@ -1714,6 +1771,7 @@ export default function CompeteScreen() {
     if (inv.status === "accepted" && canOpenMission) {
       return (
         <View key={`group:${inv.id}`} style={cardStyle}>
+          <GlassTopHighlight radius={16} />
           <InviteMissionHeader
             meta={meta}
             theme={theme}
@@ -1728,6 +1786,7 @@ export default function CompeteScreen() {
 
     return (
       <View key={`group:${inv.id}`} style={cardStyle}>
+        <GlassTopHighlight radius={16} />
         <InviteMissionHeader meta={meta} theme={theme} isDark={isDark} />
         <InviteRequesterLine username={requesterLabel?.username} theme={theme} />
         {resolvedBlock}
@@ -1762,6 +1821,7 @@ export default function CompeteScreen() {
           { marginBottom: segment === "challenges" ? 8 : 18 },
         ]}
       >
+        <GlassTopHighlight radius={14} />
         <TouchableOpacity
           style={[
             styles.segment,
@@ -1881,6 +1941,7 @@ export default function CompeteScreen() {
                   },
                 ]}
               >
+                <GlassTopHighlight radius={18} />
                 <View style={styles.leagueHeroTop}>
                   <View style={styles.leagueHeroText}>
                     <Text style={[styles.leagueTitle, { color: theme.colors.textPrimary }]}>Weekly Ranks</Text>
@@ -2004,6 +2065,7 @@ export default function CompeteScreen() {
                         },
                       ]}
                     >
+                      <GlassTopHighlight radius={16} />
                       <ShimmerBlock isDark={isDark} height={22} radius={11} style={{ width: 34 }} />
                       <ShimmerBlock isDark={isDark} height={50} radius={25} style={{ width: 50 }} />
                       <View style={{ flex: 1, gap: 8 }}>
@@ -2021,6 +2083,7 @@ export default function CompeteScreen() {
                     { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, ...theme.shadow.card, marginBottom: 10 },
                   ]}
                 >
+                  <GlassTopHighlight radius={16} />
                   <Text style={[styles.emptyTitle, { color: theme.colors.textPrimary }]}>Weekly Ranks unavailable</Text>
                   <Text style={[styles.emptyBody, { color: theme.colors.textSecondary }]}>{leagueListError}</Text>
                 </View>
@@ -2031,6 +2094,7 @@ export default function CompeteScreen() {
                     { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, ...theme.shadow.card, marginBottom: 10 },
                   ]}
                 >
+                  <GlassTopHighlight radius={16} />
                   <Text style={[styles.emptyTitle, { color: theme.colors.textPrimary }]}>No such user available</Text>
                   <Text style={[styles.emptyBody, { color: theme.colors.textSecondary }]}>
                     Try another username or clear search to return to the weekly ranks.
@@ -2043,6 +2107,7 @@ export default function CompeteScreen() {
                     { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, ...theme.shadow.card, marginBottom: 10 },
                   ]}
                 >
+                  <GlassTopHighlight radius={16} />
                   <Text style={[styles.emptyTitle, { color: theme.colors.textPrimary }]}>No weekly scores yet</Text>
                   <Text style={[styles.emptyBody, { color: theme.colors.textSecondary }]}>
                     Create a username from Profile and complete habits or minis this week.
@@ -2051,9 +2116,10 @@ export default function CompeteScreen() {
               ) : null}
             </>
           }
-          renderItem={({ item }) => (
+          renderItem={({ item, index }: { item: WeeklyLeaderboardEntry; index: number }) => (
             <LeagueRow
               entry={item}
+              index={index}
               theme={theme}
               isDark={isDark}
               onPress={handleLeagueRowPress}
@@ -2111,6 +2177,7 @@ export default function CompeteScreen() {
                         },
                       ]}
                     >
+                      <GlassTopHighlight radius={16} />
                       <View style={{ gap: 10 }}>
                         <ShimmerBlock
                           isDark={isDark}
@@ -2132,6 +2199,7 @@ export default function CompeteScreen() {
                 <View
                   style={[styles.card, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, ...theme.shadow.card }]}
                 >
+                  <GlassTopHighlight radius={16} />
                   <Text style={[styles.emptyTitle, { color: theme.colors.textPrimary }]}>No invites yet</Text>
                   <Text style={[styles.emptyBody, { color: theme.colors.textSecondary }]}>
                     When someone invites you to a group mission or Live Mini Mission, it will show up here.
@@ -2178,15 +2246,17 @@ export default function CompeteScreen() {
                 <View
                   style={[styles.card, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, ...theme.shadow.card }]}
                 >
+                  <GlassTopHighlight radius={16} />
                   <Text style={[styles.emptyTitle, { color: theme.colors.textPrimary }]}>No active challenges</Text>
                   <Text style={[styles.emptyBody, { color: theme.colors.textSecondary }]}>
                     Pick a challenge below. Up to two at a time. Progress uses your habit + mini mission data on this device.
                   </Text>
                 </View>
               ) : (
-                enrollments.map((e) => (
+                enrollments.map((e, index) => (
                   <ActiveChallengeCard
                     key={e.id}
+                    index={index}
                     enrollment={e}
                     habits={habits}
                     miniMissions={miniMissions}
@@ -2205,6 +2275,7 @@ export default function CompeteScreen() {
                   onPress={() => handleJoin(t.id)}
                   activeOpacity={0.88}
                 >
+                  <GlassTopHighlight radius={16} />
                   <Text style={[styles.catalogTitle, { color: theme.colors.textPrimary }]}>{t.title}</Text>
                   <Text style={[styles.catalogSub, { color: theme.colors.textSecondary }]}>{t.subtitle}</Text>
                   <Text style={[styles.catalogGoal, { color: theme.colors.textMuted }]}>{t.goalLine}</Text>
@@ -2223,6 +2294,7 @@ export default function CompeteScreen() {
                   <View
                     style={[styles.card, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, ...theme.shadow.card }]}
                   >
+                    <GlassTopHighlight radius={16} />
                     {completed.slice(0, 6).map((c, i) => {
                       const tpl = getChallengeTemplate(c.templateId);
                       return (

@@ -16,6 +16,7 @@ import type {
 } from "../types/groupChallenge";
 import type { ProfileLabel } from "../lib/groupChallengesApi";
 import { formatDateDisplay, formatDateTimeDisplay } from "../utils/dateDisplay";
+import { GlassTopHighlight } from "./GlassTopHighlight";
 
 /** Calm header: indigo “Squad” + neutral “activity”. */
 function SquadActivityTitle({
@@ -251,6 +252,7 @@ export const SquadActivitySection = memo(function SquadActivitySection({
           },
         ]}
       >
+        <GlassTopHighlight radius={compact ? 16 : 18} />
         <View
         style={[
           styles.accordionTrigger,
