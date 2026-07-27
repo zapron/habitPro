@@ -526,26 +526,6 @@ export const HabitCard = memo(({ item, nowMs, index }: HabitCardProps) => {
 
                     {showQuickMarkComplete || item.challengeGroupId ? (
                       <View style={styles.cardStats}>
-                          {showQuickMarkComplete ? (
-                            <TouchableOpacity
-                                onPress={handleQuickMarkComplete}
-                                activeOpacity={0.82}
-                                style={[
-                                    styles.markCompleteButton,
-                                    {
-                                        borderColor: isDark ? 'rgba(34, 197, 94, 0.72)' : 'rgba(21, 128, 61, 0.42)',
-                                        backgroundColor: isDark ? 'rgba(34, 197, 94, 0.13)' : 'rgba(34, 197, 94, 0.10)',
-                                    },
-                                ]}
-                                accessibilityRole="button"
-                                accessibilityLabel="Mark today complete"
-                            >
-                                <Check size={12} color={theme.colors.green[500]} strokeWidth={2.8} />
-                                <Text style={[styles.markCompleteButtonText, { color: theme.colors.green[500] }]} numberOfLines={1}>
-                                    Mark Complete
-                                </Text>
-                            </TouchableOpacity>
-                          ) : null}
                           {item.challengeGroupId ? (
                             <TouchableOpacity
                                 onPress={(event) => {
@@ -566,6 +546,26 @@ export const HabitCard = memo(({ item, nowMs, index }: HabitCardProps) => {
                                 <Users size={12} color={theme.colors.amber[500]} strokeWidth={2.6} />
                                 <Text style={[styles.groupStreakButtonText, { color: theme.colors.amber[500] }]} numberOfLines={1}>
                                     Group Streaks
+                                </Text>
+                            </TouchableOpacity>
+                          ) : null}
+                          {showQuickMarkComplete ? (
+                            <TouchableOpacity
+                                onPress={handleQuickMarkComplete}
+                                activeOpacity={0.82}
+                                style={[
+                                    styles.markCompleteButton,
+                                    {
+                                        borderColor: isDark ? 'rgba(34, 197, 94, 0.72)' : 'rgba(21, 128, 61, 0.42)',
+                                        backgroundColor: isDark ? 'rgba(34, 197, 94, 0.13)' : 'rgba(34, 197, 94, 0.10)',
+                                    },
+                                ]}
+                                accessibilityRole="button"
+                                accessibilityLabel="Mark today complete"
+                            >
+                                <Check size={12} color={theme.colors.green[500]} strokeWidth={2.8} />
+                                <Text style={[styles.markCompleteButtonText, { color: theme.colors.green[500] }]} numberOfLines={1}>
+                                    Quick Complete
                                 </Text>
                             </TouchableOpacity>
                           ) : null}
