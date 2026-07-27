@@ -859,6 +859,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 6,
     paddingTop: 10,
+    paddingBottom: 8,
   },
   taskNameText: {
     fontSize: 13,
