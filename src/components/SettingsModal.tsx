@@ -1,6 +1,7 @@
 import React from 'react';
 import { Text } from "./AppText";
 import {
+  Animated,
   View,
   TouchableOpacity,
   Modal,
@@ -23,6 +24,8 @@ import { useRouter } from "expo-router";
 import { getRemotePushPermissionDetails, registerPushTokenForCurrentUser, requestRemotePushPermissionDetails } from "../lib/pushTokens";
 import { useEffect, useMemo, useState } from "react";
 import { ShimmerBlock } from "./ShimmerBlock";
+import { GlassTopHighlight } from "./GlassTopHighlight";
+import { useListCardEntrance } from "../hooks/useListCardEntrance";
 
 const THEME_OPTIONS: { key: ThemePreference; label: string; Icon: LucideIcon }[] = [
     { key: 'system', label: 'System', Icon: Monitor },
@@ -47,6 +50,15 @@ export function SettingsModal({ visible, onClose }: SettingsModalProps) {
     const [notifStatus, setNotifStatus] = useState<"loading" | "on" | "off" | "unavailable">("loading");
 
     const canShowNotifRow = Boolean(showAccount && uid);
+
+    // Stack-up entrance for each settings row, in fixed display order — called
+    // unconditionally (Rules of Hooks) even though the notifications row only
+    // sometimes renders below.
+    const entranceMembership = useListCardEntrance(0);
+    const entranceNotifications = useListCardEntrance(1);
+    const entrancePrivacy = useListCardEntrance(2);
+    const entranceTerms = useListCardEntrance(3);
+    const entranceSupport = useListCardEntrance(4);
 
     const refreshNotifStatus = async () => {
         if (!uid) {
@@ -162,6 +174,7 @@ export function SettingsModal({ visible, onClose }: SettingsModalProps) {
                     )}
 
                     <Text style={[styles.sectionLabel, { color: theme.colors.textMuted, marginTop: 14 }]}>SUBSCRIPTION</Text>
+                    <Animated.View style={entranceMembership}>
                     <TouchableOpacity
                         style={[
                             styles.rowBtn,
@@ -178,11 +191,13 @@ export function SettingsModal({ visible, onClose }: SettingsModalProps) {
                         accessibilityRole="button"
                         accessibilityLabel="Membership and billing"
                     >
+                        <GlassTopHighlight radius={14} />
                         <Text style={[styles.rowBtnText, { color: theme.colors.textPrimary }]}>Membership</Text>
                         <Text style={[styles.rowBtnHint, { color: theme.colors.textMuted }]}>
                             Plan, renewal date, cancel in store
                         </Text>
                     </TouchableOpacity>
+                    </Animated.View>
 
                     <Text style={[styles.sectionLabel, { color: theme.colors.textMuted, marginTop: 14 }]}>THEME</Text>
 
@@ -228,6 +243,7 @@ export function SettingsModal({ visible, onClose }: SettingsModalProps) {
                     {canShowNotifRow ? (
                         <>
                             <Text style={[styles.sectionLabel, { color: theme.colors.textMuted, marginTop: 14 }]}>NOTIFICATIONS</Text>
+                            <Animated.View style={entranceNotifications}>
                             <TouchableOpacity
                                 style={[
                                     styles.rowBtn,
@@ -241,6 +257,7 @@ export function SettingsModal({ visible, onClose }: SettingsModalProps) {
                                 accessibilityRole="button"
                                 accessibilityLabel="Notification settings"
                             >
+                                <GlassTopHighlight radius={14} />
                                 <View style={styles.rowBtnTop}>
                                     <View style={styles.rowBtnTitleRow}>
                                         <Bell size={16} color={theme.colors.indigo[400]} />
@@ -275,10 +292,12 @@ export function SettingsModal({ visible, onClose }: SettingsModalProps) {
                                     </Text>
                                 ) : null}
                             </TouchableOpacity>
+                            </Animated.View>
                         </>
                     ) : null}
 
                     <Text style={[styles.sectionLabel, { color: theme.colors.textMuted, marginTop: 14 }]}>LEGAL</Text>
+                    <Animated.View style={entrancePrivacy}>
                     <TouchableOpacity
                         style={[
                             styles.rowBtn,
@@ -293,12 +312,15 @@ export function SettingsModal({ visible, onClose }: SettingsModalProps) {
                         accessibilityRole="link"
                         accessibilityLabel="Privacy policy"
                     >
+                        <GlassTopHighlight radius={14} />
                         <View style={styles.rowBtnTop}>
                             <Text style={[styles.rowBtnText, { color: theme.colors.textPrimary }]}>Privacy Policy</Text>
                             <ExternalLink size={14} color={theme.colors.textMuted} />
                         </View>
                         <Text style={[styles.rowBtnHint, { color: theme.colors.textMuted }]}>How HabitPro handles account and app data</Text>
                     </TouchableOpacity>
+                    </Animated.View>
+                    <Animated.View style={entranceTerms}>
                     <TouchableOpacity
                         style={[
                             styles.rowBtn,
@@ -313,12 +335,15 @@ export function SettingsModal({ visible, onClose }: SettingsModalProps) {
                         accessibilityRole="link"
                         accessibilityLabel="Terms of use"
                     >
+                        <GlassTopHighlight radius={14} />
                         <View style={styles.rowBtnTop}>
                             <Text style={[styles.rowBtnText, { color: theme.colors.textPrimary }]}>Terms of Use</Text>
                             <ExternalLink size={14} color={theme.colors.textMuted} />
                         </View>
                         <Text style={[styles.rowBtnHint, { color: theme.colors.textMuted }]}>Rules for using missions, community, and membership</Text>
                     </TouchableOpacity>
+                    </Animated.View>
+                    <Animated.View style={entranceSupport}>
                     <TouchableOpacity
                         style={[
                             styles.rowBtn,
@@ -332,12 +357,14 @@ export function SettingsModal({ visible, onClose }: SettingsModalProps) {
                         accessibilityRole="link"
                         accessibilityLabel="Support"
                     >
+                        <GlassTopHighlight radius={14} />
                         <View style={styles.rowBtnTop}>
                             <Text style={[styles.rowBtnText, { color: theme.colors.textPrimary }]}>Support</Text>
                             <ExternalLink size={14} color={theme.colors.textMuted} />
                         </View>
                         <Text style={[styles.rowBtnHint, { color: theme.colors.textMuted }]}>Help with reminders, purchases, and app access</Text>
                     </TouchableOpacity>
+                    </Animated.View>
                     </ScrollView>
                 </Pressable>
                 </KeyboardAvoidingView>
