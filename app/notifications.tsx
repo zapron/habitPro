@@ -38,6 +38,8 @@ import { parseCommunityWinCheerPayload } from "../src/lib/notificationPayloads";
 import { backOrReplace } from "../src/lib/navigation";
 import type { ChallengeNudgeKind, NotificationRow } from "../src/types/groupChallenge";
 import { ShimmerBlock } from "../src/components/ShimmerBlock";
+import { GlassTopHighlight } from "../src/components/GlassTopHighlight";
+import { useListCardEntrance } from "../src/hooks/useListCardEntrance";
 import type { AppTheme } from "../src/styles/theme";
 import { formatDateDisplay, formatDateTimeDisplay } from "../src/utils/dateDisplay";
 
@@ -277,44 +279,50 @@ function notificationSubtitle(n: NotificationRow): string | null {
 
 const NotificationListItem = memo(function NotificationListItem({
   item,
+  index,
   theme,
   onPress,
 }: {
   item: NotificationRow;
+  index: number;
   theme: AppTheme;
   onPress: (item: NotificationRow) => void;
 }) {
   const title = useMemo(() => notificationTitle(item.type, item.payload), [item.payload, item.type]);
   const subtitle = useMemo(() => notificationSubtitle(item), [item.payload, item.type]);
   const createdAt = useMemo(() => formatDateTimeDisplay(item.created_at, item.created_at), [item.created_at]);
+  const entranceStyle = useListCardEntrance(index);
 
   return (
-    <TouchableOpacity
-      style={[
-        styles.row,
-        {
-          borderColor: theme.colors.border,
-          backgroundColor: theme.colors.surface,
-          opacity: item.read_at ? 0.72 : 1,
-        },
-      ]}
-      onPress={() => onPress(item)}
-    >
-      <View style={styles.rowInner}>
-        {!item.read_at ? (
-          <View style={[styles.unreadDot, { backgroundColor: theme.colors.indigo[500] }]} />
-        ) : (
-          <View style={styles.unreadSpacer} />
-        )}
-        <View style={styles.rowTextCol}>
-          <Text style={[styles.rowTitle, { color: theme.colors.textPrimary }]}>{title}</Text>
-          {subtitle ? (
-            <Text style={[styles.rowSubtitle, { color: theme.colors.cyan[400] }]}>{subtitle}</Text>
-          ) : null}
-          <Text style={[styles.rowTime, { color: theme.colors.textSecondary }]}>{createdAt}</Text>
+    <Animated.View style={entranceStyle}>
+      <TouchableOpacity
+        style={[
+          styles.row,
+          {
+            borderColor: theme.colors.border,
+            backgroundColor: theme.colors.surface,
+            opacity: item.read_at ? 0.72 : 1,
+          },
+        ]}
+        onPress={() => onPress(item)}
+      >
+        <GlassTopHighlight radius={12} />
+        <View style={styles.rowInner}>
+          {!item.read_at ? (
+            <View style={[styles.unreadDot, { backgroundColor: theme.colors.indigo[500] }]} />
+          ) : (
+            <View style={styles.unreadSpacer} />
+          )}
+          <View style={styles.rowTextCol}>
+            <Text style={[styles.rowTitle, { color: theme.colors.textPrimary }]}>{title}</Text>
+            {subtitle ? (
+              <Text style={[styles.rowSubtitle, { color: theme.colors.cyan[400] }]}>{subtitle}</Text>
+            ) : null}
+            <Text style={[styles.rowTime, { color: theme.colors.textSecondary }]}>{createdAt}</Text>
+          </View>
         </View>
-      </View>
-    </TouchableOpacity>
+      </TouchableOpacity>
+    </Animated.View>
   );
 });
 
@@ -636,8 +644,8 @@ export default function NotificationsScreen() {
   }, [loadMore]);
 
   const renderNotificationItem = useCallback(
-    ({ item }: { item: NotificationRow }) => (
-      <NotificationListItem item={item} theme={theme} onPress={onPressRow} />
+    ({ item, index }: { item: NotificationRow; index: number }) => (
+      <NotificationListItem item={item} index={index} theme={theme} onPress={onPressRow} />
     ),
     [onPressRow, theme],
   );
@@ -645,6 +653,7 @@ export default function NotificationsScreen() {
   const emptyList = useMemo(
     () => (
       <View style={[styles.emptyCard, { borderColor: theme.colors.border, backgroundColor: theme.colors.surface }]}>
+        <GlassTopHighlight radius={16} />
         <Bell size={28} color={theme.colors.indigo[400]} />
         <Text style={[styles.emptyTitle, { color: theme.colors.textPrimary }]}>No notifications yet</Text>
         <Text style={[styles.emptyBody, { color: theme.colors.textSecondary }]}>
@@ -741,6 +750,7 @@ export default function NotificationsScreen() {
                 },
               ]}
             >
+              <GlassTopHighlight radius={12} />
               <View style={styles.rowInner}>
                 <View style={styles.unreadSpacer} />
                 <View style={{ flex: 1, gap: 8 }}>
