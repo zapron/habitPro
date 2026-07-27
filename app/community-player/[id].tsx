@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Animated,
   Image,
   InteractionManager,
   Modal,
@@ -22,6 +23,7 @@ import {
   ArrowLeft,
   Camera,
   Clock3,
+  Copy,
   Flame,
   Globe,
   Image as ImageIcon,
@@ -36,13 +38,16 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Path, Rect } from "react-native-svg";
 
 import { Screen } from "../../src/components/Screen";
+import { GlassTopHighlight } from "../../src/components/GlassTopHighlight";
+import { useListCardEntrance } from "../../src/hooks/useListCardEntrance";
+import { useCardMaterialize } from "../../src/hooks/useCardMaterialize";
 import { useTheme } from "../../src/context/ThemeContext";
 import { useAuth } from "../../src/context/AuthContext";
 import { useToast } from "../../src/context/ToastContext";
 import { showAppAlert } from "../../src/context/AppDialogContext";
 import { usePlusUpsell } from "../../src/context/PlusUpsellContext";
 import { useUsernameGate } from "../../src/context/UsernameGateContext";
-import { CommunityWinImageLightbox } from "../../src/components/CommunityWinImageLightbox";
+import { CommunityWinImageLightbox, type CommunityLightboxSlide } from "../../src/components/CommunityWinImageLightbox";
 import { AnimatedCountText } from "../../src/components/AnimatedCountText";
 import { LevelXpRing } from "../../src/components/LevelXpRing";
 import {
@@ -120,11 +125,17 @@ function storyDayLabel(post: CommunityPlayerStoryPost): string {
   return "Moment";
 }
 
-function galleryImagesForPost(post: CommunityPlayerStoryPost): string[] {
+/**
+ * Slides for the full-screen lightbox — photo-only (public community policy), but
+ * each slide keeps its `note` so a photo+text task still shows its caption.
+ */
+function gallerySlidesForPost(post: CommunityPlayerStoryPost): CommunityLightboxSlide[] {
   if (post.memoryGallery && post.memoryGallery.length > 0) {
-    return post.memoryGallery.map((g) => g.imageUrl).filter(Boolean);
+    return post.memoryGallery
+      .filter((g) => Boolean(g.imageUrl))
+      .map((g) => ({ imageUrl: g.imageUrl, note: g.note }));
   }
-  return post.memoryImageUrl ? [post.memoryImageUrl] : [];
+  return post.memoryImageUrl ? [{ imageUrl: post.memoryImageUrl, note: post.memoryNote }] : [];
 }
 
 function sortTime(iso: string | undefined): number {
@@ -363,7 +374,7 @@ function StoryPhotoTile({
   radius?: number;
   theme: AppTheme;
   imagesEnabled: boolean;
-  onPress?: (images: string[], initialIndex?: number) => void;
+  onPress?: (slides: CommunityLightboxSlide[], initialIndex?: number) => void;
   onMorePress?: () => void;
   pillTone?: string;
   imageStyle?: StyleProp<ViewStyle>;
@@ -375,6 +386,7 @@ function StoryPhotoTile({
 
   const opensMore = extraCount > 0 && Boolean(onMorePress);
   const resolvedPillTone = pillTone ?? storyPillTone(`${post.feedSource}:${post.title}`);
+  const showStackBadge = !opensMore && gallerySlidesForPost(post).length > 1;
 
   return (
     <Pressable
@@ -384,7 +396,7 @@ function StoryPhotoTile({
           onMorePress?.();
           return;
         }
-        onPress?.(galleryImagesForPost(post), 0);
+        onPress?.(gallerySlidesForPost(post), 0);
       }}
       accessibilityRole={onPress ? "imagebutton" : "image"}
       accessibilityLabel={opensMore ? "View more journey photos" : `Open ${post.title} photo`}
@@ -415,6 +427,11 @@ function StoryPhotoTile({
           <Text style={styles.moreOverlaySubtext}>+{extraCount} photos</Text>
         </View>
       ) : null}
+      {showStackBadge ? (
+        <View style={styles.storyPhotoStackBadge}>
+          <Copy size={9} color="#FFFFFF" />
+        </View>
+      ) : null}
     </Pressable>
   );
 }
@@ -430,7 +447,7 @@ function RecentProofBadge({
   size: number;
   theme: AppTheme;
   imagesEnabled: boolean;
-  onPress: (images: string[], initialIndex?: number) => void;
+  onPress: (slides: CommunityLightboxSlide[], initialIndex?: number) => void;
 }) {
   const uri = post.memoryImageUrl;
   const thumb = uri ? storageThumbnailUri(uri, Math.round(size * 2), Math.round(size * 2)) : null;
@@ -442,7 +459,7 @@ function RecentProofBadge({
 
   return (
     <Pressable
-      onPress={() => onPress(galleryImagesForPost(post), 0)}
+      onPress={() => onPress(gallerySlidesForPost(post), 0)}
       accessibilityRole="imagebutton"
       accessibilityLabel={`Open ${post.title} proof`}
       style={[styles.recentProofBadge, { width: size, height: size }]}
@@ -497,7 +514,7 @@ function GalleryMomentCard({
   imageHeight: number;
   theme: AppTheme;
   imagesEnabled: boolean;
-  onOpenImage: (images: string[], initialIndex?: number) => void;
+  onOpenImage: (slides: CommunityLightboxSlide[], initialIndex?: number) => void;
   onToggleCheer: (post: CommunityPlayerStoryPost) => void;
   isOwn: boolean;
   cheerPending: boolean;
@@ -572,7 +589,7 @@ function MissionProofTile({
   height: number;
   theme: AppTheme;
   imagesEnabled: boolean;
-  onPress: (images: string[], initialIndex?: number) => void;
+  onPress: (slides: CommunityLightboxSlide[], initialIndex?: number) => void;
   onMorePress?: () => void;
   pillTone: string;
   extraCount?: number;
@@ -582,6 +599,7 @@ function MissionProofTile({
   const thumb = uri ? storageThumbnailUri(uri, Math.round(width * 2), Math.round(height * 2)) : null;
   const displayUri = useOriginal ? uri : thumb ?? uri;
   const opensMore = extraCount > 0 && Boolean(onMorePress);
+  const showStackBadge = !opensMore && gallerySlidesForPost(post).length > 1;
 
   if (!uri) return null;
 
@@ -592,7 +610,7 @@ function MissionProofTile({
           onMorePress?.();
           return;
         }
-        onPress(galleryImagesForPost(post), 0);
+        onPress(gallerySlidesForPost(post), 0);
       }}
       accessibilityRole="imagebutton"
       accessibilityLabel={opensMore ? "View more journey photos" : `Open ${post.title} photo`}
@@ -637,6 +655,11 @@ function MissionProofTile({
           {storyDayLabel(post)}
         </Text>
       </View>
+      {showStackBadge ? (
+        <View style={styles.missionProofStackBadge}>
+          <Copy size={9} color="#FFFFFF" />
+        </View>
+      ) : null}
     </Pressable>
   );
 }
@@ -680,16 +703,19 @@ function MissionStoryCard({
   photoWidth,
   photoHeight,
   imagesEnabled,
+  index,
 }: {
   story: CommunityPlayerMissionStory;
   theme: AppTheme;
   isDark: boolean;
   onOpenGallery: () => void;
-  onOpenImage: (images: string[], initialIndex?: number) => void;
+  onOpenImage: (slides: CommunityLightboxSlide[], initialIndex?: number) => void;
   photoWidth: number;
   photoHeight: number;
   imagesEnabled: boolean;
+  index: number;
 }) {
+  const entranceStyle = useListCardEntrance(index);
   const previewPhotos = story.posts.filter((post) => post.memoryImageUrl).slice(0, 8);
   const latest = story.posts[0];
   const latestNote = latest?.memoryNote?.trim() ?? "";
@@ -703,7 +729,9 @@ function MissionStoryCard({
   const metaPillBackground = isDark ? "rgba(15, 23, 42, 0.38)" : "rgba(248, 250, 252, 0.82)";
 
   return (
+    <Animated.View style={entranceStyle}>
     <View style={[styles.missionCard, { borderColor: theme.colors.border, backgroundColor: theme.colors.surface }]}>
+      <GlassTopHighlight radius={15} />
       <View style={styles.missionHeader}>
         <View style={styles.missionTitleWrap}>
           <Text style={[styles.missionTitle, { color: theme.colors.textPrimary }]} numberOfLines={1}>
@@ -781,6 +809,7 @@ function MissionStoryCard({
         </View>
       )}
     </View>
+    </Animated.View>
   );
 }
 
@@ -801,7 +830,7 @@ function MissionGalleryModal({
   isDark: boolean;
   imagesEnabled: boolean;
   onClose: () => void;
-  onOpenImage: (images: string[], initialIndex?: number) => void;
+  onOpenImage: (slides: CommunityLightboxSlide[], initialIndex?: number) => void;
 }) {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
@@ -1144,23 +1173,27 @@ function MiniPostTile({
   isOwn,
   cheerPending,
   imagesEnabled,
+  index,
 }: {
   post: CommunityPlayerStoryPost;
   width: number;
   theme: AppTheme;
   isDark: boolean;
-  onOpenImage: (images: string[], initialIndex?: number) => void;
+  onOpenImage: (slides: CommunityLightboxSlide[], initialIndex?: number) => void;
   onToggleCheer: (post: CommunityPlayerStoryPost) => void;
   isOwn: boolean;
   cheerPending: boolean;
   imagesEnabled: boolean;
+  index: number;
 }) {
+  const entranceStyle = useCardMaterialize(index);
   const hasImage = Boolean(post.memoryImageUrl);
   const imageUri = post.memoryImageUrl as string | null;
   const [useOriginal, setUseOriginal] = useState(false);
   const thumb = imageUri ? storageThumbnailUri(imageUri, Math.round(width * 2), Math.round(width * 2.2)) : null;
   const displayUri = useOriginal ? imageUri : thumb;
   const liked = post.viewerHasCheered;
+  const showStackBadge = hasImage && gallerySlidesForPost(post).length > 1;
   const cheerButton = (
     <Pressable
       onPress={() => onToggleCheer(post)}
@@ -1201,11 +1234,18 @@ function MiniPostTile({
     </Pressable>
   );
   return (
-    <View style={[styles.miniTile, { width, borderColor: theme.colors.border, backgroundColor: theme.colors.surface }]}>
+    <Animated.View
+      style={[
+        styles.miniTile,
+        { width, borderColor: theme.colors.border, backgroundColor: theme.colors.surface },
+        entranceStyle,
+      ]}
+    >
+      <GlassTopHighlight radius={16} />
       {hasImage ? (
         <View style={styles.miniImageFrame}>
           <Pressable
-            onPress={() => onOpenImage(galleryImagesForPost(post), 0)}
+            onPress={() => onOpenImage(gallerySlidesForPost(post), 0)}
             accessibilityRole="imagebutton"
             accessibilityLabel={`Open ${post.title} photo`}
             style={styles.miniImagePressable}
@@ -1247,6 +1287,11 @@ function MiniPostTile({
               <Text style={[styles.liveBadgeText, { color: isDark ? "#A5F3FC" : theme.colors.cyan[400] }]}>LIVE</Text>
             </View>
           ) : null}
+          {showStackBadge ? (
+            <View style={styles.miniStackBadge}>
+              <Copy size={11} color="#FFFFFF" />
+            </View>
+          ) : null}
           {cheerButton}
         </View>
       ) : (
@@ -1267,7 +1312,7 @@ function MiniPostTile({
           {post.title}
         </Text>
       </View>
-    </View>
+    </Animated.View>
   );
 }
 
@@ -1294,21 +1339,21 @@ export default function CommunityPlayerStoryScreen() {
   const [miniVisibleCount, setMiniVisibleCount] = useState(MINI_POST_LIMIT);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [lightboxImages, setLightboxImages] = useState<string[]>([]);
+  const [lightboxSlides, setLightboxSlides] = useState<CommunityLightboxSlide[]>([]);
   const [lightboxIndex, setLightboxIndex] = useState(0);
   const [selectedMission, setSelectedMission] = useState<CommunityPlayerMissionStory | null>(null);
   const missionBeforeLightboxRef = useRef<CommunityPlayerMissionStory | null>(null);
   const openLightbox = useCallback(
-    (images: string[], initialIndex?: number) => {
+    (slides: CommunityLightboxSlide[], initialIndex?: number) => {
       missionBeforeLightboxRef.current = selectedMission;
       if (selectedMission) setSelectedMission(null);
-      setLightboxImages(images);
+      setLightboxSlides(slides);
       setLightboxIndex(initialIndex ?? 0);
     },
     [selectedMission],
   );
   const closeLightbox = useCallback(() => {
-    setLightboxImages([]);
+    setLightboxSlides([]);
     if (missionBeforeLightboxRef.current) {
       setSelectedMission(missionBeforeLightboxRef.current);
       missionBeforeLightboxRef.current = null;
@@ -1705,6 +1750,7 @@ export default function CommunityPlayerStoryScreen() {
         </View>
 
         <View style={[styles.statPanel, { borderColor: theme.colors.border, backgroundColor: theme.colors.surface }]}>
+          <GlassTopHighlight radius={16} />
           <View style={[styles.statPanelRow, styles.statPanelDivider, { borderBottomColor: theme.colors.border }]}>
             <StatTile
               theme={theme}
@@ -1788,6 +1834,7 @@ export default function CommunityPlayerStoryScreen() {
             },
           ]}
         >
+          <GlassTopHighlight radius={18} />
           <SegmentButton
             active={activeTab === "missions"}
             label="Missions"
@@ -1821,7 +1868,7 @@ export default function CommunityPlayerStoryScreen() {
           <View style={styles.sectionStack}>
             {story && story.missionStories.length > 0 ? (
               <>
-              {visibleMissionStories.map((mission) => (
+              {visibleMissionStories.map((mission, index) => (
                 <MissionStoryCard
                   key={mission.key}
                   story={mission}
@@ -1832,6 +1879,7 @@ export default function CommunityPlayerStoryScreen() {
                   photoWidth={missionPreviewPhotoSize}
                   photoHeight={missionPreviewPhotoSize}
                   onOpenGallery={() => setSelectedMission(mission)}
+                  index={index}
                 />
               ))}
               {activeTab === "missions" && hasMoreVisibleStory ? (
@@ -1875,6 +1923,7 @@ export default function CommunityPlayerStoryScreen() {
                   },
                 ]}
               >
+                <GlassTopHighlight radius={14} />
                 <View
                   style={[
                     styles.storyEmptyIcon,
@@ -1900,7 +1949,7 @@ export default function CommunityPlayerStoryScreen() {
         ) : story && story.miniPosts.length > 0 ? (
           <View style={styles.miniSection}>
             <View style={[styles.miniGrid, { gap: miniGridGap }]}>
-              {visibleMiniPosts.map((post) => (
+              {visibleMiniPosts.map((post, index) => (
                 <MiniPostTile
                   key={post.id}
                   post={post}
@@ -1912,6 +1961,7 @@ export default function CommunityPlayerStoryScreen() {
                   onToggleCheer={handleMiniCheer}
                   isOwn={viewerOwnsProfile}
                   cheerPending={miniCheeringIds.has(post.id)}
+                  index={index}
                 />
               ))}
             </View>
@@ -1956,6 +2006,7 @@ export default function CommunityPlayerStoryScreen() {
               },
             ]}
           >
+            <GlassTopHighlight radius={14} />
             <View
               style={[
                 styles.storyEmptyIcon,
@@ -1991,8 +2042,8 @@ export default function CommunityPlayerStoryScreen() {
       />
 
       <CommunityWinImageLightbox
-        visible={lightboxImages.length > 0}
-        images={lightboxImages}
+        visible={lightboxSlides.length > 0}
+        slides={lightboxSlides}
         initialIndex={lightboxIndex}
         onClose={closeLightbox}
       />
@@ -2194,6 +2245,17 @@ const styles = StyleSheet.create({
   },
   moreOverlayText: { color: "#FFFFFF", fontSize: 11, lineHeight: 14, fontWeight: "900" },
   moreOverlaySubtext: { color: "#FFFFFF", fontSize: 9, lineHeight: 12, fontWeight: "800", marginTop: 1 },
+  storyPhotoStackBadge: {
+    position: "absolute",
+    right: 7,
+    bottom: 7,
+    width: 19,
+    height: 19,
+    borderRadius: 9.5,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(15, 23, 42, 0.76)",
+  },
   textOnlyMoment: {
     marginTop: 10,
     borderRadius: 12,
@@ -2241,6 +2303,18 @@ const styles = StyleSheet.create({
     gap: 5,
   },
   miniCheerText: { fontSize: 11, lineHeight: 14, fontWeight: "900", fontVariant: ["tabular-nums"] },
+  // Bottom-left, not bottom-right — the cheer button already owns that corner here.
+  miniStackBadge: {
+    position: "absolute",
+    left: 8,
+    bottom: 8,
+    minWidth: 22,
+    minHeight: 22,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(15, 23, 42, 0.76)",
+  },
   loadingBlock: { alignItems: "center", justifyContent: "center", minHeight: 180, gap: 10 },
   loadingText: { fontSize: 13, lineHeight: 18, fontWeight: "800" },
   emptyState: {
@@ -2311,6 +2385,17 @@ const styles = StyleSheet.create({
   },
   missionProofDayPill: { left: 38, top: -1, minHeight: 16, paddingHorizontal: 5 },
   missionProofDayPillText: { fontSize: 8, lineHeight: 10 },
+  missionProofStackBadge: {
+    position: "absolute",
+    right: -2,
+    bottom: -2,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(15, 23, 42, 0.76)",
+  },
   galleryMomentCard: {
     position: "relative",
     borderRadius: 10,

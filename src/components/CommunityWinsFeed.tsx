@@ -35,7 +35,7 @@ import {
 import { traceAsync } from "../lib/perfTrace";
 import { CommunityWinFeedPost } from "./CommunityWinFeedPost";
 import { CommunityWinFeedSkeletonRow } from "./CommunityWinFeedSkeleton";
-import { CommunityWinImageLightbox } from "./CommunityWinImageLightbox";
+import { CommunityWinImageLightbox, type CommunityLightboxSlide } from "./CommunityWinImageLightbox";
 import { CommunityWinCheerersModal } from "./CommunityWinCheerersModal";
 
 type CheerersSheetState = { winId: string; totalLikes: number };
@@ -79,7 +79,7 @@ export function CommunityWinsFeed({
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [expandedById, setExpandedById] = useState<Record<string, boolean>>({});
-  const [lightboxImages, setLightboxImages] = useState<string[]>([]);
+  const [lightboxSlides, setLightboxSlides] = useState<CommunityLightboxSlide[]>([]);
   const [lightboxIndex, setLightboxIndex] = useState(0);
   const [cheerersSheet, setCheerersSheet] = useState<CheerersSheetState | null>(null);
   const itemsRef = useRef<CommunityWinFeedItem[]>([]);
@@ -96,7 +96,7 @@ export function CommunityWinsFeed({
     setItems([]);
     setHasMore(Boolean(userId && isSupabaseConfigured()));
     setExpandedById({});
-    setLightboxImages([]);
+    setLightboxSlides([]);
     setLightboxIndex(0);
     setCheerersSheet(null);
     setLoading(Boolean(userId && isSupabaseConfigured()));
@@ -333,8 +333,8 @@ export function CommunityWinsFeed({
           expanded={Boolean(expandedById[win.id])}
           reduceMotion={reduceMotion}
           onToggleExpanded={() => toggleExpanded(win.id)}
-          onOpenLightbox={(images, initialIndex) => {
-            setLightboxImages(images);
+          onOpenLightbox={(slides, initialIndex) => {
+            setLightboxSlides(slides);
             setLightboxIndex(initialIndex ?? 0);
           }}
           onOpenPlayer={openPlayerStory}
@@ -421,10 +421,10 @@ export function CommunityWinsFeed({
         showsVerticalScrollIndicator={false}
       />
       <CommunityWinImageLightbox
-        visible={lightboxImages.length > 0}
-        images={lightboxImages}
+        visible={lightboxSlides.length > 0}
+        slides={lightboxSlides}
         initialIndex={lightboxIndex}
-        onClose={() => setLightboxImages([])}
+        onClose={() => setLightboxSlides([])}
       />
       <CommunityWinCheerersModal
         visible={cheerersSheet !== null}

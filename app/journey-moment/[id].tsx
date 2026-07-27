@@ -13,7 +13,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { ArrowLeft, Camera, ChevronRight, Clock3, Globe, Image as ImageIcon, Radio, RefreshCw, ThumbsUp, User } from "lucide-react-native";
 import { Text } from "../../src/components/AppText";
 import { CommunityWinCheerersModal } from "../../src/components/CommunityWinCheerersModal";
-import { CommunityWinImageLightbox } from "../../src/components/CommunityWinImageLightbox";
+import { CommunityWinImageLightbox, type CommunityLightboxSlide } from "../../src/components/CommunityWinImageLightbox";
 import { Screen } from "../../src/components/Screen";
 import { useAuth } from "../../src/context/AuthContext";
 import { usePlusUpsell } from "../../src/context/PlusUpsellContext";
@@ -80,7 +80,7 @@ export default function JourneyMomentScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [imageFailed, setImageFailed] = useState(false);
-  const [lightboxImages, setLightboxImages] = useState<string[]>([]);
+  const [lightboxSlides, setLightboxSlides] = useState<CommunityLightboxSlide[]>([]);
   const [cheerBusy, setCheerBusy] = useState(false);
   const [cheerersOpen, setCheerersOpen] = useState(false);
 
@@ -93,12 +93,12 @@ export default function JourneyMomentScreen() {
     [imageFailed, imageHeight, moment?.memory_image_url, width],
   );
   const isOwnMoment = Boolean(moment && session?.user?.id === moment.user_id);
-  const fullGalleryImages = useMemo(() => {
+  const fullGallerySlides = useMemo<CommunityLightboxSlide[]>(() => {
     if (!moment) return [];
     if (moment.memory_gallery && moment.memory_gallery.length > 0) {
-      return moment.memory_gallery.map((g) => g.imageUrl).filter(Boolean);
+      return moment.memory_gallery.map((g) => ({ imageUrl: g.imageUrl, note: g.note }));
     }
-    return moment.memory_image_url ? [moment.memory_image_url] : [];
+    return moment.memory_image_url ? [{ imageUrl: moment.memory_image_url, note: moment.memory_note }] : [];
   }, [moment]);
 
   const load = useCallback(
@@ -294,7 +294,7 @@ export default function JourneyMomentScreen() {
         <View style={[styles.momentCard, { backgroundColor: cardBg, borderColor: border }]}>
           <Pressable
             style={[styles.mediaWrap, { height: hasImage ? imageHeight : 180, backgroundColor: mediaBg }]}
-            onPress={() => (fullGalleryImages.length > 0 ? setLightboxImages(fullGalleryImages) : undefined)}
+            onPress={() => (fullGallerySlides.length > 0 ? setLightboxSlides(fullGallerySlides) : undefined)}
             disabled={!moment.memory_image_url}
             accessibilityRole={moment.memory_image_url ? "imagebutton" : undefined}
             accessibilityLabel={moment.memory_image_url ? "Open proof image" : undefined}
@@ -390,9 +390,9 @@ export default function JourneyMomentScreen() {
       </ScrollView>
 
       <CommunityWinImageLightbox
-        visible={lightboxImages.length > 0}
-        images={lightboxImages}
-        onClose={() => setLightboxImages([])}
+        visible={lightboxSlides.length > 0}
+        slides={lightboxSlides}
+        onClose={() => setLightboxSlides([])}
       />
       <CommunityWinCheerersModal
         visible={cheerersOpen}

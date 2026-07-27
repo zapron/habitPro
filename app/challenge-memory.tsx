@@ -926,7 +926,7 @@ export default function ChallengeMemoryScreen() {
 
       <CommunityWinImageLightbox
         visible={imageViewerOpen && lightboxImages.length > 0}
-        images={lightboxImages}
+        slides={lightboxImages.map((uri) => ({ imageUrl: uri, note: null }))}
         initialIndex={lightboxIndex}
         onClose={() => setImageViewerOpen(false)}
       />

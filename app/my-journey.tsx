@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Animated,
   FlatList,
   Image,
   InteractionManager,
@@ -27,6 +28,7 @@ import {
   ArrowLeft,
   Camera,
   Clock3,
+  Copy,
   Flame,
   Globe,
   Image as ImageIcon,
@@ -43,6 +45,9 @@ import { useShallow } from "zustand/react/shallow";
 import { Screen } from "../src/components/Screen";
 import { AnimatedCountText } from "../src/components/AnimatedCountText";
 import { LevelXpRing } from "../src/components/LevelXpRing";
+import { GlassTopHighlight } from "../src/components/GlassTopHighlight";
+import { useListCardEntrance } from "../src/hooks/useListCardEntrance";
+import { useCardMaterialize } from "../src/hooks/useCardMaterialize";
 import { useAuth } from "../src/context/AuthContext";
 import { useTheme } from "../src/context/ThemeContext";
 import { showAppAlert } from "../src/context/AppDialogContext";
@@ -75,7 +80,7 @@ type JourneyStoryData = {
 };
 type StoryRow =
   | { kind: "mission"; story: CommunityPlayerMissionStory }
-  | { kind: "mini-row"; posts: CommunityPlayerStoryPost[] };
+  | { kind: "mini"; post: CommunityPlayerStoryPost };
 
 const STORY_FETCH_LIMIT = 48;
 const HERO_PHOTO_LIMIT = 8;
@@ -403,6 +408,25 @@ function storyPostIdentityKeys(post: CommunityPlayerStoryPost): string[] {
   return keys;
 }
 
+/**
+ * Union of both galleries by `taskId`, `b` winning on overlap — preserves `a`'s task
+ * order as the base. Used to keep a private day's text-only/bare-excluded tasks visible
+ * after that same day gets replaced by its public counterpart below, since the public
+ * gallery is photo-only by design (see `CommunityMemoryGalleryItem` doc comment in
+ * communityWinsApi.ts) and would otherwise silently drop the private-only entries.
+ */
+function mergeMemoryGalleries(
+  a: CommunityMemoryGalleryItem[] | null,
+  b: CommunityMemoryGalleryItem[] | null,
+): CommunityMemoryGalleryItem[] | null {
+  if (!a || a.length === 0) return b;
+  if (!b || b.length === 0) return a;
+  const byTaskId = new Map<string, CommunityMemoryGalleryItem>();
+  for (const item of a) byTaskId.set(item.taskId, item);
+  for (const item of b) byTaskId.set(item.taskId, item);
+  return Array.from(byTaskId.values());
+}
+
 function dedupeStoryPostsPreferPublic(posts: readonly CommunityPlayerStoryPost[]): CommunityPlayerStoryPost[] {
   const indexByKey = new Map<string, number>();
   const out: CommunityPlayerStoryPost[] = [];
@@ -413,7 +437,10 @@ function dedupeStoryPostsPreferPublic(posts: readonly CommunityPlayerStoryPost[]
     if (existingIndex != null) {
       const existing = out[existingIndex];
       if (existing && isPrivateStoryPost(existing) && !isPrivateStoryPost(post)) {
-        out[existingIndex] = post;
+        out[existingIndex] = {
+          ...post,
+          memoryGallery: mergeMemoryGalleries(existing.memoryGallery, post.memoryGallery),
+        };
         keys.forEach((key) => indexByKey.set(key, existingIndex));
       }
       continue;
@@ -533,14 +560,6 @@ function mergePublicStoryPage(story: CommunityPlayerStory, page: CommunityPlayer
   };
 }
 
-function chunkPosts(posts: readonly CommunityPlayerStoryPost[], size: number): CommunityPlayerStoryPost[][] {
-  const chunks: CommunityPlayerStoryPost[][] = [];
-  for (let index = 0; index < posts.length; index += size) {
-    chunks.push(posts.slice(index, index + size));
-  }
-  return chunks;
-}
-
 function StatTile({
   label,
   value,
@@ -580,6 +599,7 @@ function StoryToggle({
 }) {
   return (
     <View style={[styles.modeToggle, { borderColor: theme.colors.border, backgroundColor: theme.colors.surface }]}>
+      <GlassTopHighlight radius={15} />
       {(["public", "private"] as const).map((nextMode) => {
         const active = mode === nextMode;
         const accent = nextMode === "public" ? theme.colors.indigo[600] : theme.colors.cyan[500];
@@ -786,6 +806,7 @@ function StoryPhotoTile({
   const tileRadius = isCircle ? Math.min(width, height) / 2 : radius;
   const showTypeBadge = !isCircle && (isPrivate || showPublicBadge);
   const showTopLikeBadge = isCircle && showLikeBadge;
+  const showStackBadge = Boolean(uri) && journeySlidesForPost(post).length > 1;
   const showBottomLikeBadge = !isCircle && showLikeBadge;
   const body = (
     <View
@@ -843,6 +864,16 @@ function StoryPhotoTile({
           <Text style={styles.tileStatusText}>{post.cheerCount}</Text>
         </View>
       ) : null}
+      {showStackBadge ? (
+        <View
+          style={[
+            isCircle ? styles.circleStackBadge : styles.roundedStackBadge,
+            { backgroundColor: LIKE_BADGE_BACKGROUND },
+          ]}
+        >
+          <Copy size={9} color="#FFFFFF" />
+        </View>
+      ) : null}
     </View>
   );
 
@@ -868,6 +899,7 @@ const MissionStoryCard = memo(function MissionStoryCard({
   photoSize,
   imagesEnabled,
   journeyMode,
+  index,
 }: {
   story: CommunityPlayerMissionStory;
   theme: AppTheme;
@@ -877,7 +909,9 @@ const MissionStoryCard = memo(function MissionStoryCard({
   photoSize: number;
   imagesEnabled: boolean;
   journeyMode: JourneyMode;
+  index: number;
 }) {
+  const entranceStyle = useListCardEntrance(index);
   const previewPhotos = story.posts.filter((post) => post.memoryImageUrl).slice(0, 8);
   const latest = story.posts[0];
   const latestNote = latest?.memoryNote?.trim() ?? "";
@@ -897,7 +931,9 @@ const MissionStoryCard = memo(function MissionStoryCard({
   const textOnlyBorder = latestIsSquadSave ? theme.colors.cyan[500] : theme.colors.border;
 
   return (
+    <Animated.View style={entranceStyle}>
     <View style={[styles.missionCard, { borderColor: theme.colors.border, backgroundColor: theme.colors.surface }]}>
+      <GlassTopHighlight radius={15} />
       <View style={styles.missionHeader}>
         <View style={styles.missionTitleWrap}>
           <Text style={[styles.missionTitle, { color: theme.colors.textPrimary }]} numberOfLines={1}>
@@ -976,26 +1012,33 @@ const MissionStoryCard = memo(function MissionStoryCard({
         </View>
       )}
     </View>
+    </Animated.View>
   );
 });
 
 const MiniPostCard = memo(function MiniPostCard({
   post,
   width,
+  gap,
   theme,
   isDark,
   imagesEnabled,
   onOpenImage,
   journeyMode,
+  index,
 }: {
   post: CommunityPlayerStoryPost;
   width: number;
+  /** Masonry spacing — applied as right/bottom margin so packed cards don't touch their neighbors. */
+  gap: number;
   theme: AppTheme;
   isDark: boolean;
   imagesEnabled: boolean;
   onOpenImage: (slides: CommunityMemoryGalleryItem[], initialIndex?: number) => void;
   journeyMode: JourneyMode;
+  index: number;
 }) {
+  const entranceStyle = useCardMaterialize(index);
   const imageUri = post.memoryImageUrl;
   const note = post.memoryNote?.trim() ?? "";
   const thumb = imageUri ? storageThumbnailUri(imageUri, Math.round(width * 2), Math.round(width * 2.25)) : null;
@@ -1003,6 +1046,7 @@ const MiniPostCard = memo(function MiniPostCard({
   const displayUri = useOriginal ? imageUri : thumb;
   /** Checklist minis with only text-only tasks have no cover photo but still have slides to open. */
   const hasTextOnlySlides = !imageUri && journeySlidesForPost(post).length > 0;
+  const hasMultipleSlides = journeySlidesForPost(post).length > 1;
   const isPrivate = isPrivateStoryPost(post);
   const isSquadSave = isSquadSavedPost(post);
   const showPublicBadge = journeyMode === "private" && !isPrivate;
@@ -1016,7 +1060,20 @@ const MiniPostCard = memo(function MiniPostCard({
       : "rgba(99,102,241,0.1)";
 
   return (
-    <View style={[styles.miniCard, { width, borderColor: isSquadSave ? theme.colors.cyan[500] : theme.colors.border, backgroundColor: theme.colors.surface }]}>
+    <Animated.View
+      style={[
+        styles.miniCard,
+        {
+          width,
+          marginRight: gap,
+          marginBottom: gap,
+          borderColor: isSquadSave ? theme.colors.cyan[500] : theme.colors.border,
+          backgroundColor: theme.colors.surface,
+        },
+        entranceStyle,
+      ]}
+    >
+      <GlassTopHighlight radius={16} />
       {imageUri ? (
         <Pressable onPress={() => onOpenImage(journeySlidesForPost(post), 0)} accessibilityRole="imagebutton" accessibilityLabel={`Open ${post.title} photo`}>
           <View style={[styles.miniImageWrap, { backgroundColor: theme.colors.surfaceElevated }]}>
@@ -1058,6 +1115,11 @@ const MiniPostCard = memo(function MiniPostCard({
                 </View>
               ) : null}
             </View>
+            {hasMultipleSlides ? (
+              <View style={[styles.miniStackBadge, { backgroundColor: LIKE_BADGE_BACKGROUND }]}>
+                <Copy size={11} color="#FFFFFF" />
+              </View>
+            ) : null}
           </View>
         </Pressable>
       ) : (
@@ -1088,6 +1150,11 @@ const MiniPostCard = memo(function MiniPostCard({
                 </View>
               ) : null}
             </View>
+            {hasMultipleSlides ? (
+              <View style={[styles.miniStackBadge, { backgroundColor: LIKE_BADGE_BACKGROUND }]}>
+                <Copy size={11} color="#FFFFFF" />
+              </View>
+            ) : null}
           </View>
         </Pressable>
       )}
@@ -1101,45 +1168,7 @@ const MiniPostCard = memo(function MiniPostCard({
           </Text>
         ) : null}
       </View>
-    </View>
-  );
-});
-
-const MiniPostRow = memo(function MiniPostRow({
-  posts,
-  cardWidth,
-  gap,
-  theme,
-  isDark,
-  imagesEnabled,
-  onOpenImage,
-  journeyMode,
-}: {
-  posts: CommunityPlayerStoryPost[];
-  cardWidth: number;
-  gap: number;
-  theme: AppTheme;
-  isDark: boolean;
-  imagesEnabled: boolean;
-  onOpenImage: (slides: CommunityMemoryGalleryItem[], initialIndex?: number) => void;
-  journeyMode: JourneyMode;
-}) {
-  return (
-    <View style={[styles.miniGridRow, { gap }]}>
-      {posts.map((post) => (
-        <MiniPostCard
-          key={post.id}
-          post={post}
-          width={cardWidth}
-          theme={theme}
-          isDark={isDark}
-          imagesEnabled={imagesEnabled}
-          onOpenImage={onOpenImage}
-          journeyMode={journeyMode}
-        />
-      ))}
-      {posts.length === 1 ? <View style={{ width: cardWidth }} /> : null}
-    </View>
+    </Animated.View>
   );
 });
 
@@ -1381,15 +1410,28 @@ function JourneyMemoryLightbox({
           renderItem={({ item }) => {
             const uri = item.imageUrl;
             const failed = uri ? failedUris.has(uri) : false;
+            const note = item.note?.trim() || null;
             return (
               <View style={[journeyLightboxStyles.imgWrap, { width }]}>
                 {uri && !failed ? (
-                  <Image
-                    source={{ uri }}
-                    style={journeyLightboxStyles.img}
-                    resizeMode="contain"
-                    onError={() => setFailedUris((prev) => (prev.has(uri) ? prev : new Set(prev).add(uri)))}
-                  />
+                  <>
+                    <Image
+                      source={{ uri }}
+                      style={journeyLightboxStyles.img}
+                      resizeMode="contain"
+                      onError={() => setFailedUris((prev) => (prev.has(uri) ? prev : new Set(prev).add(uri)))}
+                    />
+                    {note ? (
+                      <View
+                        style={[journeyLightboxStyles.captionBar, { paddingBottom: Math.max(insets.bottom, 12) + 28 }]}
+                        pointerEvents="none"
+                      >
+                        <Text style={journeyLightboxStyles.captionText} numberOfLines={4}>
+                          {note}
+                        </Text>
+                      </View>
+                    ) : null}
+                  </>
                 ) : (
                   <View style={journeyLightboxStyles.textCard}>
                     {failed ? (
@@ -1398,7 +1440,7 @@ function JourneyMemoryLightbox({
                       </Text>
                     ) : (
                       <Text style={journeyLightboxStyles.textCardNote} numberOfLines={10}>
-                        {item.note}
+                        {note ?? item.label}
                       </Text>
                     )}
                   </View>
@@ -1407,6 +1449,19 @@ function JourneyMemoryLightbox({
             );
           }}
         />
+        {slides.length > 1 ? (
+          <View pointerEvents="none" style={[journeyLightboxStyles.dotsRow, { bottom: Math.max(insets.bottom, 12) + 8 }]}>
+            {slides.map((_, i) => (
+              <View
+                key={i}
+                style={[
+                  journeyLightboxStyles.dot,
+                  { backgroundColor: i === activeIndex ? "#fff" : "rgba(255,255,255,0.4)" },
+                ]}
+              />
+            ))}
+          </View>
+        ) : null}
       </View>
     </Modal>
   );
@@ -1470,6 +1525,35 @@ const journeyLightboxStyles = StyleSheet.create({
     fontWeight: "700",
     textAlign: "center",
     color: "#fff",
+  },
+  captionBar: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    paddingHorizontal: 24,
+    paddingTop: 14,
+    backgroundColor: "rgba(0,0,0,0.55)",
+  },
+  captionText: {
+    color: "#fff",
+    fontSize: 14,
+    lineHeight: 19,
+    textAlign: "center",
+  },
+  dotsRow: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 5,
+  },
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
   },
 });
 
@@ -1632,8 +1716,15 @@ export default function MyJourneyScreen() {
   const {
     columnCount: miniColumnCount,
     gap: miniGridGap,
-    tileWidth: miniTileWidth,
   } = getJourneyMiniGridLayout(miniAvailableWidth, { gap: 9 });
+  // FlashList's native masonry mode allocates each column a raw, gap-unaware
+  // slot (availableWidth / columnCount) — not the row-flexbox-style tileWidth
+  // above (which pre-subtracts total gap space for a `flexDirection: "row"`
+  // layout). Compute the slot width masonry will actually use, then leave
+  // `miniGridGap` as this card's own right/bottom margin so it doesn't touch
+  // its neighbors.
+  const masonrySlotWidth = miniColumnCount > 0 ? miniAvailableWidth / miniColumnCount : miniAvailableWidth;
+  const miniTileWidth = Math.max(0, Math.floor(masonrySlotWidth - miniGridGap));
   const shownProfile: CommunityPlayerProfile | null = publicStory?.profile ?? (userId ? {
     userId,
     username,
@@ -1654,8 +1745,8 @@ export default function MyJourneyScreen() {
   const totalPublicPhotos = publicStory?.totalPhotoMoments ?? publicPhotoPosts.length;
   const rows = useMemo<StoryRow[]>(() => {
     if (activeTab === "missions") return visibleMissions.map((story) => ({ kind: "mission", story }));
-    return chunkPosts(visibleMinis, miniColumnCount).map((posts) => ({ kind: "mini-row", posts }));
-  }, [activeTab, miniColumnCount, visibleMissions, visibleMinis]);
+    return visibleMinis.map((post) => ({ kind: "mini", post }));
+  }, [activeTab, visibleMissions, visibleMinis]);
   const activeTabTotal = activeTab === "missions" ? activeMissions.length : activeMinis.length;
   const activeTabVisible = activeTab === "missions" ? visibleMissions.length : visibleMinis.length;
   const hasLocalHistoryMore = activeTabVisible < activeTabTotal;
@@ -1732,7 +1823,7 @@ export default function MyJourneyScreen() {
   ]);
 
   const renderRow: ListRenderItem<StoryRow> = useCallback(
-    ({ item }) => {
+    ({ item, index }) => {
       if (item.kind === "mission") {
         return (
           <MissionStoryCard
@@ -1744,19 +1835,21 @@ export default function MyJourneyScreen() {
             onOpenGallery={setSelectedMission}
             photoSize={missionPreviewPhotoSize}
             journeyMode={journeyMode}
+            index={index}
           />
         );
       }
       return (
-        <MiniPostRow
-          posts={item.posts}
-          cardWidth={miniTileWidth}
+        <MiniPostCard
+          post={item.post}
+          width={miniTileWidth}
           gap={miniGridGap}
           theme={theme}
           isDark={isDark}
           imagesEnabled={imagesEnabled}
           onOpenImage={openLightbox}
           journeyMode={journeyMode}
+          index={index}
         />
       );
     },
@@ -1820,6 +1913,7 @@ export default function MyJourneyScreen() {
       </View>
 
       <View style={[styles.statPanel, { borderColor: theme.colors.border, backgroundColor: theme.colors.surface }]}>
+        <GlassTopHighlight radius={16} />
         <View style={[styles.statPanelRow, styles.statPanelDivider, { borderBottomColor: theme.colors.border }]}>
           <StatTile
             theme={theme}
@@ -1956,6 +2050,7 @@ export default function MyJourneyScreen() {
     if (journeyMode === "public" && publicError) {
       return (
         <View style={[styles.emptyState, { borderColor: theme.colors.border, backgroundColor: theme.colors.surface }]}>
+          <GlassTopHighlight radius={16} />
           <Globe size={24} color={theme.colors.textMuted} />
           <Text style={[styles.emptyTitle, { color: theme.colors.textPrimary }]}>Public journey unavailable</Text>
           <Text style={[styles.emptyBody, { color: theme.colors.textSecondary }]}>{publicError}</Text>
@@ -1964,6 +2059,7 @@ export default function MyJourneyScreen() {
     }
     return (
       <View style={[styles.emptyState, { borderColor: theme.colors.border, backgroundColor: theme.colors.surface }]}>
+        <GlassTopHighlight radius={16} />
         {journeyMode === "private" ? (
           <LockKeyhole size={24} color={theme.colors.textMuted} />
         ) : activeTab === "missions" ? (
@@ -2028,9 +2124,18 @@ export default function MyJourneyScreen() {
         style={styles.list}
         onLayout={handleListLayout}
         data={rows}
-        keyExtractor={(row) => (row.kind === "mission" ? row.story.key : row.posts.map((post) => post.id).join("|"))}
+        keyExtractor={(row) => (row.kind === "mission" ? row.story.key : row.post.id)}
         renderItem={renderRow}
-        ItemSeparatorComponent={RowSeparator}
+        // Minis tab: true masonry — each card packs into whichever column is
+        // currently shortest, so a short card lets the next item in its own
+        // column start immediately instead of waiting for its old row
+        // partner. Deliberately not setting `optimizeItemArrangement`: it
+        // would reorder items to balance column heights, which would break
+        // this feed's chronological order — slightly uneven columns are the
+        // right trade-off here, not shuffled dates.
+        masonry={activeTab === "minis"}
+        numColumns={activeTab === "minis" ? miniColumnCount : 1}
+        ItemSeparatorComponent={activeTab === "minis" ? undefined : RowSeparator}
         ListHeaderComponent={listHeader}
         ListEmptyComponent={empty}
         ListFooterComponent={listFooter}
@@ -2231,12 +2336,33 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   tileBottomStatusPill: { position: "absolute", right: 7, bottom: 7 },
+  circleStackBadge: {
+    position: "absolute",
+    right: -2,
+    bottom: -2,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  // Rounded (non-circle) tiles keep the bottom-right corner for the like badge —
+  // this sits bottom-left instead.
+  roundedStackBadge: {
+    position: "absolute",
+    left: 7,
+    bottom: 7,
+    width: 19,
+    height: 19,
+    borderRadius: 9.5,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   tileStatusText: { color: "#FFFFFF", fontSize: 9, lineHeight: 11, fontWeight: "900", fontVariant: ["tabular-nums"] },
   textOnlyMoment: { minHeight: 52, borderRadius: 14, borderWidth: 1, marginTop: 10, padding: 9, flexDirection: "row", alignItems: "center", gap: 9 },
   textDayPill: { minHeight: 19, borderRadius: 999, paddingHorizontal: 7, alignItems: "center", justifyContent: "center", alignSelf: "center" },
   textOnlyContent: { flex: 1, minWidth: 0 },
   textOnlyCopy: { flex: 1, minWidth: 0, fontSize: 12, lineHeight: 17, fontWeight: "800" },
-  miniGridRow: { flexDirection: "row", alignItems: "stretch" },
   miniCard: { borderRadius: 16, borderWidth: 1, overflow: "hidden" },
   miniImageWrap: { width: "100%", aspectRatio: 1.08, overflow: "hidden" },
   miniDatePill: { position: "absolute", left: 8, top: 8, minHeight: 22, borderRadius: 999, paddingHorizontal: 8, alignItems: "center", justifyContent: "center" },
@@ -2266,6 +2392,16 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   miniStatusText: { color: "#FFFFFF", fontSize: 10, lineHeight: 13, fontWeight: "900", fontVariant: ["tabular-nums"] },
+  miniStackBadge: {
+    position: "absolute",
+    right: 8,
+    bottom: 8,
+    minWidth: 22,
+    minHeight: 22,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   miniTextOnlyTop: { position: "relative", minHeight: 42 },
   miniBody: { paddingHorizontal: 8, paddingVertical: 8, gap: 5 },
   miniTitle: { fontSize: 13, lineHeight: 17, fontWeight: "900" },

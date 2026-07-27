@@ -102,7 +102,10 @@ function normalizeTaskGallery(value: unknown): ChallengeMemoryTaskEntry[] {
     const label = stringValue(row.label);
     const imageUrl = stringValue(row.imageUrl);
     const note = stringValue(row.note);
-    if (!taskId || !label || (!imageUrl && !note)) continue;
+    // A task logged with neither photo nor note ("bare mark complete") is still a
+    // real, deliberate entry — keep it. The carousel falls back to the task's own
+    // label when both are null (see app/challenge-memory.tsx's text-slide branch).
+    if (!taskId || !label) continue;
     out.push({
       taskId,
       label,

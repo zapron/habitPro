@@ -31,6 +31,7 @@ import {
 } from "lucide-react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import type { CommunityWinFeedItem } from "../lib/communityWinsApi";
+import type { CommunityLightboxSlide } from "./CommunityWinImageLightbox";
 import { buildStreakCelebrationKicker } from "../lib/communityStreakFeedCopy";
 import { formatCompletedAt, formatRelativeTime } from "../lib/communityWinFeedFormat";
 import type { AppTheme } from "../styles/theme";
@@ -61,7 +62,7 @@ type Props = {
   expanded: boolean;
   reduceMotion: boolean;
   onToggleExpanded: () => void;
-  onOpenLightbox: (images: string[], initialIndex?: number) => void;
+  onOpenLightbox: (slides: CommunityLightboxSlide[], initialIndex?: number) => void;
   onOpenPlayer?: (win: CommunityWinFeedItem) => void;
   /** Returns whether the cheer API succeeded (optimistic list update in parent). */
   onCheer: (win: CommunityWinFeedItem) => Promise<boolean>;
@@ -298,13 +299,20 @@ export const CommunityWinFeedPost = memo(function CommunityWinFeedPost({
         : null,
     [photoRenderWidth, win.memory_image_url],
   );
-  /** Full-res URLs for the lightbox — the catalog when present, else the single cover photo. */
+  /** Full-res URLs for the inline preview carousel — the catalog when present, else the single cover photo. */
   const galleryImages = useMemo(() => {
     if (win.memory_gallery && win.memory_gallery.length > 0) {
       return win.memory_gallery.map((g) => g.imageUrl).filter(Boolean);
     }
     return win.memory_image_url ? [win.memory_image_url] : [];
   }, [win.memory_gallery, win.memory_image_url]);
+  /** Same catalog, but keeping each task's note for the full-screen lightbox's captions. */
+  const gallerySlides = useMemo<CommunityLightboxSlide[]>(() => {
+    if (win.memory_gallery && win.memory_gallery.length > 0) {
+      return win.memory_gallery.map((g) => ({ imageUrl: g.imageUrl, note: g.note }));
+    }
+    return win.memory_image_url ? [{ imageUrl: win.memory_image_url, note: win.memory_note }] : [];
+  }, [win.memory_gallery, win.memory_image_url, win.memory_note]);
 
   // FlashList recycles this component across different posts — reset the swipe
   // position whenever the underlying win changes so a stale index from a
@@ -355,8 +363,8 @@ export const CommunityWinFeedPost = memo(function CommunityWinFeedPost({
   const scheduleLightbox = useCallback(() => {
     clearLightboxTimer();
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    onOpenLightbox(galleryImages, activeGalleryIndex);
-  }, [clearLightboxTimer, onOpenLightbox, galleryImages, activeGalleryIndex]);
+    onOpenLightbox(gallerySlides, activeGalleryIndex);
+  }, [clearLightboxTimer, onOpenLightbox, gallerySlides, activeGalleryIndex]);
 
   const onImageAreaPress = useCallback(
     (uri: string | null) => {
