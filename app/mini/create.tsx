@@ -4,6 +4,7 @@ import { View, TextInput, TouchableOpacity, ScrollView, StyleSheet, StatusBar, P
 import { useRouter } from "expo-router";
 import { ArrowLeft, Check, Clock3, ListChecks, Plane, Plus, X } from "lucide-react-native";
 import { Screen } from "../../src/components/Screen";
+import { GlassTopHighlight } from "../../src/components/GlassTopHighlight";
 import { useHabitStore } from "../../src/store/habitStore";
 import { useTheme } from "../../src/context/ThemeContext";
 import { FuelTimePresetButton } from "../../src/components/fuel/FuelTimePresetButton";
@@ -183,11 +184,12 @@ export default function CreateMiniMission() {
             },
           ]}
         >
+          <GlassTopHighlight radius={theme.radius.lg} />
           <View style={styles.heroRow}>
             <View style={styles.heroBody}>
               <Text style={[styles.heroTitle, { color: theme.colors.textPrimary, fontSize: theme.typography.h3 }]}>How long will this take?</Text>
               <Text style={[styles.heroText, { color: theme.colors.textSecondary }]}>
-                Choose roughly how many minutes you want. Start when you are ready. You can choose whether to publish to Community when you finish.
+                Set a rough time limit — pick the exact minutes below.
               </Text>
             </View>
             <View style={styles.heroIconWrap}>
@@ -260,9 +262,8 @@ export default function CreateMiniMission() {
             Task checklist (optional)
           </Text>
         </View>
-        <Text style={[styles.fieldHint, { color: theme.colors.textMuted }]}>
-          Break this mission into steps you log separately — like "Warm up" or "Cool down".
-          Leave empty to check in with one note and photo when you finish, as usual.
+        <Text style={[styles.fieldHint, { color: theme.colors.textSecondary }]}>
+          Split into steps you log separately. Leave empty for a single check-in.
         </Text>
         {checklistItems.length > 0 ? (
           <View
@@ -276,6 +277,7 @@ export default function CreateMiniMission() {
               },
             ]}
           >
+            <GlassTopHighlight radius={theme.radius.lg} />
             {checklistItems.map((item, index) => (
               <View key={item.id} style={styles.checklistRow}>
                 <Text style={[styles.checklistIndex, { color: theme.colors.textMuted }]}>
@@ -323,8 +325,8 @@ export default function CreateMiniMission() {
         </TouchableOpacity>
 
         <Text style={[styles.label, { color: theme.colors.textSecondary, fontSize: theme.typography.caption }]}>Duration</Text>
-        <Text style={[styles.fieldHint, { color: theme.colors.textMuted }]}>
-          Short tasks: use the row below. Longer stretches: use the bigger options. Or type any number of minutes (1–480).
+        <Text style={[styles.fieldHint, { color: theme.colors.textSecondary }]}>
+          Pick a preset or type any number of minutes (1–480).
         </Text>
 
         <View
@@ -338,6 +340,7 @@ export default function CreateMiniMission() {
             },
           ]}
         >
+          <GlassTopHighlight radius={theme.radius.lg} />
           <Text style={[styles.presetSectionLabel, { color: theme.colors.textSecondary }]}>Under 1 hour</Text>
           <FuelQuickMinutesStrip
             presets={QUICK_MINUTES}
@@ -403,6 +406,7 @@ export default function CreateMiniMission() {
             },
           ]}
         >
+          <GlassTopHighlight radius={theme.radius.lg} />
           <TouchableOpacity
             style={[
               styles.finishOption,
@@ -437,7 +441,7 @@ export default function CreateMiniMission() {
                 </View>
               </View>
               <Text style={[styles.finishBody, { color: theme.colors.textSecondary }]} numberOfLines={2}>
-                Time ends, then confirm if you completed it. Best for workouts, planks, study, meditation.
+                Time ends, then confirm you finished. Good for workouts, study, meditation.
               </Text>
             </View>
             {completionMode === "timer_check_in" ? <Check size={18} color={theme.colors.green[500]} /> : null}
@@ -479,7 +483,7 @@ export default function CreateMiniMission() {
                 </View>
               </View>
               <Text style={[styles.finishBody, { color: theme.colors.textSecondary }]} numberOfLines={2}>
-                Tap complete before zero. Use this for stricter race-style mini missions.
+                Tap complete before time runs out. For stricter, race-style missions.
               </Text>
             </View>
             {completionMode === "manual" ? <Check size={18} color={theme.colors.indigo[400]} /> : null}
@@ -563,9 +567,9 @@ const styles = StyleSheet.create({
   },
   heroBody: { flex: 1, minWidth: 0 },
   heroTitle: { fontWeight: "700", marginBottom: 6 },
-  heroText: { lineHeight: 20 },
+  heroText: { fontWeight: "600", lineHeight: 20 },
   label: { marginBottom: 8, fontWeight: "600" },
-  fieldHint: { fontSize: 12, marginBottom: 10, lineHeight: 17 },
+  fieldHint: { fontSize: 12, fontWeight: "600", marginBottom: 10, lineHeight: 17 },
   input: { borderWidth: 1, padding: 14, fontSize: 16, marginBottom: 16 },
   textArea: { height: 110 },
   durationCard: { borderWidth: 1, paddingVertical: 14, paddingHorizontal: 10, marginBottom: 16, gap: 10 },

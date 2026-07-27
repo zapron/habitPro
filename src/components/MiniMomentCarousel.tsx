@@ -50,9 +50,11 @@ export function MiniMomentCarousel({ tasks, onPressSlide, onIndexChange }: Props
   const active = tasks[activeIndex];
 
   return (
-    <View style={styles.root}>
+    <View
+      style={[styles.card, { borderColor: theme.colors.border, backgroundColor: theme.colors.surfaceElevated }]}
+    >
       <View
-        style={[styles.frame, { borderColor: theme.colors.border, backgroundColor: theme.colors.surfaceElevated }]}
+        style={styles.frame}
         onLayout={(e) => {
           const w = e.nativeEvent.layout.width;
           if (w > 0 && Math.abs(w - slideWidth) > 1) setSlideWidth(w);
@@ -97,18 +99,31 @@ export function MiniMomentCarousel({ tasks, onPressSlide, onIndexChange }: Props
         ) : null}
       </View>
       {active ? (
-        <Text style={[styles.caption, { color: theme.colors.textSecondary }]} numberOfLines={2}>
-          <Text style={[styles.captionLabel, { color: theme.colors.textPrimary }]}>{active.label}</Text>
-          {active.note ? `  ·  ${active.note}` : ""}
-        </Text>
+        <View style={[styles.captionBar, { borderTopColor: theme.colors.border }]}>
+          <Text style={[styles.captionLabel, { color: theme.colors.textPrimary }]} numberOfLines={1}>
+            {active.label}
+          </Text>
+          {active.note ? (
+            <Text style={[styles.captionNote, { color: theme.colors.textSecondary }]} numberOfLines={2}>
+              {active.note}
+            </Text>
+          ) : null}
+        </View>
       ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { width: "92%", alignSelf: "center", maxWidth: 380, gap: 8 },
-  frame: { borderRadius: 14, borderWidth: 1, overflow: "hidden", height: 260 },
+  card: {
+    width: "92%",
+    alignSelf: "center",
+    maxWidth: 380,
+    borderRadius: 14,
+    borderWidth: 1,
+    overflow: "hidden",
+  },
+  frame: { height: 260 },
   slideImage: { width: "100%", height: "100%" },
   textSlide: { width: "100%", height: "100%", alignItems: "center", justifyContent: "center", padding: 20 },
   textSlideNote: { fontSize: 14, lineHeight: 20, fontWeight: "600", textAlign: "center" },
@@ -122,6 +137,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   dot: { width: 6, height: 6, borderRadius: 3 },
-  caption: { fontSize: 13, lineHeight: 18, textAlign: "center" },
-  captionLabel: { fontWeight: "800" },
+  captionBar: { borderTopWidth: StyleSheet.hairlineWidth, paddingHorizontal: 14, paddingVertical: 10, gap: 2 },
+  captionLabel: { fontSize: 14, fontWeight: "800" },
+  captionNote: { fontSize: 12, lineHeight: 17, fontWeight: "500" },
 });

@@ -44,6 +44,7 @@ import {
   Users,
 } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
+import { LinearGradient } from "expo-linear-gradient";
 import {
   clearMiniMissionWarningNotification,
   syncMiniMissionNotifications,
@@ -1725,13 +1726,30 @@ export default function MiniMissionDetail() {
   };
 
   /**
+   * Mirrors handleToggleTaskInclusion in app/habit/[id].tsx, but simpler: a mini
+   * mission's tasks live in local draft state (draftTaskEntries) until "Complete
+   * Mission" commits them, so there's no store patch to make here — just flip the
+   * flag in place. handleChecklistCompleteCommit's gallery filter (and the
+   * completionMemory.tasks it persists) both read this same field afterward.
+   */
+  const handleToggleMiniTaskInclusion = (taskId: string) => {
+    setDraftTaskEntries((prev) => {
+      const entry = prev[taskId];
+      if (!entry) return prev;
+      return { ...prev, [taskId]: { ...entry, includedInShare: entry.includedInShare === false } };
+    });
+  };
+
+  /**
    * Finalizes a checklist mini mission from whatever tasks have been logged so far —
    * logging zero tasks is allowed, same as a classic completion with no memory.
    * Community publish (Phase 4) is a single toggle bundled with this one-shot action,
    * mirroring the classic single-photo mini's toggle: only tasks with an uploaded
-   * photo are included in the shared gallery (matches the established
-   * Community-share convention of dropping text-only tasks — see
-   * docs/CATALOG_ARCHITECTURE.md §11). The sheet is closed before any alert/upsell
+   * photo AND includedInShare !== false are included in the shared gallery (matches
+   * the established Community-share convention of dropping text-only tasks — see
+   * docs/CATALOG_ARCHITECTURE.md §11 — plus the per-task eye toggle in
+   * MiniChecklistSheet, mirroring handleChecklistDayShare in app/habit/[id].tsx).
+   * The sheet is closed before any alert/upsell
    * call, not after — this is new code, so it follows the established
    * close-before-open rule from the start rather than the still-open gap documented
    * for the classic single-memory path in app-architecture.md Known Caution Points.
@@ -1755,7 +1773,7 @@ export default function MiniMissionDetail() {
 
       const wantsPublish = opts?.publishToCommunity === true;
       const gallery = tasks
-        .filter((t) => t.proofUrls[0] && /^https?:\/\//.test(t.proofUrls[0]))
+        .filter((t) => t.includedInShare !== false && t.proofUrls[0] && /^https?:\/\//.test(t.proofUrls[0]))
         .map((t) => ({ taskId: t.taskId, label: t.label, note: t.note ?? null, imageUrl: t.proofUrls[0] }));
       const publishCloudReady =
         wantsPublish && isSupabaseConfigured() && session?.user != null && gallery.length > 0;
@@ -2054,6 +2072,7 @@ export default function MiniMissionDetail() {
                 const existing = draftTaskEntries[task.id];
                 setTaskMemoryUi(existing ? { kind: "view", task, entry: existing } : { kind: "create", task });
               }}
+              onToggleTaskInclusion={handleToggleMiniTaskInclusion}
               onComplete={(opts) => void handleChecklistCompleteCommit(opts)}
               onClose={() => {
                 setCompleteSheetOpen(false);
@@ -2066,6 +2085,7 @@ export default function MiniMissionDetail() {
               visible={taskMemoryUi !== null}
               variant="mini"
               mode={taskMemoryUi?.kind === "view" ? "view" : "create"}
+              hideCommunityPublish
               viewMemory={
                 taskMemoryUi?.kind === "view"
                   ? {
@@ -2224,27 +2244,6 @@ export default function MiniMissionDetail() {
             </View>
           ) : null}
 
-          {mission.liveSquadId ? (
-            <TouchableOpacity
-              onPress={openLiveSquadBoard}
-              activeOpacity={0.86}
-              style={[
-                styles.liveMiniPill,
-                {
-                  borderColor: isDark ? "rgba(34, 211, 238, 0.34)" : "rgba(8, 145, 178, 0.24)",
-                  backgroundColor: isDark ? "rgba(34, 211, 238, 0.1)" : "rgba(8, 145, 178, 0.08)",
-                },
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel="Open Live Squad board"
-            >
-              <Radio size={14} color={theme.colors.cyan[400]} />
-              <Text style={[styles.liveMiniPillText, { color: theme.colors.cyan[400] }]}>
-                Live Squad
-              </Text>
-            </TouchableOpacity>
-          ) : null}
-
           <View
             style={[
               styles.metaPill,
@@ -2260,16 +2259,43 @@ export default function MiniMissionDetail() {
                 ? "Check In"
                 : mission.status === "in_progress" && !isTimerUpState
                 ? allowReserveFuel
-                  ? `${totalMinutes} min total · reserve ${reserveUsed}/${MAX_RESERVE_FUEL_MINUTES} min`
-                  : `${totalMinutes} min total`
-                : `${totalMinutes} minutes ${
-                    allowReserveFuel && (mission.extendedMinutes ?? 0) > 0
-                      ? `(+${mission.extendedMinutes ?? 0} reserve)`
-                      : "planned"
-                  }`}
+                  ? `${totalMinutes} min · reserve ${reserveUsed}/${MAX_RESERVE_FUEL_MINUTES}`
+                  : `${totalMinutes} min`
+                : allowReserveFuel && (mission.extendedMinutes ?? 0) > 0
+                  ? `${totalMinutes} min (+${mission.extendedMinutes ?? 0})`
+                  : `${totalMinutes} min`}
             </Text>
           </View>
         </View>
+
+        {mission.status === "completed" && mission.liveSquadId ? (
+          <TouchableOpacity
+            style={[
+              styles.liveMiniEntry,
+              {
+                borderRadius: theme.radius.md,
+                borderColor: isDark ? "rgba(34, 211, 238, 0.35)" : "rgba(8, 145, 178, 0.26)",
+                backgroundColor: isDark ? "rgba(34, 211, 238, 0.09)" : "rgba(8, 145, 178, 0.07)",
+              },
+            ]}
+            activeOpacity={0.86}
+            onPress={openLiveSquadBoard}
+            accessibilityRole="button"
+            accessibilityLabel="Open Live Squad board"
+          >
+            <View style={styles.liveMiniEntryIcon}>
+              <Radio size={19} color={theme.colors.cyan[400]} />
+            </View>
+            <View style={styles.liveMiniEntryText}>
+              <Text style={[styles.liveMiniEntryTitle, { color: theme.colors.textPrimary }]} numberOfLines={1}>
+                Live Squad
+              </Text>
+              <Text style={[styles.liveMiniEntryBody, { color: theme.colors.textSecondary }]} numberOfLines={2}>
+                See who joined, finished, or missed this run.
+              </Text>
+            </View>
+          </TouchableOpacity>
+        ) : null}
 
         {mission.status !== "completed" ? (
           <Text style={[styles.timerHint, { color: theme.colors.textSecondary }]}>
@@ -2523,32 +2549,37 @@ export default function MiniMissionDetail() {
 
           {mission.status === "completed" && (
             <>
-              {/* Achievement stats */}
-              <View style={styles.completedRow}>
-                <Check size={18} color={theme.colors.green[500]} />
-                <Text style={[styles.completedText, { color: theme.colors.green[500] }]}>
-                  Mini mission completed
-                </Text>
-              </View>
-
               {earlyFinishMs > 0 && (
-                <View style={[styles.rewardCard, { borderRadius: theme.radius.md }]}>
-                  <View style={styles.rewardHeader}>
-                    <Flame size={18} color="#f59e0b" fill="#fde68a" />
+                <View style={[styles.rewardCard, { borderRadius: theme.radius.lg }]}>
+                  <LinearGradient
+                    pointerEvents="none"
+                    colors={
+                      isDark
+                        ? ["rgba(245, 158, 11, 0.30)", "rgba(217, 119, 6, 0.06)"]
+                        : ["rgba(253, 230, 138, 0.85)", "rgba(254, 243, 199, 0.3)"]
+                    }
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={StyleSheet.absoluteFill}
+                  />
+                  <View style={styles.rewardIconBadge}>
+                    <Flame size={24} color="#f59e0b" fill="#fde68a" />
+                  </View>
+                  <View style={styles.rewardTextCol}>
                     <Text style={[styles.rewardTitle, { color: theme.colors.yellow[400] }]}>
                       Early Finish Reward
                     </Text>
-                  </View>
-                  <View style={styles.rewardRow}>
-                    <Trophy size={16} color={theme.colors.yellow[400]} />
-                    <Text
-                      style={[
-                        styles.rewardText,
-                        { color: isDark ? "#fde68a" : theme.colors.amber[500] },
-                      ]}
-                    >
-                      You beat your estimate by {formatDuration(earlyFinishMs)}.
-                    </Text>
+                    <View style={styles.rewardRow}>
+                      <Trophy size={15} color={theme.colors.yellow[400]} />
+                      <Text
+                        style={[
+                          styles.rewardText,
+                          { color: isDark ? "#fde68a" : theme.colors.amber[500] },
+                        ]}
+                      >
+                        You beat your estimate by {formatDuration(earlyFinishMs)}.
+                      </Text>
+                    </View>
                   </View>
                 </View>
               )}
@@ -2813,16 +2844,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   completedPillText: { fontWeight: "800", fontSize: 13, letterSpacing: 0.2 },
-  liveMiniPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 7,
-    borderRadius: 9999,
-    borderWidth: 1,
-    paddingVertical: 7,
-    paddingHorizontal: 12,
-  },
-  liveMiniPillText: { fontWeight: "900", fontSize: 12 },
   metaPill: {
     flexDirection: "row",
     alignItems: "center",
@@ -2908,13 +2929,6 @@ const styles = StyleSheet.create({
   },
   extendButtonText: { fontWeight: "700", fontSize: 15, flexShrink: 1 },
   extendButtonDisabled: { opacity: 0.72, backgroundColor: "rgba(148, 163, 184, 0.12)", borderColor: "rgba(148, 163, 184, 0.35)" },
-  completedRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingVertical: 10,
-  },
-  completedText: { fontWeight: "700" },
   completionMomentSection: { marginTop: 4, marginBottom: 4, gap: 10 },
   completionMomentHead: { flexDirection: "row", alignItems: "center", gap: 8 },
   completionMomentTitle: { fontWeight: "800", fontSize: 14 },
@@ -2958,21 +2972,27 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   rewardCard: {
-    borderWidth: 1,
-    borderColor: "rgba(251, 191, 36, 0.45)",
-    backgroundColor: "rgba(245, 158, 11, 0.12)",
-    padding: 12,
-    marginTop: 2,
-  },
-  rewardHeader: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 8,
-    gap: 6,
+    gap: 14,
+    borderWidth: 1,
+    borderColor: "rgba(251, 191, 36, 0.45)",
+    overflow: "hidden",
+    padding: 16,
+    marginTop: 2,
   },
-  rewardTitle: { fontWeight: "800", fontSize: 13, letterSpacing: 0.4 },
-  rewardRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  rewardText: { fontWeight: "600" },
+  rewardIconBadge: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(245, 158, 11, 0.18)",
+  },
+  rewardTextCol: { flex: 1, minWidth: 0, gap: 4 },
+  rewardTitle: { fontWeight: "900", fontSize: 15, letterSpacing: 0.3 },
+  rewardRow: { flexDirection: "row", alignItems: "center", gap: 7 },
+  rewardText: { fontWeight: "700", fontSize: 13, flexShrink: 1 },
   cancelledRow: {
     flexDirection: "row",
     alignItems: "center",

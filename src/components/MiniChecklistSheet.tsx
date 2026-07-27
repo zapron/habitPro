@@ -2,7 +2,7 @@ import { Text } from "./AppText";
 import { useState } from "react";
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Switch, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Check, ChevronRight, Flag, Globe, X } from "lucide-react-native";
+import { Check, ChevronRight, Eye, EyeOff, Flag, Globe, X } from "lucide-react-native";
 import { useTheme } from "../context/ThemeContext";
 import type { StreakMemoryTaskEntry, TaskChecklistItem } from "../types/habit";
 
@@ -15,6 +15,8 @@ type Props = {
   /** Signed in + cloud sync configured + HabitPro Community access. */
   canPublishCommunity: boolean;
   onSelectTask: (task: TaskChecklistItem) => void;
+  /** Toggle whether a logged task's photo is included when this mission publishes to Community. */
+  onToggleTaskInclusion: (taskId: string) => void;
   onComplete: (opts: { publishToCommunity: boolean }) => void;
   onClose: () => void;
 };
@@ -26,11 +28,12 @@ type Props = {
  * shape: no calendar day, no per-task share/unshare step. Unlike a main mission's
  * any-time re-editable daily entry, a mini mission completes once — so publishing to
  * Community is a single toggle bundled with "Complete Mission" (mirrors the classic
- * single-photo mini's toggle), not a separate repeatable share action, and there is
- * no per-task include/exclude here (deferred — see the architecture doc's Phase 4
- * note on reassessing that once this phase is stable). Tapping a task opens the
- * existing StreakMemorySheet reused as-is, scoped to that single task, exactly like
- * the habit-side pattern.
+ * single-photo mini's toggle), not a separate repeatable share action. Each
+ * shareable (photo-bearing) task does still get its own include/exclude eye toggle,
+ * matching ChecklistDaySheet — the per-task photo choice just gets bundled into this
+ * one publish action instead of being a separately repeatable share/update step.
+ * Tapping a task opens the existing StreakMemorySheet reused as-is, scoped to that
+ * single task, exactly like the habit-side pattern.
  */
 export function MiniChecklistSheet({
   visible,
@@ -40,6 +43,7 @@ export function MiniChecklistSheet({
   completing,
   canPublishCommunity,
   onSelectTask,
+  onToggleTaskInclusion,
   onComplete,
   onClose,
 }: Props) {
@@ -103,6 +107,8 @@ export function MiniChecklistSheet({
             {tasks.map((task) => {
               const entry = loggedByTaskId.get(task.id);
               const logged = Boolean(entry);
+              const shareable = Boolean(entry && /^https?:\/\//.test(entry.proofUrls[0] ?? ""));
+              const included = entry?.includedInShare !== false;
               return (
                 <Pressable
                   key={task.id}
@@ -136,6 +142,24 @@ export function MiniChecklistSheet({
                   >
                     {task.label}
                   </Text>
+                  {shareable ? (
+                    <Pressable
+                      onPress={(e) => {
+                        e.stopPropagation();
+                        onToggleTaskInclusion(task.id);
+                      }}
+                      hitSlop={8}
+                      accessibilityRole="button"
+                      accessibilityLabel={included ? "Included in Community — tap to exclude" : "Excluded from Community — tap to include"}
+                      style={styles.includeToggle}
+                    >
+                      {included ? (
+                        <Eye size={16} color={theme.colors.indigo[400]} />
+                      ) : (
+                        <EyeOff size={16} color={theme.colors.textMuted} />
+                      )}
+                    </Pressable>
+                  ) : null}
                   <ChevronRight size={16} color={theme.colors.textMuted} />
                 </Pressable>
               );
@@ -241,6 +265,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   taskLabel: { flex: 1, minWidth: 0, fontSize: 14, fontWeight: "700" },
+  includeToggle: {
+    width: 26,
+    height: 26,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   publishRow: {
     flexDirection: "row",
     alignItems: "center",

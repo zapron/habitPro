@@ -31,6 +31,8 @@ import {
 import { Screen } from "../../src/components/Screen";
 import { Button } from "../../src/components/Button";
 import { MiniMissionFireProgressBar } from "../../src/components/MiniMissionFireProgressBar";
+import { GlassTopHighlight } from "../../src/components/GlassTopHighlight";
+import { useListCardEntrance } from "../../src/hooks/useListCardEntrance";
 import { useTheme } from "../../src/context/ThemeContext";
 import { useHabitStore } from "../../src/store/habitStore";
 import { MiniMission } from "../../src/types/habit";
@@ -59,11 +61,12 @@ const formatCountdown = (ms: number) => {
 };
 
 /* ─── Mini Mission Card ──────────────────────────────────── */
-const MiniMissionCard = memo(function MiniMissionCard({ item }: { item: MiniMission }) {
+const MiniMissionCard = memo(function MiniMissionCard({ item, index }: { item: MiniMission; index: number }) {
   const router = useRouter();
   const { theme, isDark } = useTheme();
   const retryFailedMiniMission = useHabitStore((s) => s.retryFailedMiniMission);
   const [now, setNow] = useState(() => Date.now());
+  const entranceStyle = useListCardEntrance(index);
 
   const handleRetry = useCallback(() => {
     retryFailedMiniMission(item.id);
@@ -120,6 +123,7 @@ const MiniMissionCard = memo(function MiniMissionCard({ item }: { item: MiniMiss
           : { label: "Waiting", color: theme.colors.textSecondary };
 
   return (
+    <Animated.View style={entranceStyle}>
     <View
       style={[
         styles.card,
@@ -132,6 +136,7 @@ const MiniMissionCard = memo(function MiniMissionCard({ item }: { item: MiniMiss
         },
       ]}
     >
+      <GlassTopHighlight radius={theme.radius.lg} />
       <TouchableOpacity
         activeOpacity={0.9}
         onPress={() => router.push(`/mini/${item.id}`)}
@@ -170,31 +175,6 @@ const MiniMissionCard = memo(function MiniMissionCard({ item }: { item: MiniMiss
           </View>
         ) : null}
       </View>
-
-      {isTimerUp ? (
-        <View style={styles.failedMetaInlineRow}>
-          {item.liveSquadId ? (
-            <View
-              style={[
-                styles.liveBadge,
-                {
-                  backgroundColor: isDark ? "rgba(34,211,238,0.12)" : "rgba(8,145,178,0.1)",
-                  borderColor: isDark ? "rgba(34,211,238,0.3)" : "rgba(8,145,178,0.2)",
-                },
-              ]}
-            >
-              <Radio size={12} color={theme.colors.cyan[400]} />
-              <Text style={[styles.liveBadgeText, { color: theme.colors.cyan[400] }]}>Live</Text>
-            </View>
-          ) : null}
-          <View style={[styles.statusBadge, { backgroundColor: statusConfig.color + "18" }]}>
-            <Text style={[styles.statusBadgeText, { color: statusConfig.color }]}>{statusConfig.label}</Text>
-          </View>
-          <Text style={[styles.failedInlineTime, { color: theme.colors.textMuted }]} numberOfLines={1}>
-            {totalMinutes} min total
-          </Text>
-        </View>
-      ) : null}
 
       {/* Objective */}
       {!!item.objective && (
@@ -273,31 +253,58 @@ const MiniMissionCard = memo(function MiniMissionCard({ item }: { item: MiniMiss
       </TouchableOpacity>
 
       {isTimerUp ? (
-        <View style={[styles.cardRetrySection, { borderTopColor: theme.colors.border }]}>
+        <View style={styles.failedMetaInlineRow}>
+          {item.liveSquadId ? (
+            <View
+              style={[
+                styles.liveBadge,
+                {
+                  backgroundColor: isDark ? "rgba(34,211,238,0.12)" : "rgba(8,145,178,0.1)",
+                  borderColor: isDark ? "rgba(34,211,238,0.3)" : "rgba(8,145,178,0.2)",
+                },
+              ]}
+            >
+              <Radio size={12} color={theme.colors.cyan[400]} />
+              <Text style={[styles.liveBadgeText, { color: theme.colors.cyan[400] }]}>Live</Text>
+            </View>
+          ) : null}
+          <View style={[styles.statusBadge, { backgroundColor: statusConfig.color + "18" }]}>
+            <Text style={[styles.statusBadgeText, { color: statusConfig.color }]}>{statusConfig.label}</Text>
+          </View>
+          <Text style={[styles.failedInlineTime, { color: theme.colors.textMuted }]} numberOfLines={1}>
+            {totalMinutes} min total
+          </Text>
           {item.liveSquadId ? (
             <Button
-              title="Open Live Squad"
+              title="Open Squad"
               variant="subtle"
-              icon={<Radio size={16} color={theme.colors.cyan[400]} />}
+              icon={<Radio size={13} color={theme.colors.indigo[400]} />}
               onPress={() => router.push(`/live-mini/${item.liveSquadId}`)}
-              style={styles.failedActionButton}
-              textStyle={styles.failedActionText}
-              accessibilityLabel={`Open Live Squad: ${item.title}`}
+              style={[
+                styles.inlineActionButton,
+                { borderColor: theme.colors.indigo[400], backgroundColor: theme.colors.indigo[500] + "1f" },
+              ]}
+              textStyle={[styles.inlineActionText, { color: theme.colors.indigo[400] }]}
+              accessibilityLabel={`Open Squad: ${item.title}`}
             />
           ) : (
             <Button
               title="Retry"
               variant="subtle"
-              icon={<Timer size={16} color={theme.colors.textSecondary} />}
+              icon={<Timer size={13} color={theme.colors.green[500]} />}
               onPress={handleRetry}
-              style={styles.failedActionButton}
-              textStyle={styles.failedActionText}
+              style={[
+                styles.inlineActionButton,
+                { borderColor: theme.colors.green[500], backgroundColor: theme.colors.green[500] + "1f" },
+              ]}
+              textStyle={[styles.inlineActionText, { color: theme.colors.green[500] }]}
               accessibilityLabel={`Retry mission: ${item.title}`}
             />
           )}
         </View>
       ) : null}
     </View>
+    </Animated.View>
   );
 });
 
@@ -441,7 +448,7 @@ export default function MiniMissionsScreen() {
   const queuedCount = miniMissions.filter((m) => m.status === "pending" || m.status === "scheduled").length;
   const completedCount = miniMissions.filter((m) => m.status === "completed").length;
   const renderMiniMission = useCallback(
-    ({ item }: { item: MiniMission }) => <MiniMissionCard item={item} />,
+    ({ item, index }: { item: MiniMission; index: number }) => <MiniMissionCard item={item} index={index} />,
     [],
   );
 
@@ -470,6 +477,7 @@ export default function MiniMissionsScreen() {
           },
         ]}
       >
+        <GlassTopHighlight radius={theme.radius.md} />
         <View style={styles.keepScreenTextCol}>
           <Text style={[styles.keepScreenLabel, { color: theme.colors.textPrimary, fontSize: theme.typography.caption }]}>
             Keep screen on
@@ -488,6 +496,7 @@ export default function MiniMissionsScreen() {
       </View>
 
       <View style={[styles.tabContainer, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, borderRadius: theme.radius.md }]}>
+        <GlassTopHighlight radius={theme.radius.md} />
         <TouchableOpacity
           style={[styles.tab, (tab === "active" || view === "running") && [styles.activeTab, { backgroundColor: theme.colors.indigo[600] }]]}
           onPress={() => { setTab("active"); if (view === "running") router.replace("/mini?tab=active"); }}
@@ -644,23 +653,16 @@ const styles = StyleSheet.create({
   listContent: { paddingBottom: 100 },
   // Card styles
   card: { padding: 16, marginBottom: 12 },
-  cardRetrySection: {
-    marginTop: 12,
-    paddingTop: 12,
-    borderTopWidth: StyleSheet.hairlineWidth,
+  inlineActionButton: {
+    marginLeft: "auto",
+    minHeight: 0,
+    borderRadius: 9,
+    borderWidth: 1.5,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    gap: 4,
   },
-  failedActionButton: {
-    minHeight: 48,
-    borderRadius: 14,
-    borderWidth: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    paddingVertical: 11,
-    paddingHorizontal: 16,
-  },
-  failedActionText: { fontSize: 15, fontWeight: "800" },
+  inlineActionText: { fontSize: 11, fontWeight: "800" },
   cardTopRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 4 },
   failedCardTopRow: { alignItems: "flex-start", marginBottom: 0 },
   cardTitleRow: { flex: 1, flexDirection: "row", alignItems: "center", marginRight: 8, minWidth: 0 },

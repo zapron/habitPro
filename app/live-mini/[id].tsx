@@ -20,6 +20,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ArrowLeft, Check, Flame, Info, ListChecks, Radio, Timer, Trophy, UserPlus, Users, X } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import { Text } from "../../src/components/AppText";
+import { GlassTopHighlight } from "../../src/components/GlassTopHighlight";
 import { LiveMiniInviteSheet } from "../../src/components/LiveMiniInviteSheet";
 import { Screen } from "../../src/components/Screen";
 import { Button } from "../../src/components/Button";
@@ -404,6 +405,7 @@ const LiveSquadHero = memo(function LiveSquadHero({
         },
       ]}
     >
+      <GlassTopHighlight radius={20} />
       {leader ? (
         <>
           <View style={styles.heroTopRow}>
@@ -730,6 +732,7 @@ function ParticipantCard({
         },
       ]}
     >
+      <GlassTopHighlight radius={20} />
       <Animated.View
         pointerEvents="none"
         style={[styles.finishGlow, { backgroundColor: theme.colors.green[500], opacity: finishGlow }]}
@@ -1457,6 +1460,7 @@ export default function LiveMiniSquadScreen() {
 
           {inviteActionable ? (
             <View style={[styles.acceptCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, ...theme.shadow.card }]}>
+              <GlassTopHighlight radius={18} />
               <Text style={[styles.acceptTitle, { color: theme.colors.textPrimary }]}>Pick your timer</Text>
               <Text style={[styles.acceptBody, { color: theme.colors.textSecondary }]}>
                 Your timer starts as soon as you accept. Max duration is 8 hours.

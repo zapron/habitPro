@@ -28,20 +28,11 @@ export function MiniVisibilityRow({
   const isPublic = visibility === "public";
   const hint = isPublic ? PUBLIC_HINT : SOLO_HINT;
   return (
-    <View
-      style={[
-        styles.row,
-        {
-          backgroundColor: theme.colors.surface,
-          borderColor: theme.colors.border,
-          borderRadius: theme.radius.md,
-        },
-      ]}
-    >
+    <View style={styles.row}>
       {isPublic ? (
-        <Globe size={theme.icon.md} color={theme.colors.cyan[400]} />
+        <Globe size={theme.icon.sm} color={theme.colors.cyan[400]} />
       ) : (
-        <User size={theme.icon.md} color={theme.colors.indigo[400]} />
+        <User size={theme.icon.sm} color={theme.colors.indigo[400]} />
       )}
       <View style={styles.textCol}>
         <Text style={[styles.title, { color: theme.colors.textPrimary }]}>{isPublic ? "Public" : "Solo"}</Text>
@@ -67,13 +58,11 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    borderWidth: 1,
-    marginBottom: 16,
+    gap: 10,
+    paddingVertical: 4,
+    marginBottom: 14,
   },
   textCol: { flex: 1 },
-  title: { fontWeight: "700", fontSize: 14 },
-  hint: { fontSize: 11, marginTop: 3, lineHeight: 15 },
+  title: { fontWeight: "700", fontSize: 13 },
+  hint: { fontSize: 11, marginTop: 2, lineHeight: 14 },
 });
