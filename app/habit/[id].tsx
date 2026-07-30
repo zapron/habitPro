@@ -45,6 +45,7 @@ import { subscribeSyncFailure, subscribeSyncSuccess } from '../../src/lib/syncQu
 import { backOrReplace } from '../../src/lib/navigation';
 import type { MissionVisibility } from '../../src/types/habit';
 import { ConfettiBurst } from '../../src/components/ConfettiBurst';
+import { XpGainBadge } from '../../src/components/XpGainBadge';
 import { StreakProgressCard } from '../../src/components/StreakProgressCard';
 import {
   calendarDateForHabitMissionDayIndex,
@@ -604,7 +605,7 @@ export default function HabitDetail() {
         return new Date(habit.startDate).getTime() + totalDays * MS_PER_MISSION_DAY;
     }, [habit, mode, totalDays]);
 
-    const [confetti, setConfetti] = useState<{ active: boolean; milestone: boolean; x: number; y: number }>({ active: false, milestone: false, x: 0, y: 0 });
+    const [confetti, setConfetti] = useState<{ active: boolean; milestone: boolean; x: number; y: number; xp: number; day: number; align: "left" | "center" | "right" }>({ active: false, milestone: false, x: 0, y: 0, xp: 0, day: 0, align: "center" });
     const gridRef = useRef<View>(null);
     const [gridLayout, setGridLayout] = useState({ x: 0, y: 0 });
     const [now, setNow] = useState(() => Date.now());
@@ -912,16 +913,21 @@ export default function HabitDetail() {
     ]);
 
     const fireCompletionCelebration = useCallback(
-        (dayIndex: number, day: number, isMilestone: boolean) => {
+        (dayIndex: number, day: number, isMilestone: boolean, xpGained: number = 0) => {
             const visualIndex = useActiveTrailGrid ? Math.max(0, activeTrailReachedDay - day) : dayIndex;
             const col = visualIndex % 7;
             const row = Math.floor(visualIndex / 7);
             const cellSize = 50;
             const x = col * cellSize + cellSize / 2;
             const y = row * cellSize + cellSize / 2;
-            setConfetti({ active: false, milestone: false, x: 0, y: 0 });
+            // The XP pill anchors itself relative to this cell's origin; a fixed
+            // centering offset pushes it off-screen to the left for column 0 (and
+            // would hang off the right edge for the last column), so bias inward
+            // at both edges instead of always centering.
+            const align = col === 0 ? "left" : col === 6 ? "right" : "center";
+            setConfetti({ active: false, milestone: false, x: 0, y: 0, xp: 0, day: 0, align: "center" });
             setTimeout(() => {
-                setConfetti({ active: true, milestone: isMilestone, x, y });
+                setConfetti({ active: true, milestone: isMilestone, x, y, xp: xpGained, day, align });
             }, 50);
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         },
@@ -980,6 +986,7 @@ export default function HabitDetail() {
                 }
             }
 
+            const xpBefore = useHabitStore.getState().xp;
             const changed = toggleCompletion(habit.id, ctx.dateStr, commitNow);
             if (!changed) {
                 showToast(LOCKED_CHECKIN_MSG, 'info', 5000);
@@ -994,7 +1001,8 @@ export default function HabitDetail() {
                 });
             }
             const isMilestone = milestones.includes(ctx.day);
-            fireCompletionCelebration(ctx.dayIndex, ctx.day, isMilestone);
+            const xpGained = useHabitStore.getState().xp - xpBefore;
+            fireCompletionCelebration(ctx.dayIndex, ctx.day, isMilestone, xpGained);
 
             const wantsPublishAfterSave = meta?.publishToCommunity === true && Boolean(memoryToSave);
             if (wantsPublishAfterSave && memoryToSave) {
@@ -1134,10 +1142,12 @@ export default function HabitDetail() {
             const loggedIds = new Set(nextTasks.filter((t) => currentTaskIds.has(t.taskId)).map((t) => t.taskId));
             const allTasksNowLogged = currentTaskIds.size > 0 && loggedIds.size >= currentTaskIds.size;
             if (allTasksNowLogged) {
+                const xpBefore = useHabitStore.getState().xp;
                 const changed = markChecklistDayComplete(habit.id, ctx.dateStr);
                 if (changed) {
                     const isMilestone = milestones.includes(ctx.day);
-                    fireCompletionCelebration(ctx.dayIndex, ctx.day, isMilestone);
+                    const xpGained = useHabitStore.getState().xp - xpBefore;
+                    fireCompletionCelebration(ctx.dayIndex, ctx.day, isMilestone, xpGained);
                 }
             }
 
@@ -1158,13 +1168,15 @@ export default function HabitDetail() {
     const handleMarkChecklistDayComplete = useCallback(
         (dateStr: string, day: number, dayIndex: number) => {
             if (!habit) return;
+            const xpBefore = useHabitStore.getState().xp;
             const changed = markChecklistDayComplete(habit.id, dateStr);
             if (!changed) {
                 showToast(LOCKED_CHECKIN_MSG, 'info', 5000);
                 return;
             }
             const isMilestone = milestones.includes(day);
-            fireCompletionCelebration(dayIndex, day, isMilestone);
+            const xpGained = useHabitStore.getState().xp - xpBefore;
+            fireCompletionCelebration(dayIndex, day, isMilestone, xpGained);
             setChecklistDayUi(null);
         },
         [habit, markChecklistDayComplete, milestones, fireCompletionCelebration, showToast],
@@ -2408,6 +2420,9 @@ export default function HabitDetail() {
 
                 <View style={styles.grid} ref={gridRef} onLayout={(e: LayoutChangeEvent) => { setGridLayout({ x: e.nativeEvent.layout.x, y: e.nativeEvent.layout.y }); }}>
                     {confetti.active && <ConfettiBurst active={confetti.active} isMilestone={confetti.milestone} originX={confetti.x} originY={confetti.y} />}
+                    {confetti.active && confetti.xp > 0 && (
+                        <XpGainBadge active={confetti.active} xp={confetti.xp} day={confetti.day} originX={confetti.x} originY={confetti.y} align={confetti.align} />
+                    )}
 
                     {!detailHeavyContentReady && !useActiveTrailGrid
                         ? Array.from({ length: Math.min(14, totalDays) }, (_, i) => (

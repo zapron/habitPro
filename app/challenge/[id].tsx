@@ -1185,6 +1185,7 @@ export default function ChallengeDetailScreen() {
           next.add(sentKey);
           return next;
         });
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         await load({ silent: true });
       } finally {
         socialActionInFlightRef.current = false;
@@ -1659,6 +1660,7 @@ export default function ChallengeDetailScreen() {
           next.add(customNoteToUserId);
           return next;
         });
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         setCustomNoteToUserId(null);
         await load({ silent: true });
       } finally {

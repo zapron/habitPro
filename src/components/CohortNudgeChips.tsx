@@ -1,7 +1,8 @@
-import React, { memo } from "react";
+import React, { memo, useEffect, useRef } from "react";
 import { Text } from "./AppText";
 import {
   ActivityIndicator,
+  Animated,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -47,6 +48,29 @@ const NUDGE_SPECS: {
   },
 ];
 
+/**
+ * Wraps chip content and plays a quick scale-pop the moment `sent` flips
+ * false -> true, mirroring the community feed's cheer-button bounce
+ * (1 -> 1.14 -> 1) so sending a nudge lands with the same reward feedback
+ * cheering already gets, instead of just a silent label swap.
+ */
+function SentPopFlourish({ sent, children }: { sent: boolean; children: React.ReactNode }) {
+  const scale = useRef(new Animated.Value(1)).current;
+  const wasSent = useRef(sent);
+
+  useEffect(() => {
+    if (sent && !wasSent.current) {
+      Animated.sequence([
+        Animated.spring(scale, { toValue: 1.14, useNativeDriver: true, speed: 30, bounciness: 10 }),
+        Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 20, bounciness: 6 }),
+      ]).start();
+    }
+    wasSent.current = sent;
+  }, [sent, scale]);
+
+  return <Animated.View style={{ transform: [{ scale }] }}>{children}</Animated.View>;
+}
+
 type Props = {
   theme: AppTheme;
   isDark: boolean;
@@ -86,7 +110,6 @@ export const CohortNudgeChips = memo(function CohortNudgeChips({
       showsHorizontalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"
       directionalLockEnabled
-      canCancelContentTouches={false}
       contentContainerStyle={styles.scrollContent}
       style={styles.scroll}
     >
@@ -139,24 +162,26 @@ export const CohortNudgeChips = memo(function CohortNudgeChips({
             {busy ? (
               <ActivityIndicator size="small" color={iconColor} />
             ) : (
-              <View style={styles.chipInner}>
-                <View style={styles.chipTitleRow}>
-                  {glyph ? (
-                    <Text style={[styles.glyph, { color: iconColor }]}>{glyph}</Text>
-                  ) : Icon ? (
-                    <Icon size={theme.icon.sm} color={iconColor} strokeWidth={2.2} />
-                  ) : null}
-                  {suffixGlyph ? (
-                    <Text style={[styles.glyph, { color: iconColor }]}>{suffixGlyph}</Text>
-                  ) : null}
-                  <Text style={[styles.chipLabel, { color: theme.colors.textPrimary }]} numberOfLines={1}>
-                    {label}
+              <SentPopFlourish sent={sentToday}>
+                <View style={styles.chipInner}>
+                  <View style={styles.chipTitleRow}>
+                    {glyph ? (
+                      <Text style={[styles.glyph, { color: iconColor }]}>{glyph}</Text>
+                    ) : Icon ? (
+                      <Icon size={theme.icon.sm} color={iconColor} strokeWidth={2.2} />
+                    ) : null}
+                    {suffixGlyph ? (
+                      <Text style={[styles.glyph, { color: iconColor }]}>{suffixGlyph}</Text>
+                    ) : null}
+                    <Text style={[styles.chipLabel, { color: theme.colors.textPrimary }]} numberOfLines={1}>
+                      {label}
+                    </Text>
+                  </View>
+                  <Text style={[styles.chipSubtitle, { color: theme.colors.textMuted }]} numberOfLines={1}>
+                    {sentToday ? "Sent today" : subtitle}
                   </Text>
                 </View>
-                <Text style={[styles.chipSubtitle, { color: theme.colors.textMuted }]} numberOfLines={1}>
-                  {sentToday ? "Sent today" : subtitle}
-                </Text>
-              </View>
+              </SentPopFlourish>
             )}
           </Pressable>
         );
@@ -185,17 +210,19 @@ export const CohortNudgeChips = memo(function CohortNudgeChips({
         {customBusy ? (
           <ActivityIndicator size="small" color={customIcon} />
         ) : (
-          <View style={styles.chipInner}>
-            <View style={styles.chipTitleRow}>
-              <MessageSquare size={theme.icon.sm} color={customIcon} strokeWidth={2.2} />
-              <Text style={[styles.chipLabel, { color: theme.colors.textPrimary }]} numberOfLines={1}>
-                {customNoteSentToday ? "Note sent" : "Note"}
+          <SentPopFlourish sent={customNoteSentToday}>
+            <View style={styles.chipInner}>
+              <View style={styles.chipTitleRow}>
+                <MessageSquare size={theme.icon.sm} color={customIcon} strokeWidth={2.2} />
+                <Text style={[styles.chipLabel, { color: theme.colors.textPrimary }]} numberOfLines={1}>
+                  {customNoteSentToday ? "Note sent" : "Note"}
+                </Text>
+              </View>
+              <Text style={[styles.chipSubtitle, { color: theme.colors.textMuted }]} numberOfLines={1}>
+                {customNoteSentToday ? "Sent today" : "Send a note"}
               </Text>
             </View>
-            <Text style={[styles.chipSubtitle, { color: theme.colors.textMuted }]} numberOfLines={1}>
-              {customNoteSentToday ? "Sent today" : "Send a note"}
-            </Text>
-          </View>
+          </SentPopFlourish>
         )}
       </Pressable>
     </ScrollView>

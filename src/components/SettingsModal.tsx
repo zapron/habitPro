@@ -215,7 +215,7 @@ export function SettingsModal({ visible, onClose }: SettingsModalProps) {
                                         },
                                         isActive && {
                                             borderColor: theme.colors.indigo[500],
-                                            backgroundColor: isDark ? 'rgba(99, 102, 241, 0.14)' : 'rgba(79, 70, 229, 0.08)',
+                                            backgroundColor: theme.colors.indigo[500] + (isDark ? '24' : '14'),
                                         },
                                     ]}
                                     onPress={() => setPreference(key)}

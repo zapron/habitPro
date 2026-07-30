@@ -25,7 +25,7 @@ import { FlashList } from "@shopify/flash-list";
 const DynamicFlashList = FlashList as any;
 import { useFocusEffect, useIsFocused } from "@react-navigation/native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { ChevronRight, Crown, Eye, Medal, Radio, RefreshCw, Search, Swords, Trophy, Clock, X, Zap } from "lucide-react-native";
+import { ChevronRight, Crown, Eye, Medal, Radio, RefreshCw, Search, Star, Swords, Trophy, Clock, X, Zap } from "lucide-react-native";
 import { Screen } from "../../src/components/Screen";
 import { Button } from "../../src/components/Button";
 import { ConfirmDialog } from "../../src/components/ConfirmDialog";
@@ -41,6 +41,7 @@ import {
   weeklyTierLabel,
   countHabitCheckInsThisWeek,
   countMiniCompletionsThisWeek,
+  weekRangeMs,
 } from "../../src/utils/weekStats";
 import { inviteeHabitStartIsoFromGroupStartDate } from "../../src/utils/challengeInviteeStart";
 import type { ChallengeEnrollment } from "../../src/types/challenge";
@@ -494,6 +495,17 @@ function useListCardEntrance(index: number) {
       };
 }
 
+/** "Resets in 2d 4h" / "Resets in 6h 12m" / "Resets in 4m" copy for the weekly board. */
+function formatWeekResetCountdown(msRemaining: number): string {
+  const totalMinutes = Math.max(0, Math.round(msRemaining / 60000));
+  const days = Math.floor(totalMinutes / (24 * 60));
+  const hours = Math.floor((totalMinutes % (24 * 60)) / 60);
+  const minutes = totalMinutes % 60;
+  if (days > 0) return `Resets in ${days}d ${hours}h`;
+  if (hours > 0) return `Resets in ${hours}h ${minutes}m`;
+  return `Resets in ${Math.max(1, minutes)}m`;
+}
+
 function leaderboardAccent(rank: number, theme: ReturnType<typeof useTheme>["theme"]) {
   if (rank === 1) return theme.colors.amber[500];
   if (rank === 2) return theme.colors.cyan[400];
@@ -582,6 +594,10 @@ const LeagueRow = memo(function LeagueRow({
       <View style={styles.leagueRankSlot}>
         {entry.rankPosition === 1 ? (
           <Crown size={22} color={accent} fill={accent} />
+        ) : entry.rankPosition === 2 || entry.rankPosition === 3 ? (
+          <View style={[styles.medalDisc, { backgroundColor: accent }]}>
+            <Star size={11} color={theme.colors.white} fill={theme.colors.white} />
+          </View>
         ) : (
           <Text style={[styles.leagueRankText, { color: accent }]}>#{entry.rankPosition}</Text>
         )}
@@ -1391,6 +1407,15 @@ export default function CompeteScreen() {
 
   const bottomPad = Math.max(insets.bottom, 16) + 8;
 
+  const [weekResetLabel, setWeekResetLabel] = useState(() => formatWeekResetCountdown(weekRangeMs().endMs + 1 - Date.now()));
+  useEffect(() => {
+    if (segment !== "leaderboard") return;
+    const tick = () => setWeekResetLabel(formatWeekResetCountdown(weekRangeMs().endMs + 1 - Date.now()));
+    tick();
+    const id = setInterval(tick, 60000);
+    return () => clearInterval(id);
+  }, [segment]);
+
   const localWeeklyScore = useMemo(
     () => (segment === "leaderboard" ? weeklyCompeteScore(habits, miniMissions, level) : 0),
     [habits, miniMissions, level, segment],
@@ -1959,6 +1984,12 @@ export default function CompeteScreen() {
                         <Medal size={13} color={theme.colors.indigo[400]} />
                         <Text style={[styles.leagueHeroPillText, { color: theme.colors.textSecondary }]}>
                           {tier.label} this week
+                        </Text>
+                      </View>
+                      <View style={[styles.leagueHeroPill, { borderColor: theme.colors.border }]}>
+                        <Clock size={13} color={theme.colors.amber[500]} />
+                        <Text style={[styles.leagueHeroPillText, { color: theme.colors.textSecondary }]}>
+                          {weekResetLabel}
                         </Text>
                       </View>
                     </View>
@@ -2571,6 +2602,13 @@ const styles = StyleSheet.create({
   },
   leagueRankSlot: {
     width: 44,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  medalDisc: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
   },

@@ -6,12 +6,23 @@ interface PulsingBorderProps {
     children: React.ReactNode;
     active: boolean;
     color?: string;
+    /**
+     * Explicit square diameter for compact circular badges (e.g. a tab-bar
+     * unread dot). Gives the wrapper a fixed footprint so it doesn't collapse
+     * when `children` is itself absolutely positioned, and makes the halo a
+     * true circle instead of the card-radius default. Omit for the original
+     * "wrap a bordered card" usage.
+     */
+    size?: number;
+    /** Corner radius used when `size` is omitted (card mode). */
+    radius?: number;
 }
 
-export function PulsingBorder({ children, active, color }: PulsingBorderProps) {
+export function PulsingBorder({ children, active, color, size, radius = 14 }: PulsingBorderProps) {
     const { theme } = useTheme();
     const borderColor = color ?? theme.colors.cyan[400];
     const pulse = useRef(new Animated.Value(1)).current;
+    const fixedSizeStyle = size ? { width: size, height: size } : undefined;
 
     const loopRef = useRef<Animated.CompositeAnimation | null>(null);
     useEffect(() => {
@@ -58,13 +69,18 @@ export function PulsingBorder({ children, active, color }: PulsingBorderProps) {
         outputRange: [0.5, 1],
     });
 
-    if (!active) return <View>{children}</View>;
+    if (!active) return <View style={fixedSizeStyle}>{children}</View>;
+
+    const haloShape = size
+        ? { width: size, height: size, borderRadius: size / 2 }
+        : { ...StyleSheet.absoluteFillObject, borderRadius: radius };
 
     return (
-        <View>
+        <View style={fixedSizeStyle}>
             <Animated.View
                 style={[
                     styles.halo,
+                    haloShape,
                     {
                         borderColor,
                         transform: [{ scale: pulse }],
@@ -80,8 +96,7 @@ export function PulsingBorder({ children, active, color }: PulsingBorderProps) {
 
 const styles = StyleSheet.create({
     halo: {
-        ...StyleSheet.absoluteFillObject,
-        borderRadius: 14,
+        position: "absolute",
         borderWidth: 2,
         zIndex: 1,
     },

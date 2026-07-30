@@ -47,15 +47,20 @@ export function Button({
         variant === "secondary"
             ? { backgroundColor: theme.colors.surfaceElevated, borderWidth: 1, borderColor: theme.colors.border }
             : variant === "subtle"
-                ? { backgroundColor: theme.colors.surfaceElevated, borderWidth: 1, borderColor: theme.colors.border }
+                // Deliberately quieter than "secondary": the flatter `surface` tone
+                // (not the raised `surfaceElevated` one) so the two variants read as
+                // different emphasis levels instead of the same button twice.
+                ? { backgroundColor: theme.colors.surface, borderWidth: 1, borderColor: theme.colors.border }
             : variant === "danger"
                 ? { backgroundColor: theme.colors.red[500] }
                 : { backgroundColor: theme.colors.indigo[600], borderWidth: 1, borderColor: theme.colors.indigo[500] };
 
     const variantText: TextStyle =
-        variant === "secondary" || variant === "subtle"
+        variant === "secondary"
             ? { color: theme.colors.textPrimary }
-            : { color: theme.colors.white };
+            : variant === "subtle"
+                ? { color: theme.colors.textSecondary }
+                : { color: theme.colors.white };
     const spinnerColor =
         variant === "danger"
             ? theme.colors.white

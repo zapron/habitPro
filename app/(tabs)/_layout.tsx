@@ -10,6 +10,7 @@ import {
 } from "../../src/constants/tabBar";
 import { useTheme } from "../../src/context/ThemeContext";
 import { useInviteBadge } from "../../src/context/InviteBadgeContext";
+import { PulsingBorder } from "../../src/components/PulsingBorder";
 
 const TAB_BAR_TOP_PAD = 8;
 
@@ -24,7 +25,13 @@ function TabIconWithDot({
   return (
     <View style={styles.tabIconWrap}>
       {children}
-      {showDot ? <View style={[styles.tabDot, { backgroundColor: theme.colors.red[500] }]} /> : null}
+      {showDot ? (
+        <View style={styles.tabDotAnchor}>
+          <PulsingBorder active={showDot} color={theme.colors.red[500]} size={8}>
+            <View style={[styles.tabDot, { backgroundColor: theme.colors.red[500] }]} />
+          </PulsingBorder>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -97,10 +104,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  tabDot: {
+  tabDotAnchor: {
     position: "absolute",
     top: -2,
     right: -6,
+  },
+  tabDot: {
     width: 8,
     height: 8,
     borderRadius: 999,
