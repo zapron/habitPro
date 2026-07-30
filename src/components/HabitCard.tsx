@@ -22,6 +22,7 @@ import * as Haptics from 'expo-haptics';
 import { getEligibleStreakRepair } from "../utils/streakRepairEligibility";
 import { calendarDateForHabitMissionDayIndex, getHabitActiveMissionDaySlot } from "../utils/missionDaySlots";
 import { useReducedMotion } from "../hooks/useReducedMotion";
+import { showAppAlert } from "../context/AppDialogContext";
 import Svg, { Circle, G } from "react-native-svg";
 import { prewarmChallengeStreaks } from "../lib/groupChallengesApi";
 
@@ -288,11 +289,39 @@ export const HabitCard = memo(({ item, nowMs, index }: HabitCardProps) => {
     const handleQuickMarkComplete = (event: { stopPropagation: () => void }) => {
       event.stopPropagation();
       if (!activeCheckinDateStr) return;
-      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      const changed = markChecklistDayComplete(item.id, activeCheckinDateStr);
-      if (changed) {
-        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      const dateStr = activeCheckinDateStr;
+
+      const commit = () => {
+        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        const changed = markChecklistDayComplete(item.id, dateStr);
+        if (changed) {
+          void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        }
+      };
+
+      // Quick Complete skips the checklist sheet entirely, so a user who hasn't
+      // logged (all of) today's tasks yet may not realize this button won't log
+      // them for them — confirm first, with copy that reflects what's actually
+      // still pending, instead of silently completing the day out from under them.
+      const remaining = Math.max(0, totalChecklistTasks - loggedChecklistTasks);
+      if (remaining <= 0) {
+        commit();
+        return;
       }
+
+      const message =
+        loggedChecklistTasks === 0
+          ? "You haven't logged any tasks today. This will simply mark the day as complete. Do you want to continue, or log some tasks first?"
+          : `You still haven't logged ${remaining} task${remaining === 1 ? "" : "s"} today. This will mark the day complete without ${remaining === 1 ? "that task" : "those tasks"} counted. Do you want to continue?`;
+
+      showAppAlert("Mark day complete?", message, [
+        {
+          text: "I'll log my tasks",
+          style: "default",
+          onPress: () => router.push(`/habit/${item.id}`),
+        },
+        { text: "Yes, mark complete", style: "cancel", onPress: commit },
+      ]);
     };
 
     const pulse = useRef(new Animated.Value(0)).current;
