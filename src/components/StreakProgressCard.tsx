@@ -7,6 +7,7 @@ import {
     Easing,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
+import { GlassTopHighlight } from "./GlassTopHighlight";
 import { Crown } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
 import { useReducedMotion } from '../hooks/useReducedMotion';
@@ -156,13 +157,7 @@ export function StreakProgressCard({ streak, completedCount, totalDays, ringColo
                     },
                 ]}
             >
-                <LinearGradient
-                    pointerEvents="none"
-                    colors={["rgba(255,255,255,0.10)", "rgba(255,255,255,0)"]}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 0 }}
-                    style={[styles.topHighlight, { borderTopLeftRadius: theme.radius.lg, borderTopRightRadius: theme.radius.lg }]}
-                />
+                <GlassTopHighlight radius={theme.radius.lg} />
                 <View style={styles.row}>
                     {intensity !== 'none' ? (
                         <View style={styles.iconCol}>

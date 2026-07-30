@@ -23,7 +23,7 @@ import { View,
   Platform,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { LinearGradient } from 'expo-linear-gradient';
+import { GlassTopHighlight } from '../../src/components/GlassTopHighlight';
 import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowLeft, Trash2, Lock, RotateCcw, Star, Plane, Gamepad2, Globe, User, Users, Info, Bell } from 'lucide-react-native';
@@ -2102,13 +2102,7 @@ export default function HabitDetail() {
                         },
                     ]}
                 >
-                    <LinearGradient
-                        pointerEvents="none"
-                        colors={["rgba(255,255,255,0.10)", "rgba(255,255,255,0)"]}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 0 }}
-                        style={[styles.missionControlsTopHighlight, { borderTopLeftRadius: theme.radius.lg, borderTopRightRadius: theme.radius.lg }]}
-                    />
+                    <GlassTopHighlight radius={theme.radius.lg} />
                     <TouchableOpacity
                         activeOpacity={reminderLockedTime ? 1 : 0.84}
                         onPress={reminderLockedTime ? undefined : openReminderEditor}

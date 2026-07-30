@@ -11,7 +11,7 @@ import {
   Platform,
 } from "react-native";
 import { useRouter } from 'expo-router';
-import { LinearGradient } from 'expo-linear-gradient';
+import { GlassTopHighlight } from './GlassTopHighlight';
 import { Flame, Check, CircleX, Plane, Gamepad2, Globe, Swords, Users } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
 import { Habit } from '../types/habit';
@@ -456,13 +456,7 @@ export const HabitCard = memo(({ item, nowMs, index }: HabitCardProps) => {
                 },
             ]}
         >
-            <LinearGradient
-                pointerEvents="none"
-                colors={["rgba(255,255,255,0.10)", "rgba(255,255,255,0)"]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={[styles.topHighlight, { borderTopLeftRadius: theme.radius.lg, borderTopRightRadius: theme.radius.lg }]}
-            />
+            <GlassTopHighlight radius={theme.radius.lg} />
             <View style={styles.cardContent}>
                     <View style={styles.pillRow}>
                             {isManual ? (

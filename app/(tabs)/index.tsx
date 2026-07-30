@@ -64,6 +64,7 @@ import { useReducedMotion } from "../../src/hooks/useReducedMotion";
 import { AnimatedFire } from "../../src/components/AnimatedFire";
 import { FireLottie, FIRE_LOTTIE_URI } from "../../src/components/FireLottie";
 import { ConfettiBurst } from "../../src/components/ConfettiBurst";
+import { GlassTopHighlight } from "../../src/components/GlassTopHighlight";
 import { useToast } from "../../src/context/ToastContext";
 import { getMiniRemainingMs } from "../../src/utils/miniMissionTime";
 import {
@@ -951,13 +952,7 @@ export default function Home() {
             },
           ]}
         >
-          <LinearGradient
-            pointerEvents="none"
-            colors={["rgba(255,255,255,0.10)", "rgba(255,255,255,0)"]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={[styles.cardTopHighlight, { borderTopLeftRadius: theme.radius.md, borderTopRightRadius: theme.radius.md }]}
-          />
+          <GlassTopHighlight radius={theme.radius.md} />
           <View style={styles.xpInfo}>
             <View style={styles.xpLeft}>
               <Zap
@@ -1106,13 +1101,7 @@ export default function Home() {
           activeOpacity={0.85}
           onPress={() => router.push("/mini")}
         >
-          <LinearGradient
-            pointerEvents="none"
-            colors={["rgba(255,255,255,0.10)", "rgba(255,255,255,0)"]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={[styles.cardTopHighlight, { borderTopLeftRadius: theme.radius.lg, borderTopRightRadius: theme.radius.lg }]}
-          />
+          <GlassTopHighlight radius={theme.radius.lg} />
           <View style={styles.miniBannerLeft}>
             <View style={styles.commandIconMini}>
               {miniMissionStats.live > 0 ? (

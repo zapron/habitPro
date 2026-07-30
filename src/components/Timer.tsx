@@ -1,7 +1,7 @@
 import { Text } from "./AppText";
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { Animated, StyleSheet, TouchableOpacity, View } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
+import { GlassTopHighlight } from "./GlassTopHighlight";
 import { useTheme } from '../context/ThemeContext';
 import { AnimatedFire } from './AnimatedFire';
 import { FireLottie } from "./FireLottie";
@@ -134,13 +134,7 @@ export function Timer({ startDate, mode = 'autopilot', endDate, missionTimezone,
                 },
             ]}
         >
-            <LinearGradient
-                pointerEvents="none"
-                colors={["rgba(255,255,255,0.10)", "rgba(255,255,255,0)"]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={[styles.topHighlight, { borderTopLeftRadius: theme.radius.lg, borderTopRightRadius: theme.radius.lg }]}
-            />
+            <GlassTopHighlight radius={theme.radius.lg} />
             <View
                 style={[
                     styles.iconContainer,
