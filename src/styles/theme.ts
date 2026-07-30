@@ -1,5 +1,27 @@
 import { fontFamily } from "./fonts";
 
+/**
+ * Appends a precise alpha channel to a 6-digit hex color, e.g.
+ * `withAlpha("#7C5CF2", 20)` -> `"#7C5CF233"`. Use this instead of hand-picking
+ * an `rgba(...)` literal for a tinted background/border/badge.
+ *
+ * Hand-picked rgba literals are how this app ended up with the same tint
+ * (e.g. an indigo wash, a cyan badge) written dozens of times across screens
+ * with slightly different RGB values each time — several of which turned out
+ * to be stock Tailwind colors (`rgba(99,102,241,...)`) rather than this app's
+ * actual indigo token (`#7C5CF2`/`#5B3FDE`), because nothing tied the literal
+ * back to the real palette. Deriving the tint from the token itself instead
+ * makes that class of drift structurally impossible.
+ */
+export function withAlpha(hex: string, alphaPercent: number): string {
+  const clamped = Math.max(0, Math.min(100, alphaPercent));
+  const alphaHex = Math.round((clamped / 100) * 255)
+    .toString(16)
+    .padStart(2, "0")
+    .toUpperCase();
+  return `${hex}${alphaHex}`;
+}
+
 /** Shared (non-color) design tokens. Plus Jakarta Sans — see `AppText` + `fontAssets` in root layout. */
 const tokens = {
   spacing: { xs: 8, sm: 12, md: 16, lg: 24, xl: 32 },

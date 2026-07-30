@@ -16,6 +16,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Bell, ExternalLink, X, Monitor, Sun, Moon, type LucideIcon } from 'lucide-react-native';
 import { useTheme, type ThemePreference } from '../context/ThemeContext';
+import { withAlpha } from '../styles/theme';
 import { useAuth } from '../context/AuthContext';
 import { getPublicLinks, isSupabaseConfigured } from '../lib/env';
 import { useHabitStore } from '../store/habitStore';
@@ -215,7 +216,7 @@ export function SettingsModal({ visible, onClose }: SettingsModalProps) {
                                         },
                                         isActive && {
                                             borderColor: theme.colors.indigo[500],
-                                            backgroundColor: theme.colors.indigo[500] + (isDark ? '24' : '14'),
+                                            backgroundColor: isDark ? withAlpha(theme.colors.indigo[500], 14) : withAlpha(theme.colors.indigo[500], 8),
                                         },
                                     ]}
                                     onPress={() => setPreference(key)}

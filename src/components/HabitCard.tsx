@@ -14,6 +14,7 @@ import { useRouter } from 'expo-router';
 import { GlassTopHighlight } from './GlassTopHighlight';
 import { Flame, Check, CircleX, Plane, Gamepad2, Globe, Swords, Users } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
+import { withAlpha } from '../styles/theme';
 import { Habit } from '../types/habit';
 import { needsMainMissionOutcome } from '../utils/mainMissionUi';
 import { useHabitStore } from '../store/habitStore';
@@ -482,7 +483,7 @@ export const HabitCard = memo(({ item, nowMs, index }: HabitCardProps) => {
                                             styles.pulseGlyphHalo,
                                             {
                                                 borderColor: theme.colors.cyan[400],
-                                                backgroundColor: "rgba(34, 211, 238, 0.10)",
+                                                backgroundColor: withAlpha(theme.colors.cyan[400], 10),
                                                 transform: [{ scale: reduceMotion ? 1 : pulseScale }],
                                                 opacity: reduceMotion ? 0.5 : pulseOpacity,
                                             },
@@ -518,12 +519,12 @@ export const HabitCard = memo(({ item, nowMs, index }: HabitCardProps) => {
                                         styles.taskProgressPill,
                                         loggedChecklistTasks >= totalChecklistTasks
                                             ? {
-                                                  borderColor: isDark ? 'rgba(34, 197, 94, 0.5)' : 'rgba(21, 128, 61, 0.32)',
-                                                  backgroundColor: isDark ? 'rgba(34, 197, 94, 0.12)' : 'rgba(34, 197, 94, 0.08)',
+                                                  borderColor: isDark ? withAlpha(theme.colors.green[500], 50) : withAlpha(theme.colors.green[600], 32),
+                                                  backgroundColor: isDark ? withAlpha(theme.colors.green[500], 12) : withAlpha(theme.colors.green[500], 8),
                                               }
                                             : {
-                                                  borderColor: isDark ? 'rgba(34, 211, 238, 0.5)' : 'rgba(8, 145, 178, 0.32)',
-                                                  backgroundColor: isDark ? 'rgba(34, 211, 238, 0.12)' : 'rgba(34, 211, 238, 0.08)',
+                                                  borderColor: isDark ? withAlpha(theme.colors.cyan[400], 50) : withAlpha(theme.colors.cyan[500], 32),
+                                                  backgroundColor: isDark ? withAlpha(theme.colors.cyan[400], 12) : withAlpha(theme.colors.cyan[400], 8),
                                               },
                                     ]}
                                 >

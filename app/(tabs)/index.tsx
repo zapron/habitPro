@@ -60,6 +60,7 @@ import { Button } from "../../src/components/Button";
 import { HabitCard } from "../../src/components/HabitCard";
 import { Screen } from "../../src/components/Screen";
 import { useTheme } from "../../src/context/ThemeContext";
+import { withAlpha } from "../../src/styles/theme";
 import { useReducedMotion } from "../../src/hooks/useReducedMotion";
 import { AnimatedFire } from "../../src/components/AnimatedFire";
 import { FireLottie, FIRE_LOTTIE_URI } from "../../src/components/FireLottie";
@@ -811,10 +812,10 @@ export default function Home() {
     homeSpark?.kind === "mini"   ? theme.colors.amber[500]  :
     theme.colors.cyan[400];
   const sparkTint =
-    homeSpark?.kind === "lead"   ? (isDark ? "rgba(234,179,8,0.08)"   : "rgba(234,179,8,0.07)")   :
-    homeSpark?.kind === "chase"  ? (isDark ? "rgba(239,68,68,0.09)"   : "rgba(239,68,68,0.07)")   :
-    homeSpark?.kind === "mini"   ? (isDark ? "rgba(245,158,11,0.09)"  : "rgba(245,158,11,0.07)")  :
-    homeSpark?.kind === "xp"     ? (isDark ? "rgba(34,211,238,0.08)"  : "rgba(34,211,238,0.06)")  :
+    homeSpark?.kind === "lead"   ? withAlpha(theme.colors.yellow[400], isDark ? 8 : 7) :
+    homeSpark?.kind === "chase"  ? withAlpha(theme.colors.red[500], isDark ? 9 : 7) :
+    homeSpark?.kind === "mini"   ? withAlpha(theme.colors.amber[500], isDark ? 9 : 7) :
+    homeSpark?.kind === "xp"     ? withAlpha(theme.colors.cyan[400], isDark ? 8 : 6) :
     "transparent";
 
   return (
@@ -1058,8 +1059,8 @@ export default function Home() {
             style={[
               styles.softUpdateStrip,
               {
-                backgroundColor: isDark ? "rgba(79, 70, 229, 0.14)" : "rgba(79, 70, 229, 0.08)",
-                borderColor: isDark ? "rgba(129, 140, 248, 0.34)" : "rgba(79, 70, 229, 0.16)",
+                backgroundColor: isDark ? withAlpha(theme.colors.indigo[600], 14) : withAlpha(theme.colors.indigo[600], 8),
+                borderColor: isDark ? withAlpha(theme.colors.indigo[400], 34) : withAlpha(theme.colors.indigo[600], 16),
               },
             ]}
           >
@@ -1067,7 +1068,7 @@ export default function Home() {
               style={[
                 styles.softUpdateIcon,
                 {
-                  backgroundColor: isDark ? "rgba(34, 211, 238, 0.14)" : "rgba(8, 145, 178, 0.1)",
+                  backgroundColor: isDark ? withAlpha(theme.colors.cyan[400], 14) : withAlpha(theme.colors.cyan[500], 10),
                 },
               ]}
             >
@@ -1211,7 +1212,7 @@ export default function Home() {
                 style={[
                   styles.reportSegBtn,
                   reportsSegment === key && {
-                    backgroundColor: isDark ? "rgba(99, 102, 241, 0.2)" : "rgba(79, 70, 229, 0.12)",
+                    backgroundColor: isDark ? withAlpha(theme.colors.indigo[500], 20) : withAlpha(theme.colors.indigo[600], 12),
                   },
                 ]}
                 onPress={() => setReportsSegment(key)}
