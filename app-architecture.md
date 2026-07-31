@@ -1,6 +1,6 @@
 # HabitPro App Architecture
 
-Last updated: 2026-07-17
+Last updated: 2026-07-31
 
 This document is a practical map of the HabitPro mobile app for future AI agents and developers. It describes what the app does, where important behavior lives, how data moves between local state and Supabase, and which files are risky to change.
 
@@ -82,7 +82,7 @@ Files:
 
 Current build/update model:
 
-- Runtime version is manually pinned in `app.json` as `1.1.32`. This is required because the project has native Android code / bare workflow behavior, so runtime version policies are not supported.
+- Runtime version is manually pinned in `app.json` (currently `1.1.35` — this drifts with every native/config bump; verify against `app.json` directly rather than trusting this number). This is required because the project has native Android code / bare workflow behavior, so runtime version policies are not supported.
 - EAS channels are `development`, `preview`, and `production`.
 - Build profiles `apk` and `preview` both publish Android APKs on the `preview` channel.
 - Production builds use the `production` channel.
@@ -315,8 +315,9 @@ Important sync functions:
 - `upsertRemoteHabit()`
 - `deleteRemoteHabit()`
 - `resetRemoteHabitArtifacts()`
-- `upsertRemoteMiniMission()`
-- `deleteRemoteMiniMission()`
+- `deleteRemoteMiniMission()` (there is no standalone `upsertRemoteMiniMission()` —
+  mini missions only get pushed in bulk via `pushFullState()`'s single
+  `rpc_sync_dirty_state` call, no per-mini upsert function exists)
 - `pullCohortPeerHabitsFromSupabase()`
 
 Performance notes:
@@ -642,11 +643,12 @@ Fallback behavior:
 - If viewer is not a member or detail cannot resolve, show unavailable state.
 - Be careful with habit IDs/user IDs/date IDs; remote markers and actual details must match.
 
-Catalog feature status: this screen does **not** yet show multi-task catalogs. It
-reads `streak_memories[date]` through its own dedicated fetch
-(`challengeMemoryDetail.ts`), separate from `communityWinsApi.ts` / `community_wins`
-entirely, so the gallery/carousel work done for the main Community feed doesn't reach
-it automatically. See `docs/CATALOG_ARCHITECTURE.md` §6 (explicitly deferred).
+Catalog feature status: this screen **does** show multi-task catalogs now (a
+`MemoryPhotoCarousel` fed by `galleryImages` derived from `detail.tasks`) — this was
+done as of `docs/CATALOG_ARCHITECTURE.md` §9. It reads `streak_memories[date]`
+through its own dedicated fetch (`challengeMemoryDetail.ts`), separate from
+`communityWinsApi.ts` / `community_wins` entirely, so it needed its own gallery
+wiring rather than automatically inheriting the main Community feed's carousel work.
 
 ## Community Feed
 
@@ -674,10 +676,13 @@ Purpose:
   caption, instead of a single static photo. Single-photo posts — everything that
   predates this feature — are completely unaffected; they never reach that code path.
   Tapping still opens `CommunityWinImageLightbox` full-screen, now gallery-capable
-  (`images: string[]`, was a single `imageUri`) and landing on the exact photo
-  swiped to. `my-journey.tsx` and `community-player/[id].tsx` still use the old
-  single-image-only call pattern — not yet upgraded, see
-  `docs/CATALOG_ARCHITECTURE.md` §5/Phase 4.
+  and landing on the exact photo swiped to. Its prop shape has since changed again
+  from the original `images: string[]` to `slides: CommunityLightboxSlide[]` (each
+  slide carries its own caption/note, not just a URL) — check the component's
+  actual type definition before assuming either shape. `my-journey.tsx` and
+  `community-player/[id].tsx` were upgraded to this gallery-capable lightbox too
+  (each has its own gallery-slide builder — `journeySlidesForPost()` /
+  `gallerySlidesForPost()`); this is done, not deferred.
 
 Important tables:
 
@@ -723,7 +728,10 @@ Important APIs:
 - `fetchCommunityPlayerStoryPage()`
 - `fetchCommunityPlayerMissionJourneyPage()`
 - `recordCommunityJourneyView()`
-- `fetchCommunityJourneyViewCount()`
+- View count is not a standalone fetch — it's bundled inside
+  `fetchCommunityPlayerProfile()`'s return value (`journeyViewsCount`), backed by
+  an internal (non-exported) `countCommunityJourneyViews()` helper calling
+  `rpc_community_journey_view_count_v1`.
 
 Important UI logic:
 
@@ -1032,13 +1040,18 @@ Color token discipline (as of 2026-07-31):
 - A component that takes `isDark` as a **prop** instead of calling
   `useTheme()` itself has no `theme` object in scope by default — found
   this exact bug (a hardcoded color masking a reference to `theme.colors.*`
-  that would otherwise crash) 4 times in one sweep: `FocusMissionControlModal`
-  in `app/mini/[id].tsx`, `ShimmerBlock.tsx`,
-  `src/components/fuel/FuelQuickMinutesStrip.tsx`,
+  that would otherwise crash) in `ShimmerBlock.tsx`,
+  `src/components/fuel/FuelQuickMinutesStrip.tsx`, and
   `src/components/fuel/FuelTimePresetButton.tsx`. Fix: import
   `darkTheme`/`lightTheme` directly from `theme.ts`, select per the `isDark`
   prop — don't assume a hook call exists just because the file imports
-  `useTheme`'s type or a sibling component calls it.
+  `useTheme`'s type or a sibling component calls it. A related but distinct
+  bug in the same sweep: `FocusMissionControlModal` (`app/mini/[id].tsx`)
+  *does* call `useTheme()`, but only ever destructured `{ isDark }` from it,
+  never `theme` — so `theme.colors.*` references there would still crash
+  despite the hook call being present. Fix was just adding `theme` to the
+  destructure. Moral either way: don't assume `theme` is in scope just
+  because `isDark` clearly is — check what's actually destructured.
 
 ## Important User Flows
 
@@ -1117,7 +1130,7 @@ Color token discipline (as of 2026-07-31):
 - OTA updates must match the installed binary runtime version; native/config changes require a new build.
 - Realtime subscriptions should use unique channel names where needed and be removed on cleanup.
 - Pending delete/reset queues are intentional sync state. Do not clear them until the matching remote operation succeeds.
-- **iOS cannot reliably present a second native `<Modal>` while one is already open** — it silently fails (no crash, no error, the second modal just never appears); Android's Dialog-backed `Modal` tolerates it, which is why this class of bug is always reported as "works on Android, not on iOS." This is not just about `openUpsell`/the paywall (the original fix, 8 files/12 call sites — see `docs/WORK_HISTORY.md` 2026-07-22): `showAppAlert` (`src/context/AppDialogContext.tsx`) also renders through a real `<Modal>`, not a native OS alert as the name might suggest, so calling `showAppAlert(...)` from inside a handler while any sheet/modal is still open hits the exact same bug. Found and fixed twice more on 2026-07-23 (catalog "Remove from Community," and a latent pre-existing bug in the classic single-memory revoke flow, `handleHabitMemoryCommunityChange` in `app/habit/[id].tsx`) — both fixed the same way: close the enclosing Modal immediately before calling `showAppAlert`/`openUpsell`, capture what was open so it can be reopened afterward if appropriate. **Known still-open instance, not yet fixed**: `handleMemoryCommit` in `app/habit/[id].tsx` (~lines 886-963) calls `showAppAlert` for several publish-time validation errors while `StreakMemorySheet`'s Modal is still open (it only auto-closes after `onCommit` resolves) — structurally trickier to fix than the others since closing the sheet early, mid-async-operation, could look premature; needs its own careful pass. When adding any new confirm/error dialog inside a sheet: default to assuming this bug applies and close-before-open, don't assume `showAppAlert` is safe just because it isn't literally named `Modal`.
+- **iOS cannot reliably present a second native `<Modal>` while one is already open** — it silently fails (no crash, no error, the second modal just never appears); Android's Dialog-backed `Modal` tolerates it, which is why this class of bug is always reported as "works on Android, not on iOS." This is not just about `openUpsell`/the paywall (the original fix, 8 files/12 call sites — see `docs/WORK_HISTORY.md` 2026-07-22): `showAppAlert` (`src/context/AppDialogContext.tsx`) also renders through a real `<Modal>`, not a native OS alert as the name might suggest, so calling `showAppAlert(...)` from inside a handler while any sheet/modal is still open hits the exact same bug. Found and fixed twice more on 2026-07-23 (catalog "Remove from Community," and a latent pre-existing bug in the classic single-memory revoke flow, `handleHabitMemoryCommunityChange` in `app/habit/[id].tsx`) — both fixed the same way: close the enclosing Modal immediately before calling `showAppAlert`/`openUpsell`, capture what was open so it can be reopened afterward if appropriate. **Known still-open instance, not yet fixed**: `handleMemoryCommit` in `app/habit/[id].tsx` (starting at line 938 — line-number citations in this doc drift as the file grows, verify with a fresh grep before trusting an exact range) calls `showAppAlert` for several publish-time validation errors while `StreakMemorySheet`'s Modal is still open (it only auto-closes after `onCommit` resolves) — structurally trickier to fix than the others since closing the sheet early, mid-async-operation, could look premature; needs its own careful pass. When adding any new confirm/error dialog inside a sheet: default to assuming this bug applies and close-before-open, don't assume `showAppAlert` is safe just because it isn't literally named `Modal`.
 
 Also not limited to `showAppAlert`/`openUpsell` — any two full-screen `<Modal>`s stacking has the same problem. Found (and fixed) a third and fourth instance on 2026-07-23 in `app/my-journey.tsx` and `app/community-player/[id].tsx`: each has a `MissionGalleryModal` (a full-screen photo-gallery `<Modal>`) that opened `CommunityWinImageLightbox` (another `<Modal>`) on top of itself when a photo tile inside it was tapped. Fixed identically in both files with a `missionBeforeLightboxRef` + unified `openLightbox`/`closeLightbox` handler pair: opening the lightbox closes `MissionGalleryModal` first (remembering which mission story was open), closing the lightbox reopens it.
 
@@ -1131,7 +1144,7 @@ Also not limited to `showAppAlert`/`openUpsell` — any two full-screen `<Modal>
 - **`useEffect` runs after render — a ref sized to match a prop at render time, then "corrected" for a changed prop inside a `useEffect`, has a window where the render reads a too-short/stale ref.** Found in `StreakMemoryGallery.tsx`'s hex-stack shuffle animation (2026-07-26): one `Animated.Value` per stacked photo lived in a `useRef` array sized to the current photo count, resized inside a `useEffect` when the count grew. The render that *first* saw a 2-photo day gain a 3rd task (logging it while that day's hex tile was still mounted on screen) indexed the not-yet-resized array, got `undefined`, and called `undefined.interpolate(...)` — a hard crash, identical on iOS and Android since it's a plain JS `TypeError`, not anything native. Only triggered by an *update* to an already-mounted component; a fresh mount always sizes correctly from its `useState`/`useRef` initializer, which is why it only reproduced on a task's 3rd-and-later log, never the 1st or 2nd. Fixed by moving the resize into a plain, guarded `if` block in the render body (mutating a ref during render takes effect immediately for that same render; a paired `setState` call there is React's documented "adjust state while rendering" pattern, safe as long as it's guarded so it can't loop). When a ref/array needs to track a prop that can grow while the owning component stays mounted, do the resize synchronously in the render body, not in an effect.
 - **`SplashGate` (`src/components/SplashGate.tsx`) mounts the real app content immediately, *underneath* its splash overlay** — the overlay is a separate absolutely-positioned layer on top (`AnimatedSplashOverlay`, z-index 9999), not something the real screens render behind a gate for. A mount-triggered animation (e.g. `HabitCard`'s stack-up entrance, added 2026-07-26) that starts immediately in a `useEffect` on mount will therefore run to completion *behind the still-opaque splash* on the very first cold launch (the overlay's minimum display time is 2.4s+), and the user only ever sees it play on a later remount (tab switch, navigating back) — never on actual app startup, which is usually the one moment it matters most. Fixed with a one-shot signal, `src/lib/appReadySignal.ts` (`markAppReady()` called from `SplashGate`'s `onDismissed`; `onAppReady(callback)` fires immediately if already latched, otherwise waits) — any "first impression" mount animation should start inside `onAppReady(...)`, not directly in its own effect, or check this pattern before assuming a "the animation isn't working" report is about the animation's tuning rather than its timing.
 - **A `ScrollView`/`FlatList` where every pixel is covered by tappable children must never set `canCancelContentTouches={false}`.** This is an iOS-only prop; React Native's own doc comment on it reads "When false, once tracking starts, won't try to drag if the touch moves." Found in `CohortNudgeChips.tsx`'s horizontal nudge-chip row (2026-07-31), reported by the user as "I can scroll on Android but not iOS" — exactly the signature of an iOS-only prop nobody remembered was there. Since the whole scrollable width is Pressable chips, a touch always starts tracking on a child first, and with this prop set, iOS never lets the ScrollView reclaim that touch to scroll no matter how far the finger drags. Android ignores the prop entirely, which is why it worked there. Fix: remove it, let it default to `true`. `directionalLockEnabled` (a different prop, just prevents diagonal drift once a direction is committed) is unrelated and fine to keep. When a scroll container feels frozen on iOS only and every child is tappable, check for this prop before assuming a gesture-responder conflict.
-- **Off-palette color drift and a whole class of "no `theme` in scope" bugs, found via a repo-wide color-token sweep (2026-07-31).** A grep for `isDark ? "rgba(...)" : "rgba(...)"` turned up ~289 hand-typed color decisions instead of routing through `src/styles/theme.ts`; several of the most-repeated ones were confirmed off-palette — stock Tailwind hex (`rgba(99,102,241,...)`) instead of this app's actual indigo token (`#7C5CF2`/`#5B3FDE`), invisible because nothing ever compared the hand-typed literal against the real token. Fixed by adding `withAlpha(hex, alphaPercent)` to `theme.ts` (derives a tint directly from a real token) plus two new tokens for jobs that aren't a brand-hue tint — `scrim` (backdrop dimming, always dark) and `sheen` (the glass-highlight flip, white in dark mode / dark ink in light mode) — then converting every instance where both sides of the ternary confidently matched a known token. Separately, this surfaced a real latent-crash pattern 4 times: a component that receives `isDark` as a **prop** rather than calling `useTheme()` itself has no `theme` object in scope, so a hardcoded-color line that "looked like" it referenced `theme.colors.*` after conversion would have been a hard crash (`FocusMissionControlModal` in `app/mini/[id].tsx`, `ShimmerBlock.tsx`, `fuel/FuelQuickMinutesStrip.tsx`, `fuel/FuelTimePresetButton.tsx`) — fixed by importing `darkTheme`/`lightTheme` directly and selecting per the `isDark` prop. When converting any hardcoded color to a theme reference, confirm `theme` (not just `isDark`) is actually in that component's scope first. Full list of what was and wasn't converted (a handful of genuinely one-off colors were deliberately left as literals rather than forced into a token with exactly one caller) in `docs/CURRENT_WORK.md`.
+- **Off-palette color drift and a whole class of "no `theme` in scope" bugs, found via a repo-wide color-token sweep (2026-07-31).** A grep for `isDark ? "rgba(...)" : "rgba(...)"` turned up ~289 hand-typed color decisions instead of routing through `src/styles/theme.ts`; several of the most-repeated ones were confirmed off-palette — stock Tailwind hex (`rgba(99,102,241,...)`) instead of this app's actual indigo token (`#7C5CF2`/`#5B3FDE`), invisible because nothing ever compared the hand-typed literal against the real token. Fixed by adding `withAlpha(hex, alphaPercent)` to `theme.ts` (derives a tint directly from a real token) plus two new tokens for jobs that aren't a brand-hue tint — `scrim` (backdrop dimming, always dark) and `sheen` (the glass-highlight flip, white in dark mode / dark ink in light mode) — then converting every instance where both sides of the ternary confidently matched a known token. Separately, this surfaced a real latent-crash pattern in two related but distinct forms: (1) a component that receives `isDark` as a **prop** rather than calling `useTheme()` itself has no `theme` object in scope at all (`ShimmerBlock.tsx`, `fuel/FuelQuickMinutesStrip.tsx`, `fuel/FuelTimePresetButton.tsx`) — fixed by importing `darkTheme`/`lightTheme` directly and selecting per the `isDark` prop; (2) `FocusMissionControlModal` (`app/mini/[id].tsx`) does call `useTheme()`, but only ever destructured `{ isDark }` from it, never `theme` — fixed by adding `theme` to the destructure. When converting any hardcoded color to a theme reference, confirm `theme` (not just `isDark`) is actually in scope — check the destructure, don't assume it from the hook call alone. Full list of what was and wasn't converted (a handful of genuinely one-off colors were deliberately left as literals rather than forced into a token with exactly one caller) in `docs/CURRENT_WORK.md`.
 
 ## Where To Start For Common Changes
 

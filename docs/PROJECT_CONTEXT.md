@@ -31,7 +31,7 @@ Important config:
 - EAS profiles: `eas.json`.
 - Bundle id: `com.rakti.habitpro`.
 - Android package: `com.rakti.habitpro`.
-- Current app version at time of writing: `1.1.34`.
+- App version (drifts with every version bump — verify against `package.json`/`app.json` directly rather than trusting this number): `1.1.35` as of 2026-07-31.
 - Runtime version is pinned manually in `app.json`.
 
 ## Must-Read Files

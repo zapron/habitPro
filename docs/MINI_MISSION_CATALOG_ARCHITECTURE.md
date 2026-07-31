@@ -1,5 +1,54 @@
 # Mini Mission Multi-Task Catalog — Feasibility & Rollout Plan
 
+## ⚠ Status correction (2026-07-31) — read this before anything below
+
+Everything in this document, including the "Status as of 2026-07-24: planned,
+not started" line right below and every §3 subsection's "no code exists yet" /
+"net-new work" / "would need to" language, describes a **pre-implementation
+plan**. The plan was written and then **immediately built**: git history shows
+the whole feature shipped in commit `80d2ef2` ("feat: multi-task checklist
+support for mini missions + Live Squad wiring", 2026-07-26 03:00), **12 minutes
+before this very document's own commit** (`bcee5ff8`, 2026-07-26 03:12) — the
+doc was simply never updated to say "done" afterward.
+`docs/PROJECT_CONTEXT.md`'s "Multi-Task Checklist Missions / Community Catalog"
+entry already correctly labels this "(main + mini, shipped)" and describes it as
+"fully built, migrated, and confirmed working end-to-end by the user on iOS and
+Android."
+
+**Treat every claim below as a historical design-rationale / feasibility-analysis
+record, not a current status report.** Concretely, as of 2026-07-31, all of the
+following are shipped (verified against the actual code, not assumed):
+
+| §  | This doc's framing | Actual current status |
+|---|---|---|
+| 3.1 | "No `taskChecklist` field exists" | Exists on `MiniMission` — `src/types/habit.ts` |
+| 3.3 | Creation UI is "zero existing... net-new work" | Built — `app/mini/create.tsx` |
+| 3.4 | `LiveMiniParticipantRow` has "no gallery/JSON shape"; RPC has "no array/JSON param" | Both exist — `memory_gallery` field on the type (`src/types/liveMiniMission.ts`), `p_memory_gallery` param on `rpc_sync_live_mini_progress` (migration `20260724100000_mini_mission_task_checklist_and_gallery.sql`) |
+| 3.6 | Task-scoped upload framed as future work; per-task delete "not yet existing even on the habit side" | `uploadMiniStreakTaskMemoryImage` implemented (`src/lib/streakMemoryStorage.ts`) |
+| 3.7 | Journey/player-profile tiles have "no carousel logic" | Both branch on `memoryGallery` now (`app/my-journey.tsx`, `app/community-player/[id].tsx`) |
+| 3.8 | "Nothing was added to `mini_missions` or `live_mini_participants`" | Both got schema additions — see migrations `20260724100000` and `20260724130000` |
+| 5 | Phase 0–4 rollout table, framed as not-yet-started | All five phases shipped in the single commit above |
+
+**A real gap this plan never anticipated and still doesn't document**:
+invite-time checklist propagation — an invitee sees the checklist *before*
+accepting a Live Squad invite, not just after joining (`app/live-mini/[id].tsx`,
+backed by a new `live_mini_squads.task_checklist` column). This was added as a
+post-hoc bug fix once real usage surfaced the gap, and isn't covered by
+anything in §3–§5 below. If extending Live Squad checklist behavior further,
+read the actual current code rather than this plan's data model in §3.4.
+
+Also note: every `app/mini/[id].tsx:NNNN` / `app/live-mini/[id].tsx:NNNN` line
+citation below has drifted since the referenced files grew substantially in the
+shipping commit — treat line numbers in this document as approximate/historical,
+grep for the actual symbol before trusting a specific line.
+
+The rest of this document is preserved as-written below for its design
+reasoning (why each phase was scoped the way it was, what alternatives were
+considered) — that reasoning is still generally sound, only the "not built yet"
+framing is wrong.
+
+---
+
 Status as of 2026-07-24: **planned, not started.** No code or migrations for this
 feature exist yet. This document is the single source of truth for it, the same
 role `docs/CATALOG_ARCHITECTURE.md` plays for the main-mission version of this

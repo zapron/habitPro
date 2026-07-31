@@ -69,24 +69,25 @@ Then inspect the files relevant to the user request.
   tasks (no photo) from their galleries — this was deliberately scoped out of the
   squad-viewer text-only fix above as a larger, separate follow-up. See
   `docs/CATALOG_ARCHITECTURE.md` §11 before starting that work.
-- **Runtime `1.1.35` — update as of 2026-07-26, this changed since it was first written**:
-  verified directly via `eas build:list`/`eas channel:view preview`, not assumed.
-  iOS's `production`-channel binary has been on runtime `1.1.35` since a build on
-  2026-07-23 (unrelated to this feature — an IAP/account-setup build) — so iOS
-  `production` **is** a live cohort, and every OTA pushed to `production` this
-  week (Mark Day Complete redesign, hex gallery animations, Home UI pass, and
-  their follow-up fixes) has gone to it, each time after the user explicitly
-  asked for a production push (sometimes right away, sometimes only after
-  confirming on preview first — both patterns occurred, follow the user's
-  cue each time rather than assuming one or the other). **Android's
-  `production`-channel binary is still on runtime `1.1.34`** (built 2026-07-22)
-  and cannot receive any `1.1.35` OTA at all — EAS Update only serves updates
-  matching the installed binary's exact runtime version. There has also **never
-  been an iOS build on the `preview` channel** — every iOS build ever produced
-  is `production`/TestFlight, so iOS preview-only testing has never actually
-  been possible; Android's `preview`/`apk` profile builds are the only genuine
+- **Runtime `1.1.35` — update as of 2026-07-31, re-verified via `eas build:list
+  --platform android --status finished`, this changed again since it was first
+  written on 2026-07-26**: iOS's `production`-channel binary has been on
+  runtime `1.1.35` since a build on 2026-07-23. **Android's `production`-channel
+  binary is no longer stuck on `1.1.34`** as this note previously said — a newer
+  Android production build (`buildProfile: production`, `distribution: STORE`)
+  landed 2026-07-27 at runtime `1.1.35`, superseding the 2026-07-22 build this
+  note originally referenced. Both platforms' `production` channels are on
+  `1.1.35` as of this correction, so both are now live cohorts for any
+  `1.1.35` OTA — don't assume Android still needs a version-mismatched OTA
+  skipped for it without re-checking `eas build:list` first, since this exact
+  assumption just went stale once already. There has also **never been an iOS
+  build on the `preview` channel** — every iOS build ever produced is
+  `production`/TestFlight, so iOS preview-only testing has never actually been
+  possible; Android's `preview`/`apk` profile builds are the only genuine
   preview vehicle on either platform. Don't assume "pushed to preview" means an
-  iOS tester actually receives it.
+  iOS tester actually receives it. **This whole bullet is exactly the kind of
+  fact that goes stale within days — always re-verify with `eas build:list`
+  before trusting it, rather than trusting this note itself.**
 - Four OTA rounds went out today fixing a squad-photo-viewing saga end to end:
   (1) the original `onLayout`-race blank-carousel bug, (2) image-compression
   fallback silently uploading uncompressed originals, (3) iOS embedding an ICC
@@ -105,7 +106,7 @@ Then inspect the files relevant to the user request.
 - Mini missions that are humane for real workouts/timed tasks.
 - Build path for iOS physical device and TestFlight.
 - Mac migration so Windows and Mac can both continue from committed docs/history.
-- Production Android build/testing around version `1.1.34` and the new internet-required gate.
+- Production Android build/testing (version drifts — check `eas build:list --platform android` for the actual current production build rather than trusting a hardcoded number here) and the internet-required gate, which has since shipped (`src/components/NetworkRequiredGate.tsx`, mounted globally in `app/_layout.tsx`).
 - External TestFlight setup for friends after internal smoke testing.
 
 ## Current Technical Risk Areas

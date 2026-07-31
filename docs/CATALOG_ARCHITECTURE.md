@@ -360,9 +360,25 @@ closing the lightbox reopens it.
 
 Both files verified with `npx tsc --noEmit` — clean, no errors.
 
-**Still open, not yet done**: the "×N" photo-count badge on Journey grid tiles
+**Still open, not yet done** *(as of this section's writing — since done, see correction below)*: the "×N" photo-count badge on Journey grid tiles
 (mentioned in §5 as optional) was not added to either file — grid thumbnails still show
 just the cover photo with no indication a day has multiple task photos behind it.
+
+**Correction (2026-07-31)**: both the photo-count badge and the `images: string[]`
+prop shape described above are now stale.
+- The stack badge shipped 2026-07-27 (commit `66f64738`) — both `my-journey.tsx` and
+  `community-player/[id].tsx` now render a `showStackBadge` indicator (a stack/copy
+  icon, not literal "×N" text) whenever a post's gallery has more than one slide. No
+  longer open.
+- `CommunityWinImageLightbox`'s prop shape changed again after this section was
+  written: `images: string[]` became `slides: CommunityLightboxSlide[]`, where each
+  slide carries its own caption/note (not just a photo URL) — see
+  `docs/CURRENT_WORK.md`'s "Lightbox Carousel Indicator + Captions, Everywhere
+  (2026-07-27)" entry for the full rationale. Every `images: string[]` /
+  `imageUri: string | null` reference in this document (this section, §13, §14) is
+  describing the shape as it existed *before* that rename — check
+  `src/components/CommunityWinImageLightbox.tsx`'s actual type definition before
+  writing new code against it.
 
 **Design upgrade beyond the original Phase 4 plan**: the doc's original spec was
 tap-to-open-lightbox. User feedback pushed this further — the main feed card itself
@@ -434,14 +450,13 @@ single-memory missions are completely unaffected: they have no `tasks` in
   component every other surface uses), now opening at the exact slide that was tapped.
 - `npx tsc --noEmit` clean.
 
-**Not yet done / next**: the migration needs to be applied by the user before any of
-this is testable end-to-end (`npx supabase db push`, or run the file's SQL via the
-Dashboard) — until then, `rpc_challenge_memory_detail_v1` still returns the old shape
-and every checklist-day squad view still falls back to "Day marked complete." After
-applying, retest: open a squad-mate's checklist day (2+ synced task photos) via the
-squad roster or a notification, confirm the carousel swipes, the task name/note updates
-per slide, and the fullscreen lightbox opens at the right photo; then confirm a classic
-single-memory squad day still renders exactly as before (no regression).
+**Migration status correction (2026-07-31)**: this section originally said the
+migration was "not yet applied." Confirmed via the live Supabase project's migration
+history that `20260723120000_challenge_memory_detail_task_gallery.sql` (and its
+follow-ups referenced in §11) **is applied**. Treat this as done and testable, not
+pending — if a future session needs to double-check applied-migration status, query
+the live project directly rather than trusting this doc's original "not yet applied"
+language, which was already stale by the time §11 below was written.
 
 ## 10. Group mission checklist propagation (invite → join)
 
@@ -521,7 +536,8 @@ and its own bespoke fullscreen modal.
   actually running) — `hasPhoto` now also true when any task has a synced (`https`)
   photo, `hasNote` also true when any task has a note, and the day-inclusion filter
   also matches a non-empty `tasks` array. Classic missions have no `tasks`, so this is
-  a no-op for them. **Not yet applied** — same standing rule, user applies manually.
+  a no-op for them. **Confirmed applied** on the live project as of 2026-07-31 (see
+  the migration-status correction in §9 above — this was stale here too).
 - `src/components/CohortPeerStreakDots.tsx`: `openRemoteMemory` now maps
   `detail.tasks` into `StreakMemory.tasks` (reusing the existing client type — each
   task's single `imageUrl` becomes a one-item `proofUrls` array, matching the shape
@@ -563,7 +579,8 @@ sit alongside photo slides in the same strip, applied to both squad-facing viewe
 left out of this pass — see below).
 - New migration
   `supabase/migrations/20260723140000_challenge_memory_detail_text_only_tasks.sql`
-  (not yet applied) — `tasks` now includes a task if it has a synced photo **or** a
+  (confirmed applied on the live project as of 2026-07-31 — see the migration-status
+  correction in §9 above) — `tasks` now includes a task if it has a synced photo **or** a
   note; `imageUrl` is `null` for note-only entries. Cover-field selection (the legacy
   `note`/`imageUrl`) now explicitly prefers the first task with an actual photo,
   falling back to the first task's note — previously it just took array index 0,
@@ -833,10 +850,23 @@ wanted. `npx tsc --noEmit` and `git diff --check` clean.
 Earlier phases above shipped with "the first task logged for a day completes it,
 exactly like the classic flow" — that's now superseded. Logging a task only writes
 into `streakMemories[date].tasks`; a checklist day's streak/XP/squad-notification
-now fires **only** from an explicit "Mark Day Complete" action (a button in
+now fires from an explicit "Mark Day Complete" action (a button in
 `ChecklistDaySheet`, plus a quick one-tap equivalent on the Home mission card),
 and tasks stay editable/re-fillable until that action is taken. Full design
 rationale and implementation detail is in `docs/CURRENT_WORK.md` under
 "Latest Feature: Mark Day Complete (Checklist Notification-Timing Redesign,
 2026-07-25)" rather than duplicated here. Nothing else in this document (schema,
 sharing/catalog behavior, gallery rendering) changed.
+
+**Correction (2026-07-31)**: "only from an explicit action" above is no longer
+literally true and should not be read as "the first task is the only thing that
+doesn't complete the day." As of the 2026-07-27 day-grid progress-arc work,
+`handleTaskMemoryCommit` (`app/habit/[id].tsx`) auto-fires the same
+`markChecklistDayComplete` action itself once every checklist task has a logged
+entry — logging the *last* remaining task completes the day automatically, same as
+tapping the button, so the user never has to tap a now-redundant "Mark Day
+Complete" after their final task. What changed on 2026-07-25 and remains true:
+logging the *first* task (with others still unlogged) no longer completes the day.
+What's additionally true since 2026-07-27: logging the *last* task does, without a
+separate tap. Verify against `handleTaskMemoryCommit`'s `allTasksNowLogged` check
+directly before relying on this distinction for new work.
