@@ -37,6 +37,7 @@ import { useHabitStore } from "../store/habitStore";
 import type { MiniMission } from "../types/habit";
 import type { LiveMiniParticipantStatus } from "../types/liveMiniMission";
 import type { ProfileSearchRow } from "../types/groupChallenge";
+import { withAlpha } from "../styles/theme";
 
 type Props = {
   visible: boolean;
@@ -304,7 +305,7 @@ export function LiveMiniInviteSheet({ visible, mission, onClose }: Props) {
         <View
           style={[
             styles.backdrop,
-            { backgroundColor: isDark ? "rgba(0,0,0,0.42)" : "rgba(15,23,42,0.22)" },
+            { backgroundColor: isDark ? withAlpha(theme.colors.scrim, 42) : withAlpha(theme.colors.scrim, 22) },
           ]}
         >
           <View
@@ -378,8 +379,8 @@ export function LiveMiniInviteSheet({ visible, mission, onClose }: Props) {
                       style={[
                         styles.boardButton,
                         {
-                          borderColor: isDark ? "rgba(34,211,238,0.35)" : "rgba(8,145,178,0.28)",
-                          backgroundColor: isDark ? "rgba(34,211,238,0.1)" : "rgba(8,145,178,0.08)",
+                          borderColor: isDark ? withAlpha(theme.colors.cyan[400], 35) : withAlpha(theme.colors.cyan[500], 28),
+                          backgroundColor: isDark ? withAlpha(theme.colors.cyan[400], 10) : withAlpha(theme.colors.cyan[500], 8),
                         },
                       ]}
                       onPress={openBoard}

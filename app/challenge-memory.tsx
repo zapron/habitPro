@@ -62,6 +62,7 @@ import { useRefreshPremiumAccess } from "../src/hooks/useRefreshPremiumAccess";
 import type { AppTheme } from "../src/styles/theme";
 import type { PresetChallengeNudgeKind } from "../src/types/groupChallenge";
 import { formatDateDisplay } from "../src/utils/dateDisplay";
+import { withAlpha } from "../src/styles/theme";
 
 const COMMUNITY_BADGE_BACKGROUND = "rgba(79, 70, 229, 0.9)";
 const COMMUNITY_PHOTO_ASPECT_RATIO = 0.9;
@@ -601,7 +602,7 @@ export default function ChallengeMemoryScreen() {
                       <View
                         style={[
                           styles.communityBadgeHalo,
-                          { backgroundColor: isDark ? "rgba(79, 70, 229, 0.38)" : "rgba(79, 70, 229, 0.24)" },
+                          { backgroundColor: isDark ? withAlpha(theme.colors.indigo[600], 38) : withAlpha(theme.colors.indigo[600], 24) },
                         ]}
                       />
                       <View style={[styles.communityBadge, { backgroundColor: COMMUNITY_BADGE_BACKGROUND }]}>
@@ -655,7 +656,7 @@ export default function ChallengeMemoryScreen() {
                       <View
                         style={[
                           styles.communityBadgeHalo,
-                          { backgroundColor: isDark ? "rgba(79, 70, 229, 0.38)" : "rgba(79, 70, 229, 0.24)" },
+                          { backgroundColor: isDark ? withAlpha(theme.colors.indigo[600], 38) : withAlpha(theme.colors.indigo[600], 24) },
                         ]}
                       />
                       <View style={[styles.communityBadge, { backgroundColor: COMMUNITY_BADGE_BACKGROUND }]}>
@@ -679,7 +680,7 @@ export default function ChallengeMemoryScreen() {
                       styles.stateIconOrb,
                       {
                         borderColor: theme.colors.indigo[500],
-                        backgroundColor: isDark ? "rgba(99, 102, 241, 0.14)" : "rgba(99, 102, 241, 0.08)",
+                        backgroundColor: isDark ? withAlpha(theme.colors.indigo[500], 14) : withAlpha(theme.colors.indigo[500], 8),
                       },
                     ]}
                   >
@@ -778,13 +779,9 @@ export default function ChallengeMemoryScreen() {
                           {
                             borderColor: noteExpanded
                               ? theme.colors.indigo[400]
-                              : isDark
-                                ? "rgba(165, 180, 252, 0.38)"
-                                : "rgba(79, 70, 229, 0.32)",
+                              : isDark ? withAlpha(theme.colors.indigo[400], 38) : withAlpha(theme.colors.indigo[600], 32),
                             backgroundColor: noteExpanded
-                              ? isDark
-                                ? "rgba(99, 102, 241, 0.14)"
-                                : "rgba(79, 70, 229, 0.08)"
+                              ? isDark ? withAlpha(theme.colors.indigo[500], 14) : withAlpha(theme.colors.indigo[600], 8)
                               : "transparent",
                             opacity: pressed ? 0.82 : 1,
                           },
@@ -833,17 +830,11 @@ export default function ChallengeMemoryScreen() {
                               : "#7c3aed";
                     const bg =
                       kind === "cheer"
-                        ? isDark
-                          ? "rgba(129, 140, 248, 0.10)"
-                          : "rgba(99, 102, 241, 0.07)"
+                        ? isDark ? withAlpha(theme.colors.indigo[400], 10) : withAlpha(theme.colors.indigo[500], 7)
                         : kind === "ping"
-                          ? isDark
-                            ? "rgba(34, 211, 238, 0.09)"
-                            : "rgba(8, 145, 178, 0.06)"
+                          ? isDark ? withAlpha(theme.colors.cyan[400], 9) : withAlpha(theme.colors.cyan[500], 6)
                           : kind === "fire"
-                            ? isDark
-                              ? "rgba(251, 191, 36, 0.10)"
-                              : "rgba(217, 119, 6, 0.07)"
+                            ? isDark ? withAlpha(theme.colors.yellow[400], 10) : withAlpha(theme.colors.amber[500], 7)
                             : isDark
                               ? "rgba(167, 139, 250, 0.10)"
                               : "rgba(124, 58, 237, 0.06)";
@@ -867,7 +858,7 @@ export default function ChallengeMemoryScreen() {
                           styles.actionTile,
                           {
                             backgroundColor: bg,
-                            borderColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(15,23,42,0.08)",
+                            borderColor: isDark ? withAlpha(theme.colors.sheen, 8) : withAlpha(theme.colors.sheen, 8),
                             opacity: disabled || socialLocked ? 0.58 : pressed ? 0.9 : 1,
                             transform: [{ scale: pressed && !disabled ? 0.98 : 1 }],
                           },

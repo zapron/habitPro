@@ -9,6 +9,7 @@ import { avatarIdentityFor } from "../utils/avatarIdentity";
 import { CohortMastheadTrophyNarrative, type CohortMastheadModel } from "./CohortMasthead";
 import { CohortStreakPill } from "./CohortStreakPill";
 import { GlassTopHighlight } from "./GlassTopHighlight";
+import { withAlpha } from "../styles/theme";
 
 function initialsFromLabel(label: ProfileLabel | undefined, fallbackName: string): string {
   const dn = label?.displayName?.trim();
@@ -139,7 +140,7 @@ export function CohortLeaderHero({
                           styles.levelPill,
                           {
                             borderColor: theme.colors.border,
-                            backgroundColor: isDark ? "rgba(251, 191, 36, 0.12)" : "rgba(234, 179, 8, 0.12)",
+                            backgroundColor: isDark ? withAlpha(theme.colors.yellow[400], 12) : withAlpha(theme.colors.yellow[400], 12),
                           },
                         ]}
                       >
@@ -154,11 +155,11 @@ export function CohortLeaderHero({
                           styles.memoryVisibilityPill,
                           {
                             borderColor: squadVisible
-                              ? isDark ? "rgba(34, 211, 238, 0.36)" : "rgba(8, 145, 178, 0.28)"
+                              ? isDark ? withAlpha(theme.colors.cyan[400], 36) : withAlpha(theme.colors.cyan[500], 28)
                               : theme.colors.border,
                             backgroundColor: squadVisible
-                              ? isDark ? "rgba(34, 211, 238, 0.12)" : "rgba(8, 145, 178, 0.08)"
-                              : isDark ? "rgba(148, 163, 184, 0.1)" : "rgba(100, 116, 139, 0.07)",
+                              ? isDark ? withAlpha(theme.colors.cyan[400], 12) : withAlpha(theme.colors.cyan[500], 8)
+                              : isDark ? withAlpha(theme.colors.textSecondary, 10) : withAlpha(theme.colors.textMuted, 7),
                           },
                         ]}
                         accessibilityLabel={squadVisible ? "Memories visible to squad" : "Memories private"}
@@ -196,7 +197,7 @@ export function CohortLeaderHero({
                     <Text style={[styles.progressLabel, { color: theme.colors.textMuted }]} numberOfLines={1}>
                       {rankLabel(index + 1, member.name)}
                     </Text>
-                    <View style={[styles.track, { backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)" }]}>
+                    <View style={[styles.track, { backgroundColor: isDark ? withAlpha(theme.colors.sheen, 8) : withAlpha(theme.colors.sheen, 6) }]}>
                       <View
                         style={[
                           styles.trackFill,

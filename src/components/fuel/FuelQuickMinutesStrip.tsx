@@ -2,6 +2,7 @@ import { memo } from "react";
 import { View, TouchableOpacity, StyleSheet } from "react-native";
 import { Text } from "../AppText";
 import { AVIATION_HUD } from "./FuelPetrolGraphics";
+import { withAlpha, darkTheme, lightTheme } from "../../styles/theme";
 
 export type QuickMinutePreset = { label: string; minutes: number };
 
@@ -25,7 +26,7 @@ export const FuelQuickMinutesStrip = memo(function FuelQuickMinutesStrip({
         styles.strip,
         {
           borderColor: isDark ? AVIATION_HUD.stripBorderDark : AVIATION_HUD.stripBorderLight,
-          backgroundColor: isDark ? "rgba(15, 23, 42, 0.45)" : "rgba(241, 245, 249, 0.9)",
+          backgroundColor: isDark ? withAlpha(darkTheme.colors.slate[900], 45) : withAlpha(lightTheme.colors.surfaceElevated, 90),
         },
       ]}
     >

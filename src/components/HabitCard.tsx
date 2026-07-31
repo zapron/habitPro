@@ -560,8 +560,8 @@ export const HabitCard = memo(({ item, nowMs, index }: HabitCardProps) => {
                                 style={[
                                     styles.groupStreakButton,
                                     {
-                                        borderColor: isDark ? 'rgba(245, 158, 11, 0.72)' : 'rgba(217, 119, 6, 0.42)',
-                                        backgroundColor: isDark ? 'rgba(245, 158, 11, 0.13)' : 'rgba(245, 158, 11, 0.10)',
+                                        borderColor: isDark ? withAlpha(theme.colors.amber[500], 72) : withAlpha(theme.colors.amber[500], 42),
+                                        backgroundColor: isDark ? withAlpha(theme.colors.amber[500], 13) : withAlpha(theme.colors.amber[500], 10),
                                     },
                                 ]}
                                 accessibilityRole="button"
@@ -580,8 +580,8 @@ export const HabitCard = memo(({ item, nowMs, index }: HabitCardProps) => {
                                 style={[
                                     styles.markCompleteButton,
                                     {
-                                        borderColor: isDark ? 'rgba(34, 197, 94, 0.72)' : 'rgba(21, 128, 61, 0.42)',
-                                        backgroundColor: isDark ? 'rgba(34, 197, 94, 0.13)' : 'rgba(34, 197, 94, 0.10)',
+                                        borderColor: isDark ? withAlpha(theme.colors.green[500], 72) : withAlpha(theme.colors.green[600], 42),
+                                        backgroundColor: isDark ? withAlpha(theme.colors.green[500], 13) : withAlpha(theme.colors.green[500], 10),
                                     },
                                 ]}
                                 accessibilityRole="button"
@@ -643,7 +643,7 @@ export const HabitCard = memo(({ item, nowMs, index }: HabitCardProps) => {
                       strokeWidth={strokeWidth}
                       progress={campaignProgress}
                       doneColor={theme.colors.indigo[400]}
-                      futureColor={isDark ? "rgba(148, 163, 184, 0.22)" : "rgba(100, 116, 139, 0.22)"}
+                      futureColor={isDark ? withAlpha(theme.colors.textSecondary, 22) : withAlpha(theme.colors.textMuted, 22)}
                     />
                   ) : !missionWon && !missionFailed ? (
                     <RingDayArcs
@@ -655,9 +655,9 @@ export const HabitCard = memo(({ item, nowMs, index }: HabitCardProps) => {
                       nowMs={nowMs}
                       // Use brand color for "done", and a calmer neutral for "missed".
                       doneColor={theme.colors.indigo[400]}
-                      missedColor={isDark ? "rgba(148, 163, 184, 0.55)" : "rgba(100, 116, 139, 0.55)"}
-                      pendingColor={isDark ? "rgba(148, 163, 184, 0.75)" : "rgba(100, 116, 139, 0.75)"}
-                      futureColor={isDark ? "rgba(148, 163, 184, 0.22)" : "rgba(100, 116, 139, 0.22)"}
+                      missedColor={isDark ? withAlpha(theme.colors.textSecondary, 55) : withAlpha(theme.colors.textMuted, 55)}
+                      pendingColor={isDark ? withAlpha(theme.colors.textSecondary, 75) : withAlpha(theme.colors.textMuted, 75)}
+                      futureColor={isDark ? withAlpha(theme.colors.textSecondary, 22) : withAlpha(theme.colors.textMuted, 22)}
                       completedDateSet={completedDateSet}
                     />
                   ) : null}

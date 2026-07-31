@@ -6,6 +6,7 @@ import { UsernameSetupFields } from "../components/UsernameSetupFields";
 import { useTheme } from "./ThemeContext";
 import { useHabitStore } from "../store/habitStore";
 import { useAuth } from "./AuthContext";
+import { withAlpha } from "../styles/theme";
 
 type UsernameGateReason =
   | "community_like"
@@ -117,7 +118,7 @@ export function UsernameGateProvider({ children }: { children: React.ReactNode }
           <Pressable
             style={[
               styles.backdrop,
-              { backgroundColor: isDark ? "rgba(0,0,0,0.62)" : "rgba(15,23,42,0.45)" },
+              { backgroundColor: isDark ? withAlpha(theme.colors.scrim, 62) : withAlpha(theme.colors.scrim, 45) },
             ]}
             onPress={() => close(false)}
           />

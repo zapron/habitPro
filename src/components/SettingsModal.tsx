@@ -128,7 +128,7 @@ export function SettingsModal({ visible, onClose }: SettingsModalProps) {
             onRequestClose={onClose}
             statusBarTranslucent
         >
-            <View style={[styles.backdrop, { backgroundColor: isDark ? 'rgba(0,0,0,0.4)' : 'rgba(0,0,0,0.2)' }]}>
+            <View style={[styles.backdrop, { backgroundColor: isDark ? withAlpha(theme.colors.scrim, 40) : withAlpha(theme.colors.scrim, 20) }]}>
                 <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityRole="button" accessibilityLabel="Dismiss" />
                 <KeyboardAvoidingView
                     pointerEvents="box-none"

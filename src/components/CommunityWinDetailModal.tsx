@@ -15,6 +15,7 @@ import { useTheme } from "../context/ThemeContext";
 import type { CommunityWinFeedItem } from "../lib/communityWinsApi";
 import { buildStreakCelebrationKicker } from "../lib/communityStreakFeedCopy";
 import { formatCompletedAt, formatRelativeTime } from "../lib/communityWinFeedFormat";
+import { withAlpha } from "../styles/theme";
 
 type Props = {
   visible: boolean;
@@ -127,7 +128,7 @@ export function CommunityWinDetailModal({ visible, win, onClose, onPressImage }:
                       styles.liveSquadPhotoBadge,
                       {
                         backgroundColor: isDark ? "rgba(8, 47, 73, 0.88)" : "rgba(236, 254, 255, 0.94)",
-                        borderColor: isDark ? "rgba(34, 211, 238, 0.42)" : "rgba(6, 182, 212, 0.28)",
+                        borderColor: isDark ? withAlpha(theme.colors.cyan[400], 42) : withAlpha(theme.colors.cyan[500], 28),
                       },
                     ]}
                   >

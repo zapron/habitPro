@@ -99,6 +99,7 @@ import {
 } from "../../src/utils/missionDaySlots";
 import { formatDateDisplay } from "../../src/utils/dateDisplay";
 import { levelFromTotalXp } from "../../src/utils/xpLevel";
+import { withAlpha } from "../../src/styles/theme";
 
 const OPERATION_STEP_DELAY_MS = 360;
 const OPERATION_FINAL_DELAY_MS = 220;
@@ -421,11 +422,11 @@ const ParticipantCard = memo(function ParticipantCard({
                 styles.memoryVisibilityPill,
                 {
                   borderColor: squadVisible
-                    ? isDark ? "rgba(34, 211, 238, 0.36)" : "rgba(8, 145, 178, 0.28)"
+                    ? isDark ? withAlpha(theme.colors.cyan[400], 36) : withAlpha(theme.colors.cyan[500], 28)
                     : theme.colors.border,
                   backgroundColor: squadVisible
-                    ? isDark ? "rgba(34, 211, 238, 0.12)" : "rgba(8, 145, 178, 0.08)"
-                    : isDark ? "rgba(148, 163, 184, 0.1)" : "rgba(100, 116, 139, 0.07)",
+                    ? isDark ? withAlpha(theme.colors.cyan[400], 12) : withAlpha(theme.colors.cyan[500], 8)
+                    : isDark ? withAlpha(theme.colors.textSecondary, 10) : withAlpha(theme.colors.textMuted, 7),
                 },
               ]}
               accessibilityLabel={squadVisible ? "Memories visible to squad" : "Memories private"}
@@ -585,7 +586,7 @@ export default function ChallengeDetailScreen() {
       },
       levelPill: {
         borderColor: theme.colors.border,
-        backgroundColor: isDark ? "rgba(251, 191, 36, 0.12)" : "rgba(234, 179, 8, 0.12)",
+        backgroundColor: isDark ? withAlpha(theme.colors.yellow[400], 12) : withAlpha(theme.colors.yellow[400], 12),
       },
       recoveryCard: {
         backgroundColor: theme.colors.surface,
@@ -1895,7 +1896,7 @@ export default function ChallengeDetailScreen() {
                 style={[
                   styles.dayPill,
                   {
-                    backgroundColor: isDark ? "rgba(99, 102, 241, 0.2)" : "rgba(99, 102, 241, 0.14)",
+                    backgroundColor: isDark ? withAlpha(theme.colors.indigo[500], 20) : withAlpha(theme.colors.indigo[500], 14),
                   },
                 ]}
               >
@@ -1965,18 +1966,14 @@ export default function ChallengeDetailScreen() {
                           backgroundColor: active
                             ? "rgba(255,255,255,0.18)"
                             : attentionBadge
-                              ? isDark
-                                ? "rgba(245, 158, 11, 0.16)"
-                                : "rgba(245, 158, 11, 0.12)"
+                              ? isDark ? withAlpha(theme.colors.amber[500], 16) : withAlpha(theme.colors.amber[500], 12)
                             : isDark
                               ? "rgba(148, 163, 184, 0.14)"
                               : theme.colors.surfaceElevated,
                           borderColor: active
                             ? "rgba(255,255,255,0.26)"
                             : attentionBadge
-                              ? isDark
-                                ? "rgba(245, 158, 11, 0.42)"
-                                : "rgba(217, 119, 6, 0.34)"
+                              ? isDark ? withAlpha(theme.colors.amber[500], 42) : withAlpha(theme.colors.amber[500], 34)
                             : theme.colors.border,
                         },
                       ]}
@@ -2022,8 +2019,8 @@ export default function ChallengeDetailScreen() {
                       style={[
                         styles.repairIconBadgeCompact,
                         {
-                          backgroundColor: isDark ? "rgba(34, 211, 238, 0.10)" : "rgba(6, 182, 212, 0.10)",
-                          borderColor: isDark ? "rgba(34, 211, 238, 0.24)" : "rgba(6, 182, 212, 0.22)",
+                          backgroundColor: isDark ? withAlpha(theme.colors.cyan[400], 10) : withAlpha(theme.colors.cyan[500], 10),
+                          borderColor: isDark ? withAlpha(theme.colors.cyan[400], 24) : withAlpha(theme.colors.cyan[500], 22),
                         },
                       ]}
                     >
@@ -2066,28 +2063,16 @@ export default function ChallengeDetailScreen() {
                     : theme.colors.green[500];
               const statusRowBg =
                 r.status === "declined"
-                  ? isDark
-                    ? "rgba(239, 68, 68, 0.12)"
-                    : "rgba(220, 38, 38, 0.08)"
+                  ? isDark ? withAlpha(theme.colors.red[500], 12) : withAlpha(theme.colors.red[500], 8)
                   : r.status === "pending"
-                    ? isDark
-                      ? "rgba(34, 211, 238, 0.10)"
-                      : "rgba(6, 182, 212, 0.10)"
-                    : isDark
-                      ? "rgba(34, 197, 94, 0.12)"
-                      : "rgba(22, 163, 74, 0.10)";
+                    ? isDark ? withAlpha(theme.colors.cyan[400], 10) : withAlpha(theme.colors.cyan[500], 10)
+                    : isDark ? withAlpha(theme.colors.green[500], 12) : withAlpha(theme.colors.green[600], 10);
               const statusRowBorder =
                 r.status === "declined"
-                  ? isDark
-                    ? "rgba(239, 68, 68, 0.32)"
-                    : "rgba(220, 38, 38, 0.24)"
+                  ? isDark ? withAlpha(theme.colors.red[500], 32) : withAlpha(theme.colors.red[500], 24)
                   : r.status === "pending"
-                    ? isDark
-                      ? "rgba(34, 211, 238, 0.24)"
-                      : "rgba(6, 182, 212, 0.22)"
-                    : isDark
-                      ? "rgba(34, 197, 94, 0.28)"
-                      : "rgba(22, 163, 74, 0.22)";
+                    ? isDark ? withAlpha(theme.colors.cyan[400], 24) : withAlpha(theme.colors.cyan[500], 22)
+                    : isDark ? withAlpha(theme.colors.green[500], 28) : withAlpha(theme.colors.green[600], 22);
               const statusRowText =
                 r.status === "pending"
                   ? "Waiting for squad approvals..."
@@ -2119,23 +2104,23 @@ export default function ChallengeDetailScreen() {
                     : approvalsLeft === 0
                       ? "Ready to restore"
                       : "Needs squad approval";
-              const repairToneBg = isDark ? "rgba(34, 211, 238, 0.10)" : "rgba(6, 182, 212, 0.10)";
-              const repairToneBorder = isDark ? "rgba(34, 211, 238, 0.24)" : "rgba(6, 182, 212, 0.22)";
+              const repairToneBg = isDark ? withAlpha(theme.colors.cyan[400], 10) : withAlpha(theme.colors.cyan[500], 10);
+              const repairToneBorder = isDark ? withAlpha(theme.colors.cyan[400], 24) : withAlpha(theme.colors.cyan[500], 22);
               const repairStatusBg =
                 r.status === "declined"
-                  ? isDark ? "rgba(239, 68, 68, 0.12)" : "rgba(220, 38, 38, 0.08)"
+                  ? isDark ? withAlpha(theme.colors.red[500], 12) : withAlpha(theme.colors.red[500], 8)
                   : r.status === "pending"
                     ? repairToneBg
-                    : isDark ? "rgba(34, 197, 94, 0.12)" : "rgba(22, 163, 74, 0.10)";
+                    : isDark ? withAlpha(theme.colors.green[500], 12) : withAlpha(theme.colors.green[600], 10);
               const repairStatusBorder =
                 r.status === "declined"
-                  ? isDark ? "rgba(239, 68, 68, 0.32)" : "rgba(220, 38, 38, 0.24)"
+                  ? isDark ? withAlpha(theme.colors.red[500], 32) : withAlpha(theme.colors.red[500], 24)
                   : r.status === "pending"
                     ? repairToneBorder
-                    : isDark ? "rgba(34, 197, 94, 0.28)" : "rgba(22, 163, 74, 0.22)";
-              const approveBg = isDark ? "rgba(34, 211, 238, 0.14)" : "rgba(6, 182, 212, 0.08)";
-              const approveSelectedBg = isDark ? "rgba(34, 211, 238, 0.22)" : "rgba(6, 182, 212, 0.13)";
-              const approveBorder = isDark ? "rgba(34, 211, 238, 0.38)" : "rgba(6, 182, 212, 0.26)";
+                    : isDark ? withAlpha(theme.colors.green[500], 28) : withAlpha(theme.colors.green[600], 22);
+              const approveBg = isDark ? withAlpha(theme.colors.cyan[400], 14) : withAlpha(theme.colors.cyan[500], 8);
+              const approveSelectedBg = isDark ? withAlpha(theme.colors.cyan[400], 22) : withAlpha(theme.colors.cyan[500], 13);
+              const approveBorder = isDark ? withAlpha(theme.colors.cyan[400], 38) : withAlpha(theme.colors.cyan[500], 26);
               const approvalChipBg =
                 approves >= approvalsRequired
                   ? isDark ? "rgba(34, 197, 94, 0.16)" : "rgba(16, 185, 129, 0.12)"
@@ -2149,9 +2134,9 @@ export default function ChallengeDetailScreen() {
                   ? isDark ? theme.colors.green[500] : "#059669"
                   : statusAccent;
               const declineBg = theme.colors.surfaceElevated;
-              const declineSelectedBg = isDark ? "rgba(239, 68, 68, 0.14)" : "rgba(220, 38, 38, 0.08)";
+              const declineSelectedBg = isDark ? withAlpha(theme.colors.red[500], 14) : withAlpha(theme.colors.red[500], 8);
               const declineBorder = theme.colors.border;
-              const declineSelectedBorder = isDark ? "rgba(239, 68, 68, 0.32)" : "rgba(220, 38, 38, 0.24)";
+              const declineSelectedBorder = isDark ? withAlpha(theme.colors.red[500], 32) : withAlpha(theme.colors.red[500], 24);
               const actionDisabled = Boolean(!isPendingRepair || !myUserId || isRequester || declines !== 0 || busyVote || myVote);
               const expanded = expandedRepairId === r.id;
               const missedDateLabel = formatDateDisplay(r.date_str, r.date_str);
@@ -2241,8 +2226,8 @@ export default function ChallengeDetailScreen() {
                             style={[
                               styles.repairXpChip,
                               {
-                                backgroundColor: isDark ? "rgba(251, 191, 36, 0.12)" : "rgba(234, 179, 8, 0.12)",
-                                borderColor: isDark ? "rgba(251, 191, 36, 0.28)" : "rgba(234, 179, 8, 0.24)",
+                                backgroundColor: isDark ? withAlpha(theme.colors.yellow[400], 12) : withAlpha(theme.colors.yellow[400], 12),
+                                borderColor: isDark ? withAlpha(theme.colors.yellow[400], 28) : withAlpha(theme.colors.yellow[400], 24),
                               },
                             ]}
                           >
@@ -2357,7 +2342,7 @@ export default function ChallengeDetailScreen() {
                           style={[
                             styles.repairReasonBox,
                             {
-                              backgroundColor: isDark ? "rgba(15, 23, 42, 0.7)" : "rgba(241, 245, 249, 0.9)",
+                              backgroundColor: isDark ? withAlpha(theme.colors.slate[900], 70) : withAlpha(theme.colors.surfaceElevated, 90),
                               borderColor: theme.colors.border,
                             },
                           ]}
@@ -2634,7 +2619,7 @@ export default function ChallengeDetailScreen() {
                   style={[
                     styles.loadMoreSecondaryBtn,
                     {
-                      borderColor: isDark ? "rgba(165, 180, 252, 0.42)" : "rgba(79, 70, 229, 0.2)",
+                      borderColor: isDark ? withAlpha(theme.colors.indigo[400], 42) : withAlpha(theme.colors.indigo[600], 20),
                       opacity: streakLoadingMore ? 0.72 : 1,
                     },
                   ]}

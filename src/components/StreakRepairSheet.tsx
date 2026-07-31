@@ -30,6 +30,7 @@ import {
 import type { EligibleStreakRepair } from "../utils/streakRepairEligibility";
 import { requestStreakRepair } from "../lib/streakRepairApi";
 import { listChallengeMembers } from "../lib/groupChallengesApi";
+import { withAlpha } from "../styles/theme";
 
 const REASON_CHIPS = ["Busy day", "Sick", "Travel", "Forgot", "Other"] as const;
 
@@ -124,7 +125,7 @@ export function StreakRepairSheet({ visible, onClose, habit, eligible, onRequest
       <View
         style={[
           styles.backdrop,
-          { backgroundColor: isDark ? "rgba(0,0,0,0.45)" : "rgba(0,0,0,0.22)" },
+          { backgroundColor: isDark ? withAlpha(theme.colors.scrim, 45) : withAlpha(theme.colors.scrim, 22) },
         ]}
       >
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityRole="button" accessibilityLabel="Dismiss" />

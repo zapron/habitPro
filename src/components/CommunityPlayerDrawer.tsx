@@ -22,6 +22,7 @@ import { formatRelativeTime } from "../lib/communityWinFeedFormat";
 import { LevelXpRing } from "./LevelXpRing";
 import { levelFromTotalXp, xpInCurrentLevel } from "../utils/xpLevel";
 import { playerLeagueForLevel } from "../utils/playerLeague";
+import { withAlpha } from "../styles/theme";
 
 type Props = {
   visible: boolean;
@@ -140,7 +141,7 @@ export function CommunityPlayerDrawer({ visible, player, onClose }: Props) {
         <Pressable
           style={[
             StyleSheet.absoluteFillObject,
-            { backgroundColor: isDark ? "rgba(0,0,0,0.46)" : "rgba(0,0,0,0.22)" },
+            { backgroundColor: isDark ? withAlpha(theme.colors.scrim, 46) : withAlpha(theme.colors.scrim, 22) },
           ]}
           onPress={onClose}
           accessibilityRole="button"

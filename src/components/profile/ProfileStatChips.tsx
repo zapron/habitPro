@@ -6,6 +6,7 @@ import {
 } from "react-native";
 import type { AppTheme } from "../../styles/theme";
 import { TrendingUp, Layers, Hash } from "lucide-react-native";
+import { withAlpha } from "../../styles/theme";
 
 type Props = {
   theme: AppTheme;
@@ -16,7 +17,7 @@ type Props = {
 };
 
 export const ProfileStatChips = memo(function ProfileStatChips({ theme, isDark, maxStreak, activeHabits, lifetimeCheckIns }: Props) {
-  const chipBg = isDark ? "rgba(255,255,255,0.05)" : "rgba(15,23,42,0.04)";
+  const chipBg = isDark ? withAlpha(theme.colors.sheen, 5) : withAlpha(theme.colors.sheen, 4);
   const border = theme.colors.border;
 
   const items = [

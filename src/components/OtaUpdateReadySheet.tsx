@@ -5,6 +5,7 @@ import { Button } from "./Button";
 import { GlassTopHighlight } from "./GlassTopHighlight";
 import { useReducedMotion } from "../hooks/useReducedMotion";
 import { useTheme } from "../context/ThemeContext";
+import { withAlpha } from "../styles/theme";
 
 type Props = {
   visible: boolean;
@@ -66,7 +67,7 @@ export function OtaUpdateReadySheet({ visible, onLater, onRestart }: Props) {
           pointerEvents="box-none"
           style={[
             styles.backdrop,
-            { opacity: backdropOp, backgroundColor: isDark ? "rgba(0,0,0,0.62)" : "rgba(15,23,42,0.45)" },
+            { opacity: backdropOp, backgroundColor: isDark ? withAlpha(theme.colors.scrim, 62) : withAlpha(theme.colors.scrim, 45) },
           ]}
         >
           <Pressable style={StyleSheet.absoluteFill} onPress={onLater} accessibilityRole="button" accessibilityLabel="Dismiss" />

@@ -11,6 +11,7 @@ import {
 import { Flame, Heart, MessageSquare } from "lucide-react-native";
 import type { AppTheme } from "../styles/theme";
 import type { PresetChallengeNudgeKind } from "../types/groupChallenge";
+import { withAlpha } from "../styles/theme";
 
 const NUDGE_SPECS: {
   kind: PresetChallengeNudgeKind;
@@ -142,16 +143,10 @@ export const CohortNudgeChips = memo(function CohortNudgeChips({
                 backgroundColor: bg,
                 borderColor:
                   kind === "cheer"
-                    ? isDark
-                      ? "rgba(129, 140, 248, 0.22)"
-                      : "rgba(99, 102, 241, 0.2)"
+                    ? isDark ? withAlpha(theme.colors.indigo[400], 22) : withAlpha(theme.colors.indigo[500], 20)
                     : kind === "ping"
-                      ? isDark
-                        ? "rgba(34, 211, 238, 0.22)"
-                        : "rgba(6, 182, 212, 0.22)"
-                      : isDark
-                        ? "rgba(251, 191, 36, 0.22)"
-                        : "rgba(217, 119, 6, 0.22)",
+                      ? isDark ? withAlpha(theme.colors.cyan[400], 22) : withAlpha(theme.colors.cyan[500], 22)
+                      : isDark ? withAlpha(theme.colors.yellow[400], 22) : withAlpha(theme.colors.amber[500], 22),
                 opacity: presetLocked || sentToday ? 0.55 : busy ? 0.5 : pressed ? 0.92 : 1,
                 transform: [{ scale: pressed && !busy && !sentToday ? 0.98 : 1 }],
               },

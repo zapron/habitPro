@@ -3,6 +3,7 @@ import { TouchableOpacity, StyleSheet } from "react-native";
 import Svg, { Defs, LinearGradient, Stop, Rect, G, ClipPath } from "react-native-svg";
 import { Text } from "../AppText";
 import { PETROL } from "./FuelPetrolGraphics";
+import { withAlpha, darkTheme, lightTheme } from "../../styles/theme";
 
 const MAX_MIN = 480;
 
@@ -98,7 +99,7 @@ const FuelTankFillGraphic = memo(function FuelTankFillGraphic({
         width="56"
         height="20"
         rx="4"
-        fill={isDark ? "rgba(15, 23, 42, 0.4)" : "rgba(241, 245, 249, 0.9)"}
+        fill={isDark ? withAlpha(darkTheme.colors.slate[900], 40) : withAlpha(lightTheme.colors.surfaceElevated, 90)}
         stroke={stroke}
         strokeWidth={active ? 1.4 : 1}
       />

@@ -4,6 +4,7 @@ import { Sun } from "lucide-react-native";
 import { useEffect, useMemo, useRef } from "react";
 import type { AppTheme } from "../styles/theme";
 import { FireLottie } from "./FireLottie";
+import { withAlpha } from "../styles/theme";
 
 // Easy-off switch for trying Lottie in the UI.
 const USE_FIRE_LOTTIE = true;
@@ -106,7 +107,7 @@ export function CohortMastheadTrophyNarrative({ theme, model, isDark = false }: 
             <Animated.View
               style={[
                 styles.sunGlow,
-                { backgroundColor: isDark ? "rgba(251, 191, 36, 0.65)" : "rgba(251, 191, 36, 0.55)" },
+                { backgroundColor: isDark ? withAlpha(theme.colors.yellow[400], 65) : withAlpha(theme.colors.yellow[400], 55) },
                 sunGlowStyle,
               ]}
             />

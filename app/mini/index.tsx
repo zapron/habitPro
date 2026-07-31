@@ -49,6 +49,7 @@ import {
   MINI_MISSION_KEEP_SCREEN_ON_KEY,
   MINI_MISSIONS_LIST_KEEP_AWAKE_TAG,
 } from "../../src/constants/miniMissionKeepAwake";
+import { withAlpha } from "../../src/styles/theme";
 
 type MiniTab = "active" | "queued" | "completed" | "failed";
 const MINI_LIST_CLOCK_MS = 5000;
@@ -160,8 +161,8 @@ const MiniMissionCard = memo(function MiniMissionCard({ item, index }: { item: M
                 style={[
                   styles.liveBadge,
                   {
-                    backgroundColor: isDark ? "rgba(34,211,238,0.12)" : "rgba(8,145,178,0.1)",
-                    borderColor: isDark ? "rgba(34,211,238,0.3)" : "rgba(8,145,178,0.2)",
+                    backgroundColor: isDark ? withAlpha(theme.colors.cyan[400], 12) : withAlpha(theme.colors.cyan[500], 10),
+                    borderColor: isDark ? withAlpha(theme.colors.cyan[400], 30) : withAlpha(theme.colors.cyan[500], 20),
                   },
                 ]}
               >
@@ -259,8 +260,8 @@ const MiniMissionCard = memo(function MiniMissionCard({ item, index }: { item: M
               style={[
                 styles.liveBadge,
                 {
-                  backgroundColor: isDark ? "rgba(34,211,238,0.12)" : "rgba(8,145,178,0.1)",
-                  borderColor: isDark ? "rgba(34,211,238,0.3)" : "rgba(8,145,178,0.2)",
+                  backgroundColor: isDark ? withAlpha(theme.colors.cyan[400], 12) : withAlpha(theme.colors.cyan[500], 10),
+                  borderColor: isDark ? withAlpha(theme.colors.cyan[400], 30) : withAlpha(theme.colors.cyan[500], 20),
                 },
               ]}
             >

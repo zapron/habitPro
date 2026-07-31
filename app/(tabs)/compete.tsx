@@ -88,6 +88,7 @@ import {
 } from "../../src/lib/liveMiniMissionsApi";
 import { formatDateDisplay } from "../../src/utils/dateDisplay";
 import { levelFromTotalXp, xpInCurrentLevel } from "../../src/utils/xpLevel";
+import { withAlpha } from "../../src/styles/theme";
 
 const WEEKLY_RANK_PAGE_SIZE = 20;
 const COMPETE_INVITES_PAGE_SIZE = 20;
@@ -210,8 +211,8 @@ function InviteMissionHeader({
           style={[
             styles.inviteKindPill,
             {
-              backgroundColor: isDark ? "rgba(99, 102, 241, 0.18)" : "rgba(79, 70, 229, 0.1)",
-              borderColor: isDark ? "rgba(129, 140, 248, 0.45)" : "rgba(79, 70, 229, 0.28)",
+              backgroundColor: isDark ? withAlpha(theme.colors.indigo[500], 18) : withAlpha(theme.colors.indigo[600], 10),
+              borderColor: isDark ? withAlpha(theme.colors.indigo[400], 45) : withAlpha(theme.colors.indigo[600], 28),
             },
           ]}
         >
@@ -436,7 +437,7 @@ function ActiveChallengeCard({
         </TouchableOpacity>
       </View>
 
-      <View style={[styles.track, { backgroundColor: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)" }]}>
+      <View style={[styles.track, { backgroundColor: isDark ? withAlpha(theme.colors.sheen, 6) : withAlpha(theme.colors.sheen, 6) }]}>
         <View
           style={[styles.fill, { width: `${pct}%`, backgroundColor: theme.colors.indigo[500] }]}
         />
@@ -522,21 +523,21 @@ function lifetimeLeagueForLevel(
     return {
       label: "Mythic League",
       color: theme.colors.indigo[400],
-      backgroundColor: isDark ? "rgba(99, 102, 241, 0.16)" : "rgba(99, 102, 241, 0.09)",
+      backgroundColor: isDark ? withAlpha(theme.colors.indigo[500], 16) : withAlpha(theme.colors.indigo[500], 9),
     };
   }
   if (level >= 15) {
     return {
       label: "Gold League",
       color: theme.colors.amber[500],
-      backgroundColor: isDark ? "rgba(245, 158, 11, 0.15)" : "rgba(245, 158, 11, 0.11)",
+      backgroundColor: isDark ? withAlpha(theme.colors.amber[500], 15) : withAlpha(theme.colors.amber[500], 11),
     };
   }
   if (level >= 8) {
     return {
       label: "Silver League",
       color: theme.colors.cyan[400],
-      backgroundColor: isDark ? "rgba(34, 211, 238, 0.13)" : "rgba(8, 145, 178, 0.09)",
+      backgroundColor: isDark ? withAlpha(theme.colors.cyan[400], 13) : withAlpha(theme.colors.cyan[500], 9),
     };
   }
   if (level >= 3) {
@@ -549,7 +550,7 @@ function lifetimeLeagueForLevel(
   return {
     label: "Rookie League",
     color: theme.colors.textMuted,
-    backgroundColor: isDark ? "rgba(148, 163, 184, 0.08)" : "rgba(148, 163, 184, 0.12)",
+    backgroundColor: isDark ? withAlpha(theme.colors.textSecondary, 8) : withAlpha(theme.colors.textSecondary, 12),
   };
 }
 
@@ -1581,7 +1582,7 @@ export default function CompeteScreen() {
               styles.awaitingInvitePulse,
               {
                 borderColor: theme.colors.cyan[400],
-                backgroundColor: isDark ? "rgba(34, 211, 238, 0.05)" : "rgba(8, 145, 178, 0.04)",
+                backgroundColor: isDark ? withAlpha(theme.colors.cyan[400], 5) : withAlpha(theme.colors.cyan[500], 4),
               },
               awaitingInvitePulseStyle,
             ]}
@@ -1600,8 +1601,8 @@ export default function CompeteScreen() {
               style={[
                 styles.liveInviteTimerPill,
                 {
-                  backgroundColor: isDark ? "rgba(34, 211, 238, 0.1)" : "rgba(8, 145, 178, 0.08)",
-                  borderColor: isDark ? "rgba(34, 211, 238, 0.28)" : "rgba(8, 145, 178, 0.2)",
+                  backgroundColor: isDark ? withAlpha(theme.colors.cyan[400], 10) : withAlpha(theme.colors.cyan[500], 8),
+                  borderColor: isDark ? withAlpha(theme.colors.cyan[400], 28) : withAlpha(theme.colors.cyan[500], 20),
                 },
               ]}
             >
@@ -1699,8 +1700,8 @@ export default function CompeteScreen() {
         style={[
           styles.inviteGroupStreaksBtn,
           {
-            backgroundColor: isDark ? "rgba(245, 158, 11, 0.13)" : "rgba(245, 158, 11, 0.10)",
-            borderColor: isDark ? "rgba(245, 158, 11, 0.62)" : "rgba(217, 119, 6, 0.42)",
+            backgroundColor: isDark ? withAlpha(theme.colors.amber[500], 13) : withAlpha(theme.colors.amber[500], 10),
+            borderColor: isDark ? withAlpha(theme.colors.amber[500], 62) : withAlpha(theme.colors.amber[500], 42),
             shadowColor: theme.colors.amber[500],
           },
         ]}
@@ -1749,7 +1750,7 @@ export default function CompeteScreen() {
               styles.awaitingInvitePulse,
               {
                 borderColor: theme.colors.cyan[400],
-                backgroundColor: isDark ? "rgba(34, 211, 238, 0.05)" : "rgba(8, 145, 178, 0.04)",
+                backgroundColor: isDark ? withAlpha(theme.colors.cyan[400], 5) : withAlpha(theme.colors.cyan[500], 4),
               },
               awaitingInvitePulseStyle,
             ]}
@@ -1897,7 +1898,7 @@ export default function CompeteScreen() {
             style={[
               styles.challengesSubPill,
               challengesSubTab === "missions" && {
-                backgroundColor: isDark ? "rgba(99, 102, 241, 0.2)" : "rgba(79, 70, 229, 0.12)",
+                backgroundColor: isDark ? withAlpha(theme.colors.indigo[500], 20) : withAlpha(theme.colors.indigo[600], 12),
               },
             ]}
             onPress={() => setChallengesSubTab("missions")}
@@ -1921,7 +1922,7 @@ export default function CompeteScreen() {
             style={[
               styles.challengesSubPill,
               challengesSubTab === "invites" && {
-                backgroundColor: isDark ? "rgba(99, 102, 241, 0.2)" : "rgba(79, 70, 229, 0.12)",
+                backgroundColor: isDark ? withAlpha(theme.colors.indigo[500], 20) : withAlpha(theme.colors.indigo[600], 12),
               },
             ]}
             onPress={() => setChallengesSubTab("invites")}

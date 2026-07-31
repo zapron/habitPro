@@ -7,6 +7,7 @@ import {
 import type { AppTheme } from "../../styles/theme";
 import { weeklyTierProgressFraction } from "../../utils/profileStats";
 import { Flame } from "lucide-react-native";
+import { withAlpha } from "../../styles/theme";
 
 type Props = {
   theme: AppTheme;
@@ -28,7 +29,7 @@ export const ProfileWeeklyPulse = memo(function ProfileWeeklyPulse({
   miniCompletionsThisWeek,
 }: Props) {
   const { fraction, nextTierName } = weeklyTierProgressFraction(weeklyScore);
-  const track = isDark ? "rgba(255,255,255,0.08)" : "rgba(15,23,42,0.08)";
+  const track = isDark ? withAlpha(theme.colors.sheen, 8) : withAlpha(theme.colors.sheen, 8);
   const fill = theme.colors.indigo[500];
 
   return (
@@ -47,7 +48,7 @@ export const ProfileWeeklyPulse = memo(function ProfileWeeklyPulse({
           <Flame size={20} color={theme.colors.amber[500]} />
           <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>This week</Text>
         </View>
-        <Text style={[styles.scorePill, { color: theme.colors.indigo[400], backgroundColor: isDark ? "rgba(99,102,241,0.15)" : "rgba(79,70,229,0.1)" }]}>
+        <Text style={[styles.scorePill, { color: theme.colors.indigo[400], backgroundColor: isDark ? withAlpha(theme.colors.indigo[500], 15) : withAlpha(theme.colors.indigo[600], 10) }]}>
           {weeklyScore} pts
         </Text>
       </View>

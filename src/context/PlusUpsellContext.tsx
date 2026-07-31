@@ -20,6 +20,7 @@ import { useToast } from "./ToastContext";
 import { getPublicLinks } from "../lib/env";
 import { startCommunityTrial } from "../lib/communityAccessApi";
 import { useRefreshPremiumAccess } from "../hooks/useRefreshPremiumAccess";
+import { withAlpha } from "../styles/theme";
 
 export type PlusUpsellReason =
   | "generic"
@@ -531,8 +532,8 @@ function BillingUpsellModal({
           style={[
             styles.notice,
             {
-              backgroundColor: isDark ? "rgba(99, 102, 241, 0.12)" : "rgba(99, 102, 241, 0.07)",
-              borderColor: isDark ? "rgba(129, 140, 248, 0.28)" : "rgba(99, 102, 241, 0.16)",
+              backgroundColor: isDark ? withAlpha(theme.colors.indigo[500], 12) : withAlpha(theme.colors.indigo[500], 7),
+              borderColor: isDark ? withAlpha(theme.colors.indigo[400], 28) : withAlpha(theme.colors.indigo[500], 16),
             },
           ]}
         >
@@ -640,7 +641,7 @@ function BillingUpsellModal({
             styles.featuredPlan,
             {
               borderColor: theme.colors.indigo[500],
-              backgroundColor: isDark ? "rgba(99, 102, 241, 0.10)" : "rgba(99, 102, 241, 0.06)",
+              backgroundColor: isDark ? withAlpha(theme.colors.indigo[500], 10) : withAlpha(theme.colors.indigo[500], 6),
               marginTop: trialAvailable ? 14 : 10,
             },
           ]}

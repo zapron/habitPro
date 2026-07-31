@@ -17,6 +17,7 @@ import type {
 import type { ProfileLabel } from "../lib/groupChallengesApi";
 import { formatDateDisplay, formatDateTimeDisplay } from "../utils/dateDisplay";
 import { GlassTopHighlight } from "./GlassTopHighlight";
+import { withAlpha } from "../styles/theme";
 
 /** Calm header: indigo “Squad” + neutral “activity”. */
 function SquadActivityTitle({
@@ -272,11 +273,11 @@ export const SquadActivitySection = memo(function SquadActivitySection({
               styles.accordionTriggerMain,
               compact && styles.compactTriggerMain,
               {
-                backgroundColor: pressed ? (isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)") : "transparent",
+                backgroundColor: pressed ? (isDark ? withAlpha(theme.colors.sheen, 4) : withAlpha(theme.colors.sheen, 3)) : "transparent",
               },
             ]}
           >
-            <View style={[styles.headerIconWrap, compact && styles.compactHeaderIconWrap, { backgroundColor: isDark ? "rgba(129, 140, 248, 0.18)" : "rgba(99, 102, 241, 0.12)" }]}>
+            <View style={[styles.headerIconWrap, compact && styles.compactHeaderIconWrap, { backgroundColor: isDark ? withAlpha(theme.colors.indigo[400], 18) : withAlpha(theme.colors.indigo[500], 12) }]}>
               <Users size={compact ? theme.icon.sm : theme.icon.md} color={theme.colors.indigo[400]} strokeWidth={2.2} />
             </View>
             <View style={styles.headerText}>
@@ -349,7 +350,7 @@ export const SquadActivitySection = memo(function SquadActivitySection({
                   compact && styles.compactExpandIconButton,
                   compact && {
                     borderColor: theme.colors.border,
-                    backgroundColor: isDark ? "rgba(129, 140, 248, 0.12)" : "rgba(99, 102, 241, 0.08)",
+                    backgroundColor: isDark ? withAlpha(theme.colors.indigo[400], 12) : withAlpha(theme.colors.indigo[500], 8),
                   },
                   { opacity: pressed ? 0.75 : 1 },
                 ]}
@@ -386,7 +387,7 @@ export const SquadActivitySection = memo(function SquadActivitySection({
               styles.milestoneAccordion,
               {
                 borderColor: border,
-                backgroundColor: isDark ? "rgba(15, 23, 42, 0.16)" : "rgba(248, 250, 252, 0.8)",
+                backgroundColor: isDark ? withAlpha(theme.colors.slate[900], 16) : withAlpha(theme.colors.background, 80),
               },
             ]}
           >
@@ -399,9 +400,7 @@ export const SquadActivitySection = memo(function SquadActivitySection({
                 styles.milestoneAccordionTrigger,
                 {
                   backgroundColor: pressed
-                    ? isDark
-                      ? "rgba(255,255,255,0.04)"
-                      : "rgba(15,23,42,0.03)"
+                    ? isDark ? withAlpha(theme.colors.sheen, 4) : withAlpha(theme.colors.sheen, 3)
                     : "transparent",
                 },
               ]}
@@ -411,9 +410,7 @@ export const SquadActivitySection = memo(function SquadActivitySection({
                   style={[
                     styles.milestoneAccordionIcon,
                     {
-                      backgroundColor: isDark
-                        ? "rgba(34, 197, 94, 0.12)"
-                        : "rgba(22, 163, 74, 0.1)",
+                      backgroundColor: isDark ? withAlpha(theme.colors.green[500], 12) : withAlpha(theme.colors.green[600], 10),
                     },
                   ]}
                 >
@@ -452,12 +449,8 @@ export const SquadActivitySection = memo(function SquadActivitySection({
                   const alreadyCongratulated = congratsSentActivityIds?.has(row.id) === true;
                   const accent = isMission ? theme.colors.green[500] : theme.colors.cyan[400];
                   const tintBg = isMission
-                    ? isDark
-                      ? "rgba(34, 197, 94, 0.12)"
-                      : "rgba(22, 163, 74, 0.1)"
-                    : isDark
-                      ? "rgba(34, 211, 238, 0.12)"
-                      : "rgba(8, 145, 178, 0.1)";
+                    ? isDark ? withAlpha(theme.colors.green[500], 12) : withAlpha(theme.colors.green[600], 10)
+                    : isDark ? withAlpha(theme.colors.cyan[400], 12) : withAlpha(theme.colors.cyan[500], 10);
 
                   return (
                     <View
@@ -495,7 +488,7 @@ export const SquadActivitySection = memo(function SquadActivitySection({
                           style={({ pressed }) => [
                             styles.congratsPill,
                             {
-                              backgroundColor: isDark ? "rgba(129, 140, 248, 0.22)" : "rgba(99, 102, 241, 0.12)",
+                              backgroundColor: isDark ? withAlpha(theme.colors.indigo[400], 22) : withAlpha(theme.colors.indigo[500], 12),
                               opacity:
                                 pressed
                                   ? 0.85
@@ -547,7 +540,7 @@ export const SquadActivitySection = memo(function SquadActivitySection({
                   style={[
                     styles.nudgeIconWrap,
                     {
-                      backgroundColor: isDark ? "rgba(148, 163, 184, 0.12)" : "rgba(148, 163, 184, 0.12)",
+                      backgroundColor: isDark ? withAlpha(theme.colors.textSecondary, 12) : withAlpha(theme.colors.textSecondary, 12),
                     },
                   ]}
                 >
@@ -583,9 +576,7 @@ export const SquadActivitySection = memo(function SquadActivitySection({
               {
                 borderColor: border,
                 backgroundColor: pressed
-                  ? isDark
-                    ? "rgba(255,255,255,0.06)"
-                    : "rgba(0,0,0,0.04)"
+                  ? isDark ? withAlpha(theme.colors.sheen, 6) : withAlpha(theme.colors.sheen, 4)
                   : "transparent",
                 opacity: loadingMore ? 0.72 : 1,
               },

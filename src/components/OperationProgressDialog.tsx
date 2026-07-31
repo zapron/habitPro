@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, View } from "react-native";
 import { Check, Circle, XCircle } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "../context/ThemeContext";
+import { withAlpha } from "../styles/theme";
 
 export type OperationProgressStep = {
   label: string;
@@ -47,7 +48,7 @@ export function OperationProgressDialog({
         pointerEvents="none"
         style={[
           styles.backdrop,
-          { backgroundColor: isDark ? "rgba(0,0,0,0.62)" : "rgba(15,23,42,0.42)" },
+          { backgroundColor: isDark ? withAlpha(theme.colors.scrim, 62) : withAlpha(theme.colors.scrim, 42) },
         ]}
       />
       <View
@@ -84,9 +85,7 @@ export function OperationProgressDialog({
                 ? theme.colors.red[500]
                 : active
                   ? theme.colors.indigo[600]
-                  : isDark
-                    ? "rgba(148,163,184,0.12)"
-                    : "rgba(148,163,184,0.16)";
+                  : isDark ? withAlpha(theme.colors.textSecondary, 12) : withAlpha(theme.colors.textSecondary, 16);
             const iconColor =
               complete || failed || active ? theme.colors.white : theme.colors.textMuted;
             return (

@@ -29,6 +29,7 @@ import { formatDateDisplay } from "../utils/dateDisplay";
 import { playMemoryFormationHaptics } from "../utils/hapticFeedback";
 import { storageThumbnailUri } from "../utils/imageThumbnail";
 import { traceSync } from "../lib/jsThreadProbe";
+import { withAlpha } from "../styles/theme";
 
 type Entry = { dateStr: string; memory: StreakMemory; missionDay?: number | null };
 type HoneycombColumn = {
@@ -576,9 +577,7 @@ export function StreakMemoryGallery({
                         reduceMotion={reduceMotion}
                         frontStrokeColor={
                           isSquadRepair
-                            ? isDark
-                              ? "rgba(34, 211, 238, 0.58)"
-                              : "rgba(6, 182, 212, 0.42)"
+                            ? isDark ? withAlpha(theme.colors.cyan[400], 58) : withAlpha(theme.colors.cyan[500], 42)
                             : isDark
                               ? "rgba(255, 255, 255, 0.22)"
                               : "rgba(255, 255, 255, 0.72)"
@@ -624,9 +623,7 @@ export function StreakMemoryGallery({
                           fill="transparent"
                           stroke={
                             isSquadRepair
-                              ? isDark
-                                ? "rgba(34, 211, 238, 0.58)"
-                                : "rgba(6, 182, 212, 0.42)"
+                              ? isDark ? withAlpha(theme.colors.cyan[400], 58) : withAlpha(theme.colors.cyan[500], 42)
                               : showImage
                                 ? isDark
                                   ? "rgba(255, 255, 255, 0.22)"
@@ -647,7 +644,7 @@ export function StreakMemoryGallery({
                           style={[
                             styles.hexIconShell,
                             {
-                              backgroundColor: isDark ? "rgba(34, 211, 238, 0.16)" : "rgba(6, 182, 212, 0.13)",
+                              backgroundColor: isDark ? withAlpha(theme.colors.cyan[400], 16) : withAlpha(theme.colors.cyan[500], 13),
                               borderColor: isDark ? "rgba(125, 211, 252, 0.42)" : "rgba(6, 182, 212, 0.34)",
                             },
                           ]}
@@ -765,7 +762,7 @@ export function StreakMemoryGallery({
                         <View
                           style={[
                             styles.viewerPhotoMat,
-                            { width: viewerPhotoWidth, height: viewerPhotoHeight, backgroundColor: isDark ? "#070b16" : "#f8fafc" },
+                            { width: viewerPhotoWidth, height: viewerPhotoHeight, backgroundColor: theme.colors.background },
                           ]}
                         >
                           <Image source={{ uri: taskUri! }} style={styles.viewerImg} resizeMode="cover" />
@@ -816,7 +813,7 @@ export function StreakMemoryGallery({
                   {
                     width: viewerPhotoWidth,
                     height: viewerPhotoHeight,
-                    backgroundColor: isDark ? "#070b16" : "#f8fafc",
+                    backgroundColor: theme.colors.background,
                   },
                 ]}
               >

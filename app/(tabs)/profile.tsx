@@ -82,6 +82,7 @@ import { useRefreshPremiumAccess } from "../../src/hooks/useRefreshPremiumAccess
 import { formatDateTimeDisplay } from "../../src/utils/dateDisplay";
 import { XP_PER_LEVEL, levelFromTotalXp, xpInCurrentLevel } from "../../src/utils/xpLevel";
 import { showAppAlert } from "../../src/context/AppDialogContext";
+import { withAlpha } from "../../src/styles/theme";
 
 const EMPTY_HABITS: Habit[] = [];
 const EMPTY_MINI_MISSIONS: MiniMission[] = [];
@@ -709,7 +710,7 @@ function ModelScoreCard({
       <AnimatedScoreBar
         value={value}
         color={color}
-        trackColor={isDark ? "rgba(255,255,255,0.09)" : "rgba(15,23,42,0.08)"}
+        trackColor={isDark ? withAlpha(theme.colors.sheen, 9) : withAlpha(theme.colors.sheen, 8)}
       />
       <Text style={[styles.modelScoreDetail, { color: theme.colors.textSecondary }]} numberOfLines={2}>
         {detail}
@@ -741,7 +742,7 @@ function RawStatTile({
         styles.rawStatTile,
         wide && styles.rawStatTileWide,
         {
-          backgroundColor: isDark ? "rgba(255,255,255,0.035)" : "rgba(15,23,42,0.035)",
+          backgroundColor: isDark ? withAlpha(theme.colors.sheen, 3.5) : withAlpha(theme.colors.sheen, 3.5),
           borderColor: color + "3D",
         },
       ]}
@@ -849,7 +850,7 @@ function ProfileInfoSheet({
             style={[
               styles.infoFormulaBox,
               {
-                backgroundColor: isDark ? "rgba(99,102,241,0.13)" : "rgba(79,70,229,0.08)",
+                backgroundColor: isDark ? withAlpha(theme.colors.indigo[500], 13) : withAlpha(theme.colors.indigo[600], 8),
                 borderColor: theme.colors.border,
               },
             ]}
@@ -1447,8 +1448,8 @@ export default function ProfileScreen() {
                 style={[
                   styles.recoveryIcon,
                   {
-                    backgroundColor: isDark ? "rgba(34,197,94,0.14)" : "rgba(22,163,74,0.1)",
-                    borderColor: isDark ? "rgba(34,197,94,0.28)" : "rgba(22,163,74,0.18)",
+                    backgroundColor: isDark ? withAlpha(theme.colors.green[500], 14) : withAlpha(theme.colors.green[600], 10),
+                    borderColor: isDark ? withAlpha(theme.colors.green[500], 28) : withAlpha(theme.colors.green[600], 18),
                   },
                 ]}
               >
@@ -1553,8 +1554,8 @@ export default function ProfileScreen() {
                 style={[
                   styles.heroLevelPill,
                   {
-                    backgroundColor: isDark ? "rgba(99,102,241,0.14)" : "rgba(79,70,229,0.08)",
-                    borderColor: isDark ? "rgba(129,140,248,0.35)" : "rgba(99,102,241,0.24)",
+                    backgroundColor: isDark ? withAlpha(theme.colors.indigo[500], 14) : withAlpha(theme.colors.indigo[600], 8),
+                    borderColor: isDark ? withAlpha(theme.colors.indigo[400], 35) : withAlpha(theme.colors.indigo[500], 24),
                   },
                 ]}
               >
@@ -1565,8 +1566,8 @@ export default function ProfileScreen() {
                   style={[
                     styles.heroActivePill,
                     {
-                      backgroundColor: isDark ? "rgba(34,197,94,0.12)" : "rgba(22,163,74,0.08)",
-                      borderColor: isDark ? "rgba(34,197,94,0.28)" : "rgba(22,163,74,0.2)",
+                      backgroundColor: isDark ? withAlpha(theme.colors.green[500], 12) : withAlpha(theme.colors.green[600], 8),
+                      borderColor: isDark ? withAlpha(theme.colors.green[500], 28) : withAlpha(theme.colors.green[600], 20),
                     },
                   ]}
                 >
@@ -1578,8 +1579,8 @@ export default function ProfileScreen() {
                   style={[
                     styles.heroActivePill,
                     {
-                      backgroundColor: isDark ? "rgba(99,102,241,0.12)" : "rgba(79,70,229,0.08)",
-                      borderColor: isDark ? "rgba(129,140,248,0.28)" : "rgba(99,102,241,0.2)",
+                      backgroundColor: isDark ? withAlpha(theme.colors.indigo[500], 12) : withAlpha(theme.colors.indigo[600], 8),
+                      borderColor: isDark ? withAlpha(theme.colors.indigo[400], 28) : withAlpha(theme.colors.indigo[500], 20),
                     },
                   ]}
                 >
@@ -1594,7 +1595,7 @@ export default function ProfileScreen() {
                 {xpInLevel} / {XP_PER_LEVEL} <Text style={{ color: theme.colors.textMuted, fontWeight: "600" }}>XP this level</Text>
               </Text>
             </View>
-            <View style={[styles.heroXpTrack, { backgroundColor: isDark ? "rgba(255,255,255,0.09)" : "rgba(15,23,42,0.08)" }]}>
+            <View style={[styles.heroXpTrack, { backgroundColor: isDark ? withAlpha(theme.colors.sheen, 9) : withAlpha(theme.colors.sheen, 8) }]}>
               <View
                 style={[
                   styles.heroXpFill,
@@ -1686,12 +1687,12 @@ export default function ProfileScreen() {
                 {profileMath.tier.label}. {profileMath.tier.detail}
               </Text>
             </View>
-            <View style={[styles.scoreDial, { borderColor: theme.colors.border, backgroundColor: isDark ? "rgba(99,102,241,0.14)" : "rgba(79,70,229,0.08)" }]}>
+            <View style={[styles.scoreDial, { borderColor: theme.colors.border, backgroundColor: isDark ? withAlpha(theme.colors.indigo[500], 14) : withAlpha(theme.colors.indigo[600], 8) }]}>
               <Text style={[styles.scoreDialNumber, { color: theme.colors.textPrimary }]}>{profileMath.growthScore}</Text>
               <Text style={[styles.scoreDialUnit, { color: theme.colors.textMuted }]}>/100</Text>
             </View>
           </View>
-          <View style={[styles.progressTrack, { backgroundColor: isDark ? "rgba(255,255,255,0.09)" : "rgba(15,23,42,0.08)" }]}>
+          <View style={[styles.progressTrack, { backgroundColor: isDark ? withAlpha(theme.colors.sheen, 9) : withAlpha(theme.colors.sheen, 8) }]}>
             <View
               style={[
                 styles.progressFill,
@@ -1707,7 +1708,7 @@ export default function ProfileScreen() {
               ? "Built from consistency, follow through, momentum, recovery, reflection, focus, and social activity."
               : "Built from consistency, follow through, momentum, recovery, reflection, and focus."}
           </Text>
-          <View style={[styles.nextActionStrip, { backgroundColor: isDark ? "rgba(79,70,229,0.14)" : "rgba(79,70,229,0.08)", borderColor: theme.colors.border }]}>
+          <View style={[styles.nextActionStrip, { backgroundColor: isDark ? withAlpha(theme.colors.indigo[600], 14) : withAlpha(theme.colors.indigo[600], 8), borderColor: theme.colors.border }]}>
             <View style={styles.nextActionCopy}>
               <Text style={[styles.nextActionKicker, { color: theme.colors.indigo[400] }]}>TODAY'S BEST MOVE</Text>
               <Text style={[styles.nextActionTitle, { color: theme.colors.textPrimary }]} numberOfLines={1}>
@@ -1803,7 +1804,7 @@ export default function ProfileScreen() {
                     styles.microBar,
                     {
                       height: 8 + Math.min(point.count, 5) * 6,
-                      backgroundColor: point.count > 0 ? theme.colors.cyan[500] : (isDark ? "rgba(255,255,255,0.1)" : "rgba(15,23,42,0.1)"),
+                      backgroundColor: point.count > 0 ? theme.colors.cyan[500] : (isDark ? withAlpha(theme.colors.sheen, 10) : withAlpha(theme.colors.sheen, 10)),
                     },
                   ]}
                 />
@@ -1912,7 +1913,7 @@ export default function ProfileScreen() {
             accessibilityLabel="View all habits"
           >
             <View style={styles.commitmentMain}>
-              <View style={[styles.commitmentIcon, { backgroundColor: isDark ? "rgba(34,211,238,0.12)" : "rgba(8,145,178,0.1)" }]}>
+              <View style={[styles.commitmentIcon, { backgroundColor: isDark ? withAlpha(theme.colors.cyan[400], 12) : withAlpha(theme.colors.cyan[500], 10) }]}>
                 <Target size={16} color={theme.colors.cyan[400]} />
               </View>
               <View style={styles.commitmentCopy}>
@@ -1938,7 +1939,7 @@ export default function ProfileScreen() {
             accessibilityLabel="View all mini missions"
           >
             <View style={styles.commitmentMain}>
-              <View style={[styles.commitmentIcon, { backgroundColor: isDark ? "rgba(245,158,11,0.13)" : "rgba(245,158,11,0.1)" }]}>
+              <View style={[styles.commitmentIcon, { backgroundColor: isDark ? withAlpha(theme.colors.amber[500], 13) : withAlpha(theme.colors.amber[500], 10) }]}>
                 <Flame size={16} color={theme.colors.amber[500]} />
               </View>
               <View style={styles.commitmentCopy}>
@@ -1956,7 +1957,7 @@ export default function ProfileScreen() {
 
           <View style={styles.commitmentChipRow}>
             <TouchableOpacity
-              style={[styles.commitmentChip, { borderColor: theme.colors.border, backgroundColor: isDark ? "rgba(255,255,255,0.04)" : "rgba(15,23,42,0.04)" }]}
+              style={[styles.commitmentChip, { borderColor: theme.colors.border, backgroundColor: isDark ? withAlpha(theme.colors.sheen, 4) : withAlpha(theme.colors.sheen, 4) }]}
               onPress={profileIsPremium ? onHabitsPublicPress : onHabitsSoloPress}
               activeOpacity={0.85}
               accessibilityRole="button"
@@ -1974,7 +1975,7 @@ export default function ProfileScreen() {
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.commitmentChip, { borderColor: theme.colors.border, backgroundColor: isDark ? "rgba(255,255,255,0.04)" : "rgba(15,23,42,0.04)" }]}
+              style={[styles.commitmentChip, { borderColor: theme.colors.border, backgroundColor: isDark ? withAlpha(theme.colors.sheen, 4) : withAlpha(theme.colors.sheen, 4) }]}
               onPress={onMinisSoloPress}
               activeOpacity={0.85}
               accessibilityRole="button"

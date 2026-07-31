@@ -72,6 +72,7 @@ import { playerLeagueForLevel } from "../../src/utils/playerLeague";
 import { storageThumbnailUri } from "../../src/utils/imageThumbnail";
 import { avatarIdentityFor } from "../../src/utils/avatarIdentity";
 import type { AppTheme } from "../../src/styles/theme";
+import { withAlpha } from "../../src/styles/theme";
 
 type StoryTab = "missions" | "minis";
 
@@ -726,7 +727,7 @@ function MissionStoryCard({
     story.photoCount > 0
       ? `${proofCount} ${plural(proofCount, "photo", "photos")}`
       : `${proofCount} ${plural(proofCount, "moment", "moments")}`;
-  const metaPillBackground = isDark ? "rgba(15, 23, 42, 0.38)" : "rgba(248, 250, 252, 0.82)";
+  const metaPillBackground = isDark ? withAlpha(theme.colors.slate[900], 38) : withAlpha(theme.colors.background, 82);
 
   return (
     <Animated.View style={entranceStyle}>
@@ -1136,7 +1137,7 @@ function MissionGalleryModal({
               style={[
                 styles.loadMoreButton,
                 {
-                  borderColor: isDark ? "rgba(165, 180, 252, 0.42)" : "rgba(79, 70, 229, 0.2)",
+                  borderColor: isDark ? withAlpha(theme.colors.indigo[400], 42) : withAlpha(theme.colors.indigo[600], 20),
                   opacity: journeyLoadingMore ? 0.78 : 1,
                 },
               ]}
@@ -1725,7 +1726,7 @@ export default function CommunityPlayerStoryScreen() {
                   styles.levelPill,
                   {
                     borderColor: theme.colors.indigo[400],
-                    backgroundColor: isDark ? "rgba(99, 102, 241, 0.14)" : "rgba(99, 102, 241, 0.1)",
+                    backgroundColor: isDark ? withAlpha(theme.colors.indigo[500], 14) : withAlpha(theme.colors.indigo[500], 10),
                   },
                 ]}
               >
@@ -1891,7 +1892,7 @@ export default function CommunityPlayerStoryScreen() {
                   style={[
                     styles.loadMoreButton,
                     {
-                      borderColor: isDark ? "rgba(165, 180, 252, 0.42)" : "rgba(79, 70, 229, 0.2)",
+                      borderColor: isDark ? withAlpha(theme.colors.indigo[400], 42) : withAlpha(theme.colors.indigo[600], 20),
                       opacity: storyLoadingMore ? 0.78 : 1,
                     },
                   ]}
@@ -1929,7 +1930,7 @@ export default function CommunityPlayerStoryScreen() {
                     styles.storyEmptyIcon,
                     {
                       borderColor: "rgba(245, 158, 11, 0.32)",
-                      backgroundColor: isDark ? "rgba(245, 158, 11, 0.12)" : "rgba(245, 158, 11, 0.09)",
+                      backgroundColor: isDark ? withAlpha(theme.colors.amber[500], 12) : withAlpha(theme.colors.amber[500], 9),
                     },
                   ]}
                 >
@@ -1974,7 +1975,7 @@ export default function CommunityPlayerStoryScreen() {
                 style={[
                   styles.loadMoreButton,
                   {
-                    borderColor: isDark ? "rgba(165, 180, 252, 0.42)" : "rgba(79, 70, 229, 0.2)",
+                    borderColor: isDark ? withAlpha(theme.colors.indigo[400], 42) : withAlpha(theme.colors.indigo[600], 20),
                     opacity: storyLoadingMore ? 0.78 : 1,
                   },
                 ]}
@@ -2012,7 +2013,7 @@ export default function CommunityPlayerStoryScreen() {
                 styles.storyEmptyIcon,
                 {
                   borderColor: "rgba(34, 211, 238, 0.32)",
-                  backgroundColor: isDark ? "rgba(34, 211, 238, 0.12)" : "rgba(34, 211, 238, 0.09)",
+                  backgroundColor: isDark ? withAlpha(theme.colors.cyan[400], 12) : withAlpha(theme.colors.cyan[400], 9),
                 },
               ]}
             >

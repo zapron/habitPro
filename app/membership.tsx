@@ -26,6 +26,7 @@ import {
   storeDisplayName,
 } from "../src/lib/membershipFromCustomerInfo";
 import { backOrReplace } from "../src/lib/navigation";
+import { withAlpha } from "../src/styles/theme";
 
 function DetailRow({
   label,
@@ -225,7 +226,7 @@ export default function MembershipScreen() {
             ]}
           >
             <View style={styles.statusHead}>
-              <View style={[styles.crownWrap, { backgroundColor: isDark ? "rgba(99, 102, 241, 0.2)" : "rgba(79, 70, 229, 0.12)" }]}>
+              <View style={[styles.crownWrap, { backgroundColor: isDark ? withAlpha(theme.colors.indigo[500], 20) : withAlpha(theme.colors.indigo[600], 12) }]}>
                 <Crown size={22} color={theme.colors.indigo[400]} />
               </View>
               <View style={{ flex: 1, minWidth: 0 }}>
@@ -265,7 +266,7 @@ export default function MembershipScreen() {
               ]}
             >
               <View style={styles.statusHead}>
-                <View style={[styles.crownWrap, { backgroundColor: isDark ? "rgba(99, 102, 241, 0.2)" : "rgba(79, 70, 229, 0.12)" }]}>
+                <View style={[styles.crownWrap, { backgroundColor: isDark ? withAlpha(theme.colors.indigo[500], 20) : withAlpha(theme.colors.indigo[600], 12) }]}>
                   <Crown size={22} color={theme.colors.indigo[400]} />
                 </View>
                 <View style={{ flex: 1, minWidth: 0 }}>

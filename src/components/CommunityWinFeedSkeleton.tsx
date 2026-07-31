@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { View, StyleSheet, Animated, useWindowDimensions } from "react-native";
 import type { AppTheme } from "../styles/theme";
+import { withAlpha } from "../styles/theme";
 
 type RowProps = {
   theme: AppTheme;
@@ -22,7 +23,7 @@ export function CommunityWinFeedSkeletonRow({ theme, isDark }: RowProps) {
     return () => loop.stop();
   }, [pulse]);
 
-  const bone = isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.07)";
+  const bone = isDark ? withAlpha(theme.colors.sheen, 8) : withAlpha(theme.colors.sheen, 7);
   const boneBorder = theme.colors.border;
 
   return (

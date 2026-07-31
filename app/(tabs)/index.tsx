@@ -179,8 +179,8 @@ const MainMissionLegend = memo(function MainMissionLegend({
           style={[
             styles.legendPill,
             {
-              backgroundColor: isDark ? "rgba(148, 163, 184, 0.08)" : "rgba(148, 163, 184, 0.10)",
-              borderColor: isDark ? "rgba(148, 163, 184, 0.18)" : "rgba(148, 163, 184, 0.24)",
+              backgroundColor: isDark ? withAlpha(theme.colors.textSecondary, 8) : withAlpha(theme.colors.textSecondary, 10),
+              borderColor: isDark ? withAlpha(theme.colors.textSecondary, 18) : withAlpha(theme.colors.textSecondary, 24),
             },
           ]}
         >
@@ -233,7 +233,7 @@ const ShimmerTile = memo(function ShimmerTile({
 
   const shimmerAlpha = reduceMotion ? 0 : 1;
   // Light mode needs a darker sheen to be visible on light surfaces.
-  const sheen = isDark ? "rgba(255,255,255,0.3)" : "rgba(0,0,0,0.12)";
+  const sheen = isDark ? withAlpha(theme.colors.sheen, 30) : withAlpha(theme.colors.sheen, 12);
   const sheer = "rgba(255,255,255,0)";
   const trailingX = Animated.add(shimmerX, -Math.max(120, w * 0.5));
 
@@ -975,9 +975,7 @@ export default function Home() {
             style={[
               styles.xpTrack,
               {
-                backgroundColor: isDark
-                  ? "rgba(255,255,255,0.06)"
-                  : "rgba(0,0,0,0.06)",
+                backgroundColor: isDark ? withAlpha(theme.colors.sheen, 6) : withAlpha(theme.colors.sheen, 6),
               },
             ]}
             onLayout={(e) => setXpTrackWidth(e.nativeEvent.layout.width)}
@@ -1095,7 +1093,7 @@ export default function Home() {
             styles.miniBanner,
             {
               backgroundColor: theme.colors.surface,
-              borderColor: isDark ? "rgba(245, 158, 11, 0.3)" : "rgba(217, 119, 6, 0.25)",
+              borderColor: isDark ? withAlpha(theme.colors.amber[500], 30) : withAlpha(theme.colors.amber[500], 25),
               borderRadius: theme.radius.lg,
             },
           ]}

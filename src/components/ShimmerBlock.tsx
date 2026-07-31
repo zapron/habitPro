@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Animated, Easing, StyleProp, View, ViewStyle } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
+import { withAlpha, darkTheme, lightTheme } from "../styles/theme";
 
 type Props = {
   isDark: boolean;
@@ -43,7 +44,7 @@ export function ShimmerBlock({
   }, [reduceMotion, shimmerX, w]);
 
   const bg = baseColor ?? (isDark ? "rgba(255,255,255,0.06)" : "rgba(2,6,23,0.05)");
-  const sheen = isDark ? "rgba(255,255,255,0.22)" : "rgba(0,0,0,0.08)";
+  const sheen = isDark ? withAlpha(darkTheme.colors.sheen, 22) : withAlpha(lightTheme.colors.sheen, 8);
   const sheer = "rgba(255,255,255,0)";
 
   const shimmerWidthPct = useMemo(() => "55%" as const, []);

@@ -13,6 +13,7 @@ import { backOrReplace } from "../../src/lib/navigation";
 import { useNotificationGate } from "../../src/context/NotificationGateContext";
 import { showAppAlert } from "../../src/context/AppDialogContext";
 import type { MiniMissionCompletionMode, TaskChecklistItem } from "../../src/types/habit";
+import { withAlpha } from "../../src/styles/theme";
 
 type StartMode = "now" | "later";
 
@@ -412,7 +413,7 @@ export default function CreateMiniMission() {
               styles.finishOption,
               completionMode === "timer_check_in" && {
                 borderColor: theme.colors.green[500],
-                backgroundColor: isDark ? "rgba(34,197,94,0.12)" : "rgba(22,163,74,0.1)",
+                backgroundColor: isDark ? withAlpha(theme.colors.green[500], 12) : withAlpha(theme.colors.green[600], 10),
               },
             ]}
             onPress={() => setCompletionMode("timer_check_in")}
@@ -420,7 +421,7 @@ export default function CreateMiniMission() {
             accessibilityRole="button"
             accessibilityState={{ selected: completionMode === "timer_check_in" }}
           >
-            <View style={[styles.finishIcon, { backgroundColor: isDark ? "rgba(34,197,94,0.14)" : "rgba(22,163,74,0.12)" }]}>
+            <View style={[styles.finishIcon, { backgroundColor: isDark ? withAlpha(theme.colors.green[500], 14) : withAlpha(theme.colors.green[600], 12) }]}>
               <Clock3 size={17} color={theme.colors.green[500]} />
             </View>
             <View style={styles.finishText}>
@@ -432,7 +433,7 @@ export default function CreateMiniMission() {
                   style={[
                     styles.finishModeTag,
                     {
-                      backgroundColor: isDark ? "rgba(34,197,94,0.16)" : "rgba(22,163,74,0.11)",
+                      backgroundColor: isDark ? withAlpha(theme.colors.green[500], 16) : withAlpha(theme.colors.green[600], 11),
                       borderColor: theme.colors.green[500] + "66",
                     },
                   ]}
@@ -452,7 +453,7 @@ export default function CreateMiniMission() {
               styles.finishOption,
               completionMode === "manual" && {
                 borderColor: theme.colors.indigo[500],
-                backgroundColor: isDark ? "rgba(99,102,241,0.13)" : "rgba(99,102,241,0.1)",
+                backgroundColor: isDark ? withAlpha(theme.colors.indigo[500], 13) : withAlpha(theme.colors.indigo[500], 10),
               },
             ]}
             onPress={() => setCompletionMode("manual")}
@@ -460,7 +461,7 @@ export default function CreateMiniMission() {
             accessibilityRole="button"
             accessibilityState={{ selected: completionMode === "manual" }}
           >
-            <View style={[styles.finishIcon, { backgroundColor: isDark ? "rgba(99,102,241,0.16)" : "rgba(99,102,241,0.12)" }]}>
+            <View style={[styles.finishIcon, { backgroundColor: isDark ? withAlpha(theme.colors.indigo[500], 16) : withAlpha(theme.colors.indigo[500], 12) }]}>
               <Plane size={17} color={theme.colors.indigo[400]} />
             </View>
             <View style={styles.finishText}>
@@ -472,7 +473,7 @@ export default function CreateMiniMission() {
                   style={[
                     styles.finishModeTag,
                     {
-                      backgroundColor: isDark ? "rgba(99,102,241,0.17)" : "rgba(79,70,229,0.1)",
+                      backgroundColor: isDark ? withAlpha(theme.colors.indigo[500], 17) : withAlpha(theme.colors.indigo[600], 10),
                       borderColor: theme.colors.indigo[400] + "66",
                     },
                   ]}

@@ -29,6 +29,7 @@ import * as Haptics from "expo-haptics";
 import { useTheme } from "../context/ThemeContext";
 import type { StreakMemory } from "../types/habit";
 import { showAppAlert } from "../context/AppDialogContext";
+import { withAlpha } from "../styles/theme";
 
 const IOS_PICKER_PRESENT_DELAY_MS = 360;
 
@@ -427,7 +428,7 @@ export const StreakMemorySheet = React.memo(function StreakMemorySheet({
         if (!submitting) handleDismiss();
       }}
     >
-      <View style={[styles.backdrop, { backgroundColor: isDark ? "rgba(0,0,0,0.72)" : "rgba(15,23,42,0.55)" }]}>
+      <View style={[styles.backdrop, { backgroundColor: isDark ? withAlpha(theme.colors.scrim, 72) : withAlpha(theme.colors.scrim, 55) }]}>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Dismiss"
@@ -470,8 +471,8 @@ export const StreakMemorySheet = React.memo(function StreakMemorySheet({
                     isView
                       ? { backgroundColor: `${theme.colors.indigo[600]}33`, borderColor: theme.colors.indigo[500] }
                       : {
-                          backgroundColor: isDark ? "rgba(34, 197, 94, 0.14)" : "rgba(22, 163, 74, 0.12)",
-                          borderColor: isDark ? "rgba(34, 197, 94, 0.45)" : "rgba(22, 163, 74, 0.35)",
+                          backgroundColor: isDark ? withAlpha(theme.colors.green[500], 14) : withAlpha(theme.colors.green[600], 12),
+                          borderColor: isDark ? withAlpha(theme.colors.green[500], 45) : withAlpha(theme.colors.green[600], 35),
                         },
                   ]}
                 >
@@ -520,7 +521,7 @@ export const StreakMemorySheet = React.memo(function StreakMemorySheet({
                           styles.textOnlyMemoryCard,
                           {
                             borderColor: theme.colors.border,
-                            backgroundColor: isDark ? "rgba(79, 70, 229, 0.12)" : "rgba(79, 70, 229, 0.07)",
+                            backgroundColor: isDark ? withAlpha(theme.colors.indigo[600], 12) : withAlpha(theme.colors.indigo[600], 7),
                             borderLeftColor: theme.colors.indigo[500],
                             ...theme.shadow.card,
                           },
@@ -557,7 +558,7 @@ export const StreakMemorySheet = React.memo(function StreakMemorySheet({
                           styles.checkInOnlyCard,
                           {
                             borderColor: theme.colors.border,
-                            backgroundColor: isDark ? "rgba(148, 163, 184, 0.1)" : "rgba(100, 116, 139, 0.08)",
+                            backgroundColor: isDark ? withAlpha(theme.colors.textSecondary, 10) : withAlpha(theme.colors.textMuted, 8),
                           },
                         ]}
                       >
@@ -610,7 +611,7 @@ export const StreakMemorySheet = React.memo(function StreakMemorySheet({
                               styles.checkInOnlyCard,
                               {
                                 borderColor: theme.colors.border,
-                                backgroundColor: isDark ? "rgba(148, 163, 184, 0.1)" : "rgba(100, 116, 139, 0.08)",
+                                backgroundColor: isDark ? withAlpha(theme.colors.textSecondary, 10) : withAlpha(theme.colors.textMuted, 8),
                               },
                             ]}
                           >
@@ -768,9 +769,7 @@ export const StreakMemorySheet = React.memo(function StreakMemorySheet({
                         styles.immutableNotice,
                         styles.immutableNoticeMemory,
                         {
-                          backgroundColor: isDark
-                            ? "rgba(245, 158, 11, 0.1)"
-                            : "rgba(251, 191, 36, 0.14)",
+                          backgroundColor: isDark ? withAlpha(theme.colors.amber[500], 10) : withAlpha(theme.colors.yellow[400], 14),
                         },
                       ]}
                     >
@@ -1078,7 +1077,7 @@ export const StreakMemorySheet = React.memo(function StreakMemorySheet({
                   style={[
                     styles.submittingOverlay,
                     {
-                      backgroundColor: isDark ? "rgba(0, 0, 0, 0.52)" : "rgba(248, 250, 252, 0.94)",
+                      backgroundColor: isDark ? withAlpha(theme.colors.background, 52) : withAlpha(theme.colors.background, 94),
                     },
                   ]}
                 >

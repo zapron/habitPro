@@ -25,6 +25,7 @@ import { formatCompletedAt, formatRelativeTime } from "../../src/lib/communityWi
 import { fetchCommunityWinMoment, toggleCheer, type CommunityWinFeedItem } from "../../src/lib/communityWinsApi";
 import { backOrReplace } from "../../src/lib/navigation";
 import { storageThumbnailUri } from "../../src/utils/imageThumbnail";
+import { withAlpha } from "../../src/styles/theme";
 
 function paramString(value: string | string[] | undefined): string {
   if (Array.isArray(value)) return value[0] ?? "";
@@ -185,7 +186,7 @@ export default function JourneyMomentScreen() {
   const cardBg = theme.colors.surface;
   const muted = theme.colors.textSecondary;
   const border = theme.colors.border;
-  const mediaBg = isDark ? "rgba(15, 23, 42, 0.88)" : "rgba(241, 245, 249, 0.95)";
+  const mediaBg = isDark ? withAlpha(theme.colors.slate[900], 88) : withAlpha(theme.colors.surfaceElevated, 95);
 
   if (loading && !moment) {
     return (
@@ -274,7 +275,7 @@ export default function JourneyMomentScreen() {
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={[styles.contextCard, { backgroundColor: cardBg, borderColor: border }]}>
-          <View style={[styles.avatar, { backgroundColor: isDark ? "rgba(99, 102, 241, 0.18)" : "rgba(99, 102, 241, 0.1)" }]}>
+          <View style={[styles.avatar, { backgroundColor: isDark ? withAlpha(theme.colors.indigo[500], 18) : withAlpha(theme.colors.indigo[500], 10) }]}>
             <User size={21} color={theme.colors.indigo[500]} />
           </View>
           <View style={styles.contextCopy}>
@@ -285,7 +286,7 @@ export default function JourneyMomentScreen() {
               {momentKicker(moment)}
             </Text>
           </View>
-          <View style={[styles.publicPill, { backgroundColor: isDark ? "rgba(6, 182, 212, 0.14)" : "rgba(6, 182, 212, 0.1)" }]}>
+          <View style={[styles.publicPill, { backgroundColor: isDark ? withAlpha(theme.colors.cyan[500], 14) : withAlpha(theme.colors.cyan[500], 10) }]}>
             <Globe size={14} color={theme.colors.cyan[500]} />
             <Text style={[styles.publicPillText, { color: theme.colors.cyan[500] }]}>Public</Text>
           </View>
@@ -333,9 +334,7 @@ export default function JourneyMomentScreen() {
                 {
                   backgroundColor: moment.viewerHasCheered
                     ? "rgba(79, 70, 229, 0.9)"
-                    : isDark
-                      ? "rgba(15, 23, 42, 0.82)"
-                      : "rgba(15, 23, 42, 0.72)",
+                    : isDark ? withAlpha(theme.colors.scrim, 82) : withAlpha(theme.colors.scrim, 72),
                 },
               ]}
               onPress={isOwnMoment ? (moment.cheerCount > 0 ? () => setCheerersOpen(true) : undefined) : handleToggleCheer}

@@ -100,6 +100,7 @@ import { getMyStreakRepairStatusForDay } from "../../src/lib/streakRepairApi";
 import { requestRemoteSync } from "../../src/lib/syncQueue";
 import { startJsStallProbe, traceSync } from "../../src/lib/jsThreadProbe";
 import { waitForHabitPersistIdle } from "../../src/lib/chunkedHabitPersistStorage";
+import { withAlpha } from "../../src/styles/theme";
 
 const LOCKED_CHECKIN_MSG =
     'You can only check in for the current mission day. Each day unlocks 24 hours after the mission started (day 2 after the first 24 hours, and so on).';
@@ -207,7 +208,7 @@ const HabitGridBrandRing = React.memo(function HabitGridBrandRing({
     const innerCirc = 2 * Math.PI * innerR;
     const current = variant === 'current';
     const strokeOpacity = current ? 0.72 : 1;
-    const track = isDark ? 'rgba(148, 163, 184, 0.24)' : 'rgba(100, 116, 139, 0.18)';
+    const track = isDark ? withAlpha(theme.colors.textSecondary, 24) : withAlpha(theme.colors.textMuted, 18);
 
     return (
         <View style={styles.brandRingWrap}>
@@ -437,7 +438,7 @@ const AnimatedDayCell = React.memo(function AnimatedDayCell({
             ? [
                 styles.dayButtonCompleted,
                 {
-                    backgroundColor: isDark ? 'rgba(79, 70, 229, 0.12)' : 'rgba(99, 102, 241, 0.08)',
+                    backgroundColor: isDark ? withAlpha(theme.colors.indigo[600], 12) : withAlpha(theme.colors.indigo[500], 8),
                     borderColor: isMilestone ? theme.colors.amber[500] : theme.colors.indigo[500],
                     ...(optimizeForScroll ? {} : theme.shadow.glow),
                 },
@@ -2116,8 +2117,8 @@ export default function HabitDetail() {
                                 styles.missionControlIcon,
                                 {
                                     backgroundColor: reminderLockedTime
-                                        ? isDark ? "rgba(99, 102, 241, 0.14)" : "rgba(99, 102, 241, 0.10)"
-                                        : isDark ? "rgba(245, 158, 11, 0.14)" : "rgba(245, 158, 11, 0.12)",
+                                        ? isDark ? withAlpha(theme.colors.indigo[500], 14) : withAlpha(theme.colors.indigo[500], 10)
+                                        : isDark ? withAlpha(theme.colors.amber[500], 14) : withAlpha(theme.colors.amber[500], 12),
                                 },
                             ]}
                         >
@@ -2163,8 +2164,8 @@ export default function HabitDetail() {
                                 styles.missionControlIcon,
                                 {
                                     backgroundColor: missionVisibilityIsPublic
-                                        ? isDark ? "rgba(34, 211, 238, 0.12)" : "rgba(6, 182, 212, 0.10)"
-                                        : isDark ? "rgba(99, 102, 241, 0.14)" : "rgba(99, 102, 241, 0.10)",
+                                        ? isDark ? withAlpha(theme.colors.cyan[400], 12) : withAlpha(theme.colors.cyan[500], 10)
+                                        : isDark ? withAlpha(theme.colors.indigo[500], 14) : withAlpha(theme.colors.indigo[500], 10),
                                 },
                             ]}
                         >
@@ -2230,12 +2231,8 @@ export default function HabitDetail() {
                     style={[
                       styles.repairBanner,
                       {
-                        borderColor: isDark
-                          ? "rgba(245, 158, 11, 0.35)"
-                          : "rgba(217, 119, 6, 0.25)",
-                        backgroundColor: isDark
-                          ? "rgba(245, 158, 11, 0.10)"
-                          : "rgba(245, 158, 11, 0.08)",
+                        borderColor: isDark ? withAlpha(theme.colors.amber[500], 35) : withAlpha(theme.colors.amber[500], 25),
+                        backgroundColor: isDark ? withAlpha(theme.colors.amber[500], 10) : withAlpha(theme.colors.amber[500], 8),
                       },
                     ]}
                   >
@@ -2298,7 +2295,7 @@ export default function HabitDetail() {
                         <Pressable
                             style={[
                                 styles.backdrop,
-                                { backgroundColor: isDark ? "rgba(0,0,0,0.55)" : "rgba(0,0,0,0.28)" },
+                                { backgroundColor: isDark ? withAlpha(theme.colors.scrim, 55) : withAlpha(theme.colors.scrim, 28) },
                             ]}
                             onPress={() => setReminderEditorOpen(false)}
                         >
@@ -2401,7 +2398,7 @@ export default function HabitDetail() {
                                 styles.unlockPill,
                                 {
                                     borderColor: theme.colors.border,
-                                    backgroundColor: isDark ? 'rgba(34, 211, 238, 0.10)' : 'rgba(6, 182, 212, 0.08)',
+                                    backgroundColor: isDark ? withAlpha(theme.colors.cyan[400], 10) : withAlpha(theme.colors.cyan[500], 8),
                                 },
                             ]}
                         >

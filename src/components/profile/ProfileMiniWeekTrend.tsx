@@ -9,6 +9,7 @@ import Svg, { Rect } from "react-native-svg";
 import type { AppTheme } from "../../styles/theme";
 import type { MiniWeekBucket } from "../../utils/profileStats";
 import { Flame } from "lucide-react-native";
+import { withAlpha } from "../../styles/theme";
 
 const CHART_HEIGHT = 96;
 /** Screen horizontal padding (theme.spacing.sm×2) + card padding + small inset so SVG never clips card edges. */
@@ -27,7 +28,7 @@ export const ProfileMiniWeekTrend = memo(function ProfileMiniWeekTrend({ theme, 
   const maxCount = useMemo(() => Math.max(1, ...buckets.map((b) => b.count)), [buckets]);
   const hasAny = buckets.some((b) => b.count > 0);
   const barColor = theme.colors.amber[500];
-  const mutedBar = isDark ? "rgba(255,255,255,0.12)" : "rgba(15,23,42,0.1)";
+  const mutedBar = isDark ? withAlpha(theme.colors.sheen, 12) : withAlpha(theme.colors.sheen, 10);
   const n = buckets.length;
   const gap = 8;
   const pad = 4;

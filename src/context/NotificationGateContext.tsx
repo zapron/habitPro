@@ -16,6 +16,7 @@ import {
 import * as Linking from "expo-linking";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAuth } from "./AuthContext";
+import { withAlpha } from "../styles/theme";
 
 export type NotificationGateReason =
   | "mini_timer"
@@ -163,7 +164,7 @@ function NotificationPermissionSheet({
   }, [backdropOp, reduceMotion, sheetOp, sheetY]);
 
   const accent = theme.colors.indigo[500];
-  const accentSoft = isDark ? "rgba(99, 102, 241, 0.22)" : "rgba(79, 70, 229, 0.12)";
+  const accentSoft = isDark ? withAlpha(theme.colors.indigo[500], 22) : withAlpha(theme.colors.indigo[600], 12);
 
   return (
     <View style={styles.modalRoot} pointerEvents="box-none">
@@ -173,7 +174,7 @@ function NotificationPermissionSheet({
           styles.backdrop,
           {
             opacity: backdropOp,
-            backgroundColor: isDark ? "rgba(0,0,0,0.62)" : "rgba(15,23,42,0.45)",
+            backgroundColor: isDark ? withAlpha(theme.colors.scrim, 62) : withAlpha(theme.colors.scrim, 45),
           },
         ]}
       >

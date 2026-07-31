@@ -71,6 +71,7 @@ import { getJourneyMiniGridLayout } from "../src/utils/journeyMiniGrid";
 import { levelFromTotalXp, xpInCurrentLevel } from "../src/utils/xpLevel";
 import { playerLeagueForLevel } from "../src/utils/playerLeague";
 import { storageThumbnailUri } from "../src/utils/imageThumbnail";
+import { withAlpha } from "../src/styles/theme";
 
 type StoryTab = "missions" | "minis";
 type JourneyMode = "public" | "private";
@@ -921,12 +922,10 @@ const MissionStoryCard = memo(function MissionStoryCard({
     story.photoCount > 0
       ? `${proofCount} ${plural(proofCount, "photo", "photos")}`
       : `${proofCount} ${plural(proofCount, "moment", "moments")}`;
-  const metaPillBackground = isDark ? "rgba(15, 23, 42, 0.38)" : "rgba(248, 250, 252, 0.82)";
+  const metaPillBackground = isDark ? withAlpha(theme.colors.slate[900], 38) : withAlpha(theme.colors.background, 82);
   const latestIsSquadSave = isSquadSavedPost(latest);
   const textOnlyBg = latestIsSquadSave
-    ? isDark
-      ? "rgba(8, 145, 178, 0.16)"
-      : "rgba(8, 145, 178, 0.1)"
+    ? isDark ? withAlpha(theme.colors.cyan[500], 16) : withAlpha(theme.colors.cyan[500], 10)
     : theme.colors.surfaceElevated;
   const textOnlyBorder = latestIsSquadSave ? theme.colors.cyan[500] : theme.colors.border;
 
@@ -1052,12 +1051,8 @@ const MiniPostCard = memo(function MiniPostCard({
   const showPublicBadge = journeyMode === "private" && !isPrivate;
   const showLikeBadge = !isPrivate;
   const textOnlyBg = isSquadSave
-    ? isDark
-      ? "rgba(8, 145, 178, 0.16)"
-      : "rgba(8, 145, 178, 0.1)"
-    : isDark
-      ? "rgba(99,102,241,0.14)"
-      : "rgba(99,102,241,0.1)";
+    ? isDark ? withAlpha(theme.colors.cyan[500], 16) : withAlpha(theme.colors.cyan[500], 10)
+    : isDark ? withAlpha(theme.colors.indigo[500], 14) : withAlpha(theme.colors.indigo[500], 10);
 
   return (
     <Animated.View
@@ -2092,7 +2087,7 @@ export default function MyJourneyScreen() {
           style={[
             styles.loadMoreButton,
             {
-              borderColor: isDark ? "rgba(165, 180, 252, 0.42)" : "rgba(79, 70, 229, 0.2)",
+              borderColor: isDark ? withAlpha(theme.colors.indigo[400], 42) : withAlpha(theme.colors.indigo[600], 20),
               opacity: loadingMoreHistory ? 0.78 : 1,
             },
           ]}

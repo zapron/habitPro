@@ -18,6 +18,7 @@ import { useTheme } from "../context/ThemeContext";
 import { formatRelativeTime } from "../lib/communityWinFeedFormat";
 import { listCommunityWinCheerers, type CommunityWinCheerer } from "../lib/communityWinsApi";
 import { levelFromTotalXp } from "../utils/xpLevel";
+import { withAlpha } from "../styles/theme";
 
 function initialsFromUsername(username: string | null): string {
   if (!username || !username.trim()) return "?";
@@ -48,8 +49,8 @@ export function CommunityWinCheerersModal({ visible, winId, totalLikes, onClose 
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
   const { theme, isDark } = useTheme();
-  const levelPillBg = isDark ? "rgba(99, 102, 241, 0.14)" : "rgba(79, 70, 229, 0.08)";
-  const levelPillBorder = isDark ? "rgba(129, 140, 248, 0.35)" : "rgba(99, 102, 241, 0.28)";
+  const levelPillBg = isDark ? withAlpha(theme.colors.indigo[500], 14) : withAlpha(theme.colors.indigo[600], 8);
+  const levelPillBorder = isDark ? withAlpha(theme.colors.indigo[400], 35) : withAlpha(theme.colors.indigo[500], 28);
   const [loading, setLoading] = useState(false);
   const [items, setItems] = useState<CommunityWinCheerer[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -144,7 +145,7 @@ export function CommunityWinCheerersModal({ visible, winId, totalLikes, onClose 
           style={[
             StyleSheet.absoluteFillObject,
             {
-              backgroundColor: isDark ? "rgba(0,0,0,0.45)" : "rgba(0,0,0,0.22)",
+              backgroundColor: isDark ? withAlpha(theme.colors.scrim, 45) : withAlpha(theme.colors.scrim, 22),
             },
           ]}
           onPress={onClose}

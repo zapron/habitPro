@@ -13,6 +13,7 @@ import {
 import { Alert as NativeAlert, Modal, Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "./ThemeContext";
+import { withAlpha } from "../styles/theme";
 
 export type AppDialogButton = {
   text: string;
@@ -109,7 +110,7 @@ export function AppDialogProvider({ children }: { children: ReactNode }) {
             <Pressable
               style={[
                 styles.backdrop,
-                { backgroundColor: isDark ? "rgba(0,0,0,0.62)" : "rgba(15,23,42,0.38)" },
+                { backgroundColor: isDark ? withAlpha(theme.colors.scrim, 62) : withAlpha(theme.colors.scrim, 38) },
               ]}
               onPress={canDismiss ? dismiss : undefined}
               accessibilityRole={canDismiss ? "button" : undefined}

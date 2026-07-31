@@ -39,6 +39,7 @@ import { levelFromTotalXp } from "../utils/xpLevel";
 import { playerLeagueForLevel } from "../utils/playerLeague";
 import { storageThumbnailUri } from "../utils/imageThumbnail";
 import { avatarIdentityFor } from "../utils/avatarIdentity";
+import { withAlpha } from "../styles/theme";
 
 function initialsFromDisplay(name: string): string {
   const trimmed = name.replace(/^@/, "").trim();
@@ -408,7 +409,7 @@ export const CommunityWinFeedPost = memo(function CommunityWinFeedPost({
 
   const tileBorder = useMemo(
     () => ({
-      borderColor: isDark ? "rgba(148, 163, 184, 0.2)" : "rgba(148, 163, 184, 0.34)",
+      borderColor: isDark ? withAlpha(theme.colors.textSecondary, 20) : withAlpha(theme.colors.textSecondary, 34),
       backgroundColor: isDark ? "rgba(15, 23, 42, 0.96)" : theme.colors.background,
     }),
     [isDark, theme.colors.background],
@@ -476,7 +477,7 @@ export const CommunityWinFeedPost = memo(function CommunityWinFeedPost({
               styles.liveSquadPhotoBadge,
               {
                 backgroundColor: isDark ? "rgba(8, 47, 73, 0.88)" : "rgba(236, 254, 255, 0.94)",
-                borderColor: isDark ? "rgba(34, 211, 238, 0.42)" : "rgba(6, 182, 212, 0.28)",
+                borderColor: isDark ? withAlpha(theme.colors.cyan[400], 42) : withAlpha(theme.colors.cyan[500], 28),
               },
             ]}
           >
@@ -492,7 +493,7 @@ export const CommunityWinFeedPost = memo(function CommunityWinFeedPost({
             styles.galleryCountBadge,
             {
               backgroundColor: isDark ? "rgba(15, 23, 42, 0.82)" : "rgba(255, 255, 255, 0.92)",
-              borderColor: isDark ? "rgba(255,255,255,0.22)" : "rgba(15, 23, 42, 0.14)",
+              borderColor: isDark ? withAlpha(theme.colors.sheen, 22) : withAlpha(theme.colors.sheen, 14),
             },
           ]}
         >
@@ -545,7 +546,7 @@ export const CommunityWinFeedPost = memo(function CommunityWinFeedPost({
               styles.liveSquadPhotoBadge,
               {
                 backgroundColor: isDark ? "rgba(8, 47, 73, 0.88)" : "rgba(236, 254, 255, 0.94)",
-                borderColor: isDark ? "rgba(34, 211, 238, 0.42)" : "rgba(6, 182, 212, 0.28)",
+                borderColor: isDark ? withAlpha(theme.colors.cyan[400], 42) : withAlpha(theme.colors.cyan[500], 28),
               },
             ]}
           >
@@ -567,7 +568,7 @@ export const CommunityWinFeedPost = memo(function CommunityWinFeedPost({
         isOwn ? "No photo on your win" : !canCheer ? "No photo. Cheering is HabitPro Community." : "Double-tap to cheer"
       }
     >
-      <View style={[photoFrameStyle, styles.photoPlaceholder, { backgroundColor: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)" }]}>
+      <View style={[photoFrameStyle, styles.photoPlaceholder, { backgroundColor: isDark ? withAlpha(theme.colors.sheen, 6) : withAlpha(theme.colors.sheen, 6) }]}>
         <Camera size={36} color={theme.colors.textMuted} strokeWidth={1.8} />
       </View>
     </Pressable>
@@ -589,8 +590,8 @@ export const CommunityWinFeedPost = memo(function CommunityWinFeedPost({
           style={[
             styles.streakBanner,
             {
-              borderLeftColor: isDark ? "rgba(34, 211, 238, 0.82)" : "rgba(6, 182, 212, 0.72)",
-              borderBottomColor: isDark ? "rgba(34, 211, 238, 0.14)" : "rgba(245, 158, 11, 0.14)",
+              borderLeftColor: isDark ? withAlpha(theme.colors.cyan[400], 82) : withAlpha(theme.colors.cyan[500], 72),
+              borderBottomColor: isDark ? withAlpha(theme.colors.cyan[400], 14) : withAlpha(theme.colors.amber[500], 14),
             },
             isFeed ? styles.padHFeed : styles.padCardInner,
           ]}
@@ -612,7 +613,7 @@ export const CommunityWinFeedPost = memo(function CommunityWinFeedPost({
                   styles.streakDayPill,
                   {
                     backgroundColor: isDark ? "rgba(15, 23, 42, 0.58)" : "rgba(255, 255, 255, 0.76)",
-                    borderColor: isDark ? "rgba(34, 211, 238, 0.28)" : "rgba(79, 70, 229, 0.2)",
+                    borderColor: isDark ? withAlpha(theme.colors.cyan[400], 28) : withAlpha(theme.colors.indigo[600], 20),
                   },
                 ]}
               >
@@ -646,8 +647,8 @@ export const CommunityWinFeedPost = memo(function CommunityWinFeedPost({
           style={[
             styles.miniMissionBanner,
             {
-              borderLeftColor: isDark ? "rgba(34, 211, 238, 0.82)" : "rgba(6, 182, 212, 0.72)",
-              borderBottomColor: isDark ? "rgba(34, 211, 238, 0.14)" : "rgba(99, 102, 241, 0.14)",
+              borderLeftColor: isDark ? withAlpha(theme.colors.cyan[400], 82) : withAlpha(theme.colors.cyan[500], 72),
+              borderBottomColor: isDark ? withAlpha(theme.colors.cyan[400], 14) : withAlpha(theme.colors.indigo[500], 14),
             },
             isFeed ? styles.padHFeed : styles.padCardInner,
           ]}
@@ -761,13 +762,9 @@ export const CommunityWinFeedPost = memo(function CommunityWinFeedPost({
                   {
                     borderColor: expanded
                       ? theme.colors.indigo[400]
-                      : isDark
-                        ? "rgba(165, 180, 252, 0.38)"
-                        : "rgba(79, 70, 229, 0.32)",
+                      : isDark ? withAlpha(theme.colors.indigo[400], 38) : withAlpha(theme.colors.indigo[600], 32),
                     backgroundColor: expanded
-                      ? isDark
-                        ? "rgba(99, 102, 241, 0.14)"
-                        : "rgba(79, 70, 229, 0.08)"
+                      ? isDark ? withAlpha(theme.colors.indigo[500], 14) : withAlpha(theme.colors.indigo[600], 8)
                       : "transparent",
                     opacity: pressed ? 0.82 : 1,
                   },

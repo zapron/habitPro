@@ -55,6 +55,7 @@ import type {
 import { formatDateTimeDisplay } from "../../src/utils/dateDisplay";
 import { storageThumbnailUri } from "../../src/utils/imageThumbnail";
 import { levelFromTotalXp } from "../../src/utils/xpLevel";
+import { withAlpha } from "../../src/styles/theme";
 
 const QUICK_MINUTES = [
   { label: "5m", minutes: 5 },
@@ -157,18 +158,18 @@ function statusCopy(status: LiveMiniParticipantStatus): string {
 
 function statusTone(status: LiveMiniParticipantStatus, theme: ReturnType<typeof useTheme>["theme"], isDark: boolean) {
   if (status === "completed") {
-    return { fg: theme.colors.green[500], bg: isDark ? "rgba(34,197,94,0.14)" : "rgba(22,163,74,0.1)" };
+    return { fg: theme.colors.green[500], bg: isDark ? withAlpha(theme.colors.green[500], 14) : withAlpha(theme.colors.green[600], 10) };
   }
   if (status === "in_progress") {
-    return { fg: theme.colors.cyan[400], bg: isDark ? "rgba(34,211,238,0.13)" : "rgba(8,145,178,0.1)" };
+    return { fg: theme.colors.cyan[400], bg: isDark ? withAlpha(theme.colors.cyan[400], 13) : withAlpha(theme.colors.cyan[500], 10) };
   }
   if (status === "expired") {
-    return { fg: theme.colors.textMuted, bg: isDark ? "rgba(148,163,184,0.12)" : "rgba(100,116,139,0.08)" };
+    return { fg: theme.colors.textMuted, bg: isDark ? withAlpha(theme.colors.textSecondary, 12) : withAlpha(theme.colors.textMuted, 8) };
   }
   if (status === "missed" || status === "cancelled" || status === "declined") {
-    return { fg: theme.colors.red[500], bg: isDark ? "rgba(239,68,68,0.12)" : "rgba(220,38,38,0.08)" };
+    return { fg: theme.colors.red[500], bg: isDark ? withAlpha(theme.colors.red[500], 12) : withAlpha(theme.colors.red[500], 8) };
   }
-  return { fg: theme.colors.indigo[400], bg: isDark ? "rgba(129,140,248,0.15)" : "rgba(99,102,241,0.1)" };
+  return { fg: theme.colors.indigo[400], bg: isDark ? withAlpha(theme.colors.indigo[400], 15) : withAlpha(theme.colors.indigo[500], 10) };
 }
 
 function isTerminalLiveMiniStatus(status: LiveMiniParticipantStatus): boolean {
@@ -272,8 +273,8 @@ function LiveSquadDetailsSheet({
               style={[
                 styles.detailsModePill,
                 {
-                  backgroundColor: isDark ? "rgba(34,211,238,0.1)" : "rgba(8,145,178,0.08)",
-                  borderColor: isDark ? "rgba(34,211,238,0.3)" : "rgba(8,145,178,0.2)",
+                  backgroundColor: isDark ? withAlpha(theme.colors.cyan[400], 10) : withAlpha(theme.colors.cyan[500], 8),
+                  borderColor: isDark ? withAlpha(theme.colors.cyan[400], 30) : withAlpha(theme.colors.cyan[500], 20),
                 },
               ]}
             >
@@ -413,8 +414,8 @@ const LiveSquadHero = memo(function LiveSquadHero({
               style={[
                 styles.heroAvatar,
                 {
-                  backgroundColor: isDark ? "rgba(129, 140, 248, 0.22)" : "rgba(99, 102, 241, 0.12)",
-                  borderColor: isDark ? "rgba(129, 140, 248, 0.4)" : "rgba(99, 102, 241, 0.25)",
+                  backgroundColor: isDark ? withAlpha(theme.colors.indigo[400], 22) : withAlpha(theme.colors.indigo[500], 12),
+                  borderColor: isDark ? withAlpha(theme.colors.indigo[400], 40) : withAlpha(theme.colors.indigo[500], 25),
                 },
               ]}
             >
@@ -432,7 +433,7 @@ const LiveSquadHero = memo(function LiveSquadHero({
                     style={[
                       styles.levelPill,
                       {
-                        backgroundColor: isDark ? "rgba(251, 191, 36, 0.12)" : "rgba(234, 179, 8, 0.12)",
+                        backgroundColor: isDark ? withAlpha(theme.colors.yellow[400], 12) : withAlpha(theme.colors.yellow[400], 12),
                         borderColor: theme.colors.border,
                       },
                     ]}
@@ -459,8 +460,8 @@ const LiveSquadHero = memo(function LiveSquadHero({
               style={[
                 styles.fastestPill,
                 {
-                  backgroundColor: isDark ? "rgba(34, 211, 238, 0.12)" : "rgba(8, 145, 178, 0.1)",
-                  borderColor: isDark ? "rgba(34, 211, 238, 0.32)" : "rgba(8, 145, 178, 0.2)",
+                  backgroundColor: isDark ? withAlpha(theme.colors.cyan[400], 12) : withAlpha(theme.colors.cyan[500], 10),
+                  borderColor: isDark ? withAlpha(theme.colors.cyan[400], 32) : withAlpha(theme.colors.cyan[500], 20),
                 },
               ]}
             >
@@ -479,7 +480,7 @@ const LiveSquadHero = memo(function LiveSquadHero({
                   <Text style={[styles.paceLabel, { color: theme.colors.textMuted }]} numberOfLines={1}>
                     {ordinalLabel(index + 1)} - {shortDisplayName(profiles[row.user_id])}
                   </Text>
-                  <View style={[styles.paceTrack, { backgroundColor: isDark ? "rgba(255,255,255,0.09)" : "rgba(15,23,42,0.06)" }]}>
+                  <View style={[styles.paceTrack, { backgroundColor: isDark ? withAlpha(theme.colors.sheen, 9) : withAlpha(theme.colors.sheen, 6) }]}>
                     <View style={[styles.paceFill, { width: `${progress * 100}%`, backgroundColor: paceColors[index] }]} />
                   </View>
                   <Text style={[styles.paceValue, { color: theme.colors.textSecondary }]}>
@@ -514,7 +515,7 @@ const LiveSquadHero = memo(function LiveSquadHero({
             style={[
               styles.emptyHeroIcon,
               {
-                backgroundColor: isDark ? "rgba(34, 211, 238, 0.13)" : "rgba(8,145,178,0.1)",
+                backgroundColor: isDark ? withAlpha(theme.colors.cyan[400], 13) : withAlpha(theme.colors.cyan[500], 10),
                 borderColor: theme.colors.border,
               },
             ]}
@@ -759,8 +760,8 @@ function ParticipantCard({
                 style={[
                   styles.youBadge,
                   {
-                    backgroundColor: isDark ? "rgba(99, 102, 241, 0.18)" : "rgba(79, 70, 229, 0.1)",
-                    borderColor: isDark ? "rgba(129, 140, 248, 0.36)" : "rgba(79, 70, 229, 0.22)",
+                    backgroundColor: isDark ? withAlpha(theme.colors.indigo[500], 18) : withAlpha(theme.colors.indigo[600], 10),
+                    borderColor: isDark ? withAlpha(theme.colors.indigo[400], 36) : withAlpha(theme.colors.indigo[600], 22),
                   },
                 ]}
               >
@@ -772,7 +773,7 @@ function ParticipantCard({
                 style={[
                   styles.levelPill,
                   {
-                    backgroundColor: isDark ? "rgba(251, 191, 36, 0.12)" : "rgba(234, 179, 8, 0.12)",
+                    backgroundColor: isDark ? withAlpha(theme.colors.yellow[400], 12) : withAlpha(theme.colors.yellow[400], 12),
                     borderColor: theme.colors.border,
                   },
                 ]}
@@ -813,8 +814,8 @@ function ParticipantCard({
             style={[
               styles.lockedPill,
               {
-                backgroundColor: isDark ? "rgba(34,197,94,0.12)" : "rgba(22,163,74,0.08)",
-                borderColor: isDark ? "rgba(34,197,94,0.34)" : "rgba(22,163,74,0.22)",
+                backgroundColor: isDark ? withAlpha(theme.colors.green[500], 12) : withAlpha(theme.colors.green[600], 8),
+                borderColor: isDark ? withAlpha(theme.colors.green[500], 34) : withAlpha(theme.colors.green[600], 22),
               },
             ]}
           >
@@ -826,7 +827,7 @@ function ParticipantCard({
 
       {showProgress ? (
         <View style={styles.progressBlock}>
-          <View style={[styles.resultTrack, { backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(15,23,42,0.06)" }]}>
+          <View style={[styles.resultTrack, { backgroundColor: isDark ? withAlpha(theme.colors.sheen, 8) : withAlpha(theme.colors.sheen, 6) }]}>
             <View
               style={[
                 styles.resultFill,
@@ -1332,8 +1333,8 @@ export default function LiveMiniSquadScreen() {
             style={[
               styles.livePill,
               {
-                backgroundColor: isDark ? "rgba(34,211,238,0.12)" : "rgba(8,145,178,0.1)",
-                borderColor: isDark ? "rgba(34,211,238,0.24)" : "rgba(8,145,178,0.16)",
+                backgroundColor: isDark ? withAlpha(theme.colors.cyan[400], 12) : withAlpha(theme.colors.cyan[500], 10),
+                borderColor: isDark ? withAlpha(theme.colors.cyan[400], 24) : withAlpha(theme.colors.cyan[500], 16),
               },
             ]}
           >
@@ -1433,8 +1434,8 @@ export default function LiveMiniSquadScreen() {
               style={[
                 styles.inviteMoreCard,
                 {
-                  backgroundColor: isDark ? "rgba(34,211,238,0.08)" : "rgba(8,145,178,0.06)",
-                  borderColor: isDark ? "rgba(34,211,238,0.24)" : "rgba(8,145,178,0.16)",
+                  backgroundColor: isDark ? withAlpha(theme.colors.cyan[400], 8) : withAlpha(theme.colors.cyan[500], 6),
+                  borderColor: isDark ? withAlpha(theme.colors.cyan[400], 24) : withAlpha(theme.colors.cyan[500], 16),
                 },
               ]}
               accessibilityRole="button"
@@ -1443,7 +1444,7 @@ export default function LiveMiniSquadScreen() {
               <View
                 style={[
                   styles.inviteMoreIcon,
-                  { backgroundColor: isDark ? "rgba(34,211,238,0.14)" : "rgba(8,145,178,0.1)" },
+                  { backgroundColor: isDark ? withAlpha(theme.colors.cyan[400], 14) : withAlpha(theme.colors.cyan[500], 10) },
                 ]}
               >
                 <UserPlus size={18} color={theme.colors.cyan[400]} />

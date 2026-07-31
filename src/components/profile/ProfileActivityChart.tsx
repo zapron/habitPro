@@ -9,6 +9,7 @@ import Svg, { Rect } from "react-native-svg";
 import type { AppTheme } from "../../styles/theme";
 import type { DayCheckInPoint } from "../../utils/profileStats";
 import { BarChart3 } from "lucide-react-native";
+import { withAlpha } from "../../styles/theme";
 
 const CHART_HEIGHT = 112;
 const CHART_PAD = 6;
@@ -28,7 +29,7 @@ export const ProfileActivityChart = memo(function ProfileActivityChart({ theme, 
   const maxCount = useMemo(() => Math.max(1, ...points.map((p) => p.count)), [points]);
   const hasAny = points.some((p) => p.count > 0);
   const barColor = theme.colors.indigo[500];
-  const mutedBar = isDark ? "rgba(255,255,255,0.12)" : "rgba(15,23,42,0.1)";
+  const mutedBar = isDark ? withAlpha(theme.colors.sheen, 12) : withAlpha(theme.colors.sheen, 10);
   const n = points.length;
   const gap = 6;
   const barW = (chartWidth - gap * (n - 1) - CHART_PAD * 2) / n;

@@ -10,6 +10,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "../context/ThemeContext";
 import { Button } from "./Button";
+import { withAlpha } from "../styles/theme";
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -72,7 +73,7 @@ export function ConfirmDialog({
     >
       <Animated.View style={[styles.root, { opacity: progress }]}>
         <AnimatedPressable
-          style={[styles.backdrop, { backgroundColor: isDark ? "rgba(0,0,0,0.55)" : "rgba(15,23,42,0.45)" }]}
+          style={[styles.backdrop, { backgroundColor: isDark ? withAlpha(theme.colors.scrim, 55) : withAlpha(theme.colors.scrim, 45) }]}
           onPress={dismissOnBackdrop ? onRequestClose : undefined}
           accessibilityRole={dismissOnBackdrop ? "button" : undefined}
           accessibilityLabel="Dismiss"

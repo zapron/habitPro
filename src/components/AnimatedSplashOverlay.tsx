@@ -16,6 +16,7 @@ import {
 } from "../constants/splash";
 import { useTheme } from "../context/ThemeContext";
 import { quotes } from "../data/quotes";
+import { withAlpha } from "../styles/theme";
 
 const AnimatedText = Animated.createAnimatedComponent(Text);
 
@@ -173,7 +174,7 @@ export function AnimatedSplashOverlay({ onFirstLayout, dismiss, onDismissed }: P
   });
   const wordmarkHabitColor = isDark ? theme.colors.slate[400] : theme.colors.textSecondary;
   const wisdomPanelBg = isDark ? "rgba(15, 23, 42, 0.42)" : "rgba(255, 255, 255, 0.62)";
-  const wisdomBorder = isDark ? "rgba(129, 140, 248, 0.16)" : "rgba(99, 102, 241, 0.14)";
+  const wisdomBorder = isDark ? withAlpha(theme.colors.indigo[400], 16) : withAlpha(theme.colors.indigo[500], 14);
 
   const handleLayout = (_e: LayoutChangeEvent) => {
     if (layoutReported.current) return;

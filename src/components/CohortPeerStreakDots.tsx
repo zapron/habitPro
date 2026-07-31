@@ -26,6 +26,7 @@ import type { AppTheme } from "../styles/theme";
 import type { Habit, StreakMemory, StreakMemoryTaskEntry } from "../types/habit";
 import { formatDateDisplay } from "../utils/dateDisplay";
 import { calendarDateForHabitMissionDayIndex, getHabitActiveMissionDaySlot } from "../utils/missionDaySlots";
+import { withAlpha } from "../styles/theme";
 
 const DOT_SIZE = 36;
 const DOT_GAP = 8;
@@ -411,8 +412,8 @@ export const CohortPeerStreakDots = memo(function CohortPeerStreakDots({
       if (completed) {
         dotBg = isDark ? "#23274e" : "#eef2ff";
         dotBorder = isCurrentSlot
-          ? isDark ? "rgba(245, 158, 11, 0.72)" : "rgba(217, 119, 6, 0.58)"
-          : isDark ? "rgba(99, 102, 241, 0.62)" : "rgba(79, 70, 229, 0.42)";
+          ? isDark ? withAlpha(theme.colors.amber[500], 72) : withAlpha(theme.colors.amber[500], 58)
+          : isDark ? withAlpha(theme.colors.indigo[500], 62) : withAlpha(theme.colors.indigo[600], 42);
         dotText = isDark ? theme.colors.white : theme.colors.indigo[600];
         extraStyle = {
           shadowColor: theme.colors.indigo[500],
@@ -524,7 +525,7 @@ export const CohortPeerStreakDots = memo(function CohortPeerStreakDots({
               </View>
             ) : open?.isPrivate ? (
               <View style={[styles.privateContainer, { backgroundColor: theme.colors.surfaceElevated, borderColor: theme.colors.border }]}>
-                <View style={[styles.privateIconOrb, { backgroundColor: isDark ? "rgba(99, 102, 241, 0.16)" : "rgba(99, 102, 241, 0.08)", borderColor: theme.colors.indigo[500] }]}>
+                <View style={[styles.privateIconOrb, { backgroundColor: isDark ? withAlpha(theme.colors.indigo[500], 16) : withAlpha(theme.colors.indigo[500], 8), borderColor: theme.colors.indigo[500] }]}>
                   <Lock size={28} color={theme.colors.indigo[500]} />
                 </View>
                 <Text style={[styles.privateTitle, { color: theme.colors.textPrimary }]}>
@@ -543,7 +544,7 @@ export const CohortPeerStreakDots = memo(function CohortPeerStreakDots({
               </View>
             ) : open?.isCheckInOnly ? (
               <View style={[styles.privateContainer, { backgroundColor: theme.colors.surfaceElevated, borderColor: theme.colors.border }]}>
-                <View style={[styles.privateIconOrb, { backgroundColor: isDark ? "rgba(99, 102, 241, 0.16)" : "rgba(99, 102, 241, 0.08)", borderColor: theme.colors.indigo[500] }]}>
+                <View style={[styles.privateIconOrb, { backgroundColor: isDark ? withAlpha(theme.colors.indigo[500], 16) : withAlpha(theme.colors.indigo[500], 8), borderColor: theme.colors.indigo[500] }]}>
                   <Check size={28} color={theme.colors.indigo[500]} strokeWidth={2.5} />
                 </View>
                 <Text style={[styles.privateTitle, { color: theme.colors.textPrimary }]}>

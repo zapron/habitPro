@@ -23,6 +23,7 @@ import { Button } from "../../src/components/Button";
 import { GoogleGIcon } from "../../src/components/GoogleGIcon";
 import { SPLASH_WORDMARK_PRO_COLOR } from "../../src/constants/splash";
 import { showAppAlert } from "../../src/context/AppDialogContext";
+import { withAlpha } from "../../src/styles/theme";
 
 type FocusKey = "email" | "password" | "confirmPassword" | null;
 
@@ -169,9 +170,9 @@ export default function LoginScreen() {
   };
 
   const busy = loading || googleLoading || appleLoading;
-  const glassSurface = isDark ? "rgba(15,23,42,0.74)" : "rgba(248,250,252,0.96)";
-  const glassBorder = isDark ? "rgba(148,163,184,0.26)" : "rgba(100,116,139,0.28)";
-  const focusedBorder = isDark ? "rgba(129,140,248,0.84)" : "rgba(79,70,229,0.62)";
+  const glassSurface = isDark ? withAlpha(theme.colors.slate[900], 74) : withAlpha(theme.colors.background, 96);
+  const glassBorder = isDark ? withAlpha(theme.colors.textSecondary, 26) : withAlpha(theme.colors.textMuted, 28);
+  const focusedBorder = isDark ? withAlpha(theme.colors.indigo[400], 84) : withAlpha(theme.colors.indigo[600], 62);
   const fieldTextColor = isDark ? "#F8FAFC" : theme.colors.textPrimary;
   const fieldMutedColor = isDark ? "rgba(203,213,225,0.62)" : "rgba(71,85,105,0.62)";
   const labelColor = isDark ? "rgba(226,232,240,0.8)" : theme.colors.textSecondary;
@@ -469,7 +470,7 @@ export default function LoginScreen() {
                     styles.googleBtn,
                     {
                       borderColor: glassBorder,
-                      backgroundColor: isDark ? "rgba(15,23,42,0.68)" : "rgba(248,250,252,0.96)",
+                      backgroundColor: isDark ? withAlpha(theme.colors.slate[900], 68) : withAlpha(theme.colors.background, 96),
                     },
                   ]}
                   onPress={() => void onGoogle()}
@@ -496,7 +497,7 @@ export default function LoginScreen() {
                       styles.socialBtn,
                       {
                         borderColor: glassBorder,
-                        backgroundColor: isDark ? "rgba(15,23,42,0.68)" : "rgba(248,250,252,0.96)",
+                        backgroundColor: isDark ? withAlpha(theme.colors.slate[900], 68) : withAlpha(theme.colors.background, 96),
                       },
                     ]}
                     onPress={() => void onApple()}

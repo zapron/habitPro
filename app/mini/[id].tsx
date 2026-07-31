@@ -103,6 +103,7 @@ import { showAppAlert } from "../../src/context/AppDialogContext";
 import { startJsStallProbe, traceSync } from "../../src/lib/jsThreadProbe";
 import { waitForHabitPersistIdle } from "../../src/lib/chunkedHabitPersistStorage";
 import { isMiniMissionAwaitingCheckIn } from "../../src/utils/miniMissionTime";
+import { withAlpha } from "../../src/styles/theme";
 
 // Notification handler is configured globally in _layout.tsx via setupNotifications()
 
@@ -743,7 +744,7 @@ function FocusMissionControlModal({
   onReserveFuel,
   onMarkComplete,
 }: FocusMissionControlModalProps) {
-  const { isDark } = useTheme();
+  const { theme, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const isWide = width > height && width >= 680;
@@ -960,14 +961,14 @@ function FocusMissionControlModal({
             style={[
               focusStyles.liveSquadButton,
               {
-                backgroundColor: isDark ? "rgba(34, 211, 238, 0.1)" : "rgba(8, 145, 178, 0.08)",
-                borderColor: isDark ? "rgba(34, 211, 238, 0.34)" : "rgba(8, 145, 178, 0.24)",
+                backgroundColor: isDark ? withAlpha(theme.colors.cyan[400], 10) : withAlpha(theme.colors.cyan[500], 8),
+                borderColor: isDark ? withAlpha(theme.colors.cyan[400], 34) : withAlpha(theme.colors.cyan[500], 24),
               },
             ]}
             accessibilityRole="button"
             accessibilityLabel="Open Live Squad board"
           >
-            <Radio size={16} color={isDark ? "#22d3ee" : "#0891b2"} />
+            <Radio size={16} color={isDark ? theme.colors.cyan[400] : theme.colors.cyan[500]} />
             <Text style={[focusStyles.liveSquadButtonText, { color: focusColors.title }]}>
               Live Squad
             </Text>
@@ -2232,8 +2233,8 @@ export default function MiniMissionDetail() {
               style={[
                 styles.completedPill,
                 {
-                  backgroundColor: isDark ? "rgba(34, 197, 94, 0.14)" : "rgba(22, 163, 74, 0.12)",
-                  borderColor: isDark ? "rgba(34, 197, 94, 0.28)" : "rgba(22, 163, 74, 0.22)",
+                  backgroundColor: isDark ? withAlpha(theme.colors.green[500], 14) : withAlpha(theme.colors.green[600], 12),
+                  borderColor: isDark ? withAlpha(theme.colors.green[500], 28) : withAlpha(theme.colors.green[600], 22),
                 },
               ]}
             >
@@ -2274,8 +2275,8 @@ export default function MiniMissionDetail() {
               styles.liveMiniEntry,
               {
                 borderRadius: theme.radius.md,
-                borderColor: isDark ? "rgba(34, 211, 238, 0.35)" : "rgba(8, 145, 178, 0.26)",
-                backgroundColor: isDark ? "rgba(34, 211, 238, 0.09)" : "rgba(8, 145, 178, 0.07)",
+                borderColor: isDark ? withAlpha(theme.colors.cyan[400], 35) : withAlpha(theme.colors.cyan[500], 26),
+                backgroundColor: isDark ? withAlpha(theme.colors.cyan[400], 9) : withAlpha(theme.colors.cyan[500], 7),
               },
             ]}
             activeOpacity={0.86}
@@ -2332,12 +2333,8 @@ export default function MiniMissionDetail() {
               styles.focusLauncher,
               {
                 borderRadius: theme.radius.md,
-                borderColor: isDark
-                  ? "rgba(34, 211, 238, 0.35)"
-                  : "rgba(8, 145, 178, 0.28)",
-                backgroundColor: isDark
-                  ? "rgba(34, 211, 238, 0.1)"
-                  : "rgba(8, 145, 178, 0.08)",
+                borderColor: isDark ? withAlpha(theme.colors.cyan[400], 35) : withAlpha(theme.colors.cyan[500], 28),
+                backgroundColor: isDark ? withAlpha(theme.colors.cyan[400], 10) : withAlpha(theme.colors.cyan[500], 8),
               },
             ]}
             activeOpacity={0.86}
@@ -2365,14 +2362,10 @@ export default function MiniMissionDetail() {
               {
                 borderRadius: theme.radius.md,
                 borderColor: mission.liveSquadId
-                  ? isDark
-                    ? "rgba(34, 211, 238, 0.35)"
-                    : "rgba(8, 145, 178, 0.26)"
+                  ? isDark ? withAlpha(theme.colors.cyan[400], 35) : withAlpha(theme.colors.cyan[500], 26)
                   : theme.colors.border,
                 backgroundColor: mission.liveSquadId
-                  ? isDark
-                    ? "rgba(34, 211, 238, 0.09)"
-                    : "rgba(8, 145, 178, 0.07)"
+                  ? isDark ? withAlpha(theme.colors.cyan[400], 9) : withAlpha(theme.colors.cyan[500], 7)
                   : theme.colors.surface,
               },
             ]}
