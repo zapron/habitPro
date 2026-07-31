@@ -1007,6 +1007,39 @@ General UI conventions in this app:
 - Lucide icons for actions.
 - Avoid huge decorative UI in operational screens.
 
+Color token discipline (as of 2026-07-31):
+
+- Every color goes through `src/styles/theme.ts` — an existing token
+  (`theme.colors.indigo[500]`, `theme.colors.green[600]`, etc.) plus
+  `withAlpha(hex, alphaPercent)` for any tinted/translucent variant. Never
+  hand-type `isDark ? "rgba(...)" : "rgba(...)"` — a repo-wide sweep found
+  ~289 of these, several silently off-palette (stock Tailwind hex instead of
+  this app's actual token), fixed across commits `9226085`, `0783dfe`,
+  `1a1df99`, `587461d`. A handful of genuinely one-off colors (not repeated
+  anywhere else) were deliberately left as hand-typed literals rather than
+  forced into a token that would only ever have one caller.
+- Two color tokens exist for jobs that aren't a brand-hue tint:
+  `theme.colors.scrim` (modal/sheet backdrop dimming — always a dark tint
+  regardless of app theme) and `theme.colors.sheen` (the glass-highlight
+  flip — white in dark mode, dark ink in light mode).
+- `GlassTopHighlight.tsx` (the shared glass-sheen top highlight) renders
+  **nothing in light mode** — a first attempt at a light-mode tint (a
+  slate-colored version of the same gradient) read as a flat gray smudge
+  across the top of a white card, rejected on sight. Dark mode is
+  unchanged. All 6 previously-duplicated inline copies of this gradient
+  (`HabitCard.tsx`, `StreakProgressCard.tsx`, `Timer.tsx`, Home ×2, habit
+  detail's mission controls card) now render through this one component.
+- A component that takes `isDark` as a **prop** instead of calling
+  `useTheme()` itself has no `theme` object in scope by default — found
+  this exact bug (a hardcoded color masking a reference to `theme.colors.*`
+  that would otherwise crash) 4 times in one sweep: `FocusMissionControlModal`
+  in `app/mini/[id].tsx`, `ShimmerBlock.tsx`,
+  `src/components/fuel/FuelQuickMinutesStrip.tsx`,
+  `src/components/fuel/FuelTimePresetButton.tsx`. Fix: import
+  `darkTheme`/`lightTheme` directly from `theme.ts`, select per the `isDark`
+  prop — don't assume a hook call exists just because the file imports
+  `useTheme`'s type or a sibling component calls it.
+
 ## Important User Flows
 
 ### Create A Main Mission
@@ -1097,6 +1130,8 @@ Also not limited to `showAppAlert`/`openUpsell` — any two full-screen `<Modal>
 - **Changing what a data field *means* requires auditing every place that already derives from its old meaning, not just the place that writes it.** The "Mark Day Complete" redesign (2026-07-25, `docs/CATALOG_ARCHITECTURE.md` addendum) changed checklist missions so that logging a task writes a `streakMemories[date]` entry *before* the day is completed — breaking a previously-safe assumption ("any memory entry for a date is proof that date should be in `completedDates`") that three independent, pre-existing self-heal call sites all relied on: `habitStore.ts`'s `completedDatesWithMemoryEvidence` (backing both `repairHabitCompletedDatesFromMemories` and `onRehydrateStorage`, so it also refires on every app cold start), a matching `useEffect` in `app/habit/[id].tsx`, and `src/lib/sync.ts`'s `habitFromRow` (runs on every remote pull/delta sync — the one that made the bug reproduce fastest). All three force-added a date to `completedDates` the instant its first task was logged, silently re-completing the day and firing the squad notification early. Fixed by requiring a *classic* marker (`note`/`imageUrl`/`imageUri`/`checkInOnly`/`repairSource`) before counting a memory as completion evidence, not mere key presence. When changing an existing field/flag's meaning, grep for every reader of it first — the bug surfaces where the reader is, not where the writer changed.
 - **`useEffect` runs after render — a ref sized to match a prop at render time, then "corrected" for a changed prop inside a `useEffect`, has a window where the render reads a too-short/stale ref.** Found in `StreakMemoryGallery.tsx`'s hex-stack shuffle animation (2026-07-26): one `Animated.Value` per stacked photo lived in a `useRef` array sized to the current photo count, resized inside a `useEffect` when the count grew. The render that *first* saw a 2-photo day gain a 3rd task (logging it while that day's hex tile was still mounted on screen) indexed the not-yet-resized array, got `undefined`, and called `undefined.interpolate(...)` — a hard crash, identical on iOS and Android since it's a plain JS `TypeError`, not anything native. Only triggered by an *update* to an already-mounted component; a fresh mount always sizes correctly from its `useState`/`useRef` initializer, which is why it only reproduced on a task's 3rd-and-later log, never the 1st or 2nd. Fixed by moving the resize into a plain, guarded `if` block in the render body (mutating a ref during render takes effect immediately for that same render; a paired `setState` call there is React's documented "adjust state while rendering" pattern, safe as long as it's guarded so it can't loop). When a ref/array needs to track a prop that can grow while the owning component stays mounted, do the resize synchronously in the render body, not in an effect.
 - **`SplashGate` (`src/components/SplashGate.tsx`) mounts the real app content immediately, *underneath* its splash overlay** — the overlay is a separate absolutely-positioned layer on top (`AnimatedSplashOverlay`, z-index 9999), not something the real screens render behind a gate for. A mount-triggered animation (e.g. `HabitCard`'s stack-up entrance, added 2026-07-26) that starts immediately in a `useEffect` on mount will therefore run to completion *behind the still-opaque splash* on the very first cold launch (the overlay's minimum display time is 2.4s+), and the user only ever sees it play on a later remount (tab switch, navigating back) — never on actual app startup, which is usually the one moment it matters most. Fixed with a one-shot signal, `src/lib/appReadySignal.ts` (`markAppReady()` called from `SplashGate`'s `onDismissed`; `onAppReady(callback)` fires immediately if already latched, otherwise waits) — any "first impression" mount animation should start inside `onAppReady(...)`, not directly in its own effect, or check this pattern before assuming a "the animation isn't working" report is about the animation's tuning rather than its timing.
+- **A `ScrollView`/`FlatList` where every pixel is covered by tappable children must never set `canCancelContentTouches={false}`.** This is an iOS-only prop; React Native's own doc comment on it reads "When false, once tracking starts, won't try to drag if the touch moves." Found in `CohortNudgeChips.tsx`'s horizontal nudge-chip row (2026-07-31), reported by the user as "I can scroll on Android but not iOS" — exactly the signature of an iOS-only prop nobody remembered was there. Since the whole scrollable width is Pressable chips, a touch always starts tracking on a child first, and with this prop set, iOS never lets the ScrollView reclaim that touch to scroll no matter how far the finger drags. Android ignores the prop entirely, which is why it worked there. Fix: remove it, let it default to `true`. `directionalLockEnabled` (a different prop, just prevents diagonal drift once a direction is committed) is unrelated and fine to keep. When a scroll container feels frozen on iOS only and every child is tappable, check for this prop before assuming a gesture-responder conflict.
+- **Off-palette color drift and a whole class of "no `theme` in scope" bugs, found via a repo-wide color-token sweep (2026-07-31).** A grep for `isDark ? "rgba(...)" : "rgba(...)"` turned up ~289 hand-typed color decisions instead of routing through `src/styles/theme.ts`; several of the most-repeated ones were confirmed off-palette — stock Tailwind hex (`rgba(99,102,241,...)`) instead of this app's actual indigo token (`#7C5CF2`/`#5B3FDE`), invisible because nothing ever compared the hand-typed literal against the real token. Fixed by adding `withAlpha(hex, alphaPercent)` to `theme.ts` (derives a tint directly from a real token) plus two new tokens for jobs that aren't a brand-hue tint — `scrim` (backdrop dimming, always dark) and `sheen` (the glass-highlight flip, white in dark mode / dark ink in light mode) — then converting every instance where both sides of the ternary confidently matched a known token. Separately, this surfaced a real latent-crash pattern 4 times: a component that receives `isDark` as a **prop** rather than calling `useTheme()` itself has no `theme` object in scope, so a hardcoded-color line that "looked like" it referenced `theme.colors.*` after conversion would have been a hard crash (`FocusMissionControlModal` in `app/mini/[id].tsx`, `ShimmerBlock.tsx`, `fuel/FuelQuickMinutesStrip.tsx`, `fuel/FuelTimePresetButton.tsx`) — fixed by importing `darkTheme`/`lightTheme` directly and selecting per the `isDark` prop. When converting any hardcoded color to a theme reference, confirm `theme` (not just `isDark`) is actually in that component's scope first. Full list of what was and wasn't converted (a handful of genuinely one-off colors were deliberately left as literals rather than forced into a token with exactly one caller) in `docs/CURRENT_WORK.md`.
 
 ## Where To Start For Common Changes
 

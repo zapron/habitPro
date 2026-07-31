@@ -10,6 +10,7 @@
 ## HabitPro UI preferences
 
 - Do **not** use the `Sparkles` / magic-wand style icon in HabitPro UI. It gives the product an AI-first vibe; prefer habit, progress, mission, proof, or community metaphors instead.
+- Do **not** hand-type a color as `isDark ? "rgba(...)" : "rgba(...)"`. Route it through `src/styles/theme.ts`: use an existing token (`theme.colors.indigo[500]`, `theme.colors.scrim`, etc.) and `withAlpha(hex, alphaPercent)` for any tinted/translucent variant. A repo-wide sweep (2026-07-31, see `docs/CURRENT_WORK.md`) found ~289 hand-typed instances, several silently off-palette (stock Tailwind hex instead of this app's actual token) — this is how that keeps happening. If a component receives `isDark` as a prop instead of calling `useTheme()` itself, import `darkTheme`/`lightTheme` directly from `theme.ts` rather than assuming a `theme` object is in scope — found and fixed this exact missing-scope bug four times in one session.
 
 ## Performance / time optimization
 

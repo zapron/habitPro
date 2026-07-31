@@ -1,6 +1,87 @@
 # HabitPro Current Work
 
-Last updated: 2026-07-27 (Migration applied by user; multi-photo stack badge added to journey/player-story cards and extended into the "View journey" gallery modal; every full-screen photo lightbox in the app now shows a dot carousel indicator and per-slide caption text; day-grid checklist progress arc shipped, plus a real pre-existing "day completes on first task logged" bug fixed).
+Last updated: 2026-07-31 (UI/UX audit pass: XP completion badge, leaderboard medals + weekly countdown, nudge send feedback, pulsing tab-bar invite dot, iOS nudge-scroll fix, Quick Complete confirmation dialog — all shipped to production OTA on runtime 1.1.35. Followed by a full off-palette color-token sweep across the app, landed in three commits. An experimental "Apple Glass" Home revamp exists, fully isolated on branch `experiment/glass-home`, not merged.).
+
+## Latest Feature: Off-Palette Color Token Sweep (2026-07-31)
+
+A repo-wide grep found ~289 hardcoded `isDark ? "rgba(...)" : "rgba(...)"`
+color decisions scattered across the app instead of going through
+`theme.ts`. Several of the most-repeated ones were silently off-palette —
+stock Tailwind hex values (e.g. `rgba(99,102,241,...)`) instead of this
+app's actual indigo token (`#7C5CF2`/`#5B3FDE`) — the same bug class
+`SettingsModal`'s theme-chip fix caught once already, just recurring in
+many more places. Swept in phases, each its own commit:
+
+1. **`src/styles/theme.ts`**: added `withAlpha(hex, alphaPercent)` — derives
+   a tinted rgba-equivalent directly from a real theme token instead of a
+   hand-typed literal. Manually fixed the two most central files (Home,
+   `HabitCard`) plus tidied `SettingsModal`'s earlier fix to use it.
+2. Automated the rest with a small Node script (not committed to the repo,
+   scratch-only) that only converts a pattern when *both* sides of the
+   ternary confidently match a known token — anything ambiguous was left
+   untouched rather than guessed. Caught two real bugs along the way: a
+   corrupted multi-line `import` the script's first version introduced in
+   `app/mini/index.tsx` (fixed), and a genuine latent bug in
+   `app/mini/[id].tsx`'s `FocusMissionControlModal`, which referenced
+   `theme.colors.*` without ever destructuring `theme` from `useTheme()`
+   (only `isDark`) — invisible before because the color was a hardcoded
+   string, would have been a hard crash once that code path lit up.
+3. Added two new semantic tokens, `theme.colors.scrim` (modal/sheet
+   backdrop dimming, always dark regardless of app theme) and
+   `theme.colors.sheen` (the glass-highlight flip `GlassTopHighlight`
+   already used — white in dark mode, dark ink in light mode), then swept
+   the neutral black/white/slate backdrop colors the same way. Caught the
+   same "component takes `isDark` as a prop, never calls `useTheme()`,
+   has no `theme` in scope" bug three more times: `ShimmerBlock.tsx`,
+   `fuel/FuelQuickMinutesStrip.tsx`, `fuel/FuelTimePresetButton.tsx` — all
+   fixed by importing `darkTheme`/`lightTheme` directly.
+
+**Deliberately left alone**: ~50 remaining instances — mostly genuinely
+one-off colors (a teal accent, a custom periwinkle) that appear exactly
+once each and don't correspond to any real token, plus one case
+(`CohortPeerStreakDots.tsx`'s loading-skeleton background) where only one
+side of the ternary matched a token and the other was a deliberate pale
+indigo tint, not drift. Converting either would mean guessing at intent.
+
+Commits: `1a1df99` (scrim/sheen tokens), `587461d` (the sweep). Both
+follow `9226085` (light-mode glass-sheen fix — GlassTopHighlight is now
+theme-aware and de-duplicated across 6 call sites, but renders nothing
+in light mode after a first attempt at a light-mode tint looked like "a
+flat gray smudge") and `0783dfe` (the `withAlpha()` helper's first use).
+
+Also shipped and OTA'd this session (commit `7322dec`, before the sweep):
+`HabitCard`'s Quick Complete button now confirms before completing a
+checklist day with unlogged tasks, with copy that adapts to how many are
+still pending, and two options — "I'll log my tasks" (primary, navigates
+to the mission detail screen) or "Yes, mark complete" (secondary,
+proceeds as before). Bundled in the same OTA: an XP-gain floating badge
+on habit completion (`src/components/XpGainBadge.tsx`, with a left-edge
+clipping fix for the leftmost grid column), leaderboard medal icons for
+rank #2/#3 plus a live weekly-reset countdown (`app/(tabs)/compete.tsx`),
+matching haptic+flourish feedback on squad nudge sends
+(`src/components/CohortNudgeChips.tsx`), a pulsing tab-bar invite dot
+(generalized `PulsingBorder` to support a fixed `size` for compact
+circular badges), and a real bug fix unrelated to the OTA's main
+purpose: `CohortNudgeChips.tsx`'s horizontal `ScrollView` had
+`canCancelContentTouches={false}` (iOS-only prop) which made it
+impossible to drag-scroll the nudge chip row on iOS specifically —
+removed.
+
+**Not merged, fully isolated**: branch `experiment/glass-home` has a
+from-scratch "Apple Glass" Home revamp (`GlassPanel.tsx`,
+`HomeGlassBackdrop.tsx` — real `BlurView` frosted glass, warm gold/indigo
+tint, animated ambient background blobs reacting to scroll and tap) built
+at the user's explicit request as a throwaway, revertible experiment.
+`main` never had these changes merged in; the branch exists purely to be
+revisited later if the direction is wanted. Known limitation if revisited:
+Android's `BlurView` renders as a flat tint with zero blur unless
+`experimentalBlurMethod` is set (which Expo's own docs flag as
+performance/graphics-risky) — the ambient background blobs currently show
+as plain unblurred circles on Android.
+
+`npx tsc --noEmit` clean throughout every phase. Visually spot-checked
+Home in the iOS simulator (light mode) before committing — no regressions
+observed.
 
 ## Latest Feature: Day-Grid Checklist Progress Arc (2026-07-27)
 

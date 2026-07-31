@@ -2,6 +2,84 @@
 
 This is a concise chronological log for future sessions. Keep secrets out of this file.
 
+## 2026-07-31
+
+### UI/UX Audit Pass, Production OTA, and a Full Color-Token Sweep
+
+Started from an open-ended "audit the app's UI like a design lead" request.
+Produced two artifacts (a written audit with a prioritized punch list, and a
+palette-directions mockup — Night Ops / Ember & Ash / Field Log, grounded in
+real research on Duolingo's color strategy, aviation HUD color coding, and
+expedition-journal palettes). Then implemented the punch list's low-effort
+items, shipped them as a production OTA, and did a large follow-up color-token
+refactor sweep.
+
+**Shipped and OTA'd** (commit `7322dec`, runtime `1.1.35`, both platforms):
+
+- `HabitCard`'s Quick Complete button (checklist missions) now confirms
+  before completing a day with unlogged tasks — copy adapts to whether
+  zero or some tasks are logged, with "I'll log my tasks" (primary,
+  navigates to mission detail) vs "Yes, mark complete" (secondary) per
+  explicit user direction on which should read as the default action.
+- `src/components/XpGainBadge.tsx`: floating "+N XP · Day D" badge at the
+  exact grid cell tapped, using the previously-unused `AnimatedCountText`.
+  Found and fixed a left-edge clipping bug (fixed centering offset pushed
+  the badge off-screen for column 0) by adding an `align` prop driven by
+  column position.
+- Leaderboard: medal-disc icons for rank #2/#3 (a first attempt using
+  lucide's `Medal` icon with `fill` equal to `color` collapsed into an
+  illegible flat blob — replaced with a small colored circle + white star)
+  plus a live "Resets in Xh Ym" weekly countdown in `app/(tabs)/compete.tsx`.
+- `CohortNudgeChips.tsx`: nudge sends now get the same success haptic +
+  scale-pop flourish cheering already had. Separately found and fixed a
+  real iOS-only bug in the same file: the chip row's `ScrollView` had
+  `canCancelContentTouches={false}`, an iOS-only prop that (per React
+  Native's own doc comment) prevents the scroll view from ever taking
+  over a touch that started on a child — since every pixel of the row is
+  covered by tappable chips, this made the row un-scrollable on iOS only
+  (Android ignores the prop). Removed.
+- `PulsingBorder.tsx` generalized with an optional `size` prop (compact
+  circular badges, not just card-shaped wraps) and wired onto the tab
+  bar's unread-invite dot, previously static.
+
+**Explored but explicitly not built into the app**: a from-scratch "Apple
+Glass" Home revamp, done as a throwaway, fully-isolated experiment per
+direct request ("something that can be reverted, I will not even push
+it"). Lives entirely on branch `experiment/glass-home`
+(`GlassPanel.tsx`, `HomeGlassBackdrop.tsx` — real `BlurView` frosted
+glass, warm gold/indigo tint, animated ambient background reacting to
+scroll and tap), one commit, never merged. `main` is unaffected. Also
+explored but not committed anywhere: two artifact mockups on different
+"glass" and "color identity" directions, for the user to review outside
+the codebase.
+
+**Color-token sweep** (three commits: `1a1df99`, `587461d`, plus the
+earlier `9226085`/`0783dfe` from the same effort): a repo-wide grep found
+~289 hardcoded `isDark ? "rgba(...)" : "rgba(...)"` decisions instead of
+going through `theme.ts`, several silently off-palette (stock Tailwind
+hex instead of this app's actual token). Added `withAlpha(hex, alphaPercent)`
+to `theme.ts` plus two new semantic tokens (`scrim` for backdrop dimming,
+`sheen` for the glass-highlight flip), then swept in phases — first two
+files by hand, the rest via a scratch Node script that only converts a
+pattern when both sides of the ternary confidently match a real token,
+leaving ~50 genuinely one-off/ambiguous colors untouched rather than
+guessed. Caught real latent bugs along the way, not just tidying: a
+`FocusMissionControlModal` (`app/mini/[id].tsx`) referencing
+`theme.colors.*` without `theme` ever being destructured from
+`useTheme()`, and the same "isDark passed as a prop, no `useTheme()` call,
+no `theme` in scope" bug independently in `ShimmerBlock.tsx` and both
+`fuel/FuelQuickMinutesStrip.tsx` / `fuel/FuelTimePresetButton.tsx` — all
+masked before because the colors were hardcoded literals. Full detail,
+including the light-mode `GlassTopHighlight` fix that started this
+effort (a first light-mode tint attempt looked like "a flat gray smudge"
+and was reverted in favor of rendering nothing in light mode) in
+`docs/CURRENT_WORK.md`.
+
+**Validation**: `npx tsc --noEmit` clean after every phase. Visually
+spot-checked Home (light mode) in the iOS simulator before the final
+commits — no regressions observed. No backend/migration changes this
+session.
+
 ## 2026-07-26
 
 ### Home Screen Premium UI Pass (started) + Living-Memory Hex Animations

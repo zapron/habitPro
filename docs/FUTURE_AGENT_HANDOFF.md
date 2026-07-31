@@ -23,7 +23,18 @@ Then inspect the files relevant to the user request.
 
 ## Current User Priorities
 
-- **Most current, as of 2026-07-26**: the checklist catalog feature (main +
+- **Most current, as of 2026-07-31**: a design-lead-style UI/UX audit pass
+  shipped (XP-gain badge, leaderboard medals + countdown, nudge feedback,
+  pulsing invite dot, Quick Complete confirmation dialog — OTA'd, runtime
+  `1.1.35`, commit `7322dec`), followed by a full color-token sweep (see
+  `docs/CURRENT_WORK.md` top section and `docs/PROJECT_CONTEXT.md`'s "UI/UX
+  Audit Pass + Color Token Sweep" entry for full detail; commits `9226085`,
+  `0783dfe`, `1a1df99`, `587461d`). An experimental from-scratch "Apple Glass"
+  Home revamp exists on branch `experiment/glass-home`, explicitly **not**
+  merged into `main` — a throwaway/revertible exploration the user asked for
+  directly, not abandoned or forgotten work. Don't try to reconcile or merge
+  it without the user asking; it's parked there on purpose.
+- **As of 2026-07-26**: the checklist catalog feature (main +
   mini) is fully shipped, including the Mark Day Complete notification-timing
   redesign (2026-07-25). The active thread now is a **Home Screen Premium UI
   Pass** — an explicit, iterative "go screen by screen" visual overhaul,
@@ -140,6 +151,31 @@ Then inspect the files relevant to the user request.
 - Main habit visibility persistence depends on `rpc_sync_dirty_state` writing `visibility`; migration `20260720110000_fix_habit_visibility_sync_rpc.sql` restores this and the user reported it was applied.
 - Production OTA scripts must keep `--environment production`; a Mac local `.env` once had a RevenueCat Android `test_...` key and caused Android release billing to look unconfigured until a corrective OTA was published.
 - Temporary timer/performance logs should be added only for investigation and removed before production handoff.
+- Do not hand-type `isDark ? "rgba(...)" : "rgba(...)"`. Use a `theme.colors.*`
+  token plus `withAlpha(hex, alphaPercent)` from `src/styles/theme.ts`. A
+  2026-07-31 sweep found ~289 hand-typed instances, several silently
+  off-palette (stock Tailwind hex instead of this app's actual token) — see
+  `docs/CURRENT_WORK.md` for the full list of what was and wasn't converted
+  (genuinely one-off colors were deliberately left alone, not guessed into a
+  token).
+- A component that receives `isDark` as a **prop** (rather than calling
+  `useTheme()` itself) has no `theme` object in scope — referencing
+  `theme.colors.*` there is a silent bug until something actually exercises
+  that code path (found 4 times in one session: `FocusMissionControlModal` in
+  `app/mini/[id].tsx`, `ShimmerBlock.tsx`, `fuel/FuelQuickMinutesStrip.tsx`,
+  `fuel/FuelTimePresetButton.tsx`). Fix is to import `darkTheme`/`lightTheme`
+  directly from `theme.ts` and select per the `isDark` prop.
+- A `ScrollView`/`FlatList` where every pixel is covered by tappable children
+  must never set `canCancelContentTouches={false}` (iOS-only prop) — per
+  React Native's own doc comment ("once tracking starts, won't try to drag if
+  the touch moves"), this makes the row unscrollable on iOS specifically,
+  since a touch always starts tracking on a child first. Found and fixed in
+  `CohortNudgeChips.tsx` 2026-07-31; Android was unaffected since the prop
+  doesn't apply there.
+- `expo-blur`'s `BlurView` renders as a flat tinted view with zero actual
+  blur on Android unless `experimentalBlurMethod` is explicitly set, which
+  Expo's own docs flag as performance/graphics-risky. Relevant if/when
+  `experiment/glass-home` (real frosted-glass Home revamp) is ever revisited.
 
 ## Good Next Actions
 

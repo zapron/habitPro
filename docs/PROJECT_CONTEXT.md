@@ -53,6 +53,7 @@ Read these in this order for future work:
 - Avoid AI/magic styling and avoid the `Sparkles` / magic-wand style icon.
 - Avoid em dash in user-facing text when the user asks for concise copy.
 - Prefer direct implementation once the request is clear.
+- Colors go through `src/styles/theme.ts` — an existing token plus `withAlpha(hex, alphaPercent)` for tints, never a hand-typed `isDark ? "rgba(...)" : "rgba(...)"` literal. See "Color Token Sweep" below.
 
 ## Recent Product Decisions
 
@@ -222,6 +223,34 @@ Do not treat this as a tiny UI toggle. It touches local state, Supabase RPCs, Li
 - Main mission Solo/Public visibility is sent by the client and must be persisted by `rpc_sync_dirty_state`.
 - Migration `supabase/migrations/20260720110000_fix_habit_visibility_sync_rpc.sql` restores habit `visibility` writes in that RPC.
 - User reported this migration has been applied; retest toggling a main mission to Public, leaving, and reopening.
+
+### UI/UX Audit Pass + Color Token Sweep (shipped 2026-07-31)
+
+- Started from an open-ended design-lead-style audit of the whole app; produced
+  a written punch list and implemented its low-effort items — XP-gain badge on
+  completion (`src/components/XpGainBadge.tsx`), leaderboard medal icons +
+  weekly countdown, nudge send haptic/flourish, a pulsing tab-bar invite dot
+  (`PulsingBorder` generalized with a `size` prop), a Quick Complete
+  confirmation dialog for checklist missions, and a real iOS-only bug fix
+  (`CohortNudgeChips.tsx`'s chip row was unscrollable on iOS because of a
+  `canCancelContentTouches={false}` ScrollView prop — removed). Shipped as a
+  production OTA, commit `7322dec`, runtime `1.1.35`.
+- Followed by a full **color token sweep**: ~289 hand-typed
+  `isDark ? "rgba(...)" : "rgba(...)"` color decisions found across the app,
+  several silently off-palette. Added `withAlpha(hex, alphaPercent)` plus two
+  new semantic tokens (`theme.colors.scrim`, `theme.colors.sheen`) to
+  `src/styles/theme.ts`, then converted the confidently-matched instances
+  across 47 files. Caught four real latent bugs (components referencing
+  `theme.colors.*` with no `theme` in scope) along the way. Full detail in
+  `docs/CURRENT_WORK.md`; commits `9226085`, `0783dfe`, `1a1df99`, `587461d`.
+- **Not merged**: an experimental "Apple Glass" Home revamp
+  (`GlassPanel.tsx`, `HomeGlassBackdrop.tsx` — real `BlurView` frosted glass,
+  animated ambient background) lives entirely on branch
+  `experiment/glass-home`, built as an explicitly throwaway/revertible
+  exploration at the user's request. `main` never had it merged in. If
+  revisiting: Android's `BlurView` renders as a flat tint with no actual blur
+  unless `experimentalBlurMethod` is set, which Expo's own docs flag as
+  performance/graphics-risky.
 
 ## Build And Release Direction
 
