@@ -59,6 +59,8 @@ type ColorPalette = {
   red: { 500: string };
   green: { 500: string; 600: string };
   white: string;
+  scrim: string;
+  sheen: string;
 };
 
 type ShadowSet = {
@@ -104,6 +106,10 @@ const darkColors: ColorPalette = {
   red: { 500: "#ef4444" },
   green: { 500: "#22c55e", 600: "#16a34a" },
   white: "#ffffff",
+  /** Modal/sheet backdrop dimming base — always a dark tint regardless of theme; callers apply their own withAlpha() opacity. */
+  scrim: "#000000",
+  /** Glass-highlight base — light catches as white on a dark card; each caller picks its own opacity via withAlpha(). */
+  sheen: "#ffffff",
 };
 
 /* ── Light palette (new) ── */
@@ -132,6 +138,9 @@ const lightColors: ColorPalette = {
   red: { 500: "#dc2626" },
   green: { 500: "#16a34a", 600: "#15803d" },
   white: "#ffffff",
+  /** Same dark-ink tone serves both jobs in light mode — there's no separate "light scrim" concept the way dark mode needs pure black vs. pure white. */
+  scrim: "#0f172a",
+  sheen: "#0f172a",
 };
 
 const darkShadow: ShadowSet = {
