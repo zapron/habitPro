@@ -1,6 +1,69 @@
 # HabitPro Current Work
 
-Last updated: 2026-07-31 (UI/UX audit pass: XP completion badge, leaderboard medals + weekly countdown, nudge send feedback, pulsing tab-bar invite dot, iOS nudge-scroll fix, Quick Complete confirmation dialog — all shipped to production OTA on runtime 1.1.35. Followed by a full off-palette color-token sweep across the app, landed in three commits. An experimental "Apple Glass" Home revamp exists, fully isolated on branch `experiment/glass-home`, not merged.).
+Last updated: 2026-07-31 (UI/UX audit pass: XP completion badge, leaderboard medals + weekly countdown, nudge send feedback, pulsing tab-bar invite dot, iOS nudge-scroll fix, Quick Complete confirmation dialog — all shipped to production OTA on runtime 1.1.35. Followed by a full off-palette color-token sweep across the app, landed in three commits, then a full docs-vs-code audit that found and fixed real drift in five Markdown files. An experimental "Apple Glass" Home revamp exists, fully isolated on branch `experiment/glass-home`, not merged.).
+
+## Session Handoff (2026-07-31, end of session)
+
+**State: clean.** Everything from this session is committed on `main`, nothing
+mid-flight, nothing uncommitted except the pre-existing untracked `.mcp.json`
+(unrelated to any of this work). `npx tsc --noEmit` and `git diff --check` clean
+as of the last commit below.
+
+Commits this session, oldest to newest:
+1. `7322dec` — Quick Complete confirmation dialog (checklist missions) + the
+   rest of the UI-audit punch list (XP badge, leaderboard medals/countdown,
+   nudge feedback, pulsing invite dot, iOS nudge-scroll fix). **OTA'd to
+   production**, runtime `1.1.35`.
+2. `9226085` — light-mode glass-sheen fix (`GlassTopHighlight` theme-aware,
+   de-duplicated across 6 call sites; renders nothing in light mode after a
+   tinted attempt looked like "a flat gray smudge" and was rejected).
+3. `0783dfe` — `withAlpha()` token helper + manual off-palette fix on Home/
+   HabitCard/SettingsModal (the first, smallest slice of the color sweep).
+4. `1a1df99` — `scrim`/`sheen` semantic color tokens (foundation only).
+5. `587461d` — the rest of the color-token sweep, 47 files, automated via a
+   scratch script with a hand-reviewed mapping table; caught 4 real "no
+   `theme` in scope" latent-crash bugs along the way.
+6. `1322de8` — session log (`docs/CURRENT_WORK.md`, `docs/WORK_HISTORY.md`,
+   `docs/PROJECT_CONTEXT.md`, `docs/FUTURE_AGENT_HANDOFF.md`,
+   `app-architecture.md`, `agent.md`).
+7. **`af4e713` — docs audit**: user asked to verify every Markdown doc against
+   actual code/migrations/live EAS+Supabase state. Found and fixed real drift:
+   stale runtime/app versions, two features wrongly marked "not yet done" that
+   had shipped, two cited functions that don't exist, a live-verified Android
+   production-build correction (via `eas build:list`, not guessed), and
+   — the big one — `docs/MINI_MISSION_CATALOG_ARCHITECTURE.md` reading as a
+   pre-implementation plan for a feature that actually shipped 12 minutes
+   before the doc's own commit. Full breakdown of every finding is in that
+   commit's message and in `app-architecture.md` / `docs/CATALOG_ARCHITECTURE.md`
+   / `docs/MINI_MISSION_CATALOG_ARCHITECTURE.md` themselves (each now has
+   inline corrections rather than rewritten history).
+
+**Explicitly deferred, not forgotten — pending decisions for the user, not
+open bugs:**
+- Un-paywalling community cheering (`canCheer` gate) — proposed during the
+  UI audit as a low-effort/high-impact change. User said "let me think, skip
+  for now" — genuinely undecided, not declined. Revisit only if the user
+  raises it again; don't assume either direction.
+- `experiment/glass-home` branch — a from-scratch "Apple Glass" Home revamp
+  (real `BlurView` frosted glass, animated ambient background), built as an
+  explicit throwaway/revertible experiment. Fully isolated, one commit, never
+  merged into `main`. Known limitation if resumed: Android's `BlurView` has
+  no real blur (flat tint only) unless `experimentalBlurMethod` is set, which
+  Expo's docs flag as risky. Don't merge or continue this without the user
+  explicitly asking to pick it back up.
+- ~50 remaining hardcoded `isDark ? rgba(...) : rgba(...)` color instances,
+  deliberately left unconverted (mostly genuinely one-off colors that would
+  gain nothing from becoming a token, plus a couple of legitimately-ambiguous
+  cases — see `app-architecture.md`'s "Color token discipline" note and the
+  `af4e713` commit message for the full reasoning). Not a to-do list to
+  clear — most of what's left shouldn't be tokenized at all.
+
+**If starting a fresh chat from here**: read `agent.md`,
+`docs/PROJECT_CONTEXT.md`, this file, and `app-architecture.md` in that order
+(the standing convention for this repo), then this section for what just
+happened. No need to re-verify anything above — it was tested (`tsc`, `git
+diff --check`, a live simulator visual pass on Home in light mode, and a live
+EAS/Supabase check for the version-drift finding) before being committed.
 
 ## Latest Feature: Off-Palette Color Token Sweep (2026-07-31)
 
