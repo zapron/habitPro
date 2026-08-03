@@ -23,7 +23,6 @@ import { ForceUpdateModal } from "../src/components/ForceUpdateModal";
 import { SplashGate } from "../src/components/SplashGate";
 import { AppLaunchNotificationNudge } from "../src/components/AppLaunchNotificationNudge";
 import { OtaUpdateManager } from "../src/components/OtaUpdateManager";
-import { DevUpdateSimPanel } from "../src/components/DevUpdateSimPanel"; // TEMP-DEV-SIM
 import { SyncManager } from "../src/components/SyncManager";
 import { SyncToast } from "../src/components/SyncToast";
 import { NetworkRequiredGate } from "../src/components/NetworkRequiredGate";
@@ -359,7 +358,6 @@ function RootLayoutNav() {
         changelogUrl={forceChangelogUrl}
       />
       <NetworkRequiredGate />
-      <DevUpdateSimPanel />{/* TEMP-DEV-SIM */}
     </View>
   );
 }

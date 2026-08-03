@@ -47,7 +47,7 @@ function msToParts(ms: number) {
 }
 
 export function Timer({ startDate, mode = 'autopilot', endDate, missionTimezone, missionEndMs }: TimerProps) {
-    const { theme } = useTheme();
+    const { theme, isDark } = useTheme();
     const isManual = mode === 'manual';
 
     // Effective end timestamp — manual uses endDate, others use missionEndMs
@@ -129,7 +129,9 @@ export function Timer({ startDate, mode = 'autopilot', endDate, missionTimezone,
                 {
                     backgroundColor: theme.colors.surface,
                     borderRadius: theme.radius.lg,
-                    borderColor: isManual ? 'rgba(245, 158, 11, 0.35)' : theme.colors.border,
+                    borderColor: isManual
+                        ? 'rgba(245, 158, 11, 0.35)'
+                        : isDark ? theme.colors.border : "transparent",
                     ...theme.shadow.card,
                 },
             ]}
