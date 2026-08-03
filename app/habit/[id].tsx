@@ -26,7 +26,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { GlassTopHighlight } from '../../src/components/GlassTopHighlight';
 import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ArrowLeft, Trash2, Lock, RotateCcw, Star, Plane, Gamepad2, Globe, User, Users, Info, Bell } from 'lucide-react-native';
+import { ArrowLeft, Trash2, Lock, RotateCcw, Plane, Gamepad2, Globe, User, Users, Info, Bell, Hammer, Camera, MessageSquare } from 'lucide-react-native';
 import Svg, { Circle, G } from 'react-native-svg';
 import { useHabitStore } from '../../src/store/habitStore';
 import { useShallow } from 'zustand/react/shallow';
@@ -185,111 +185,48 @@ function getMilestones(totalDays: number, _mode: string): number[] {
     return markers;
 }
 
-const HabitGridBrandRing = React.memo(function HabitGridBrandRing({
+/**
+ * Completed-day dot — mirrors the cohort screen's per-day dot design
+ * (`CohortPeerStreakDots`): a plain filled circle with the day number, plus a
+ * small floating corner badge when that day has a memory attached (camera for
+ * a photo, message for text-only). Replaces the old multi-arc "brand ring" —
+ * repaired-day and milestone treatments are deferred for now.
+ */
+const CompletedDayDot = React.memo(function CompletedDayDot({
     day,
-    variant,
-    isMilestone,
-    hasMomentMedia = false,
-    repaired = false,
-    repairSource,
+    hasPhoto,
+    hasNoteOnly,
 }: {
     day: number;
-    variant: 'completed' | 'current';
-    isMilestone: boolean;
-    hasMomentMedia?: boolean;
-    repaired?: boolean;
-    repairSource?: 'squad' | 'solo';
+    hasPhoto: boolean;
+    hasNoteOnly: boolean;
 }) {
     const { theme, isDark } = useTheme();
-    const c = 21;
-    const outerR = 17.5;
-    const innerR = 14.1;
-    const outerCirc = 2 * Math.PI * outerR;
-    const innerCirc = 2 * Math.PI * innerR;
-    const current = variant === 'current';
-    const strokeOpacity = current ? 0.72 : 1;
-    const track = isDark ? withAlpha(theme.colors.textSecondary, 24) : withAlpha(theme.colors.textMuted, 18);
+    const dotBg = isDark ? '#23274e' : '#eef2ff';
+    const dotBorder = isDark ? withAlpha(theme.colors.indigo[500], 62) : withAlpha(theme.colors.indigo[600], 42);
+    const dotText = isDark ? theme.colors.white : theme.colors.indigo[600];
 
     return (
         <View style={styles.brandRingWrap}>
-            <Svg width="100%" height="100%" viewBox="0 0 42 42" style={StyleSheet.absoluteFill}>
-                <G transform={`rotate(-92 ${c} ${c})`}>
-                    <Circle cx={c} cy={c} r={outerR} stroke={track} strokeWidth={3.6} fill="none" />
-                    <Circle
-                        cx={c}
-                        cy={c}
-                        r={outerR}
-                        stroke={theme.colors.cyan[400]}
-                        strokeWidth={3.8}
-                        fill="none"
-                        strokeLinecap="round"
-                        strokeOpacity={strokeOpacity}
-                        strokeDasharray={`${outerCirc * 0.58} ${outerCirc}`}
-                        strokeDashoffset={outerCirc * 0.02}
-                    />
-                    <Circle
-                        cx={c}
-                        cy={c}
-                        r={innerR}
-                        stroke={theme.colors.indigo[500]}
-                        strokeWidth={3.8}
-                        fill="none"
-                        strokeLinecap="round"
-                        strokeOpacity={strokeOpacity}
-                        strokeDasharray={`${innerCirc * 0.62} ${innerCirc}`}
-                        strokeDashoffset={-innerCirc * 0.24}
-                    />
-                    <Circle
-                        cx={c}
-                        cy={c}
-                        r={outerR}
-                        stroke={isMilestone ? theme.colors.yellow[400] : theme.colors.amber[500]}
-                        strokeWidth={3.8}
-                        fill="none"
-                        strokeLinecap="round"
-                        strokeOpacity={current ? 0.68 : 1}
-                        strokeDasharray={`${outerCirc * 0.16} ${outerCirc}`}
-                        strokeDashoffset={-outerCirc * 0.72}
-                    />
-                </G>
-            </Svg>
-            <View
-                style={[
-                    styles.brandRingCore,
-                    {
-                        backgroundColor: isDark ? '#0b1020' : '#ffffff',
-                        borderColor: current ? theme.colors.cyan[400] : theme.colors.border,
-                    },
-                ]}
-            >
+            <View style={[styles.completedDot, { backgroundColor: dotBg, borderColor: dotBorder }]}>
                 <Text
                     style={[
                         styles.brandRingDayText,
-                        { color: current ? theme.colors.cyan[400] : theme.colors.textPrimary },
+                        { color: dotText },
                         day >= 10 && styles.brandRingDayTextTwoDigit,
                     ]}
                 >
                     {day}
                 </Text>
             </View>
-            {isMilestone ? (
-                <Star size={8} color={theme.colors.yellow[400]} fill={theme.colors.yellow[400]} style={styles.brandRingAccent} />
-            ) : current ? (
-                <Star size={8} color={theme.colors.cyan[400]} style={styles.brandRingAccent} />
-            ) : null}
-            {hasMomentMedia ? (
-                <View style={[styles.memoryDot, { backgroundColor: theme.colors.amber[500], borderColor: theme.colors.surface }]} />
-            ) : null}
-            {repaired ? (
-                <View
-                    style={[
-                        styles.repairDot,
-                        {
-                            backgroundColor: repairSource === 'solo' ? theme.colors.amber[500] : theme.colors.cyan[400],
-                            borderColor: theme.colors.surface,
-                        },
-                    ]}
-                />
+            {hasPhoto ? (
+                <View style={[styles.floatingBadge, { backgroundColor: theme.colors.amber[500], borderColor: theme.colors.surface }]}>
+                    <Camera size={7.5} color="#111827" strokeWidth={2.5} />
+                </View>
+            ) : hasNoteOnly ? (
+                <View style={[styles.floatingBadge, { backgroundColor: theme.colors.indigo[500], borderColor: theme.colors.surface }]}>
+                    <MessageSquare size={7.5} color="#ffffff" strokeWidth={2.5} />
+                </View>
             ) : null}
         </View>
     );
@@ -335,9 +272,8 @@ const AnimatedDayCell = React.memo(function AnimatedDayCell({
     locked,
     canInteract,
     hasStreakRecord,
-    hasMomentMedia,
-    repaired,
-    repairSource,
+    hasPhoto,
+    hasNoteOnly,
     checklistLogged,
     checklistTotal,
     onPress,
@@ -352,9 +288,8 @@ const AnimatedDayCell = React.memo(function AnimatedDayCell({
     locked: boolean;
     canInteract: boolean;
     hasStreakRecord: boolean;
-    hasMomentMedia: boolean;
-    repaired: boolean;
-    repairSource?: "squad" | "solo";
+    hasPhoto: boolean;
+    hasNoteOnly: boolean;
     /** Only set for the current mission day — tasks logged so far / total checklist tasks (0/0 for classic missions, or missions with a single task, where a ratio isn't meaningful). */
     checklistLogged?: number;
     checklistTotal?: number;
@@ -445,7 +380,7 @@ const AnimatedDayCell = React.memo(function AnimatedDayCell({
             ]
             : [styles.dayButtonIncomplete, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }],
         visuallyDone && isMilestone && !optimizeForScroll && styles.dayButtonMilestone,
-        isCurrentMissionDay && !visuallyDone && { borderColor: theme.colors.cyan[400], borderWidth: 2 },
+        isCurrentMissionDay && !visuallyDone && { borderColor: theme.colors.red[500], borderWidth: 2 },
         locked && styles.dayButtonFuture,
     ];
 
@@ -470,24 +405,17 @@ const AnimatedDayCell = React.memo(function AnimatedDayCell({
             >
                 {visuallyDone ? (
                     <Animated.View style={[styles.badgeWrap, isMilestone && { opacity: shimmerOpacity }]}>
-                        <HabitGridBrandRing
-                            day={day}
-                            variant="completed"
-                            isMilestone={isMilestone}
-                            hasMomentMedia={hasMomentMedia}
-                            repaired={repaired}
-                            repairSource={repairSource}
-                        />
+                        <CompletedDayDot day={day} hasPhoto={hasPhoto} hasNoteOnly={hasNoteOnly} />
                     </Animated.View>
                 ) : locked ? (
                     <Lock size={15} color={theme.colors.textMuted} />
                 ) : isCurrentMissionDay ? (
                     <View style={styles.badgeWrap}>
-                        <Text style={[styles.dayText, styles.currentDayText, { color: theme.colors.cyan[400] }]}>{day}</Text>
+                        <Text style={[styles.dayText, styles.currentDayText, { color: theme.colors.red[500] }]}>{day}</Text>
                         {showProgressArc ? <TaskProgressArc progress={(checklistLogged ?? 0) / (checklistTotal ?? 1)} /> : null}
                     </View>
                 ) : (
-                    <Text style={[styles.dayText, isCurrentMissionDay ? { color: theme.colors.cyan[400] } : { color: theme.colors.textMuted }]}>{day}</Text>
+                    <Text style={[styles.dayText, isCurrentMissionDay ? { color: theme.colors.red[500] } : { color: theme.colors.textMuted }]}>{day}</Text>
                 )}
             </TouchableOpacity>
         </Animated.View>
@@ -1801,7 +1729,7 @@ export default function HabitDetail() {
                             onPress={() => setGroupSheetOpen(true)}
                             accessibilityLabel="Group mission"
                         >
-                            <Users size={theme.icon.xl} color={theme.colors.cyan[400]} />
+                            <Users size={theme.icon.xl} color={theme.colors.textMuted} />
                         </TouchableOpacity>
                     ) : null}
                     {!isGroupMission ? (
@@ -1810,7 +1738,7 @@ export default function HabitDetail() {
                         </TouchableOpacity>
                     ) : null}
                     <TouchableOpacity style={styles.deleteButton} onPress={handleDelete}>
-                        <Trash2 size={theme.icon.xl} color={theme.colors.red[500]} />
+                        <Trash2 size={theme.icon.xl} color={theme.colors.textMuted} />
                     </TouchableOpacity>
                 </View>
             </View>
@@ -1975,10 +1903,10 @@ export default function HabitDetail() {
                 {...({ delaysContentTouches: false } as any)}
             >
                 <View style={styles.modeRow}>
-                    <View style={[styles.modeBadge, isManual && styles.modeBadgeManual]}>
+                    <View style={[styles.modeBadge, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
                         {isManual ? <Gamepad2 size={13} color={theme.colors.amber[500]} /> : <Plane size={13} color={theme.colors.cyan[400]} />}
-                        <Text style={[styles.modeBadgeText, { color: theme.colors.cyan[400] }, isManual && { color: theme.colors.amber[500] }]}>
-                            {isManual ? 'MANUAL CONTROL' : 'AUTOPILOT'}
+                        <Text style={[styles.modeBadgeText, { color: theme.colors.textSecondary }]}>
+                            {isManual ? 'Manual control' : 'Autopilot'}
                         </Text>
                     </View>
                     <TouchableOpacity
@@ -1991,7 +1919,7 @@ export default function HabitDetail() {
                         accessibilityRole="button"
                         accessibilityLabel="Mission details and brief"
                     >
-                        <Info size={theme.icon.md} color={theme.colors.indigo[400]} />
+                        <Info size={theme.icon.md} color={theme.colors.textMuted} />
                     </TouchableOpacity>
                 </View>
 
@@ -2019,7 +1947,7 @@ export default function HabitDetail() {
                                         ? theme.colors.green[500] + '44'
                                         : habit.missionReport === 'failed'
                                             ? theme.colors.red[500] + '44'
-                                            : theme.colors.border,
+                                            : isDark ? theme.colors.border : "transparent",
                                 borderRadius: theme.radius.lg,
                                 ...theme.shadow.card,
                             },
@@ -2097,7 +2025,7 @@ export default function HabitDetail() {
                         Platform.OS === 'ios' && styles.missionControlsCardIos,
                         {
                             backgroundColor: theme.colors.surface,
-                            borderColor: theme.colors.border,
+                            borderColor: isDark ? theme.colors.border : "transparent",
                             borderRadius: theme.radius.lg,
                             ...theme.shadow.card,
                         },
@@ -2227,44 +2155,61 @@ export default function HabitDetail() {
 
 
                 {eligibleRepair && repairStatus !== "applied" ? (
-                  <View
-                    style={[
-                      styles.repairBanner,
-                      {
-                        borderColor: isDark ? withAlpha(theme.colors.amber[500], 35) : withAlpha(theme.colors.amber[500], 25),
-                        backgroundColor: isDark ? withAlpha(theme.colors.amber[500], 10) : withAlpha(theme.colors.amber[500], 8),
-                      },
-                    ]}
-                  >
-                    <View style={{ flex: 1, minWidth: 0 }}>
-                      <Text style={[styles.repairTitle, { color: theme.colors.textPrimary }]}>
-                        {repairStatus === "pending" ? "Repair pending" : "Streak broken"}
-                      </Text>
-                      <Text style={[styles.repairBody, { color: theme.colors.textSecondary }]}>
-                        {repairStatus === "pending"
-                          ? "Your squad has been asked to approve. You’ll be notified when it’s applied."
-                          : `You missed day ${eligibleRepair.missionDayNumber}. Repair within 24h to keep your streak.`}
-                      </Text>
-                      <Text style={[styles.repairCost, { color: theme.colors.amber[500] }]}>
-                        {repairStatus === "pending" ? "Waiting for approvals…" : `Cost: ${eligibleRepair.xpCost} XP`}
-                      </Text>
-                    </View>
-                    <TouchableOpacity
-                      onPress={() => void openRepair()}
-                      activeOpacity={0.86}
-                      disabled={repairStatus === "pending"}
+                  repairStatus === "pending" ? (
+                    <View
                       style={[
-                        styles.repairBtn,
-                        { backgroundColor: repairStatus === "pending" ? theme.colors.border : theme.colors.amber[500] },
+                        styles.repairBanner,
+                        {
+                          borderColor: isDark ? withAlpha(theme.colors.amber[500], 35) : withAlpha(theme.colors.amber[500], 25),
+                          backgroundColor: isDark ? withAlpha(theme.colors.amber[500], 10) : withAlpha(theme.colors.amber[500], 8),
+                        },
                       ]}
-                      accessibilityRole="button"
-                      accessibilityLabel="Repair streak"
                     >
-                      <Text style={[styles.repairBtnText, { color: "#111827" }]}>
-                        {repairStatus === "pending" ? "Pending" : "Repair"}
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <Text style={[styles.repairTitle, { color: theme.colors.textPrimary }]}>
+                          Repair pending
+                        </Text>
+                        <Text style={[styles.repairBody, { color: theme.colors.textSecondary }]}>
+                          Your squad has been asked to approve. You’ll be notified when it’s applied.
+                        </Text>
+                        <Text style={[styles.repairCost, { color: theme.colors.amber[500] }]}>
+                          Waiting for approvals…
+                        </Text>
+                      </View>
+                      <View style={[styles.repairBtn, { backgroundColor: theme.colors.border }]}>
+                        <Text style={[styles.repairBtnText, { color: "#111827" }]}>Pending</Text>
+                      </View>
+                    </View>
+                  ) : (
+                    <View
+                      style={[
+                        styles.repairPlainCard,
+                        { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
+                      ]}
+                    >
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <Text style={[styles.repairTitle, { color: theme.colors.textPrimary }]}>
+                          Streak broken
+                        </Text>
+                        <Text style={[styles.repairBody, { color: theme.colors.textSecondary }]}>
+                          {`You missed day ${eligibleRepair.missionDayNumber}. Repair within 24h to keep your streak.`}
+                        </Text>
+                        <Text style={[styles.repairCost, { color: theme.colors.textMuted }]}>
+                          {`Cost: ${eligibleRepair.xpCost} XP`}
+                        </Text>
+                      </View>
+                      <TouchableOpacity
+                        onPress={() => void openRepair()}
+                        activeOpacity={0.7}
+                        style={[styles.repairPlainBtn, { borderColor: theme.colors.amber[500] }]}
+                        accessibilityRole="button"
+                        accessibilityLabel="Repair streak"
+                      >
+                        <Hammer size={13} color={theme.colors.amber[500]} strokeWidth={2.4} />
+                        <Text style={[styles.repairBtnText, { color: theme.colors.amber[500] }]}>Repair</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )
                 ) : null}
                 <StreakProgressCard
                     streak={habit.streak}
@@ -2438,14 +2383,13 @@ export default function HabitDetail() {
                         const isCurrentMissionDay = canInteract && !isCompleted;
                         const streakMem = habit.streakMemories?.[dateStr];
                         const hasStreakRecord = Boolean(streakMem);
-                        const hasMomentMedia = Boolean(
-                            streakMem &&
-                                ((streakMem.note ?? '').trim().length > 0 ||
-                                    streakMem.imageUrl ||
-                                    streakMem.imageUri),
+                        const memoryTasks = streakMem?.tasks ?? [];
+                        const hasPhoto = Boolean(
+                            streakMem && (streakMem.imageUrl || streakMem.imageUri || memoryTasks.some((t) => t.proofUrls[0])),
                         );
-                        const repaired = repairedDateSet.has(dateStr);
-                        const repairSource = streakMem?.repairSource;
+                        const hasNoteOnly =
+                            !hasPhoto &&
+                            Boolean(streakMem && ((streakMem.note ?? '').trim().length > 0 || memoryTasks.some((t) => t.note?.trim())));
                         const checklistTotal = isCurrentMissionDay ? (habit.taskChecklist?.length ?? 0) : 0;
                         // Count only entries matching a CURRENT checklist task id — same as
                         // ChecklistDaySheet's own "N/M logged" count. A raw `tasks.length` would
@@ -2470,9 +2414,8 @@ export default function HabitDetail() {
                                 locked={locked}
                                 canInteract={canInteract}
                                 hasStreakRecord={hasStreakRecord}
-                                hasMomentMedia={hasMomentMedia}
-                                repaired={repaired}
-                                repairSource={repairSource}
+                                hasPhoto={hasPhoto}
+                                hasNoteOnly={hasNoteOnly}
                                 checklistLogged={checklistLogged}
                                 checklistTotal={checklistTotal}
                                 onPress={handleDayPress} // Stable callback reference
@@ -2707,7 +2650,7 @@ const styles = StyleSheet.create({
     headerActions: { flexDirection: 'row', gap: 8 },
     iconButton: { padding: 8, borderRadius: 9999, borderWidth: 1 },
     resetButton: { padding: 8, borderRadius: 9999, backgroundColor: 'rgba(245, 158, 11, 0.12)' },
-    deleteButton: { padding: 8, borderRadius: 9999, backgroundColor: 'rgba(239, 68, 68, 0.14)' },
+    deleteButton: { padding: 8, borderRadius: 9999 },
     modeRow: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -2715,8 +2658,7 @@ const styles = StyleSheet.create({
         gap: 8,
         marginBottom: 10,
     },
-    modeBadge: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 6, paddingVertical: 4, paddingHorizontal: 10, borderRadius: 9999, backgroundColor: 'rgba(34, 211, 238, 0.1)', borderWidth: 1, borderColor: 'rgba(34, 211, 238, 0.3)' },
-    modeBadgeManual: { backgroundColor: 'rgba(245, 158, 11, 0.1)', borderColor: 'rgba(245, 158, 11, 0.3)' },
+    modeBadge: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 6, paddingVertical: 4, paddingHorizontal: 10, borderRadius: 9999, borderWidth: 1 },
     modeBadgeText: { fontSize: 11, fontWeight: '800', letterSpacing: 1 },
     modeInfoBtn: {
         justifyContent: 'center',
@@ -2850,6 +2792,25 @@ const styles = StyleSheet.create({
     repairCost: { fontSize: 12, fontWeight: "900", marginTop: 6 },
     repairBtn: { paddingHorizontal: 14, paddingVertical: 10, borderRadius: 14 },
     repairBtnText: { fontSize: 12, fontWeight: "900" },
+    repairPlainCard: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 12,
+        paddingVertical: 12,
+        paddingHorizontal: 14,
+        borderWidth: 1,
+        borderRadius: 16,
+        marginBottom: 14,
+    },
+    repairPlainBtn: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 6,
+        paddingHorizontal: 14,
+        paddingVertical: 10,
+        borderRadius: 14,
+        borderWidth: 1,
+    },
     gridHeaderRow: {
         flexDirection: 'row',
         alignItems: 'flex-end',
@@ -2873,7 +2834,7 @@ const styles = StyleSheet.create({
     unlockPillText: { fontSize: 11, lineHeight: 14, fontWeight: '900', textAlign: 'center' },
     grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', paddingBottom: 24, position: 'relative' },
     dayCellFrame: { width: '13%', aspectRatio: 1, marginBottom: 14 },
-    dayButton: { width: '100%', height: '100%', borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+    dayButton: { width: '100%', height: '100%', borderRadius: 9999, alignItems: 'center', justifyContent: 'center' },
     dayButtonCompleted: { borderWidth: 1 },
     dayButtonMilestone: { shadowColor: '#fbbf24', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.45, shadowRadius: 14, elevation: 8 },
     dayButtonIncomplete: { borderWidth: 1 },
@@ -2887,15 +2848,28 @@ const styles = StyleSheet.create({
     completedDayText: { color: '#ffffff', fontSize: 14, fontWeight: '800' },
     completedDayTextMilestone: { color: '#fff7dc' },
     badgeAccent: { position: 'absolute', top: 6, right: 6 },
-    memoryDot: { position: 'absolute', bottom: 5, width: 7, height: 7, borderRadius: 4, borderWidth: 1.5 },
-    repairDot: { position: 'absolute', bottom: 5, right: 5, width: 7, height: 7, borderRadius: 4, borderWidth: 1.5 },
     brandRingWrap: { width: '82%', height: '82%', alignItems: 'center', justifyContent: 'center' },
-    brandRingCore: { width: 24, height: 24, borderRadius: 9999, alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
+    completedDot: { width: '100%', height: '100%', borderRadius: 9999, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5 },
     brandRingDayText: { fontSize: 14, fontWeight: '900' },
     brandRingDayTextTwoDigit: { fontSize: 12 },
-    brandRingAccent: { position: 'absolute', top: 2, right: 2 },
+    floatingBadge: {
+        position: 'absolute',
+        top: -4,
+        right: -4,
+        width: 14,
+        height: 14,
+        borderRadius: 7,
+        borderWidth: 1.2,
+        alignItems: 'center',
+        justifyContent: 'center',
+        elevation: 2,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.18,
+        shadowRadius: 1,
+    },
     dayButtonPlaceholder: { width: '13%', aspectRatio: 1, marginBottom: 14 },
-    dayButtonWarmup: { borderWidth: 1, borderRadius: 12, opacity: 0.56 },
+    dayButtonWarmup: { borderWidth: 1, borderRadius: 9999, opacity: 0.56 },
     missionTimerSlot: {
         padding: 16,
         marginBottom: 10,
