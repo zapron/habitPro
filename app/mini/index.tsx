@@ -331,6 +331,21 @@ export default function MiniMissionsScreen() {
   const isFocused = useIsFocused();
   const reduceMotion = useReducedMotion();
   const emptyIconScale = useRef(new Animated.Value(1)).current;
+  const activeTabIndex = tab === "active" || view === "running" ? 0 : tab === "queued" ? 1 : tab === "completed" ? 2 : 3;
+  const [tabTrackWidth, setTabTrackWidth] = useState(0);
+  const tabIndicatorX = useRef(new Animated.Value(activeTabIndex)).current;
+  useEffect(() => {
+    if (reduceMotion) {
+      tabIndicatorX.setValue(activeTabIndex);
+      return;
+    }
+    Animated.spring(tabIndicatorX, {
+      toValue: activeTabIndex,
+      useNativeDriver: true,
+      friction: 10,
+      tension: 90,
+    }).start();
+  }, [activeTabIndex, reduceMotion, tabIndicatorX]);
 
   useEffect(() => {
     if (reduceMotion) {
@@ -496,10 +511,36 @@ export default function MiniMissionsScreen() {
         />
       </View>
 
-      <View style={[styles.tabContainer, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, borderRadius: theme.radius.md }]}>
+      <View
+        style={[styles.tabContainer, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, borderRadius: theme.radius.md }]}
+        onLayout={(event) => {
+          const fullWidth = event.nativeEvent.layout.width;
+          setTabTrackWidth(Math.max(0, fullWidth - 2 * 4 - 2 * 1));
+        }}
+      >
         <GlassTopHighlight radius={theme.radius.md} />
+        {tabTrackWidth > 0 ? (
+          <Animated.View
+            pointerEvents="none"
+            style={[
+              styles.tabIndicator,
+              {
+                width: tabTrackWidth / 4,
+                backgroundColor: theme.colors.indigo[600],
+                transform: [
+                  {
+                    translateX: tabIndicatorX.interpolate({
+                      inputRange: [0, 1, 2, 3],
+                      outputRange: [0, tabTrackWidth / 4, (tabTrackWidth / 4) * 2, (tabTrackWidth / 4) * 3],
+                    }),
+                  },
+                ],
+              },
+            ]}
+          />
+        ) : null}
         <TouchableOpacity
-          style={[styles.tab, (tab === "active" || view === "running") && [styles.activeTab, { backgroundColor: theme.colors.indigo[600] }]]}
+          style={styles.tab}
           onPress={() => { setTab("active"); if (view === "running") router.replace("/mini?tab=active"); }}
         >
           <Text
@@ -510,7 +551,7 @@ export default function MiniMissionsScreen() {
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.tab, tab === "queued" && [styles.activeTab, { backgroundColor: theme.colors.indigo[600] }]]}
+          style={styles.tab}
           onPress={() => { setTab("queued"); if (view === "running") router.replace("/mini?tab=queued"); }}
         >
           <Text style={[styles.tabText, { color: theme.colors.textSecondary }, tab === "queued" && styles.activeTabText]} numberOfLines={1}>
@@ -518,7 +559,7 @@ export default function MiniMissionsScreen() {
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.tab, tab === "completed" && [styles.activeTab, { backgroundColor: theme.colors.indigo[600] }]]}
+          style={styles.tab}
           onPress={() => { setTab("completed"); if (view === "running") router.replace("/mini?tab=completed"); }}
         >
           <Text style={[styles.tabText, { color: theme.colors.textSecondary }, tab === "completed" && styles.activeTabText]} numberOfLines={1}>
@@ -526,7 +567,7 @@ export default function MiniMissionsScreen() {
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.tab, tab === "failed" && [styles.activeTab, { backgroundColor: theme.colors.indigo[600] }]]}
+          style={styles.tab}
           onPress={() => { setTab("failed"); if (view === "running") router.replace("/mini?tab=failed"); }}
         >
           <Text style={[styles.tabText, { color: theme.colors.textSecondary }, tab === "failed" && styles.activeTabText]} numberOfLines={1}>
@@ -647,7 +688,7 @@ const styles = StyleSheet.create({
   statsLabel: { fontSize: 11 },
   tabContainer: { flexDirection: "row", borderWidth: 1, padding: 4, marginBottom: 14 },
   tab: { flex: 1, alignItems: "center", justifyContent: "center", paddingVertical: 10, borderRadius: 10 },
-  activeTab: {},
+  tabIndicator: { position: "absolute", top: 4, bottom: 4, left: 4, borderRadius: 10 },
   tabText: { fontWeight: "700", fontSize: 11 },
   activeTabText: { color: "#ffffff" },
   listWrap: { flex: 1 },

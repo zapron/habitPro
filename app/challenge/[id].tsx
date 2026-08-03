@@ -221,6 +221,7 @@ const STREAK_SKELETON_CARD_COUNT = 3;
 const EMPTY_SENT_PRESET_NUDGE_KINDS = new Set<PresetChallengeNudgeKind>();
 
 type ChallengeDetailTab = "streaks" | "activity" | "repairs";
+const DETAIL_TAB_ORDER: ChallengeDetailTab[] = ["streaks", "activity", "repairs"];
 
 function normalizeChallengeDetailTab(value: string | string[] | undefined): ChallengeDetailTab {
   const raw = Array.isArray(value) ? value[0] : value;
@@ -490,6 +491,7 @@ export default function ChallengeDetailScreen() {
   const requestedTab = normalizeChallengeDetailTab(tab);
   const router = useRouter();
   const { theme, isDark } = useTheme();
+  const reduceMotion = useReducedMotion();
   const insets = useSafeAreaInsets();
   const { showToast } = useToast();
   const { session } = useAuth();
@@ -576,6 +578,21 @@ export default function ChallengeDetailScreen() {
   const [missionDetailsOpen, setMissionDetailsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<ChallengeDetailTab>(requestedTab);
   const [streakContentReady, setStreakContentReady] = useState(false);
+  const [detailTabsWidth, setDetailTabsWidth] = useState(0);
+  const detailTabAnim = useRef(new Animated.Value(DETAIL_TAB_ORDER.indexOf(requestedTab))).current;
+  useEffect(() => {
+    const toValue = DETAIL_TAB_ORDER.indexOf(activeTab);
+    if (reduceMotion) {
+      detailTabAnim.setValue(toValue);
+      return;
+    }
+    Animated.spring(detailTabAnim, {
+      toValue,
+      useNativeDriver: true,
+      friction: 10,
+      tension: 90,
+    }).start();
+  }, [activeTab, reduceMotion, detailTabAnim]);
 
   const themedStyles = useMemo(() => {
     return {
@@ -1924,8 +1941,36 @@ export default function ChallengeDetailScreen() {
                 borderColor: theme.colors.border,
               },
             ]}
+            onLayout={(event) => {
+              const fullWidth = event.nativeEvent.layout.width;
+              setDetailTabsWidth(Math.max(0, fullWidth - 2 * 4 - 2 * 1));
+            }}
           >
             <GlassTopHighlight radius={18} />
+            {detailTabsWidth > 0 ? (() => {
+              const itemWidth = (detailTabsWidth - 4 * (DETAIL_TAB_ORDER.length - 1)) / DETAIL_TAB_ORDER.length;
+              const step = itemWidth + 4;
+              return (
+                <Animated.View
+                  pointerEvents="none"
+                  style={[
+                    styles.detailTabIndicator,
+                    {
+                      width: itemWidth,
+                      backgroundColor: theme.colors.indigo[500],
+                      transform: [
+                        {
+                          translateX: detailTabAnim.interpolate({
+                            inputRange: DETAIL_TAB_ORDER.map((_, i) => i),
+                            outputRange: DETAIL_TAB_ORDER.map((_, i) => i * step),
+                          }),
+                        },
+                      ],
+                    },
+                  ]}
+                />
+              );
+            })() : null}
             {detailTabs.map((tab) => {
               const active = activeTab === tab.key;
               const attentionBadge = tab.key === "repairs" && tab.count === "!";
@@ -1940,14 +1985,7 @@ export default function ChallengeDetailScreen() {
                       : `Show ${tab.label}`
                   }
                   onPress={() => setActiveTab(tab.key)}
-                  style={[
-                    styles.detailTab,
-                    {
-                      backgroundColor: active
-                        ? theme.colors.indigo[500]
-                        : "transparent",
-                    },
-                  ]}
+                  style={styles.detailTab}
                 >
                   <Text
                     style={[
@@ -2779,6 +2817,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
+  },
+  detailTabIndicator: {
+    position: "absolute",
+    top: 4,
+    bottom: 4,
+    left: 4,
+    borderRadius: 14,
   },
   detailTabText: {
     fontSize: 13,
