@@ -1,5 +1,5 @@
 import { Text } from "./AppText";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   Animated,
   Easing,
@@ -159,27 +159,65 @@ function HoneycombBuildTile({
 
 type HexFrame = { type: "photo"; uri: string } | { type: "text"; note: string };
 
-/** Random window each hex independently redraws its next transition from — no shared phase, so tiles never read as one mechanical sweep. */
-const HEX_FADE_MIN_INTERVAL_MS = 2600;
-const HEX_FADE_MAX_INTERVAL_MS = 6400;
-const HEX_FADE_OUT_MS = 560;
-const HEX_FADE_IN_MS = 640;
+const HEX_FADE_OUT_MS = 700;
+const HEX_FADE_IN_MS = 800;
 /** Brief pause at full black between the old frame disappearing and the next one starting to appear. */
-const HEX_FADE_BLACK_HOLD_MS = 90;
+const HEX_FADE_BLACK_HOLD_MS = 120;
+/** Settle time after the honeycomb first builds in before the very first hex kicks off the wave. */
+const HEX_WAVE_INITIAL_DELAY_MS = 500;
+/** Next hex hands off once the current one's cycle is this far done — overlapping starts instead of waiting for a full finish, so the wave reads faster without shortening any single tile's own transition. */
+const HEX_WAVE_OVERLAP_FRACTION = 0.6;
 
-function hexFadeInterval(): number {
-  return HEX_FADE_MIN_INTERVAL_MS + Math.random() * (HEX_FADE_MAX_INTERVAL_MS - HEX_FADE_MIN_INTERVAL_MS);
+/** Turn-based coordinator so only one stacked hex ever transitions at a time, in day order (D6 → D5 → … → D1), each one waited on before the next starts — an explicit wave instead of every tile firing on its own random clock. */
+type HexWaveScheduler = {
+  activeTurnKey: string | null;
+  register: (key: string, orderIndex: number) => void;
+  unregister: (key: string) => void;
+  advance: (fromKey: string) => void;
+};
+
+function useHexWaveScheduler(): HexWaveScheduler {
+  const [activeTurnKey, setActiveTurnKey] = useState<string | null>(null);
+  const registryRef = useRef<Map<string, number>>(new Map());
+
+  const register = useCallback((key: string, orderIndex: number) => {
+    registryRef.current.set(key, orderIndex);
+    setActiveTurnKey((prev) => prev ?? key);
+  }, []);
+
+  const unregister = useCallback((key: string) => {
+    registryRef.current.delete(key);
+    setActiveTurnKey((prev) => {
+      if (prev !== key) return prev;
+      const remaining = Array.from(registryRef.current.entries()).sort((a, b) => a[1] - b[1]);
+      return remaining[0]?.[0] ?? null;
+    });
+  }, []);
+
+  const advance = useCallback((fromKey: string) => {
+    const remaining = Array.from(registryRef.current.entries()).sort((a, b) => a[1] - b[1]);
+    if (remaining.length === 0) {
+      setActiveTurnKey(null);
+      return;
+    }
+    const currentPos = remaining.findIndex(([key]) => key === fromKey);
+    const nextPos = currentPos === -1 ? 0 : (currentPos + 1) % remaining.length;
+    setActiveTurnKey(remaining[nextPos][0]);
+  }, []);
+
+  return { activeTurnKey, register, unregister, advance };
 }
 
 /**
- * The "living memory" idea, v3 — replaces the earlier synchronized spring-squish
- * wave. A day with 2+ logged tasks (photo or text note) renders as a perfectly
- * normal single hex; independently of every other hex on the grid, it periodically
- * fades to black, swaps to the next frame — photo or text note, whichever that
- * task actually has — and fades back in. Each tile redraws its own random interval
- * every cycle, with no shared phase or stagger, so the grid never reads as one
- * scripted sweep; with enough tiles firing at their own pace it still reads as a
- * slow, living wave, just an emergent one instead of a choreographed one.
+ * The "living memory" idea, v4 — a literal wave instead of an emergent one. A day
+ * with 2+ logged tasks (photo or text note) renders as a perfectly normal single
+ * hex; every stacked hex on the grid registers into a shared turn order (day
+ * order — D6, D5, D4, … per the entries array), and only the hex whose turn it
+ * is fades to black, swaps to its next frame, and fades back in. The moment it
+ * finishes, a short gap passes and the next hex in order takes its turn — so at
+ * most one tile is ever transitioning at once, and the grid reads as a single
+ * wave sweeping through the days in sequence rather than several independent
+ * flickers.
  *
  * Only one frame is ever mounted at a time (a single Animated.Value for opacity),
  * so cost doesn't scale with stack size. Photos are prefetched into the native
@@ -198,6 +236,11 @@ function HexFadeStack({
   quoteColor,
   kickerColor,
   noteColor,
+  orderIndex,
+  activeTurnKey,
+  onRegisterTurn,
+  onUnregisterTurn,
+  onAdvanceTurn,
 }: {
   frames: HexFrame[];
   tileW: number;
@@ -210,11 +253,19 @@ function HexFadeStack({
   quoteColor: string;
   kickerColor: string;
   noteColor: string;
+  /** Position in the (already day-descending) entries array — the wave's turn order. */
+  orderIndex: number;
+  activeTurnKey: string | null;
+  onRegisterTurn: (key: string, orderIndex: number) => void;
+  onUnregisterTurn: (key: string) => void;
+  onAdvanceTurn: (fromKey: string) => void;
 }) {
   const n = frames.length;
   const [activeIndex, setActiveIndex] = useState(0);
   const shownIndex = Math.min(activeIndex, Math.max(0, n - 1));
   const opacity = useRef(new Animated.Value(1)).current;
+  const tileKey = clipIdBase;
+  const isMyTurn = activeTurnKey === tileKey;
 
   const photoUris = useMemo(
     () => frames.filter((f): f is Extract<HexFrame, { type: "photo" }> => f.type === "photo").map((f) => f.uri),
@@ -238,12 +289,35 @@ function HexFadeStack({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [thumbUrisKey]);
 
+  // Join the shared wave turn order while mounted; leave it the moment this tile
+  // scrolls off and unmounts, so the wave never stalls waiting on a gone tile.
   useEffect(() => {
     if (reduceMotion || n < 2) return undefined;
-    let cancelled = false;
-    let timer: ReturnType<typeof setTimeout>;
+    onRegisterTurn(tileKey, orderIndex);
+    return () => onUnregisterTurn(tileKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reduceMotion, n, tileKey, orderIndex]);
 
-    const tick = () => {
+  // Only plays when it's this tile's turn: fade out, swap frame, fade back in —
+  // its own animation always runs the full duration, unshortened. The *handoff*
+  // to the next hex is a separate, earlier timer: it fires once this tile's
+  // cycle is HEX_WAVE_OVERLAP_FRACTION of the way done, so the next hex starts
+  // while this one is still finishing — overlapping wave instead of a strict
+  // relay, which reads faster without touching any single tile's own timing.
+  const hasPlayedOnceRef = useRef(false);
+  useEffect(() => {
+    if (reduceMotion || n < 2 || !isMyTurn) return undefined;
+    let cancelled = false;
+    let startTimer: ReturnType<typeof setTimeout>;
+    let holdTimer: ReturnType<typeof setTimeout>;
+    let advanceTimer: ReturnType<typeof setTimeout>;
+    // A tile's very first turn gets a short settle delay (lets the honeycomb
+    // build-in finish); every turn after that starts the instant it's handed off.
+    const startDelay = hasPlayedOnceRef.current ? 0 : HEX_WAVE_INITIAL_DELAY_MS;
+    hasPlayedOnceRef.current = true;
+    const totalCycleMs = HEX_FADE_OUT_MS + HEX_FADE_BLACK_HOLD_MS + HEX_FADE_IN_MS;
+
+    startTimer = setTimeout(() => {
       if (cancelled) return;
       Animated.timing(opacity, {
         toValue: 0,
@@ -254,7 +328,7 @@ function HexFadeStack({
       }).start(() => {
         if (cancelled) return;
         setActiveIndex((prev) => (prev + 1) % n);
-        timer = setTimeout(() => {
+        holdTimer = setTimeout(() => {
           if (cancelled) return;
           Animated.timing(opacity, {
             toValue: 1,
@@ -265,16 +339,18 @@ function HexFadeStack({
           }).start();
         }, HEX_FADE_BLACK_HOLD_MS);
       });
-      timer = setTimeout(tick, hexFadeInterval());
-    };
+      advanceTimer = setTimeout(() => {
+        if (!cancelled) onAdvanceTurn(tileKey);
+      }, totalCycleMs * HEX_WAVE_OVERLAP_FRACTION);
+    }, startDelay);
 
-    // Independent random start — no shared phase with any other tile.
-    timer = setTimeout(tick, Math.random() * HEX_FADE_MAX_INTERVAL_MS);
     return () => {
       cancelled = true;
-      clearTimeout(timer);
+      clearTimeout(startTimer);
+      clearTimeout(holdTimer);
+      clearTimeout(advanceTimer);
     };
-  }, [n, reduceMotion, opacity]);
+  }, [n, reduceMotion, opacity, isMyTurn, tileKey, onAdvanceTurn]);
 
   const frame = frames[shownIndex];
 
@@ -331,6 +407,7 @@ export function StreakMemoryGallery({
   const [viewerImageAspect, setViewerImageAspect] = useState<number | null>(null);
   const formationHapticKeyRef = useRef<string | null>(null);
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const hexWave = useHexWaveScheduler();
 
   const tileW = clamp((windowWidth - 42) / 3.06, 94, 122);
   const tileH = tileW * 1.12;
@@ -586,6 +663,11 @@ export function StreakMemoryGallery({
                         quoteColor={theme.colors.indigo[400]}
                         kickerColor={memoryKickerColor}
                         noteColor={memoryTextColor}
+                        orderIndex={index}
+                        activeTurnKey={hexWave.activeTurnKey}
+                        onRegisterTurn={hexWave.register}
+                        onUnregisterTurn={hexWave.unregister}
+                        onAdvanceTurn={hexWave.advance}
                       />
                     ) : (
                       <Svg width={tileW} height={tileH} viewBox={`0 0 ${tileW} ${tileH}`} style={styles.hexSvg}>
