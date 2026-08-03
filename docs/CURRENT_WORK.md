@@ -1,6 +1,97 @@
 # HabitPro Current Work
 
-Last updated: 2026-07-31 (UI/UX audit pass: XP completion badge, leaderboard medals + weekly countdown, nudge send feedback, pulsing tab-bar invite dot, iOS nudge-scroll fix, Quick Complete confirmation dialog — all shipped to production OTA on runtime 1.1.35. Followed by a full off-palette color-token sweep across the app, landed in three commits, then a full docs-vs-code audit that found and fixed real drift in five Markdown files. An experimental "Apple Glass" Home revamp exists, fully isolated on branch `experiment/glass-home`, not merged.).
+Last updated: 2026-08-04 (a full Classic/Minimalist theme-pack system landed, plus a large iterative visual-redesign pass — Home/Compete tab restyle with animated sliding indicators (rolled out to every other segmented control in the app too), a from-scratch HabitCard redesign (circular day-grid badge, colorless mission-type pills, repair-as-hammer-icon), the habit detail screen's day grid and repair banner redesign, and a restyle of the memory-capture sheet against a Claude Design mockup. All six commits live on branch `experiment/glass-redesign-v2`, **not merged into `main`**.).
+
+## Session Handoff (2026-08-04, end of session)
+
+**State: clean, but on an experiment branch, not `main`.** Everything from
+this session is committed on `experiment/glass-redesign-v2` (branches off
+`main` at `dd6c66c`, the tip of the previous session — six commits ahead,
+`main` itself untouched). Nothing mid-flight, nothing uncommitted except the
+pre-existing untracked `.mcp.json` (unrelated to any of this work, same as
+every prior session). `npx tsc --noEmit` and `git diff --check` clean as of
+the last commit below. **No merge to `main`, no push, and no OTA/build have
+been done or requested this session** — purely local commits on the
+experiment branch.
+
+Commits this session, oldest to newest (all on `experiment/glass-redesign-v2`):
+1. `1bec56c` — moved the dev-only OTA/force-update simulation controls from
+   a global floating overlay (`DevUpdateSimPanel`, deleted) into a
+   `__DEV__`-gated "DEV TOOLS" section on the Profile screen; gave
+   `Timer.tsx`'s card a transparent border in light mode (MD3 tonal
+   elevation, matching a pattern used elsewhere).
+2. `9d979fc` — **Classic/Minimalist theme-pack system** (the session's
+   foundational change): a new `themePack` preference alongside light/dark/
+   system, persisted separately, selectable from a new Settings
+   "APPEARANCE" section. `src/styles/redesignPalette.ts` (new) holds the
+   minimalist palette (warm neutral ground, single indigo accent, flat/
+   zero-shadow); `AppText` now resolves font family from `theme.fontFamily`
+   at render time so every screen's text switches automatically; adds the
+   Manrope/DM Sans font packages.
+3. `155c558` — Home + Compete adopt the minimalist palette via a local `rp`
+   value where automatic token-swapping isn't enough; both screens' main
+   segmented tabs (plus Compete's Weeklies/Invites row) redesigned with a
+   fluid `Animated.spring` sliding indicator instead of an instant per-tab
+   background swap. `HabitCard.tsx` redesigned: fire-icon streak ring
+   replaced by a small top-right circle-grid badge (GitHub-contributions
+   style, blinks red on the day open for check-in, shows a muted hammer
+   icon on a repair-eligible day instead of a separate button), mission-type
+   tags now shown as small colorless pills above the title, action buttons
+   moved below the title. `StreakProgressCard`'s pulsing fire/crown icon
+   removed.
+4. `1e9bd5b` — same sliding-tab-indicator pattern rolled out to every other
+   segmented control in the app: Challenge detail (Streaks/Activity/
+   Repairs), Mini Missions (Active/Queued/Completed/Failed), and the
+   Missions/Minis segment + Public/Private toggle shared by
+   `community-player/[id].tsx` and `my-journey.tsx`.
+5. `eeefd7c` — habit detail screen (`app/habit/[id].tsx`) redesign: every
+   day-grid cell (both the fixed grid and "Active Trail" variant) changed
+   from rounded-square to circular; the old multi-arc `HabitGridBrandRing`
+   replaced by `CompletedDayDot` (plain circle + day number, with a small
+   camera/message-square corner badge only when that day has a photo/text
+   memory — mirrors the cohort screen's own dot design instead of new
+   glyphs); header icons (group/delete/info) recolored to neutral muted;
+   mode pill recolored neutral and changed from all-caps to sentence case;
+   the actionable repair banner simplified to a plain card with only the
+   "Repair" button + hammer icon keeping the amber accent.
+6. `0012252` — `StreakMemorySheet.tsx`'s create/habit flow restyled against
+   a Claude Design mockup ("Memory Drawer.dc.html", read via the
+   `claude_design` MCP from the same design project as the theme pack):
+   indigo "DAY N" label, semantically-corrected notice icon (square/
+   checkbox vs lock, matching what the copy actually says), rounder/roomier
+   photo slot and note field, "Save moment" changed to a subtle transparent
+   indigo tint instead of a solid fill. Also, as an explicitly experimental
+   follow-up: `StreakMemoryGallery.tsx`'s stacked-moment hex tiles ("Your
+   moments" honeycomb) no longer transition on independent random timers —
+   a shared turn-based scheduler now runs them as one wave, most-recent-day
+   first, each hex handing off to the next once its own cycle is 60% done
+   (overlapping, not a strict relay) rather than every tile flickering on
+   its own clock.
+
+**Not yet visually confirmed on-device/simulator for several of these** —
+this session's environment had no tap-automation available (no `idb`, no
+accessibility permissions for AppleScript), so most changes were verified by
+`npx tsc --noEmit` plus static screenshots of whatever screen happened to
+already be open, not by interactively navigating into every changed screen.
+Specifically still needing a real look:
+- The `StreakMemorySheet` restyle (Memory Drawer mockup) — never actually
+  opened during the session.
+- The `StreakMemoryGallery` wave transition — never seen live; the overlap-
+  fraction pacing (60%, fade timings 700/120/800ms) is a best-guess tuned
+  purely from the user's verbal feedback ("faster", "slower", "overlap
+  instead of relay"), not from watching it render.
+- The sliding tab indicators on Challenge/Mini/community-player/my-journey
+  (Phase 4/commit `1e9bd5b`) — same story, typechecked and reasoned through
+  but not tapped into.
+- Android has not been checked at all this session (iOS simulator only).
+
+**If starting a fresh chat from here**: read `agent.md`,
+`docs/PROJECT_CONTEXT.md`, this file, and `app-architecture.md` in that
+order, then this section. Remember this work is on
+`experiment/glass-redesign-v2`, not `main` — check `git branch` /
+`git status` before assuming which branch you're on. No decision has been
+made yet about whether/when to merge this into `main`; don't merge without
+the user explicitly asking.
 
 ## Session Handoff (2026-07-31, end of session)
 

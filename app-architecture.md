@@ -1053,6 +1053,70 @@ Color token discipline (as of 2026-07-31):
   destructure. Moral either way: don't assume `theme` is in scope just
   because `isDark` clearly is — check what's actually destructured.
 
+### Theme Packs (as of 2026-08-04, branch `experiment/glass-redesign-v2`, not merged)
+
+A second, orthogonal preference alongside light/dark/system:
+`themePack: 'classic' | 'minimalist'` (`src/context/ThemeContext.tsx`),
+persisted separately in AsyncStorage (`@habitpro_theme_pack`), selectable
+from `SettingsModal`'s "APPEARANCE" section. `useTheme()` resolves one of
+four full `AppTheme` objects based on `(themePack, isDark)`:
+`darkTheme`/`lightTheme` (Classic, the original palette, unchanged) or
+`minimalistDarkTheme`/`minimalistLightTheme` (`src/styles/theme.ts`).
+
+- **Minimalist pack**: warm neutral ground (not cool slate-blue), a single
+  accent (`#5B5BD6`) instead of the classic indigo ramp, flat bordered
+  cards (shadow set to zero opacity/elevation — `GlassTopHighlight` renders
+  nothing for this pack, same as its existing light-mode no-op), Manrope
+  (display) + DM Sans (body) instead of Plus Jakarta Sans. Semantic colors
+  (cyan/amber/yellow/red/green) are unchanged from the matching Classic
+  palette.
+- **Why this scales with almost no per-screen work**: `AppText`'s `Text`
+  component resolves `fontWeight` -> font file via `theme.fontFamily` (from
+  `useTheme()`) at render time instead of a static import — every screen's
+  text switches families automatically when the pack changes. Any screen
+  already reading `theme.colors.*`/`theme.shadow.*` (the large majority of
+  the app) inherits the new palette/flat-shadow for free the same way.
+- **Extra hand-authored flourishes, not automatic**: Home (`index.tsx`),
+  Compete (`compete.tsx`), and `HabitCard.tsx` each derive a local `rp`
+  value (`themePack === 'minimalist' ? redesignPalette.dark/light : null`,
+  from the new `src/styles/redesignPalette.ts`) for things the automatic
+  token swap doesn't reach — recolored streak-ring track, tab-tray
+  backgrounds, chip fills, etc. `HabitCard` takes an optional
+  `redesignPalette` prop for the same purpose, passed non-null only by Home
+  when the pack is minimalist.
+- **Sliding tab indicator**: introduced alongside the theme pack (though
+  independent of it — applies in Classic too). Every segmented control in
+  the app (Home's Main Missions/Reports, Compete's Challenges/Leaderboard,
+  Challenge detail's Streaks/Activity/Repairs, Mini Missions'
+  Active/Queued/Completed/Failed, the Missions/Minis + Public/Private
+  controls shared by `community-player/[id].tsx`/`my-journey.tsx`) now
+  animates an `Animated.spring`-driven indicator behind the tabs instead of
+  swapping each tab's background instantly. Each instance measures its own
+  track width via `onLayout` and respects `reduceMotion`.
+- **`HabitCard.tsx`'s streak badge**: the old fire-icon streak ring
+  (`RingDayArcs`/`LightweightMissionRing`, SVG arcs) was replaced by
+  `MiniDayGrid` — a small top-right badge, one circle per mission day
+  (GitHub-contributions style), the day open for check-in blinking red, a
+  repair-eligible day showing a muted hammer icon instead of a colored
+  circle. `RingDayArcs`/`LightweightMissionRing` are still defined in the
+  file but are now dead code (nothing calls them) — safe to delete next
+  time that file is touched.
+- **Habit detail day grid** (`app/habit/[id].tsx`): the old
+  `HabitGridBrandRing` (multi-arc SVG ring + milestone star + generic
+  ambiguous "has a memory" dot) was replaced by `CompletedDayDot` — plain
+  circle + day number, with a small camera/message-square corner badge only
+  when that day has a photo/text memory, mirroring the cohort screen's own
+  per-day dot design (`CohortPeerStreakDots`) rather than inventing new
+  glyphs. Every grid cell (locked/current/completed/plain) is now circular,
+  not a rounded square. Milestone/repaired-day-specific treatment is
+  deferred, not dropped — the user has separate plans for that.
+- **Not visually confirmed on-device**: most of this pass was verified by
+  `npx tsc --noEmit` plus whatever screen happened to already be open in
+  the simulator — the session's environment had no tap-automation
+  available. See `docs/CURRENT_WORK.md`'s 2026-08-04 entry for the specific
+  list of what still needs a manual look before this is considered
+  production-ready or merged into `main`.
+
 ## Important User Flows
 
 ### Create A Main Mission

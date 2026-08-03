@@ -2,6 +2,94 @@
 
 This is a concise chronological log for future sessions. Keep secrets out of this file.
 
+## 2026-08-04
+
+### Classic/Minimalist Theme-Pack System + Large Iterative Visual Redesign (branch `experiment/glass-redesign-v2`, not merged)
+
+Six commits, all on `experiment/glass-redesign-v2` (branches off `main` at
+`dd6c66c`; `main` itself untouched, no merge/push/OTA this session):
+
+1. `1bec56c` — dev-tooling cleanup: OTA/force-update simulation controls
+   moved from a global floating overlay (`DevUpdateSimPanel`, deleted) into
+   a `__DEV__`-gated section on the Profile screen. `Timer.tsx`'s card
+   border made transparent in light mode (MD3 tonal elevation).
+2. `9d979fc` — **new Classic/Minimalist theme-pack system**: a `themePack`
+   preference orthogonal to light/dark/system, persisted separately,
+   selectable from a new Settings "APPEARANCE" section. `useTheme()`
+   resolves one of four full `AppTheme` objects. New
+   `src/styles/redesignPalette.ts` holds the minimalist palette (warm
+   neutral ground, single indigo accent `#5B5BD6`, flat/zero-shadow).
+   `AppText` now resolves font family from `theme.fontFamily` at render
+   time instead of a static import, so text switches families automatically
+   app-wide. Adds Manrope + DM Sans font packages.
+3. `155c558` — Home/Compete adopt the minimalist palette via a local `rp`
+   value for hand-authored flourishes beyond the automatic swap; both
+   screens' segmented tabs redesigned with a fluid `Animated.spring`
+   sliding indicator (soft tray + white/elevated active pill) replacing an
+   instant background swap. `HabitCard.tsx` redesigned: the fire-icon
+   streak ring is gone, replaced by a small top-right circle-grid badge
+   (one circle per mission day, blinks red on the day open for check-in,
+   shows a muted hammer icon on a repair-eligible day — the old separate
+   "REPAIR" button is gone); mission-type tags (Auto/Manual, Public, Squad)
+   now render as small colorless pills above the title; action buttons
+   moved below the title, capped at 50% width, "Mark done" only shown when
+   actually available today. `StreakProgressCard`'s pulsing fire/crown icon
+   + glow removed (kept label/bar/count). Also removed the redundant
+   top-of-list mission-type icon legend on Home.
+4. `1e9bd5b` — the sliding-tab-indicator pattern rolled out to every other
+   segmented control: Challenge detail (3-segment), Mini Missions
+   (4-segment), and the Missions/Minis + Public/Private controls shared by
+   `community-player/[id].tsx`/`my-journey.tsx` (color-interpolated
+   indicator since those tabs have different accent colors per side).
+5. `eeefd7c` — habit detail screen (`app/habit/[id].tsx`): every day-grid
+   cell (fixed grid + "Active Trail" variant) changed from rounded-square to
+   circular. The old multi-arc `HabitGridBrandRing` (SVG arcs, milestone
+   star, ambiguous generic "has memory" dot) replaced by `CompletedDayDot` —
+   plain circle + day number, with a small camera/message-square corner
+   badge only when that day actually has a photo/text memory, mirroring the
+   cohort screen's own dot design (`CohortPeerStreakDots`) instead of new
+   glyphs. Header icons (group/delete/info) recolored to neutral muted
+   (were cyan/red/indigo); mode pill recolored neutral, case changed from
+   all-caps to sentence case. The actionable repair banner simplified from
+   a bordered/tinted card + filled button to a plain neutral card where
+   only the "Repair" button + hammer icon keep the amber accent. Milestone/
+   repaired-day-specific treatment intentionally deferred (noted, not
+   dropped silently) — user has separate plans for that.
+6. `0012252` — `StreakMemorySheet.tsx`'s create/habit flow restyled against
+   a Claude Design mockup ("Memory Drawer.dc.html", read via the
+   `claude_design` MCP — same design project as the theme pack). Indigo
+   "DAY N" label; notice icon now semantically matches its own copy
+   (outlined square for "editable", Lock only for "no edits after Save" —
+   previously always Lock regardless); rounder/roomier photo slot and note
+   field; "Save moment" changed from a solid opaque indigo fill to a subtle
+   transparent indigo tint per follow-up feedback. Separately, and flagged
+   explicitly as experimental: `StreakMemoryGallery.tsx`'s stacked-moment
+   hex tiles no longer transition on independent per-tile random timers — a
+   new shared turn-based scheduler (`useHexWaveScheduler`) runs them as one
+   wave in day order (most recent first), each hex handing off to the next
+   once its own fade cycle is 60% done (overlapping handoff, not a strict
+   wait-for-full-finish relay) — tuned across several rounds of "faster" /
+   "slower" / "overlap instead of relay" feedback purely from verbal
+   description, never seen rendered.
+
+**Validation**: `npx tsc --noEmit` and `git diff --check` clean after every
+commit. **Not visually confirmed on real devices/simulator for most of
+this** — the working environment had no tap-automation available (no
+`idb`, no AppleScript accessibility permission), so verification leaned on
+typechecking plus whatever screen happened to already be open in the
+simulator, not on interactively navigating into each changed screen. Still
+needs a manual look, especially: the `StreakMemorySheet` restyle (never
+opened), the `StreakMemoryGallery` wave transition (never seen live, pacing
+is best-guess), the Phase-4 tab indicators on Challenge/Mini/community-
+player/my-journey, and Android generally (iOS simulator only this
+session). Full narrative/rationale for every individual UI decision is in
+`docs/CURRENT_WORK.md`'s 2026-08-04 session-handoff entry.
+
+**Explicitly deferred, not forgotten**: repaired-day-specific and
+milestone-specific visual treatment on the habit-detail day grid — the user
+has separate plans for how a repaired/text-marked day should look, out of
+scope for this pass.
+
 ## 2026-07-31
 
 ### UI/UX Audit Pass, Production OTA, and a Full Color-Token Sweep

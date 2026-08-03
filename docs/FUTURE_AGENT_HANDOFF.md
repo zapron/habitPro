@@ -23,7 +23,26 @@ Then inspect the files relevant to the user request.
 
 ## Current User Priorities
 
-- **Most current, as of 2026-07-31**: a design-lead-style UI/UX audit pass
+- **Most current, as of 2026-08-04**: a Classic/Minimalist theme-pack system
+  (new `themePack` preference, Settings-selectable) plus a large iterative
+  visual-redesign pass — Home/Compete tab restyle with an animated sliding
+  indicator (rolled out to every other segmented control in the app too),
+  a from-scratch `HabitCard` redesign (circular day-grid badge replacing the
+  fire-icon streak ring, colorless mission-type pills, repair-as-hammer-icon
+  instead of a separate button), the habit detail screen's day grid and
+  repair-banner redesign, and a `StreakMemorySheet` restyle against a Claude
+  Design mockup read via the `claude_design` MCP. Full detail in
+  `docs/CURRENT_WORK.md`'s 2026-08-04 entry and `docs/WORK_HISTORY.md`.
+  **All six commits live on branch `experiment/glass-redesign-v2`, not
+  `main`** — check which branch you're on before assuming this is live.
+  No merge/push/OTA has happened or been requested. Most of it was **not
+  visually confirmed on-device** (the session's environment had no
+  tap-automation available) — see `docs/CURRENT_WORK.md` for exactly what
+  still needs a manual look. Also: `HabitCard.tsx` now has two dead
+  components (`RingDayArcs`, `LightweightMissionRing`) left over from the
+  old fire-ring design, no longer called anywhere — worth removing next
+  time that file is touched, not urgent on its own.
+- **As of 2026-07-31**: a design-lead-style UI/UX audit pass
   shipped (XP-gain badge, leaderboard medals + countdown, nudge feedback,
   pulsing invite dot, Quick Complete confirmation dialog — OTA'd, runtime
   `1.1.35`, commit `7322dec`), followed by a full color-token sweep (see
@@ -205,7 +224,10 @@ If the user reports Home jank after splash:
 
 1. Inspect `app/(tabs)/index.tsx` and `src/components/HabitCard.tsx`.
 2. Check how many `HabitCard` rows mount initially.
-3. Temporarily replace Android long-mission `RingDayArcs` with a lightweight progress ring/text.
+3. As of 2026-08-04, the per-card streak indicator is `MiniDayGrid` (a
+   circle-grid badge), not the old `RingDayArcs`/`LightweightMissionRing`
+   SVG ring (both now dead code, unused) — if Android is slow rendering the
+   grid on a long mission, look there first instead of the old ring code.
 4. Confirm whether touch response improves before changing mission detail.
 5. Keep splash out of the blame path unless profiling shows splash-specific stalls; the user clarified the jank starts on Home after splash.
 
