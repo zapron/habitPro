@@ -33,6 +33,24 @@ const tokens = {
   fontFamily,
 } as const;
 
+/** Widened so a theme pack's `fontFamily` can point its `regular/medium/semibold/bold` slots at a different family entirely (see `minimalistFontFamily`), not just the literal Plus Jakarta Sans postscript names. */
+type FontFamilySet = Record<keyof typeof fontFamily, string>;
+
+/**
+ * "habitPro redesign" theme pack — Manrope (display) + DM Sans (body) instead
+ * of Plus Jakarta Sans everywhere. `AppText` resolves `fontWeight` through
+ * whichever `fontFamily` the active theme provides, so this one mapping is
+ * all that's needed for every screen's text to switch, with no per-component
+ * changes required.
+ */
+const minimalistFontFamily: FontFamilySet = {
+  ...fontFamily,
+  regular: fontFamily.dmSansRegular,
+  medium: fontFamily.dmSansMedium,
+  semibold: fontFamily.dmSansSemibold,
+  bold: fontFamily.manropeBold,
+};
+
 /* ── Color palette shape ── */
 type ColorPalette = {
   background: string;
@@ -116,7 +134,8 @@ const darkColors: ColorPalette = {
 const lightColors: ColorPalette = {
   background: "#f8fafc",
   surface: "#ffffff",
-  surfaceElevated: "#f1f5f9",
+  /** Tonal elevation (Material 3 style): a whisper of the brand indigo mixed into the "elevated" surface instead of a flat gray step, so stacked/nested surfaces read as branded depth rather than generic gray. */
+  surfaceElevated: "#f3f1fb",
   border: "#e2e8f0",
   textPrimary: "#0f172a",
   textSecondary: "#475569",
@@ -168,13 +187,93 @@ const lightShadow: ShadowSet = {
     shadowRadius: 14,
     elevation: 6,
   },
+  /**
+   * A soft, wide, low-opacity "floating card" shadow rather than a tight
+   * mid-gray drop shadow — paired with cards dropping their neutral border
+   * in light mode (see call sites), so depth reads from one cue (the glow),
+   * not a shadow stacked on top of a hairline outline.
+   */
   card: {
-    shadowColor: "#94a3b8",
-    shadowOffset: { width: 0, height: 3 },
+    shadowColor: "#1e293b",
+    shadowOffset: { width: 0, height: 5 },
     shadowOpacity: 0.12,
-    shadowRadius: 8,
+    shadowRadius: 14,
     elevation: 3,
   },
+};
+
+/**
+ * "habitPro redesign" theme pack — from the Claude Design mockup
+ * ("habitPro light mode redesign" project): warm neutral ground (not the
+ * cool slate-blue base above), one accent (`#5B5BD6`) instead of a
+ * multi-step indigo ramp, flat bordered cards instead of shadowed ones.
+ * Semantic colors (cyan/amber/yellow/red/green) are carried over from the
+ * matching classic palette unchanged — the mockup never redefined them, and
+ * inventing new ones wasn't worth the drift risk against their existing
+ * meanings (mode icons, streak-repair, mission outcomes, etc).
+ */
+const minimalistLightColors: ColorPalette = {
+  background: "#ffffff",
+  surface: "#ffffff",
+  surfaceElevated: "#f5f3ee",
+  border: "#ece9e3",
+  textPrimary: "#1c1b1f",
+  textSecondary: "#4a4850",
+  textMuted: "#8b8894",
+  slate: {
+    900: "#f5f3ee",
+    800: "#eeece7",
+    750: "#e5e2db",
+    700: "#ddd9d0",
+    600: "#c9c4b8",
+    500: "#8b8894",
+    400: "#4a4850",
+    200: "#1c1b1f",
+  },
+  indigo: { 400: "#5B5BD6", 500: "#5B5BD6", 600: "#5B5BD6" },
+  cyan: lightColors.cyan,
+  amber: lightColors.amber,
+  yellow: lightColors.yellow,
+  red: lightColors.red,
+  green: lightColors.green,
+  white: "#ffffff",
+  scrim: "#1c1b1f",
+  sheen: "#1c1b1f",
+};
+
+const minimalistDarkColors: ColorPalette = {
+  background: "#17161c",
+  surface: "#17161c",
+  surfaceElevated: "#211f28",
+  border: "#28262f",
+  textPrimary: "#f2f1f5",
+  textSecondary: "#c7c4d1",
+  textMuted: "#847f91",
+  slate: {
+    900: "#17161c",
+    800: "#211f28",
+    750: "#262430",
+    700: "#28262f",
+    600: "#3a3742",
+    500: "#847f91",
+    400: "#c7c4d1",
+    200: "#f2f1f5",
+  },
+  indigo: { 400: "#5B5BD6", 500: "#5B5BD6", 600: "#5B5BD6" },
+  cyan: darkColors.cyan,
+  amber: darkColors.amber,
+  yellow: darkColors.yellow,
+  red: darkColors.red,
+  green: darkColors.green,
+  white: "#ffffff",
+  scrim: "#000000",
+  sheen: "#ffffff",
+};
+
+/** Flat by design — the redesign mockup never uses a shadow anywhere, on either theme; depth comes from the border + background alone. */
+const minimalistFlatShadow: ShadowSet = {
+  glow: { shadowColor: "transparent", shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0, shadowRadius: 0, elevation: 0 },
+  card: { shadowColor: "transparent", shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0, shadowRadius: 0, elevation: 0 },
 };
 
 /** Full theme object shape. */
@@ -186,7 +285,7 @@ export type AppTheme = {
   typography: typeof tokens.typography;
   letterSpacing: typeof tokens.letterSpacing;
   icon: typeof tokens.icon;
-  fontFamily: typeof fontFamily;
+  fontFamily: FontFamilySet;
 };
 
 export const darkTheme: AppTheme = {
@@ -198,6 +297,19 @@ export const lightTheme: AppTheme = {
   colors: lightColors,
   shadow: lightShadow,
   ...tokens,
+};
+
+export const minimalistDarkTheme: AppTheme = {
+  colors: minimalistDarkColors,
+  shadow: minimalistFlatShadow,
+  ...tokens,
+  fontFamily: minimalistFontFamily,
+};
+export const minimalistLightTheme: AppTheme = {
+  colors: minimalistLightColors,
+  shadow: minimalistFlatShadow,
+  ...tokens,
+  fontFamily: minimalistFontFamily,
 };
 
 /** Backwards-compat default export — components migrating to useTheme() can drop this. */
