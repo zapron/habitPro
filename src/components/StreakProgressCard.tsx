@@ -43,18 +43,26 @@ export function StreakProgressCard({ streak, completedCount, totalDays, ringColo
 
     const intensity = intensityFor(streak);
 
+    // Dulled-down versions of the same gold/terracotta/maroon hues used elsewhere for
+    // this card — still readable as "this streak is notable" without the saturated
+    // yellow/amber/red reading as an alert. Tuned per theme so it stays legible on
+    // both a near-black and a near-white card background.
+    const mutedGold = isDark ? '#C9A758' : '#8C7530';
+    const mutedTerracotta = isDark ? '#B57C46' : '#8A5A2E';
+    const mutedMaroon = isDark ? '#B25C5C' : '#8B4048';
+
     const tierColor =
         intensity === 'legendary'
-            ? theme.colors.yellow[400]
+            ? mutedGold
             : intensity === 'epic'
-                ? theme.colors.red[500]
-                : theme.colors.amber[500];
+                ? mutedMaroon
+                : mutedTerracotta;
     const tierColorSoft =
         intensity === 'legendary'
-            ? theme.colors.amber[500]
+            ? mutedTerracotta
             : intensity === 'epic'
-                ? theme.colors.amber[500]
-                : theme.colors.yellow[400];
+                ? mutedTerracotta
+                : mutedGold;
     const tierBorder =
         intensity === 'legendary'
             ? 'rgba(251, 191, 36, 0.5)'
@@ -160,7 +168,7 @@ export function StreakProgressCard({ streak, completedCount, totalDays, ringColo
                             </View>
                             <Text style={styles.dayCount} numberOfLines={1}>
                                 <Text style={{ color: barColor, fontWeight: '800' }}>{completedCount}</Text>
-                                <Text style={{ color: theme.colors.textMuted }}>/{totalDays}d</Text>
+                                <Text style={{ color: theme.colors.textMuted }}>/{totalDays} d</Text>
                             </Text>
                         </View>
                     </View>

@@ -630,7 +630,7 @@ export const HabitCard = memo(({ item, nowMs, index, redesignPalette }: HabitCar
                                         },
                                     ]}
                                 >
-                                    <TagIcon size={10} color={rp ? rp.textMuted : theme.colors.textMuted} strokeWidth={2} />
+                                    <TagIcon size={8} color={rp ? rp.textMuted : theme.colors.textMuted} strokeWidth={2} />
                                     <Text
                                         style={[
                                             styles.contextPillText,
@@ -642,9 +642,6 @@ export const HabitCard = memo(({ item, nowMs, index, redesignPalette }: HabitCar
                                     </Text>
                                 </View>
                             ))}
-                            {item.missionReport === 'accomplished' && (
-                                <Text style={[styles.reportPillText, { color: theme.colors.green[500] }]}>ACCOMPLISHED</Text>
-                            )}
                             {needsReport && (
                                 <Text style={[styles.reportPillText, { color: theme.colors.amber[500] }]}>REVIEW DUE</Text>
                             )}
@@ -739,7 +736,15 @@ export const HabitCard = memo(({ item, nowMs, index, redesignPalette }: HabitCar
                 habit={item}
                 nowMs={nowMs}
                 completedDateSet={completedDateSet}
-                doneColor={rp ? rp.accent : theme.colors.green[500]}
+                doneColor={
+                  missionFailed
+                    ? theme.colors.red[900]
+                    : missionWon
+                      ? theme.colors.green[900]
+                      : needsReport
+                        ? theme.colors.amber[500]
+                        : rp ? rp.accent : theme.colors.green[900]
+                }
                 emptyColor={
                   rp
                     ? rp.trackBg
@@ -813,13 +818,13 @@ const styles = StyleSheet.create({
     contextPill: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 3,
-        paddingVertical: 2,
-        paddingHorizontal: 6,
+        gap: 2,
+        paddingVertical: 1.5,
+        paddingHorizontal: 5,
         borderRadius: 999,
         borderWidth: 1,
     },
-    contextPillText: { fontSize: 9, fontWeight: '700', letterSpacing: 0.3 },
+    contextPillText: { fontSize: 8, fontWeight: '700', letterSpacing: 0.2 },
     pulseGlyphWrap: {
         width: 16,
         height: 16,
