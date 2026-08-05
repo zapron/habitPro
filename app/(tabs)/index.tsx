@@ -45,6 +45,7 @@ import { useShallow } from "zustand/react/shallow";
 import { useAuth } from "../../src/context/AuthContext";
 import { useAppVersion } from "../../src/context/AppVersionContext";
 import { isSupabaseConfigured } from "../../src/lib/env";
+import { onAppReady } from "../../src/lib/appReadySignal";
 import {
   countUnreadNotificationsCached,
   getCachedUnreadNotificationCount,
@@ -85,6 +86,10 @@ const HOME_NOTIFICATION_COUNT_TTL_MS = 30_000;
 const HOME_NOTIFICATION_REFRESH_DELAY_MS = 600;
 /** Durable marker so the level-up celebration fires once per level, not on every Home visit/remount. */
 const LAST_CELEBRATED_LEVEL_KEY = "habitpro.lastCelebratedLevel";
+/** Minimalist FAB fill — a toned-down version of `rp.accent` so the floating button doesn't read as bright indigo. */
+const FAB_ACCENT_MUTED = "#4B4BB0";
+/** Minimalist notification-count badge — a dull maroon instead of alert-red, noticeable without demanding attention. */
+const NOTIF_DOT_MUTED = "#8B4048";
 
 function getGreeting(): string {
   const hour = new Date().getHours();
@@ -322,46 +327,7 @@ export default function Home() {
   const shouldHoldForFirstSync = waitingForFirstSync && !hasLocalHomeActions;
   const cloudSyncBlocked = Boolean(showAccount && session?.user && syncError);
 
-  const bellScale = useRef(new Animated.Value(1)).current;
-  const bellBuzz = useRef(new Animated.Value(0)).current;
   const emptyIconScale = useRef(new Animated.Value(1)).current;
-
-  useEffect(() => {
-    if (reduceMotion) {
-      bellScale.setValue(1);
-      bellBuzz.setValue(0);
-      return;
-    }
-    if (unreadNotifCount > 0) {
-      const loop = Animated.loop(
-        Animated.sequence([
-          // Quick "buzz" wiggle + punch scale, then rest.
-          Animated.parallel([
-            Animated.sequence([
-              Animated.timing(bellBuzz, { toValue: 1, duration: 60, easing: Easing.out(Easing.linear), useNativeDriver: true }),
-              Animated.timing(bellBuzz, { toValue: -1, duration: 60, easing: Easing.out(Easing.linear), useNativeDriver: true }),
-              Animated.timing(bellBuzz, { toValue: 1, duration: 60, easing: Easing.out(Easing.linear), useNativeDriver: true }),
-              Animated.timing(bellBuzz, { toValue: 0, duration: 70, easing: Easing.out(Easing.linear), useNativeDriver: true }),
-            ]),
-            Animated.sequence([
-              Animated.timing(bellScale, { toValue: 1.22, duration: 110, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
-              Animated.timing(bellScale, { toValue: 0.98, duration: 110, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
-              Animated.timing(bellScale, { toValue: 1, duration: 160, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
-            ]),
-          ]),
-          Animated.delay(2400),
-        ]),
-      );
-      loop.start();
-      return () => loop.stop();
-    }
-  }, [unreadNotifCount, reduceMotion, bellScale]);
-
-  const bellBuzzStyle = useMemo(() => {
-    const rotate = bellBuzz.interpolate({ inputRange: [-1, 0, 1], outputRange: ["-12deg", "0deg", "12deg"] });
-    const translateX = bellBuzz.interpolate({ inputRange: [-1, 0, 1], outputRange: [-1.2, 0, 1.2] });
-    return { transform: [{ translateX }, { rotate }] } as const;
-  }, [bellBuzz]);
 
   useEffect(() => {
     if (reduceMotion) return;
@@ -604,6 +570,7 @@ export default function Home() {
 
   const headerOpacity = useRef(new Animated.Value(0)).current;
   const headerSlide = useRef(new Animated.Value(-15)).current;
+  const fabIntro = useRef(new Animated.Value(0)).current;
   const animXpFill = useRef(new Animated.Value(xpProgress)).current;
   const prevXpProgressRef = useRef(xpProgress);
   const [levelUpBurst, setLevelUpBurst] = useState<{ active: boolean; x: number; y: number }>({
@@ -634,6 +601,53 @@ export default function Home() {
       }),
     ]).start();
   }, [headerOpacity, headerSlide, reduceMotion]);
+
+  // FAB "forms and rises" every time Home comes into focus — starts small and low
+  // (as if surfacing from the tab bar), overshoots with a squash/stretch wobble, then
+  // settles into place. Keyed on `isFocused` (not just mount) because the tab navigator
+  // keeps Home mounted after the first visit, so a mount-only effect would only ever
+  // fire once per app session.
+  //
+  // On the very first app launch, SplashGate mounts the whole app (this screen
+  // included) underneath its splash overlay well before that overlay actually
+  // dismisses — so starting the animation immediately on focus ran it to completion
+  // invisibly behind the splash. `onAppReady` (same pattern HabitCard's entrance
+  // animation uses) defers the first play until the splash has actually faded out,
+  // and fires immediately on every focus after that.
+  useEffect(() => {
+    if (!isFocused) return undefined;
+    if (reduceMotion) {
+      fabIntro.setValue(1);
+      return undefined;
+    }
+    fabIntro.setValue(0);
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let anim: Animated.CompositeAnimation | null = null;
+    const unsubscribe = onAppReady(() => {
+      timer = setTimeout(() => {
+        anim = Animated.timing(fabIntro, {
+          toValue: 1,
+          duration: 850,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        });
+        anim.start();
+      }, 220);
+    });
+    return () => {
+      unsubscribe();
+      if (timer) clearTimeout(timer);
+      anim?.stop();
+    };
+  }, [fabIntro, reduceMotion, isFocused]);
+
+  const fabIntroStyle = useMemo(() => {
+    const translateY = fabIntro.interpolate({ inputRange: [0, 1], outputRange: [58, 0] });
+    const scaleY = fabIntro.interpolate({ inputRange: [0, 0.5, 0.75, 1], outputRange: [0.3, 1.28, 0.88, 1] });
+    const scaleX = fabIntro.interpolate({ inputRange: [0, 0.5, 0.75, 1], outputRange: [0.55, 0.8, 1.08, 1] });
+    const opacity = fabIntro.interpolate({ inputRange: [0, 0.2, 1], outputRange: [0, 1, 1] });
+    return { opacity, transform: [{ translateY }, { scaleY }, { scaleX }] } as const;
+  }, [fabIntro]);
 
   useEffect(() => {
     if (prevXpProgressRef.current === xpProgress) return;
@@ -842,14 +856,6 @@ export default function Home() {
             <View style={styles.headerRightCluster}>
               {showAccount && session?.user ? (
                 <View style={styles.bellWrap}>
-                  <Animated.View
-                    style={{
-                      transform: [
-                        { scale: unreadNotifCount > 0 ? bellScale : 1 },
-                      ],
-                    }}
-                  >
-                    <Animated.View style={unreadNotifCount > 0 && !reduceMotion ? bellBuzzStyle : undefined}>
                     <TouchableOpacity
                       onPress={() => router.push("/notifications")}
                       style={[
@@ -868,15 +874,13 @@ export default function Home() {
                     >
                       <Bell size={20} color={rp ? rp.textPrimary : theme.colors.textPrimary} />
                     </TouchableOpacity>
-                    </Animated.View>
-                  </Animated.View>
                   {unreadNotifCount > 0 ? (
                     <View
                       style={[
                         styles.notifBadge,
                         {
-                          borderColor: theme.colors.background,
-                          backgroundColor: theme.colors.red[500],
+                          borderColor: rp ? rp.screenBg : theme.colors.background,
+                          backgroundColor: rp ? NOTIF_DOT_MUTED : theme.colors.red[500],
                         },
                       ]}
                       accessibilityElementsHidden
@@ -948,9 +952,7 @@ export default function Home() {
           {rp ? null : <GlassTopHighlight radius={theme.radius.md} />}
           <View style={styles.xpInfo}>
             <View style={styles.xpLeft}>
-              {rp ? (
-                <View style={{ width: 7, height: 7, borderRadius: 3.5, backgroundColor: rp.accent }} />
-              ) : (
+              {rp ? null : (
                 <Zap size={12} color={theme.colors.yellow[400]} fill={theme.colors.yellow[400]} />
               )}
               <Text
@@ -1435,11 +1437,10 @@ export default function Home() {
         style={[
           styles.fab,
           {
-            backgroundColor: rp ? rp.accent : theme.colors.indigo[600],
+            backgroundColor: rp ? FAB_ACCENT_MUTED : theme.colors.indigo[600],
             ...(rp ? null : theme.shadow.glow),
-            opacity: headerOpacity,
-            transform: [{ translateY: headerSlide }],
           },
+          fabIntroStyle,
         ]}
       >
         <TouchableOpacity
