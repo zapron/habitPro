@@ -72,10 +72,15 @@ type ColorPalette = {
   };
   indigo: { 400: string; 500: string; 600: string };
   cyan: { 400: string; 500: string };
-  amber: { 500: string };
+  /** `900` is a deep/dark shade of the same amber — same shade-scale idea as `red[900]`/`green[900]`. */
+  amber: { 500: string; 900: string };
   yellow: { 400: string };
-  red: { 500: string };
-  green: { 500: string; 600: string };
+  /** `900` is a deep/dark shade of the same hue (not a different color) — for contexts that
+   * want the semantic meaning of red without it reading as an alert (e.g. a "failed" status
+   * dot sitting next to other calm UI). See `green[900]` for the counterpart. */
+  red: { 500: string; 900: string };
+  /** `900` is a deep/dark "forest" shade of the same green — same shade-scale idea as `red[900]`. */
+  green: { 500: string; 600: string; 900: string };
   white: string;
   scrim: string;
   sheen: string;
@@ -119,10 +124,10 @@ const darkColors: ColorPalette = {
   },
   indigo: { 400: "#9B8AFB", 500: "#7C5CF2", 600: "#6144E0" },
   cyan: { 400: "#2DD9E8", 500: "#0FB8CE" },
-  amber: { 500: "#F0940A" },
+  amber: { 500: "#F0940A", 900: "#6B4413" },
   yellow: { 400: "#fbbf24" },
-  red: { 500: "#ef4444" },
-  green: { 500: "#22c55e", 600: "#16a34a" },
+  red: { 500: "#ef4444", 900: "#6B1E1E" },
+  green: { 500: "#22c55e", 600: "#16a34a", 900: "#1B4332" },
   white: "#ffffff",
   /** Modal/sheet backdrop dimming base — always a dark tint regardless of theme; callers apply their own withAlpha() opacity. */
   scrim: "#000000",
@@ -152,10 +157,10 @@ const lightColors: ColorPalette = {
   },
   indigo: { 400: "#6D56E8", 500: "#5B3FDE", 600: "#4C2FC9" },
   cyan: { 400: "#0C86A8", 500: "#106E8C" },
-  amber: { 500: "#D1720A" },
+  amber: { 500: "#D1720A", 900: "#6B4413" },
   yellow: { 400: "#eab308" },
-  red: { 500: "#dc2626" },
-  green: { 500: "#16a34a", 600: "#15803d" },
+  red: { 500: "#dc2626", 900: "#6B1E1E" },
+  green: { 500: "#16a34a", 600: "#15803d", 900: "#1B4332" },
   white: "#ffffff",
   /** Same dark-ink tone serves both jobs in light mode — there's no separate "light scrim" concept the way dark mode needs pure black vs. pure white. */
   scrim: "#0f172a",
