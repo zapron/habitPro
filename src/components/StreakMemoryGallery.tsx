@@ -1,5 +1,5 @@
 import { Text } from "./AppText";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   Animated,
   Easing,
@@ -16,7 +16,7 @@ import {
   type ViewStyle,
 } from "react-native";
 import { FlashList } from "@shopify/flash-list";
-import { Bookmark, ShieldCheck, X } from "lucide-react-native";
+import { Bookmark, Hammer, X } from "lucide-react-native";
 import Svg, { ClipPath, Defs, Image as SvgImage, Path } from "react-native-svg";
 import { useTheme } from "../context/ThemeContext";
 import { useReducedMotion } from "../hooks/useReducedMotion";
@@ -29,7 +29,6 @@ import { formatDateDisplay } from "../utils/dateDisplay";
 import { playMemoryFormationHaptics } from "../utils/hapticFeedback";
 import { storageThumbnailUri } from "../utils/imageThumbnail";
 import { traceSync } from "../lib/jsThreadProbe";
-import { withAlpha } from "../styles/theme";
 
 type Entry = { dateStr: string; memory: StreakMemory; missionDay?: number | null };
 type HoneycombColumn = {
@@ -157,242 +156,6 @@ function HoneycombBuildTile({
   return <Animated.View style={[style, animatedStyle]}>{children}</Animated.View>;
 }
 
-type HexFrame = { type: "photo"; uri: string } | { type: "text"; note: string };
-
-const HEX_FADE_OUT_MS = 700;
-const HEX_FADE_IN_MS = 800;
-/** Brief pause at full black between the old frame disappearing and the next one starting to appear. */
-const HEX_FADE_BLACK_HOLD_MS = 120;
-/** Settle time after the honeycomb first builds in before the very first hex kicks off the wave. */
-const HEX_WAVE_INITIAL_DELAY_MS = 500;
-/** Next hex hands off once the current one's cycle is this far done — overlapping starts instead of waiting for a full finish, so the wave reads faster without shortening any single tile's own transition. */
-const HEX_WAVE_OVERLAP_FRACTION = 0.6;
-
-/** Turn-based coordinator so only one stacked hex ever transitions at a time, in day order (D6 → D5 → … → D1), each one waited on before the next starts — an explicit wave instead of every tile firing on its own random clock. */
-type HexWaveScheduler = {
-  activeTurnKey: string | null;
-  register: (key: string, orderIndex: number) => void;
-  unregister: (key: string) => void;
-  advance: (fromKey: string) => void;
-};
-
-function useHexWaveScheduler(): HexWaveScheduler {
-  const [activeTurnKey, setActiveTurnKey] = useState<string | null>(null);
-  const registryRef = useRef<Map<string, number>>(new Map());
-
-  const register = useCallback((key: string, orderIndex: number) => {
-    registryRef.current.set(key, orderIndex);
-    setActiveTurnKey((prev) => prev ?? key);
-  }, []);
-
-  const unregister = useCallback((key: string) => {
-    registryRef.current.delete(key);
-    setActiveTurnKey((prev) => {
-      if (prev !== key) return prev;
-      const remaining = Array.from(registryRef.current.entries()).sort((a, b) => a[1] - b[1]);
-      return remaining[0]?.[0] ?? null;
-    });
-  }, []);
-
-  const advance = useCallback((fromKey: string) => {
-    const remaining = Array.from(registryRef.current.entries()).sort((a, b) => a[1] - b[1]);
-    if (remaining.length === 0) {
-      setActiveTurnKey(null);
-      return;
-    }
-    const currentPos = remaining.findIndex(([key]) => key === fromKey);
-    const nextPos = currentPos === -1 ? 0 : (currentPos + 1) % remaining.length;
-    setActiveTurnKey(remaining[nextPos][0]);
-  }, []);
-
-  return { activeTurnKey, register, unregister, advance };
-}
-
-/**
- * The "living memory" idea, v4 — a literal wave instead of an emergent one. A day
- * with 2+ logged tasks (photo or text note) renders as a perfectly normal single
- * hex; every stacked hex on the grid registers into a shared turn order (day
- * order — D6, D5, D4, … per the entries array), and only the hex whose turn it
- * is fades to black, swaps to its next frame, and fades back in. The moment it
- * finishes, a short gap passes and the next hex in order takes its turn — so at
- * most one tile is ever transitioning at once, and the grid reads as a single
- * wave sweeping through the days in sequence rather than several independent
- * flickers.
- *
- * Only one frame is ever mounted at a time (a single Animated.Value for opacity),
- * so cost doesn't scale with stack size. Photos are prefetched into the native
- * image cache up front so the swap at the black midpoint is instant. Skipped
- * entirely when reduceMotion is on.
- */
-function HexFadeStack({
-  frames,
-  tileW,
-  tileH,
-  hexPath,
-  clipIdBase,
-  reduceMotion,
-  frontStrokeColor,
-  textFillColor,
-  quoteColor,
-  kickerColor,
-  noteColor,
-  orderIndex,
-  activeTurnKey,
-  onRegisterTurn,
-  onUnregisterTurn,
-  onAdvanceTurn,
-}: {
-  frames: HexFrame[];
-  tileW: number;
-  tileH: number;
-  hexPath: string;
-  clipIdBase: string;
-  reduceMotion: boolean;
-  frontStrokeColor: string;
-  textFillColor: string;
-  quoteColor: string;
-  kickerColor: string;
-  noteColor: string;
-  /** Position in the (already day-descending) entries array — the wave's turn order. */
-  orderIndex: number;
-  activeTurnKey: string | null;
-  onRegisterTurn: (key: string, orderIndex: number) => void;
-  onUnregisterTurn: (key: string) => void;
-  onAdvanceTurn: (fromKey: string) => void;
-}) {
-  const n = frames.length;
-  const [activeIndex, setActiveIndex] = useState(0);
-  const shownIndex = Math.min(activeIndex, Math.max(0, n - 1));
-  const opacity = useRef(new Animated.Value(1)).current;
-  const tileKey = clipIdBase;
-  const isMyTurn = activeTurnKey === tileKey;
-
-  const photoUris = useMemo(
-    () => frames.filter((f): f is Extract<HexFrame, { type: "photo" }> => f.type === "photo").map((f) => f.uri),
-    [frames],
-  );
-  const thumbUris = useMemo(
-    () =>
-      new Map(
-        photoUris.map((uri) => [uri, storageThumbnailUri(uri, Math.round(tileW * 2.4), Math.round(tileH * 2.4)) ?? uri]),
-      ),
-    [photoUris, tileW, tileH],
-  );
-  const thumbUrisKey = photoUris.join("|");
-
-  useEffect(() => {
-    // Warm the native image cache for every stacked photo up front — only one is
-    // ever rendered at a time, but the swap needs to be instant, not a fetch.
-    thumbUris.forEach((uri) => {
-      Image.prefetch(uri).catch(() => {});
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [thumbUrisKey]);
-
-  // Join the shared wave turn order while mounted; leave it the moment this tile
-  // scrolls off and unmounts, so the wave never stalls waiting on a gone tile.
-  useEffect(() => {
-    if (reduceMotion || n < 2) return undefined;
-    onRegisterTurn(tileKey, orderIndex);
-    return () => onUnregisterTurn(tileKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reduceMotion, n, tileKey, orderIndex]);
-
-  // Only plays when it's this tile's turn: fade out, swap frame, fade back in —
-  // its own animation always runs the full duration, unshortened. The *handoff*
-  // to the next hex is a separate, earlier timer: it fires once this tile's
-  // cycle is HEX_WAVE_OVERLAP_FRACTION of the way done, so the next hex starts
-  // while this one is still finishing — overlapping wave instead of a strict
-  // relay, which reads faster without touching any single tile's own timing.
-  const hasPlayedOnceRef = useRef(false);
-  useEffect(() => {
-    if (reduceMotion || n < 2 || !isMyTurn) return undefined;
-    let cancelled = false;
-    let startTimer: ReturnType<typeof setTimeout>;
-    let holdTimer: ReturnType<typeof setTimeout>;
-    let advanceTimer: ReturnType<typeof setTimeout>;
-    // A tile's very first turn gets a short settle delay (lets the honeycomb
-    // build-in finish); every turn after that starts the instant it's handed off.
-    const startDelay = hasPlayedOnceRef.current ? 0 : HEX_WAVE_INITIAL_DELAY_MS;
-    hasPlayedOnceRef.current = true;
-    const totalCycleMs = HEX_FADE_OUT_MS + HEX_FADE_BLACK_HOLD_MS + HEX_FADE_IN_MS;
-
-    startTimer = setTimeout(() => {
-      if (cancelled) return;
-      Animated.timing(opacity, {
-        toValue: 0,
-        duration: HEX_FADE_OUT_MS,
-        easing: Easing.inOut(Easing.quad),
-        useNativeDriver: true,
-        isInteraction: false,
-      }).start(() => {
-        if (cancelled) return;
-        setActiveIndex((prev) => (prev + 1) % n);
-        holdTimer = setTimeout(() => {
-          if (cancelled) return;
-          Animated.timing(opacity, {
-            toValue: 1,
-            duration: HEX_FADE_IN_MS,
-            easing: Easing.inOut(Easing.quad),
-            useNativeDriver: true,
-            isInteraction: false,
-          }).start();
-        }, HEX_FADE_BLACK_HOLD_MS);
-      });
-      advanceTimer = setTimeout(() => {
-        if (!cancelled) onAdvanceTurn(tileKey);
-      }, totalCycleMs * HEX_WAVE_OVERLAP_FRACTION);
-    }, startDelay);
-
-    return () => {
-      cancelled = true;
-      clearTimeout(startTimer);
-      clearTimeout(holdTimer);
-      clearTimeout(advanceTimer);
-    };
-  }, [n, reduceMotion, opacity, isMyTurn, tileKey, onAdvanceTurn]);
-
-  const frame = frames[shownIndex];
-
-  return (
-    <Animated.View
-      pointerEvents="none"
-      style={[styles.hexSvg, { width: tileW, height: tileH }, reduceMotion ? null : { opacity }]}
-    >
-      <Svg width={tileW} height={tileH} viewBox={`0 0 ${tileW} ${tileH}`}>
-        <Defs>
-          <ClipPath id={clipIdBase}>
-            <Path d={hexPath} />
-          </ClipPath>
-        </Defs>
-        {frame.type === "photo" ? (
-          <SvgImage
-            href={{ uri: thumbUris.get(frame.uri) ?? frame.uri }}
-            width={tileW}
-            height={tileH}
-            preserveAspectRatio="xMidYMid slice"
-            clipPath={`url(#${clipIdBase})`}
-          />
-        ) : (
-          <Path d={hexPath} fill={textFillColor} />
-        )}
-        <Path d={hexPath} fill="transparent" stroke={frontStrokeColor} strokeWidth={1.8} />
-      </Svg>
-      {frame.type === "text" ? (
-        <View style={[styles.hexOverlay, { paddingHorizontal: tileW * 0.18 }]} pointerEvents="none">
-          <Text style={[styles.hexQuote, { color: quoteColor }]}>{"“"}</Text>
-          <Text style={[styles.hexKicker, { color: kickerColor }]} numberOfLines={1}>
-            NOTE
-          </Text>
-          <Text style={[styles.hexNotePreview, { color: noteColor }]} numberOfLines={2}>
-            {frame.note}
-          </Text>
-        </View>
-      ) : null}
-    </Animated.View>
-  );
-}
-
 export function StreakMemoryGallery({
   entries,
   sectionTitle = "Your moments",
@@ -407,7 +170,6 @@ export function StreakMemoryGallery({
   const [viewerImageAspect, setViewerImageAspect] = useState<number | null>(null);
   const formationHapticKeyRef = useRef<string | null>(null);
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
-  const hexWave = useHexWaveScheduler();
 
   const tileW = clamp((windowWidth - 42) / 3.06, 94, 122);
   const tileH = tileW * 1.12;
@@ -476,11 +238,10 @@ export function StreakMemoryGallery({
         : !isGalleryOpen && (modalNoteTrim === REPAIR_MEMORY_NOTE_SQUAD || modalNoteTrim === REPAIR_MEMORY_NOTE_SOLO)
           ? "STREAK REPAIR"
           : null;
-  const memoryCardBg = theme.colors.surface;
   const memoryTextBg = isDark ? "#141126" : theme.colors.surface;
   const memoryShellBg = theme.colors.surface;
   const memoryMetaBg = theme.colors.surfaceElevated;
-  const memoryBorder = isDark ? "rgba(129, 140, 248, 0.32)" : theme.colors.border;
+  const memoryBorder = theme.colors.border;
   const memoryTextColor = theme.colors.textPrimary;
   const memoryKickerColor = isDark ? theme.colors.cyan[400] : theme.colors.cyan[500];
   const maxViewerCardWidth = Math.min(windowWidth - 40, 420);
@@ -566,11 +327,10 @@ export function StreakMemoryGallery({
               /**
                * Checklist missions only: a day's memory logs into memory.tasks, never the
                * classic memory.imageUrl/imageUri/note — those stay undefined forever for a
-               * checklist day (see handleTaskMemoryCommit in app/habit/[id].tsx). Before this,
-               * a checklist day's hex fell through every branch below to a blank fill, since
-               * nothing here ever looked at .tasks. Derive a cover photo/note from the first
-               * task that has one, and cap how many extra photos stack behind it (2, so render
-               * cost never scales with how many tasks a day actually has).
+               * checklist day (see handleTaskMemoryCommit in app/habit/[id].tsx). Derive a
+               * cover photo/note from the first task that has one — the tile always shows a
+               * single static cover regardless of how many tasks a day has; the full set is
+               * one tap away in the swipeable viewer, not cycled in-grid.
                */
               const taskEntries = memory.tasks ?? [];
               const hasTasks = taskEntries.length > 0;
@@ -580,26 +340,10 @@ export function StreakMemoryGallery({
                     .filter((u): u is string => Boolean(u) && (!remotePeer || uriLoadsForRemoteViewer(u)))
                 : [];
               const taskCoverNote = hasTasks ? taskEntries.find((t) => t.note?.trim())?.note?.trim() : undefined;
-              const stackPhotos = taskPhotoUris.slice(0, 3);
-              /**
-               * Every task's own frame — a photo if it has one, else its text note —
-               * so the hex rotates through whatever each task actually logged instead of
-               * only ever cycling photos. Capped at 3 so timer/prefetch cost stays flat.
-               */
-              const stackFrames: HexFrame[] = hasTasks
-                ? taskEntries
-                    .map((t): HexFrame | null => {
-                      const uri = t.proofUrls[0];
-                      if (uri && (!remotePeer || uriLoadsForRemoteViewer(uri))) return { type: "photo", uri };
-                      const note = t.note?.trim();
-                      return note ? { type: "text", note } : null;
-                    })
-                    .filter((f): f is HexFrame => f !== null)
-                    .slice(0, 3)
-                : [];
-              const isStacked = stackFrames.length > 1;
+              // A day with 2+ logged tasks still shows a single static cover, no in-grid
+              // cycling and no stack badge — the full set is one tap away in the viewer.
 
-              const displayUri = hasTasks ? stackPhotos[0] : memory.imageUrl || memory.imageUri;
+              const displayUri = hasTasks ? taskPhotoUris[0] : memory.imageUrl || memory.imageUri;
               const showImage = Boolean(displayUri) && (!remotePeer || uriLoadsForRemoteViewer(displayUri));
               const thumbUri =
                 showImage && displayUri
@@ -614,14 +358,6 @@ export function StreakMemoryGallery({
               const noteTrim = hasTasks ? taskCoverNote ?? "" : memory.note?.trim() ?? "";
               const textOnlyThumb = !showImage && !hasLocalOnlyPhoto && noteTrim.length > 0;
               const isSquadRepair = memory.repairSource === "squad";
-              const repairKicker =
-                isSquadRepair
-                  ? "SQUAD REPAIR"
-                  : memory.repairSource === "solo"
-                    ? "STREAK REPAIR"
-                    : noteTrim === REPAIR_MEMORY_NOTE_SQUAD || noteTrim === REPAIR_MEMORY_NOTE_SOLO
-                      ? "STREAK REPAIR"
-                      : null;
 
               const dayLabel =
                 typeof missionDay === "number" && missionDay > 0 ? `D${missionDay}` : null;
@@ -644,155 +380,73 @@ export function StreakMemoryGallery({
                     }}
                     style={styles.hexPressable}
                   >
-                    {isStacked ? (
-                      <HexFadeStack
-                        frames={stackFrames}
-                        tileW={tileW}
-                        tileH={tileH}
-                        hexPath={hexPath}
-                        clipIdBase={clipId}
-                        reduceMotion={reduceMotion}
-                        frontStrokeColor={
-                          isSquadRepair
-                            ? isDark ? withAlpha(theme.colors.cyan[400], 58) : withAlpha(theme.colors.cyan[500], 42)
-                            : isDark
-                              ? "rgba(255, 255, 255, 0.22)"
-                              : "rgba(255, 255, 255, 0.72)"
-                        }
-                        textFillColor={isDark ? "#21194a" : "#eef2ff"}
-                        quoteColor={theme.colors.indigo[400]}
-                        kickerColor={memoryKickerColor}
-                        noteColor={memoryTextColor}
-                        orderIndex={index}
-                        activeTurnKey={hexWave.activeTurnKey}
-                        onRegisterTurn={hexWave.register}
-                        onUnregisterTurn={hexWave.unregister}
-                        onAdvanceTurn={hexWave.advance}
-                      />
-                    ) : (
-                      <Svg width={tileW} height={tileH} viewBox={`0 0 ${tileW} ${tileH}`} style={styles.hexSvg}>
-                        <Defs>
-                          <ClipPath id={clipId}>
-                            <Path d={hexPath} />
-                          </ClipPath>
-                        </Defs>
-                        {showImage ? (
-                          <SvgImage
-                            href={{ uri: thumbUri ?? displayUri! }}
-                            width={tileW}
-                            height={tileH}
-                            preserveAspectRatio="xMidYMid slice"
-                            clipPath={`url(#${clipId})`}
-                          />
-                        ) : (
-                          <Path
-                            d={hexPath}
-                            fill={
-                              isSquadRepair
-                                ? isDark
-                                  ? "#082f49"
-                                  : "#ecfeff"
-                                : textOnlyThumb
-                                  ? isDark
-                                    ? "#21194a"
-                                    : "#eef2ff"
-                                  : memoryCardBg
-                            }
-                          />
-                        )}
-                        <Path
-                          d={hexPath}
-                          fill="transparent"
-                          stroke={
-                            isSquadRepair
-                              ? isDark ? withAlpha(theme.colors.cyan[400], 58) : withAlpha(theme.colors.cyan[500], 42)
-                              : showImage
-                                ? isDark
-                                  ? "rgba(255, 255, 255, 0.22)"
-                                  : "rgba(255, 255, 255, 0.72)"
-                                : memoryBorder
-                          }
-                          strokeWidth={1.8}
+                    <Svg width={tileW} height={tileH} viewBox={`0 0 ${tileW} ${tileH}`} style={styles.hexSvg}>
+                      <Defs>
+                        <ClipPath id={clipId}>
+                          <Path d={hexPath} />
+                        </ClipPath>
+                      </Defs>
+                      {showImage ? (
+                        <SvgImage
+                          href={{ uri: thumbUri ?? displayUri! }}
+                          width={tileW}
+                          height={tileH}
+                          preserveAspectRatio="xMidYMid slice"
+                          clipPath={`url(#${clipId})`}
                         />
-                      </Svg>
-                    )}
+                      ) : (
+                        <Path d={hexPath} fill={theme.colors.surfaceElevated} />
+                      )}
+                      <Path d={hexPath} fill="transparent" stroke={memoryBorder} strokeWidth={1.8} />
+                    </Svg>
 
                     {isSquadRepair ? (
-                      <View
-                        style={[styles.hexOverlay, { paddingHorizontal: tileW * 0.2 }]}
-                        pointerEvents="none"
-                      >
-                        <View
-                          style={[
-                            styles.hexIconShell,
-                            {
-                              backgroundColor: isDark ? withAlpha(theme.colors.cyan[400], 16) : withAlpha(theme.colors.cyan[500], 13),
-                              borderColor: isDark ? "rgba(125, 211, 252, 0.42)" : "rgba(6, 182, 212, 0.34)",
-                            },
-                          ]}
-                        >
-                          <ShieldCheck size={18} color={theme.colors.cyan[400]} strokeWidth={2.4} />
-                        </View>
-                        <Text style={[styles.hexKicker, { color: theme.colors.cyan[400] }]} numberOfLines={1}>
-                          SAVE
-                        </Text>
+                      <View style={styles.hexOverlay} pointerEvents="none">
+                        <Hammer size={18} color={theme.colors.textMuted} strokeWidth={2.2} />
                       </View>
                     ) : textOnlyThumb || hasLocalOnlyPhoto || !showImage ? (
                       <View
                         style={[styles.hexOverlay, { paddingHorizontal: tileW * 0.18 }]}
                         pointerEvents="none"
                       >
-                        <Text style={[styles.hexQuote, { color: theme.colors.indigo[400] }]}>{'\u201C'}</Text>
-                        <Text style={[styles.hexKicker, { color: memoryKickerColor }]} numberOfLines={1}>
-                          {hasLocalOnlyPhoto ? "PHOTO" : repairKicker ?? (hasTasks && !textOnlyThumb ? "LOGGED" : "NOTE")}
-                        </Text>
                         {hasLocalOnlyPhoto ? (
-                          <Text style={[styles.hexNotePreview, { color: theme.colors.textMuted }]} numberOfLines={2}>
-                            On their device
-                          </Text>
+                          <>
+                            <Text style={[styles.hexKicker, { color: theme.colors.textMuted }]} numberOfLines={1}>
+                              PHOTO
+                            </Text>
+                            <Text style={[styles.hexNotePreview, { color: theme.colors.textMuted }]} numberOfLines={2}>
+                              On their device
+                            </Text>
+                          </>
                         ) : textOnlyThumb ? (
-                          <Text style={[styles.hexNotePreview, { color: memoryTextColor }]} numberOfLines={2}>
+                          <Text style={[styles.hexNotePreview, { color: memoryTextColor }]} numberOfLines={3}>
                             {noteTrim}
                           </Text>
                         ) : hasTasks ? (
                           <Text style={[styles.hexNotePreview, { color: theme.colors.textMuted }]} numberOfLines={1}>
                             {taskEntries.length} task{taskEntries.length === 1 ? "" : "s"}
                           </Text>
-                        ) : null}
-                      </View>
-                    ) : null}
-
-                    {taskEntries.length > 1 ? (
-                      <View
-                        pointerEvents="none"
-                        style={[
-                          styles.hexCountChip,
-                          { backgroundColor: theme.colors.amber[500], borderColor: memoryCardBg },
-                        ]}
-                      >
-                        <Text style={styles.hexCountChipText}>{taskEntries.length}</Text>
+                        ) : (
+                          <Text style={[styles.hexKicker, { color: theme.colors.textMuted }]} numberOfLines={1}>
+                            NOTE
+                          </Text>
+                        )}
                       </View>
                     ) : null}
 
                     {dayLabel ? (
-                      <View
+                      <Text
                         pointerEvents="none"
                         style={[
-                          styles.hexDayPill,
-                          {
-                            backgroundColor: showImage
-                              ? "rgba(15, 23, 42, 0.78)"
-                              : isDark
-                                ? "rgba(15, 23, 42, 0.84)"
-                                : "rgba(255, 255, 255, 0.88)",
-                            borderColor: showImage ? "rgba(255, 255, 255, 0.42)" : memoryBorder,
-                          },
+                          styles.hexDayCaption,
+                          showImage
+                            ? styles.hexDayCaptionOnPhoto
+                            : { color: theme.colors.textSecondary },
                         ]}
+                        numberOfLines={1}
                       >
-                        <Text style={[styles.hexDayText, { color: showImage ? "#ffffff" : theme.colors.textSecondary }]}>
-                          {dayLabel}
-                        </Text>
-                      </View>
+                        {dayLabel}
+                      </Text>
                     ) : null}
                   </Pressable>
                 </HoneycombBuildTile>
@@ -1009,77 +663,41 @@ const styles = StyleSheet.create({
     top: 0,
     zIndex: 2,
   },
-  hexCountChip: {
-    position: "absolute",
-    top: 4,
-    right: 4,
-    minWidth: 18,
-    height: 18,
-    borderRadius: 9,
-    paddingHorizontal: 4,
-    borderWidth: 1.5,
-    alignItems: "center",
-    justifyContent: "center",
-    zIndex: 5,
-  },
-  hexCountChipText: {
-    fontSize: 9,
-    fontWeight: "900",
-    color: "#1a1200",
-  },
   hexOverlay: {
     ...StyleSheet.absoluteFillObject,
     alignItems: "center",
     justifyContent: "center",
     zIndex: 3,
   },
-  hexIconShell: {
-    width: 30,
-    height: 30,
-    borderRadius: 11,
-    borderWidth: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 4,
-  },
-  hexQuote: {
-    fontSize: 24,
-    lineHeight: 23,
-    fontWeight: "900",
-    marginBottom: -2,
-    opacity: 0.82,
-  },
   hexKicker: {
-    fontSize: 7,
-    lineHeight: 9,
-    fontWeight: "900",
-    letterSpacing: 1.1,
+    fontSize: 8,
+    lineHeight: 10,
+    fontWeight: "700",
+    letterSpacing: 0.6,
     textAlign: "center",
   },
   hexNotePreview: {
-    marginTop: 3,
-    fontSize: 8,
-    lineHeight: 11,
-    fontWeight: "800",
+    fontSize: 9,
+    lineHeight: 12,
+    fontWeight: "600",
     textAlign: "center",
   },
-  hexDayPill: {
+  /** Plain caption, not a pill — layout, not a sticker on the photo. */
+  hexDayCaption: {
     position: "absolute",
-    left: "50%",
-    bottom: 14,
-    minWidth: 30,
-    transform: [{ translateX: -15 }],
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    borderRadius: 999,
-    borderWidth: 1,
-    alignItems: "center",
+    left: 0,
+    right: 0,
+    bottom: 10,
+    textAlign: "center",
+    fontSize: 9,
+    fontWeight: "700",
     zIndex: 3,
   },
-  hexDayText: {
-    fontSize: 9,
-    lineHeight: 11,
-    fontWeight: "900",
+  hexDayCaptionOnPhoto: {
+    color: "#ffffff",
+    textShadowColor: "rgba(0,0,0,0.45)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
   combRail: {
     height: StyleSheet.hairlineWidth,
