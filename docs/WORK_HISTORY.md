@@ -2,6 +2,61 @@
 
 This is a concise chronological log for future sessions. Keep secrets out of this file.
 
+## 2026-08-06
+
+### Continued Minimalist Redesign — Color Dulling, Habit-Detail Day Grid, Timer, Memory Grid (branch `experiment/glass-redesign-v2`, not merged)
+
+Six commits, all on `experiment/glass-redesign-v2` (branches off the
+previous session's tip `aa224a3`; `main` still untouched, no merge/push/OTA):
+
+1. `09c781f` — added a `900`-level dulled shade to `green`/`red`/`amber` in
+   `theme.ts` (`#1B4332`/`#6B1E1E`/`#6B4413`, same value both themes) —
+   foundational token everything else in this session routes through.
+2. `d9dba3a` — Home decolorization: removed the XP-bar's decorative dot
+   (minimalist only), muted the FAB fill and notification badge, removed
+   the unread-bell buzz/wiggle animation entirely. New FAB "forms and
+   rises" mount entrance, fixed to actually play on cold launch via the
+   existing `onAppReady()` signal (same splash-race bug `HabitCard`'s
+   entrance hit before) plus retriggering on `isFocused` since Expo
+   Router keeps tab screens mounted after the first visit.
+3. `6f9e9e4` — `HabitCard`/`StreakProgressCard`: shrunk mission-type
+   pills further, removed the redundant "ACCOMPLISHED" label, made
+   `MiniDayGrid`'s dot color follow report status (failed/accomplished/
+   pending), dulled the streak-tier colors, fixed `"74/75d"` → `"74/75 d"`.
+4. `16fe084` — `Timer.tsx`: new minimalist mount animation (fire holds 5s,
+   then collapses so the digits grow into the freed space + pop ~8%
+   larger); removed the icon's chip background, unified the card border,
+   removed the "MISSION ACTIVE" label and the elapsed/remaining toggle
+   pill (whole digit block is the tap target now). A vertical-digit-
+   elongation experiment in `SplitFlapTimeDisplay.tsx` was tried and
+   fully reverted (visible iOS banding artifact).
+5. `ab7263e` — habit detail screen: completed-day marker collapsed from
+   a two-ring "double circle" to one solid `green[900]` circle with icon
+   priority (camera > hammer-for-repaired > note > plain number); fixed
+   a real bug where a repaired day's auto-note wrongly showed the note
+   icon instead of the hammer; current-day border → dashed dull red,
+   checklist-progress indicator rewritten from a stroked arc to a filled
+   pie-slice; Reminder/Type card's colored icon chips removed. **Real bug
+   fixed**: reminder "Lock time" silently did nothing in Expo Go (push
+   permission always `"unavailable"` there) — the lock-in is now
+   decoupled from notification-permission success entirely. Removed six
+   confirmed-dead styles left over from the pre-`CompletedDayDot` design.
+6. `6f1d36a` — memory-grid ("Your moments" honeycomb) redesign per a
+   published design-audit artifact: removed the stacked-day wave
+   cross-fade subsystem, the quote-mark glyph, and the 4-color kicker
+   text system entirely; squad-repair tiles now show a plain `Hammer`
+   icon; fixed bespoke `isDark`-conditional fills/borders to real theme
+   tokens; day label moved from a floating pill to plain caption text.
+   Kept the hex silhouette itself — a deliberate "strip the decoration,
+   not the shape" choice after comparing two mockup directions.
+
+`npx tsc --noEmit` and `git diff --check` clean throughout. Not yet
+visually confirmed on-device (same sandbox limitation as prior sessions) —
+see `docs/CURRENT_WORK.md`'s 2026-08-06 entry for exactly what still needs
+a real look, including a flagged possible light-mode legibility issue
+(white day-number text on the current-day circle before any progress fill
+exists, which sits on a plain white `theme.colors.surface` background).
+
 ## 2026-08-04
 
 ### Classic/Minimalist Theme-Pack System + Large Iterative Visual Redesign (branch `experiment/glass-redesign-v2`, not merged)

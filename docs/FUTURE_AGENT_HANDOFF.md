@@ -23,7 +23,34 @@ Then inspect the files relevant to the user request.
 
 ## Current User Priorities
 
-- **Most current, as of 2026-08-04**: a Classic/Minimalist theme-pack system
+- **Most current, as of 2026-08-06**: continued the minimalist redesign with
+  a "dull it down further" pass — Home's XP-bar dot, FAB fill, notification
+  badge, and streak/status colors across `HabitCard`/`StreakProgressCard`
+  all moved from vivid to muted, plus a new `900`-level dulled shade added
+  to `green`/`red`/`amber` in `theme.ts` to back that consistently instead
+  of one-off hex picks (see app-architecture.md's "Color token discipline").
+  The habit detail day grid was reworked from a two-ring "double circle"
+  into one solid `green[900]` circle with an icon-priority system (camera >
+  hammer-for-repaired > message-square > plain number), and the in-progress
+  day's checklist indicator changed from a stroked ring-arc to an actual
+  filled pie-slice. The Reminder/Type card lost its colored icon chips.
+  `Timer.tsx` gained a minimalist-only "fire holds, then collapses so the
+  digits grow into the space" mount animation, lost its elapsed/remaining
+  toggle pill (the whole digit block is the tap target now), and the
+  memory-capture honeycomb (`StreakMemoryGallery.tsx`) had its wave
+  cross-fade, quote glyph, and 4-color kicker system stripped entirely,
+  keeping only the hex silhouette (a "Concept B" redesign chosen after
+  reviewing a published audit artifact against real minimalist references).
+  Also fixed a real bug: reminder "Lock time" silently did nothing in Expo
+  Go (push permission is always `"unavailable"` there) — the lock-in is now
+  decoupled from notification-permission success entirely. Full detail in
+  `docs/CURRENT_WORK.md`'s 2026-08-06 entry and `docs/WORK_HISTORY.md`.
+  **All six commits live on `experiment/glass-redesign-v2`, still not
+  merged into `main`.** Most of this was again verified only by
+  `tsc`/`git diff --check`, not live on-device interaction (same sandbox
+  limitation as the prior session) — see `docs/CURRENT_WORK.md` for what
+  specifically still needs a real look.
+- **As of 2026-08-04**: a Classic/Minimalist theme-pack system
   (new `themePack` preference, Settings-selectable) plus a large iterative
   visual-redesign pass — Home/Compete tab restyle with an animated sliding
   indicator (rolled out to every other segmented control in the app too),

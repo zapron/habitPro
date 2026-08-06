@@ -85,6 +85,8 @@ Read these in this order for future work:
 - Moment lightbox is an aspect-aware photo card with note/meta below it, intended to avoid black bars and feel like a scrapbook/Instax card.
 - The honeycomb build-in animation uses React Native `Animated`, not Reanimated, because Expo Go hit a Worklets native/JS version mismatch when Reanimated was imported in the gallery.
 - Long mission detail performance is sensitive on Android. Active Trail batching, non-blocking decorative animations (`isInteraction: false`), and decoupling moments from full marker rendering are intentional.
+- (2026-08-06) The honeycomb's stacked-day auto-cycling wave transition was removed — decided against after a minimalist-design review; a stacked day now shows one static cover, full set still reachable by tapping into the swipeable viewer. The hex *shape* itself was deliberately kept (a "keep the shape, strip the decoration" call, not a move to circles) after comparing two mockup directions against real reference apps.
+- (2026-08-06) The habit-detail day grid moved from a two-ring "double circle" completed-day marker to one solid dulled-green circle, with icon priority camera > repaired (hammer) > text note > plain day number.
 
 ### Mini Missions
 
