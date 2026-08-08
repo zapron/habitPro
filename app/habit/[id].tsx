@@ -188,10 +188,14 @@ function getMilestones(totalDays: number, _mode: string): number[] {
     return markers;
 }
 
-/** Fixed regardless of theme — the completed-day circle's fill (`theme.colors.green[900]`)
- * doesn't change between light/dark, so its icon needs a color that reads consistently
- * against that one dark-green background rather than a theme-conditional gray. */
+/** Fixed regardless of theme — reads consistently against both the dark-green (dark
+ * mode) and simple-green (light mode) completed-day circle fill. */
 const COMPLETED_DAY_ICON_GRAY = '#8b93a1';
+/** Experiment: light mode's completed circle uses a brighter, "simple" green
+ * (`green[500]`) instead of the dulled `green[900]`, so the day number gets a
+ * correspondingly whiter (not full-white) text color to read clearly against it —
+ * dark mode is untouched, still the dull green + `COMPLETED_DAY_ICON_GRAY` pairing. */
+const COMPLETED_DAY_TEXT_LIGHT = '#E7EAEE';
 
 /**
  * Completed-day marker — one solid dull-green circle (no separate ring/border), with
@@ -211,21 +215,22 @@ const CompletedDayDot = React.memo(function CompletedDayDot({
     hasNoteOnly: boolean;
     isRepaired: boolean;
 }) {
-    const { theme } = useTheme();
+    const { theme, isDark } = useTheme();
+    const iconColor = isDark ? COMPLETED_DAY_ICON_GRAY : COMPLETED_DAY_TEXT_LIGHT;
 
     return (
         <View style={styles.completedDotContent}>
             {hasPhoto ? (
-                <Camera size={10} color={COMPLETED_DAY_ICON_GRAY} strokeWidth={2.4} />
+                <Camera size={10} color={iconColor} strokeWidth={2.4} />
             ) : isRepaired ? (
-                <Hammer size={10} color={COMPLETED_DAY_ICON_GRAY} strokeWidth={2.4} />
+                <Hammer size={10} color={iconColor} strokeWidth={2.4} />
             ) : hasNoteOnly ? (
-                <MessageSquare size={10} color={COMPLETED_DAY_ICON_GRAY} strokeWidth={2.4} />
+                <MessageSquare size={10} color={iconColor} strokeWidth={2.4} />
             ) : null}
             <Text
                 style={[
                     styles.brandRingDayText,
-                    { color: theme.colors.white },
+                    { color: isDark ? COMPLETED_DAY_ICON_GRAY : COMPLETED_DAY_TEXT_LIGHT },
                     day >= 10 && styles.brandRingDayTextTwoDigit,
                 ]}
             >
@@ -303,7 +308,7 @@ const AnimatedDayCell = React.memo(function AnimatedDayCell({
     onPress: (dayIndex: number, day: number) => void;
     optimizeForScroll: boolean;
 }) {
-    const { theme } = useTheme();
+    const { theme, isDark } = useTheme();
     const reduceMotion = useReducedMotion();
     const scale = useRef(new Animated.Value(1)).current;
     const shimmer = useRef(new Animated.Value(0)).current;
@@ -358,8 +363,8 @@ const AnimatedDayCell = React.memo(function AnimatedDayCell({
             ? [
                 styles.dayButtonCompleted,
                 {
-                    backgroundColor: theme.colors.green[900],
-                    borderColor: theme.colors.green[900],
+                    backgroundColor: isDark ? theme.colors.green[900] : theme.colors.green[500],
+                    borderColor: isDark ? theme.colors.green[900] : theme.colors.green[500],
                     borderWidth: 0,
                 },
             ]
@@ -394,7 +399,7 @@ const AnimatedDayCell = React.memo(function AnimatedDayCell({
                 ) : isCurrentMissionDay ? (
                     <View style={styles.badgeWrap}>
                         {showProgressArc ? <TaskProgressArc progress={(checklistLogged ?? 0) / (checklistTotal ?? 1)} /> : null}
-                        <Text style={[styles.dayText, styles.currentDayText, { color: theme.colors.white }]}>{day}</Text>
+                        <Text style={[styles.dayText, styles.currentDayText, { color: theme.colors.textMuted }]}>{day}</Text>
                     </View>
                 ) : (
                     <Text style={[styles.dayText, isCurrentMissionDay ? { color: theme.colors.red[500] } : { color: theme.colors.textMuted }]}>{day}</Text>
@@ -2207,7 +2212,7 @@ export default function HabitDetail() {
                                     Daily reminder time
                                 </Text>
                                 <Text style={[styles.reminderHint, { color: theme.colors.textSecondary }]}>
-                                    24h time (HH:MM). You’ll get this ping if today isn’t marked, plus the last-hour safety reminder. This choice is final.
+                                    Use 24-hour time, like 21:00. We’ll remind you if today isn’t marked yet, plus send one last safety ping in the final hour. You won’t be able to change this later.
                                 </Text>
 
                                 <View style={styles.reminderChipsRow}>
@@ -2219,13 +2224,13 @@ export default function HabitDetail() {
                                             style={[
                                                 styles.reminderChip,
                                                 {
-                                                    borderColor: theme.colors.border,
+                                                    borderColor: reminderDraft === t ? SWITCH_ACCENT_MUTED : theme.colors.border,
                                                     backgroundColor:
-                                                        reminderDraft === t ? theme.colors.indigo[600] : theme.colors.surfaceElevated,
+                                                        reminderDraft === t ? withAlpha(SWITCH_ACCENT_MUTED, 18) : theme.colors.surfaceElevated,
                                                 },
                                             ]}
                                         >
-                                            <Text style={{ color: reminderDraft === t ? "#fff" : theme.colors.textSecondary, fontWeight: "800" }}>
+                                            <Text style={{ color: reminderDraft === t ? SWITCH_ACCENT_MUTED : theme.colors.textSecondary, fontWeight: "600" }}>
                                                 {t}
                                             </Text>
                                         </TouchableOpacity>
@@ -2252,7 +2257,7 @@ export default function HabitDetail() {
                                         activeOpacity={0.86}
                                         style={[styles.reminderActionBtn, { backgroundColor: theme.colors.surfaceElevated, borderColor: theme.colors.border }]}
                                     >
-                                        <Text style={{ color: theme.colors.textPrimary, fontWeight: "800" }}>Cancel</Text>
+                                        <Text style={{ color: theme.colors.textPrimary, fontWeight: "600" }}>Cancel</Text>
                                     </TouchableOpacity>
                                     <TouchableOpacity
                                         onPress={() => {
@@ -2266,9 +2271,9 @@ export default function HabitDetail() {
                                             setReminderEditorOpen(false);
                                         }}
                                         activeOpacity={0.86}
-                                        style={[styles.reminderActionBtn, { backgroundColor: theme.colors.indigo[600], borderColor: theme.colors.indigo[600] }]}
+                                        style={[styles.reminderActionBtn, { backgroundColor: SWITCH_ACCENT_MUTED, borderColor: SWITCH_ACCENT_MUTED }]}
                                     >
-                                        <Text style={{ color: "#fff", fontWeight: "900" }}>Continue</Text>
+                                        <Text style={{ color: theme.colors.white, fontWeight: "700" }}>Continue</Text>
                                     </TouchableOpacity>
                                 </View>
                             </Pressable>
@@ -2295,11 +2300,11 @@ export default function HabitDetail() {
                                 styles.unlockPill,
                                 {
                                     borderColor: theme.colors.border,
-                                    backgroundColor: isDark ? withAlpha(theme.colors.cyan[400], 10) : withAlpha(theme.colors.cyan[500], 8),
+                                    backgroundColor: 'transparent',
                                 },
                             ]}
                         >
-                            <Text style={[styles.unlockPillText, { color: theme.colors.cyan[400] }]} numberOfLines={2}>
+                            <Text style={[styles.unlockPillText, { color: theme.colors.textSecondary }]} numberOfLines={2}>
                                 {activeTrailUnlockCopy}
                             </Text>
                         </View>
@@ -2723,11 +2728,11 @@ const styles = StyleSheet.create({
     visibilityHint: { fontSize: 11, marginTop: 3, lineHeight: 15 },
     backdrop: { flex: 1, justifyContent: "center", alignItems: "center", paddingHorizontal: 18 },
     reminderModal: { borderWidth: 1, borderRadius: 18, padding: 16, marginHorizontal: 18, width: "100%", maxWidth: 420 },
-    reminderTitle: { fontSize: 16, fontWeight: "900" },
-    reminderHint: { fontSize: 12, lineHeight: 17, fontWeight: "600", marginTop: 6 },
+    reminderTitle: { fontSize: 16, fontWeight: "700" },
+    reminderHint: { fontSize: 12, lineHeight: 17, fontWeight: "400", marginTop: 6 },
     reminderChipsRow: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 14 },
     reminderChip: { paddingHorizontal: 12, paddingVertical: 10, borderRadius: 9999, borderWidth: 1 },
-    reminderInput: { marginTop: 14, borderWidth: 1, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 10, fontWeight: "800" },
+    reminderInput: { marginTop: 14, borderWidth: 1, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 10, fontWeight: "600" },
     reminderActionsRow: { flexDirection: "row", gap: 10, marginTop: 16 },
     reminderActionBtn: { flex: 1, paddingVertical: 12, borderRadius: 14, alignItems: "center", borderWidth: 1 },
     reminderLockedRow: {

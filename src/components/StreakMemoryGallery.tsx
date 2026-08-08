@@ -298,7 +298,7 @@ export function StreakMemoryGallery({
     <>
       <View style={styles.section}>
         <View style={styles.sectionHead}>
-          <Bookmark size={16} color={theme.colors.amber[500]} fill={theme.colors.amber[500]} />
+          <Bookmark size={16} color={theme.colors.amber[500]} strokeWidth={2} />
           <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>{sectionTitle}</Text>
         </View>
         <Text style={[styles.sectionHint, { color: theme.colors.textMuted }]}>{sectionHint}</Text>

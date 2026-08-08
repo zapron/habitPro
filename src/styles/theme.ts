@@ -79,7 +79,10 @@ type ColorPalette = {
    * want the semantic meaning of red without it reading as an alert (e.g. a "failed" status
    * dot sitting next to other calm UI). See `green[900]` for the counterpart. */
   red: { 500: string; 900: string };
-  /** `900` is a deep/dark "forest" shade of the same green — same shade-scale idea as `red[900]`. */
+  /** `900` is a deep/dark "forest" shade of the same green — same shade-scale idea as `red[900]`.
+   * Unlike most tokens here, this one is deliberately NOT identical across light/dark: the same
+   * near-black value that blends calmly into a dark surface reads as stark, heavy contrast against
+   * a light one, so light mode gets its own lighter forest step to keep the same calm feeling. */
   green: { 500: string; 600: string; 900: string };
   white: string;
   scrim: string;
@@ -160,7 +163,8 @@ const lightColors: ColorPalette = {
   amber: { 500: "#D1720A", 900: "#6B4413" },
   yellow: { 400: "#eab308" },
   red: { 500: "#dc2626", 900: "#6B1E1E" },
-  green: { 500: "#16a34a", 600: "#15803d", 900: "#1B4332" },
+  /** `900` is lighter than dark mode's — see the doc comment on `ColorPalette.green` for why. */
+  green: { 500: "#16a34a", 600: "#15803d", 900: "#2D6A4F" },
   white: "#ffffff",
   /** Same dark-ink tone serves both jobs in light mode — there's no separate "light scrim" concept the way dark mode needs pure black vs. pure white. */
   scrim: "#0f172a",

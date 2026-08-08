@@ -1,6 +1,7 @@
 import { Text } from "./AppText";
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { Animated, Easing, StyleSheet, TouchableOpacity, View } from "react-native";
+import { ArrowDown, ArrowUp } from "lucide-react-native";
 import { GlassTopHighlight } from "./GlassTopHighlight";
 import { useTheme } from '../context/ThemeContext';
 import { AnimatedFire } from './AnimatedFire';
@@ -11,7 +12,7 @@ import type { HabitMode } from '../types/habit';
 
 /** Minimalist-only mount animation: the fire icon holds briefly, then collapses
  * to width 0 so the timer's flex:1 content reflows to fill the freed space. */
-const INTRO_HOLD_MS = 5000;
+const INTRO_HOLD_MS = 4000;
 const INTRO_COLLAPSE_MS = 480;
 
 const FIRE_LOTTIE_URI = "https://fonts.gstatic.com/s/e/notoemoji/latest/1f525/lottie.json";
@@ -165,7 +166,6 @@ export function Timer({ startDate, mode = 'autopilot', endDate, missionTimezone,
 
     const activeDisplay = showRemaining ? remainingDisplay : elapsedDisplay;
     const activePhase = showRemaining ? remainingPhase : elapsedPhase;
-    const label = isExpired ? "TIME'S UP" : showRemaining ? 'TIME LEFT' : 'MISSION ACTIVE';
 
     return (
         <View
@@ -180,6 +180,15 @@ export function Timer({ startDate, mode = 'autopilot', endDate, missionTimezone,
             ]}
         >
             <GlassTopHighlight radius={theme.radius.lg} />
+            {canToggle ? (
+                <View style={styles.cornerArrow} pointerEvents="none">
+                    {showRemaining ? (
+                        <ArrowDown size={13} color={theme.colors.textMuted} strokeWidth={2.4} />
+                    ) : (
+                        <ArrowUp size={13} color={theme.colors.textMuted} strokeWidth={2.4} />
+                    )}
+                </View>
+            ) : null}
             {introEnabled ? (
                 <Animated.View
                     onLayout={handleIconLayout}
@@ -199,9 +208,6 @@ export function Timer({ startDate, mode = 'autopilot', endDate, missionTimezone,
                 </View>
             )}
             <View style={styles.contentContainer}>
-                {label === 'MISSION ACTIVE' ? null : (
-                    <Text style={[styles.label, { color: theme.colors.textSecondary }]}>{label}</Text>
-                )}
                 <TouchableOpacity
                     onPress={canToggle ? handleToggle : undefined}
                     disabled={!canToggle}
@@ -213,6 +219,7 @@ export function Timer({ startDate, mode = 'autopilot', endDate, missionTimezone,
                         <SplitFlapTimeDisplay
                             display={activeDisplay || fallbackDisplay(activePhase)}
                             phase={activePhase}
+                            size="large"
                             timeColor={isExpired ? theme.colors.red[500] : theme.colors.textPrimary}
                             digitTextShadow={
                                 isExpired
@@ -255,18 +262,22 @@ const styles = StyleSheet.create({
     },
     iconContainer: {
         marginRight: 16,
+        // Nudges the flame's optical center up to match the big digits' center,
+        // not the digits+legend combined block's center (the legend row below
+        // adds height only on that side, which used to be negligible back when
+        // the digits were tiny — now that they're large, the mismatch is visible).
+        marginBottom: 14,
         alignItems: 'center',
         justifyContent: 'center',
     },
     contentContainer: {
         flex: 1,
     },
-    label: {
-        fontSize: 12,
-        fontWeight: 'bold',
-        letterSpacing: 1.5,
-        textTransform: 'uppercase',
-        marginBottom: 4,
+    cornerArrow: {
+        position: 'absolute',
+        top: 8,
+        right: 8,
+        opacity: 0.55,
     },
     legendContainer: {
         flexDirection: 'row',
@@ -286,8 +297,9 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     legendText: {
-        fontSize: 10,
-        fontWeight: 'bold',
+        fontSize: 9,
+        fontWeight: '700',
+        letterSpacing: 0.4,
         textAlign: 'center',
     },
 });
