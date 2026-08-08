@@ -24,7 +24,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as ImagePicker from "expo-image-picker";
-import { Flag, Globe, ImageIcon, Lock, Quote, Square, Users, X } from "lucide-react-native";
+import { Camera, Flag, Globe, ImageIcon, Lock, Quote, Square, Users, X } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import { useTheme } from "../context/ThemeContext";
 import type { StreakMemory } from "../types/habit";
@@ -282,12 +282,16 @@ export const StreakMemorySheet = React.memo(function StreakMemorySheet({
           { text: "Cancel", style: "cancel", onPress: releasePickerLock },
           {
             text: "Take photo",
+            style: "neutral",
+            icon: <Camera size={18} color={theme.colors.textSecondary} strokeWidth={2} />,
             onPress: () => {
               launchPicker("camera");
             },
           },
           {
             text: "Photo library",
+            style: "neutral",
+            icon: <ImageIcon size={18} color={theme.colors.textSecondary} strokeWidth={2} />,
             onPress: () => {
               launchPicker("library");
             },
