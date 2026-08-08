@@ -12,7 +12,7 @@ import {
 } from "react-native";
 import { useRouter } from 'expo-router';
 import { GlassTopHighlight } from './GlassTopHighlight';
-import { Check, CircleX, Users, Plane, Gamepad2, Globe, Swords, Hammer } from 'lucide-react-native';
+import { Check, CircleX, Users, Plane, Gamepad2, Swords, Hammer, Flame } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
 import { withAlpha } from '../styles/theme';
 import { Habit } from '../types/habit';
@@ -383,7 +383,6 @@ export const HabitCard = memo(({ item, nowMs, index, redesignPalette }: HabitCar
     const isManual = (item.mode ?? 'autopilot') === 'manual';
     const contextTags = [
         { label: isManual ? "Manual" : "Auto", icon: isManual ? Gamepad2 : Plane },
-        (item.visibility ?? 'solo') === 'public' ? { label: "Public", icon: Globe } : null,
         item.challengeGroupId ? { label: "Squad", icon: Swords } : null,
     ].filter((tag): tag is { label: string; icon: typeof Plane } => Boolean(tag));
     const completedDateSet = useMemo(() => new Set(item.completedDates), [item.completedDates]);
@@ -642,6 +641,14 @@ export const HabitCard = memo(({ item, nowMs, index, redesignPalette }: HabitCar
                                     </Text>
                                 </View>
                             ))}
+                            {item.streak > 0 ? (
+                                <View style={styles.streakInline}>
+                                    <Flame size={8} color={rp ? rp.textMuted : theme.colors.textMuted} strokeWidth={2} />
+                                    <Text style={[styles.streakInlineText, { color: rp ? rp.textMuted : theme.colors.textMuted }]}>
+                                        {item.streak}d
+                                    </Text>
+                                </View>
+                            ) : null}
                             {needsReport && (
                                 <Text style={[styles.reportPillText, { color: theme.colors.amber[500] }]}>REVIEW DUE</Text>
                             )}
@@ -825,6 +832,12 @@ const styles = StyleSheet.create({
         borderWidth: 1,
     },
     contextPillText: { fontSize: 8, fontWeight: '700', letterSpacing: 0.2 },
+    streakInline: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 0,
+    },
+    streakInlineText: { fontSize: 8, fontWeight: '700', letterSpacing: 0.2 },
     pulseGlyphWrap: {
         width: 16,
         height: 16,
