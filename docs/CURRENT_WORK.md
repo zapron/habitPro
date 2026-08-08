@@ -1,6 +1,187 @@
 # HabitPro Current Work
 
-Last updated: 2026-08-06 (continued the minimalist redesign on `experiment/glass-redesign-v2`: a new `900`-level dulled color shade for green/red/amber in `theme.ts`; Home decolorization pass (XP-bar dot removed, FAB/notification badge muted, bell shake removed) plus a new FAB "forms and rises" entrance animation; habit-detail day grid collapsed from a two-ring "double circle" into one solid green circle with an icon-priority system; the current-day checklist-progress indicator rewritten from a stroked arc to a filled pie-slice; the Reminder/Type card's colored icon chips removed; `Timer.tsx` gained a fire-hold-then-collapse mount animation and lost its elapsed/remaining toggle pill; the memory-grid honeycomb had its wave transition, quote glyph, and colored kicker system stripped (kept the hex shape) after a published design-audit artifact; and a real bug fix — reminder "Lock time" no longer silently does nothing in Expo Go. Six commits, all on `experiment/glass-redesign-v2`, **still not merged into `main`**.).
+Last updated: 2026-08-08 (continued the minimalist redesign on `experiment/glass-redesign-v2`: Timer digit/day-grid/reminder polish; Home habit card gained a plain fire+"Xd" streak indicator and lost the "Public" pill; a reusable "neutral" button style for the shared alert system, used first for Android's Add-a-photo dialog; a large cohort/squad screen pass (rankings card rebuilt around neutral numbered circles + a per-rank dull square-grid, `CohortStreakPill` extracted and reused everywhere a streak count needs showing, day-grid brought to parity with the habit-detail screen, milestones/eye-icon/level-pill/eyebrow-pill color stripped, forced-capitalization bug fixed on usernames); the Leaderboard rows lost every piece of gamified color (crowns, medals, colored XP ring, filled pills); and the Community feed's cards were restructured (header/photo/footer) and had color stripped, with the "View more" control rebuilt to fix a real bug where it could silently fail to render at all. Six commits, all on `experiment/glass-redesign-v2`, **still not merged into `main`**.).
+
+## Session Handoff (2026-08-08, end of session)
+
+**State: clean, still on the experiment branch.** Everything from this
+session is committed on `experiment/glass-redesign-v2` (six commits ahead
+of the previous session's `9743a6e`, `main` itself untouched). Nothing
+mid-flight, nothing uncommitted except the pre-existing untracked
+`.mcp.json` and `.claude/`. `npx tsc --noEmit` clean after every commit
+below. **No merge to `main`, no push, no OTA/build.**
+
+Commits this session, oldest to newest (all on `experiment/glass-redesign-v2`):
+
+1. `9ebdc34` — **habit detail screen polish**: `Timer.tsx`'s digits enlarged
+   via `SplitFlapTimeDisplay`'s existing `size="large"` variant (previously
+   unused there, capped at the tiny `"normal"` size regardless of available
+   width), HRS/MIN/SEC legend shrunk to compensate; a small top-right arrow
+   (⬆ elapsed / ⬇ remaining) replaces the old "TIME LEFT" text label that
+   used to shift the card's height on toggle; the fire icon's vertical
+   alignment nudged (it was centering against the digit+legend block
+   combined, not just the digits, so it sat visibly low once the digits
+   grew); intro hold before the fire collapses raised from instant to 4s.
+   Day-grid completed-day number now shares the same dulled gray
+   (`#8b93a1`) as its camera/hammer/message icon instead of pure white —
+   applied identically to both the habit-detail grid and (via a later
+   commit) the cohort screen's copy of it. `green[900]` gained a doc-comment
+   clarifying it's deliberately not identical across themes (light mode
+   already had its own lighter step from a prior session). A same-file
+   experiment — light mode's completed circle using `green[500]` (a
+   brighter "simple" green) instead of the dulled `green[900]` — shipped
+   with matching whiter text/icon color for that mode only; dark mode
+   unchanged. `StreakMemoryGallery`'s bookmark section icon switched from
+   filled to outline.
+2. `a33f56d` — **Home habit card**: added a plain (no pill/border/gap)
+   colorless flame icon + "Xd" streak indicator beside the mission-type
+   tags; removed the "Public" pill entirely per explicit feedback that
+   Squad already implies the relevant distinction and visibility-only
+   doesn't need its own badge.
+3. `d973c1c` — **neutral Android photo-picker dialog**: `AppDialogContext`
+   gained an additive `"neutral"` button style (same quiet bordered look as
+   `"cancel"`) and an optional `icon` slot on `AppDialogButton` — every
+   other `showAppAlert` caller in the app is unaffected since neither field
+   is set anywhere else. Used immediately in `StreakMemorySheet.tsx`'s
+   Android "Add a photo" sheet: Take Photo / Photo Library now use muted
+   Camera/Image icons instead of one indigo-filled primary button, so all
+   three options (incl. Cancel) read as equal-weight choices.
+4. `57598df` — **cohort/squad screen minimalist redesign, the big one**:
+   - `CohortLeaderHero`: 1st/2nd/3rd rank text + colored progress bars
+     replaced with neutral numbered circles + a 14-square dull-toned grid
+     per rank (amber[900] / a local muted-indigo `#4B4BB0` / green[900] —
+     picked over reusing red[900] to avoid the "3rd place = failure"
+     connotation red carries elsewhere in the app). The redundant name/
+     level/streak header row was removed outright (all of it duplicated
+     info already in the ranked list directly below) in favor of a plain
+     "Rankings" label — along with it went the avatar/initials circle and
+     the `topTwoPaceLine`/"leads 2nd place by N days" narrative sentence.
+   - `CohortStreakPill` (new shared shape, still same file): a colorless
+     filled flame icon immediately followed by "Xd" (no gap, no pill/
+     border/background) — reused as-is in the cohort leader card, cohort
+     participant rows, and later in this same session, Community feed
+     post headers.
+   - `CohortPeerStreakDots`: completed dots now mirror the habit-detail
+     day-grid exactly — one dull-green circle, camera/hammer/message icon
+     priority, dashed red current-day ring, no pulse animation. The
+     timeline legend simplified from 3 colored swatches (with-memory/
+     check-in/current) to 2 (completed/current) since the memory-vs-
+     check-in distinction now lives in the icon, not a color/border
+     difference a 10px swatch could show.
+   - `CohortNudgeChips`: horizontal `ScrollView` → non-scrolling flex row
+     (`flex: 1` per chip) so all 4 nudges always fit without horizontal
+     scroll, at any screen width.
+   - Participant/leader cards: level pill shrunk and moved from a colored
+     chip to a small neutral-bordered inline pill beside the eye icon
+     (an earlier attempt overlaid it on the username's corner like a
+     notification badge — reverted after it overlapped the card's own top
+     edge); eye/visibility icon lost its circular border/background
+     entirely (bare icon now, always reads as "private" styling regardless
+     of actual state per request); "Day X of XX" pill and the Milestones
+     accordion (in `SquadActivitySection`, shared by this screen's Activity
+     tab) neutralized — no accent bar, no icon circle; forced first-letter
+     capitalization removed from usernames in both files (real bug — a
+     deliberately-lowercase username was being capitalized against the
+     user's own choice); "X-day streak" copy → "X day streak" throughout.
+   - Removed the fire Lottie animation from the masthead trophy row
+     entirely (was already behind an easy off-switch from a prior session;
+     this time removed for real, including the unused Sun-icon fallback
+     and its pulse animation).
+5. `4d288d2` — **Leaderboard minimalist redesign** (`app/(tabs)/compete.tsx`
+   `LeagueRow`): dropped the per-league colored card background, crown/
+   medal icons for ranks 1-3, the colored circular XP progress ring around
+   the level avatar, the solid-filled "YOU" pill, and the filled yellow
+   zap icon next to points. Replaced with: a plain neutral bordered row
+   (uniform for every rank), plain "#N" text for every position, a flat
+   bordered level circle (no ring), an outline "YOU" pill (border + colored
+   text, no fill), and an unfilled zap icon (then removed the zap icon
+   entirely per follow-up). Card chrome itself went through several
+   rounds live in this session — background removed, border removed, a
+   divider added/thickened/thinned/removed — **current shipped state has
+   no card background, no border, and no divider between rows**; spacing
+   alone separates them. Removed the now-dead `leaderboardAccent` helper,
+   `medalDisc` style, and the `backgroundColor` field from
+   `lifetimeLeagueForLevel`.
+6. `833f1b8` — **Community feed card redesign** (`CommunityWinFeedPost`,
+   `CommunityWinsFeed`, `CommunityWinCheerersModal`):
+   - Restructured each post into **header** (avatar/name/league/mission-
+     name subtitle + a `CohortStreakPill` or a "Mini Mission" text tag,
+     top-right) → **photo** (internals unchanged, gained a bottom-right
+     "Day N" badge) → **footer** (caption, cheer button, timestamp) —
+     deleted the old streak-banner and mini-mission-banner gradient strips
+     entirely, folding their content into the header instead. First
+     attempt overlaid the header on top of the photo (gradient scrim +
+     absolute position); reverted per explicit correction to a proper
+     non-overlapping header row above the photo.
+   - Stripped color from what's left: league pill, handle, task-name row
+     icon, Live Squad photo badge, the "View more" control, and the
+     Community empty-state flame icon.
+   - **Real bug found and fixed**: "View more"/"View less" could silently
+     fail to render at all. It was nested `<Text>` inside a parent `<Text
+     numberOfLines={2}>` — RN's line-clamping measures the whole run
+     including nested children, so once the note was long enough to
+     overflow, RN's own truncation clipped the nested "View more" span
+     away along with the excess text. Fixed by manually pre-truncating the
+     caption to a ~90-char, word-boundary-aware budget *before* render
+     (`truncateForCollapse`) so the combined "truncated text + View more"
+     content is short enough to never need clipping in the first place.
+     Also fixed a second, unrelated bug in the same area: the expanded and
+     collapsed states used two different text styles (15px vs 13px, no
+     shared weight), so the caption visibly jumped in size on every
+     expand/collapse — now one shared style, only `numberOfLines` toggles.
+   - Card chrome: went through the same "elevated card" exploration as the
+     Leaderboard (background/border/shadow split into outer-shadow +
+     inner-clipped views to fix iOS shadow clipping; Android's `elevation`
+     needing an opaque background to render at all; a shadow-vs-edge-to-
+     edge-photo conflict where the shadow needed horizontal bleed room the
+     full-bleed layout doesn't have) — **ultimately removed entirely** per
+     explicit "let's try the flat version" experiment: no background step
+     off the screen, no border, no shadow, no rounded corners, no divider.
+     **The prior elevated-card implementation was deleted, not hidden** —
+     if asked to "go back," it needs to be rebuilt from this conversation's
+     history/this doc, not toggled back on.
+   - Photo overlay badges (Live Squad / gallery-count / Day N): smaller,
+     always white text+icon with a text shadow (was flipping to dark text
+     in light app-theme, which is a self-defeating combo against a
+     translucent *white* chip in that same mode — the actual bug the user
+     was hitting), background switched from app-theme-conditional to a
+     fixed dark translucent chip (these overlay a *photo*, not the app
+     surface, so app light/dark mode was never the right signal) at ~40%
+     opacity (up from an initial ~16-18% that was reported as "text
+     getting lost").
+   - Cheer icon/count switch from `indigo[400]` to `amber[500]` when
+     cheered (a real theme-varying token, not a hardcoded constant).
+   - `CommunityWinCheerersModal`: hero circle no longer a solid indigo-
+     filled glow circle (now a plain outline, `surfaceElevated` +
+     `border`); level pill neutralized (transparent + border, muted text);
+     `@handle` set to `textPrimary` rather than muted — this modal has no
+     separate display-name field, so the handle *is* the row's primary
+     label here, unlike every other "handle" fix this session where it was
+     genuinely secondary to a display name; loading spinner muted.
+
+`npx tsc --noEmit` clean after every commit above.
+
+**Not yet visually confirmed on-device** — same sandbox limitation as
+every prior session (no tap-automation). A few spots specifically worth a
+real look given how much iteration happened purely from static
+reasoning/screenshots the user provided mid-session:
+- The Community feed's flat card treatment (no chrome at all) — confirm it
+  actually reads as separate posts at real scroll speed, not just in a
+  single static screenshot.
+- The photo overlay badges' new ~40% dark chip + white text + shadow combo
+  against a genuinely bright, high-key photo (only tested against the one
+  photo the user screenshotted).
+- The cohort screen's level pill position (inline beside the eye icon) and
+  the participant card's overall vertical rhythm after all the spacing
+  passes.
+- Android specifically for the Leaderboard/Community shadow work — the
+  Android `elevation`-needs-opaque-background fix was reasoned through, not
+  confirmed against a real Android shadow render.
+
+**If starting a fresh chat from here**: read `agent.md`,
+`docs/PROJECT_CONTEXT.md`, this file, and `app-architecture.md` in that
+order, then this section. Still on `experiment/glass-redesign-v2`, not
+`main`. No decision has been made about merging into `main`.
 
 ## Session Handoff (2026-08-06, end of session)
 

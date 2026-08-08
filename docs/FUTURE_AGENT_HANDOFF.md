@@ -23,7 +23,28 @@ Then inspect the files relevant to the user request.
 
 ## Current User Priorities
 
-- **Most current, as of 2026-08-06**: continued the minimalist redesign with
+- **Most current, as of 2026-08-08**: a large minimalist pass across the
+  cohort/squad screen, the Leaderboard, and the Community feed, plus a
+  Community card *structural* restructure (header/photo/footer). Full
+  detail in `docs/CURRENT_WORK.md`'s 2026-08-08 entry and
+  `docs/WORK_HISTORY.md`. **All six commits live on
+  `experiment/glass-redesign-v2`, still not merged into `main`.** Two
+  things worth knowing before touching this area again:
+  - The Community feed card's elevated-card treatment (background/border/
+    shadow) was built, iterated on extensively (fixing real iOS shadow-
+    clipping and Android elevation bugs along the way), then **deleted
+    entirely** in favor of a flat, chrome-free card per an explicit "let's
+    try that" experiment. If the user says "go back" on this, it needs to
+    be rebuilt from `docs/CURRENT_WORK.md`'s 2026-08-08 entry (which has
+    the specifics) — it is not toggled behind a flag, it's gone.
+  - `CohortStreakPill` (`src/components/CohortStreakPill.tsx`) is now a
+    shared "colorless flame + Xd" building block reused in the cohort
+    screen *and* the Community feed's post header — if it changes, check
+    both call sites.
+  Same sandbox limitation as every prior session — none of this was
+  confirmed live on-device; see `docs/CURRENT_WORK.md` for the specific
+  spots most worth a real look.
+- **As of 2026-08-06**: continued the minimalist redesign with
   a "dull it down further" pass — Home's XP-bar dot, FAB fill, notification
   badge, and streak/status colors across `HabitCard`/`StreakProgressCard`
   all moved from vivid to muted, plus a new `900`-level dulled shade added

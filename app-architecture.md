@@ -1033,13 +1033,21 @@ Color token discipline (as of 2026-07-31):
 - `green`/`red`/`amber` each gained a `900` step (2026-08-06): a deliberately
   dulled/muted shade of the same hue for contexts that want the semantic
   meaning (streak broken, day repaired, notable streak) without reading as
-  a bright alert next to an otherwise-neutral card — `green[900]` #1B4332,
-  `red[900]` #6B1E1E, `amber[900]` #6B4413, same value in both light and
-  dark (unlike the 500-level steps, which differ per theme). This is the
-  first `900` step added to the palette; only these three hues have one so
-  far. If a future ask wants "the dull/muted version of X," reach for a
-  `900` step on that hue first — add one the same way if it doesn't exist
-  yet, rather than hand-picking a fresh hex.
+  a bright alert next to an otherwise-neutral card — `red[900]` #6B1E1E and
+  `amber[900]` #6B4413 are the same value in both light and dark. `green[900]`
+  is the **exception**: it started that way (#1B4332 both themes) but the
+  same near-black value read as too heavy against a white background, so
+  light mode got its own lighter step (#2D6A4F, 2026-08-06) — dark mode kept
+  #1B4332. **Don't assume a `900` token is theme-invariant just because
+  most of them are** — check `theme.ts` directly. (A 2026-08-08 session
+  experiment tried swapping `green[900]` for the brighter `green[500]` in
+  one specific component — the habit-detail/cohort day-grid's completed
+  circle, light mode only — rather than changing the shared token; that
+  stayed local to those call sites, `green[900]` itself is unchanged since
+  08-06.) This is the first `900` step added to the palette; only these
+  three hues have one so far. If a future ask wants "the dull/muted version
+  of X," reach for a `900` step on that hue first — add one the same way if
+  it doesn't exist yet, rather than hand-picking a fresh hex.
 - `GlassTopHighlight.tsx` (the shared glass-sheen top highlight) renders
   **nothing in light mode** — a first attempt at a light-mode tint (a
   slate-colored version of the same gradient) read as a flat gray smudge
@@ -1062,6 +1070,20 @@ Color token discipline (as of 2026-07-31):
   despite the hook call being present. Fix was just adding `theme` to the
   destructure. Moral either way: don't assume `theme` is in scope just
   because `isDark` clearly is — check what's actually destructured.
+- `AppDialogContext.tsx`'s shared `showAppAlert` supports a `"neutral"`
+  button style (2026-08-08) — same quiet bordered look as `"cancel"`, plus
+  an optional `icon` slot on `AppDialogButton` — for dialogs where every
+  option should read as an equal-weight choice (e.g. a photo-source
+  picker) rather than one filled primary CTA. Purely additive: existing
+  callers that don't set either field are unaffected. Reach for this
+  before hand-rolling a bespoke dialog when the ask is "make this alert's
+  buttons quieter/equal-weight."
+- `CohortStreakPill` (`src/components/CohortStreakPill.tsx`, 2026-08-08) is
+  a small shared building block — colorless filled flame icon immediately
+  followed by "Xd", no pill/border/background — for showing a streak count
+  inline anywhere in the app. Used in the cohort screen (leader card +
+  participant rows) and the Community feed's post header. Check both
+  families of call sites before changing its shape/props.
 
 ### Theme Packs (as of 2026-08-04, branch `experiment/glass-redesign-v2`, not merged)
 

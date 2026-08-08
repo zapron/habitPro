@@ -2,6 +2,60 @@
 
 This is a concise chronological log for future sessions. Keep secrets out of this file.
 
+## 2026-08-08
+
+### Cohort/Leaderboard/Community Minimalist Pass + Community Card Restructure (branch `experiment/glass-redesign-v2`, not merged)
+
+Six commits, all on `experiment/glass-redesign-v2` (branches off the
+previous session's tip `9743a6e`; `main` still untouched, no merge/push/OTA):
+
+1. `9ebdc34` — Timer digits enlarged (previously-unused `size="large"`
+   variant), legend shrunk, elapsed/remaining now a small corner arrow
+   instead of a height-shifting text label, fire-icon alignment fixed,
+   intro hold 0→4s; habit-detail day-grid completed-day text/icon share
+   one dulled gray instead of pure white; `green[900]`'s light-mode
+   experiment (brighter `green[500]` fill + matching whiter text) shipped;
+   memory-gallery bookmark icon outline instead of filled.
+2. `a33f56d` — Home habit card: plain colorless flame+"Xd" streak
+   indicator added; "Public" pill removed (Squad already implies it).
+3. `d973c1c` — `AppDialogContext` gained an additive `"neutral"` button
+   style + optional icon slot (every other caller unaffected); Android's
+   "Add a photo" sheet uses it so Take Photo/Photo Library/Cancel read as
+   equal-weight choices instead of one indigo-filled primary button.
+4. `57598df` — cohort/squad screen: `CohortLeaderHero`'s rank list rebuilt
+   around neutral numbered circles + a per-rank dull square-grid (dropped
+   colored progress bars and the redundant name/level/streak header row);
+   `CohortStreakPill` (colorless flame + "Xd", no chrome) reused across
+   the cohort screen and, later this session, Community feed; peer/habit-
+   detail day-grids brought to parity; nudge chips no longer scroll (flex
+   row, always 4 visible); level pill/eye-icon/milestones/day-pill color
+   stripped; fixed forced-capitalization on usernames (real bug); fire
+   Lottie removed for good.
+5. `4d288d2` — Leaderboard (`LeagueRow`): dropped colored card
+   backgrounds, crown/medal icons, the colored XP ring, filled "YOU" pill,
+   filled zap icon. Card chrome ended with no background/border/divider —
+   spacing alone separates rows.
+6. `833f1b8` — Community feed cards restructured into header (identity +
+   streak-pill-or-"Mini Mission" tag) → photo (unchanged, +Day-N badge) →
+   footer (caption/cheer/time), deleting the old gradient banners.
+   **Real bug fixed**: "View more" could silently fail to render at all —
+   it was nested inside a `numberOfLines`-clamped `<Text>`, so RN's own
+   truncation could clip the nested span away once the note overflowed;
+   fixed by pre-truncating the caption to a safe char budget before
+   render. Also fixed the expanded/collapsed caption using two different
+   text styles (visible size jump on toggle) — now one shared style.
+   Card chrome exploration (elevated → flat) **ended flat** — no bg/
+   border/shadow/divider, deleted rather than hidden. Photo overlay badges
+   fixed from app-theme-conditional (white chip + white text in light
+   mode is self-defeating) to a fixed dark chip + always-white text.
+   Cheer indicator switched indigo→amber. `CommunityWinCheerersModal`
+   de-colored (outline hero circle, neutral level pill, muted spinner).
+
+`npx tsc --noEmit` clean throughout. Not yet visually confirmed on-device
+— see `docs/CURRENT_WORK.md`'s 2026-08-08 entry for exactly what still
+needs a real look (flat Community card at real scroll speed, photo-badge
+contrast against a bright photo, Android shadow/elevation specifically).
+
 ## 2026-08-06
 
 ### Continued Minimalist Redesign — Color Dulling, Habit-Detail Day Grid, Timer, Memory Grid (branch `experiment/glass-redesign-v2`, not merged)
