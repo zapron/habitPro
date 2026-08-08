@@ -4,7 +4,6 @@ import {
   ActivityIndicator,
   Animated,
   Pressable,
-  ScrollView,
   StyleSheet,
   View,
 } from "react-native";
@@ -106,14 +105,7 @@ export const CohortNudgeChips = memo(function CohortNudgeChips({
   const customIcon = isDark ? "#c4b5fd" : "#7c3aed";
 
   return (
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      keyboardShouldPersistTaps="handled"
-      directionalLockEnabled
-      contentContainerStyle={styles.scrollContent}
-      style={styles.scroll}
-    >
+    <View style={styles.row}>
       {NUDGE_SPECS.map(({ kind, label, subtitle, Icon, glyph, suffixGlyph, bgLight, bgDark }) => {
         const busy = nudgeBusyKey === `${memberId}-${kind}`;
         const presetLocked = plusLocked;
@@ -220,61 +212,60 @@ export const CohortNudgeChips = memo(function CohortNudgeChips({
           </SentPopFlourish>
         )}
       </Pressable>
-    </ScrollView>
+    </View>
   );
 });
 
 CohortNudgeChips.displayName = "CohortNudgeChips";
 
 const styles = StyleSheet.create({
-  scroll: { marginHorizontal: -4, marginTop: 8 },
-  scrollContent: {
+  row: {
     flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 4,
-    paddingVertical: 0,
+    alignItems: "stretch",
+    gap: 5,
+    marginTop: 8,
   },
   chip: {
+    flex: 1,
+    minWidth: 0,
     alignItems: "stretch",
-    paddingHorizontal: 9,
-    paddingVertical: 7,
-    borderRadius: 12,
+    paddingHorizontal: 4,
+    paddingVertical: 6,
+    borderRadius: 10,
     borderWidth: StyleSheet.hairlineWidth,
-    minHeight: 46,
-    minWidth: 92,
+    minHeight: 40,
     justifyContent: "center",
   },
   chipInner: {
-    gap: 1,
+    gap: 0,
     minWidth: 0,
   },
   chipTitleRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
+    gap: 3,
     minWidth: 0,
   },
   customChip: {
     borderWidth: 1,
   },
   glyph: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "800",
     letterSpacing: -0.3,
   },
   chipLabel: {
     flexShrink: 1,
     minWidth: 0,
-    fontSize: 11,
-    lineHeight: 14,
+    fontSize: 10,
+    lineHeight: 12,
     fontWeight: "900",
-    letterSpacing: 0.15,
+    letterSpacing: 0.1,
   },
   chipSubtitle: {
-    fontSize: 9,
-    lineHeight: 12,
+    fontSize: 8,
+    lineHeight: 10,
     fontWeight: "700",
-    letterSpacing: 0.12,
+    letterSpacing: 0.1,
   },
 });

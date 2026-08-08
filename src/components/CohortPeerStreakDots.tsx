@@ -30,59 +30,39 @@ import { withAlpha } from "../styles/theme";
 
 const DOT_SIZE = 36;
 const DOT_GAP = 8;
+/** Matches `COMPLETED_DAY_ICON_GRAY` on the habit detail screen's day grid. */
+const COMPLETED_DOT_ICON_GRAY = "#8b93a1";
+/** Experiment: light mode's completed dot uses a brighter, "simple" green (`green[500]`)
+ * instead of the dulled `green[900]`, so its number gets a correspondingly whiter text
+ * color — dark mode keeps the dull green + `COMPLETED_DOT_ICON_GRAY` pairing as-is. */
+const COMPLETED_DOT_TEXT_LIGHT = "#E7EAEE";
 
-/** Dot timeline key: memory / check-in / current day. Use once beside the cohort participants heading. */
+/** Dot timeline key: completed / current day. Use once beside the cohort participants heading. */
 export function CohortParticipantTimelineLegend({
   theme,
-  isDark,
 }: {
   theme: AppTheme;
-  isDark: boolean;
+  isDark?: boolean;
 }) {
-  const richLegendFill = isDark ? "#23274e" : "#eef2ff";
-  const richLegendBorder = theme.colors.indigo[500];
-  const todayLegendBorder = theme.colors.amber[500];
-
   return (
     <View
       style={styles.legendRow}
-      accessibilityLabel="Timeline legend: with memory, check-in only, current day"
+      accessibilityLabel="Timeline legend: completed, current day"
     >
       <View style={styles.legendItem}>
         <View
           style={[
             styles.legendSwatch,
-            {
-              backgroundColor: richLegendFill,
-              borderColor: richLegendBorder,
-              borderWidth: 1.5,
-              shadowColor: theme.colors.indigo[500],
-              shadowOffset: { width: 0, height: 1 },
-              shadowOpacity: 0.2,
-              shadowRadius: 1,
-            },
+            { backgroundColor: theme.colors.green[900], borderColor: theme.colors.green[900], borderWidth: 0 },
           ]}
         />
-        <Text style={[styles.legendLabel, { color: theme.colors.textMuted }]}>With Memory</Text>
+        <Text style={[styles.legendLabel, { color: theme.colors.textMuted }]}>Completed</Text>
       </View>
       <View style={styles.legendItem}>
         <View
           style={[
             styles.legendSwatch,
-            {
-              backgroundColor: richLegendFill,
-              borderColor: richLegendBorder,
-              borderWidth: 1.5,
-            },
-          ]}
-        />
-        <Text style={[styles.legendLabel, { color: theme.colors.textMuted }]}>Check-in Only</Text>
-      </View>
-      <View style={styles.legendItem}>
-        <View
-          style={[
-            styles.legendSwatch,
-            { backgroundColor: theme.colors.surfaceElevated, borderColor: todayLegendBorder, borderWidth: 1.8 },
+            { backgroundColor: theme.colors.surfaceElevated, borderColor: theme.colors.red[900], borderWidth: 1.8, borderStyle: "dashed" },
           ]}
         />
         <Text style={[styles.legendLabel, { color: theme.colors.textMuted }]}>Current</Text>
@@ -403,25 +383,25 @@ export const CohortPeerStreakDots = memo(function CohortPeerStreakDots({
       const isCheckInOnly = completed && isPublic && !hasMemory;
       const tappable = completed;
 
-      // Completed days share the same indigo circle; memory days add camera/text badges.
+      // Mirrors the habit detail screen's day-grid: a single solid dull-green
+      // circle for completed days (camera/note icon stacked above a thin white
+      // number), a dashed dull-red outline for the current day, plain/neutral
+      // otherwise — instead of the old indigo-tinted dot + floating corner badge.
       let dotBg = theme.colors.surfaceElevated;
-      let dotBorder = isCurrentSlot ? theme.colors.amber[500] : theme.colors.border;
+      let dotBorder = theme.colors.border;
       let dotText = theme.colors.textMuted;
-      let extraStyle = {};
+      let dotBorderWidth = 2;
+      let dotBorderStyle: "solid" | "dashed" = "solid";
 
       if (completed) {
-        dotBg = isDark ? "#23274e" : "#eef2ff";
-        dotBorder = isCurrentSlot
-          ? isDark ? withAlpha(theme.colors.amber[500], 72) : withAlpha(theme.colors.amber[500], 58)
-          : isDark ? withAlpha(theme.colors.indigo[500], 62) : withAlpha(theme.colors.indigo[600], 42);
-        dotText = isDark ? theme.colors.white : theme.colors.indigo[600];
-        extraStyle = {
-          shadowColor: theme.colors.indigo[500],
-          shadowOffset: { width: 0, height: 1.2 },
-          shadowOpacity: 0.22,
-          shadowRadius: 2.2,
-          elevation: 2,
-        };
+        dotBg = isDark ? theme.colors.green[900] : theme.colors.green[500];
+        dotBorder = dotBg;
+        dotText = isDark ? COMPLETED_DOT_ICON_GRAY : COMPLETED_DOT_TEXT_LIGHT;
+        dotBorderWidth = 0;
+      } else if (isCurrentSlot) {
+        dotBorder = theme.colors.red[900];
+        dotText = theme.colors.textPrimary;
+        dotBorderStyle = "dashed";
       }
 
       const isPending = pendingTap?.dateStr === dateStr;
@@ -444,33 +424,32 @@ export const CohortPeerStreakDots = memo(function CohortPeerStreakDots({
             {
               borderColor: dotBorder,
               backgroundColor: dotBg,
+              borderWidth: dotBorderWidth,
+              borderStyle: dotBorderStyle,
               opacity: tappable ? 1 : completed ? 0.95 : 0.45,
-              ...extraStyle,
             },
           ]}
         >
           {isPending ? (
             <ActivityIndicator size="small" color={dotText} />
           ) : (
-            <Text
-              style={[
-                styles.dotNum,
-                { color: dotText },
-              ]}
-            >
-              {dayNum}
-            </Text>
+            <View style={styles.dotContent}>
+              {isPublic && hasPhoto ? (
+                <Camera size={10} color={dotText} strokeWidth={2.4} />
+              ) : isPublic && hasNoteOnly ? (
+                <MessageSquare size={10} color={dotText} strokeWidth={2.4} />
+              ) : null}
+              <Text
+                style={[
+                  styles.dotNum,
+                  completed && styles.dotNumThin,
+                  { color: dotText },
+                ]}
+              >
+                {dayNum}
+              </Text>
+            </View>
           )}
-
-          {isPublic && hasPhoto ? (
-            <View style={[styles.floatingBadge, { backgroundColor: theme.colors.amber[500], borderColor: theme.colors.surfaceElevated }]}>
-              <Camera size={7.5} color="#111827" strokeWidth={2.5} />
-            </View>
-          ) : isPublic && hasNoteOnly ? (
-            <View style={[styles.floatingBadge, { backgroundColor: theme.colors.indigo[500], borderColor: theme.colors.surfaceElevated }]}>
-              <MessageSquare size={7.5} color="#ffffff" strokeWidth={2.5} />
-            </View>
-          ) : null}
         </Pressable>
       );
     },
@@ -682,27 +661,12 @@ const styles = StyleSheet.create({
     width: DOT_SIZE,
     height: DOT_SIZE,
     borderRadius: 9999,
-    borderWidth: 2,
     alignItems: "center",
     justifyContent: "center",
   },
+  dotContent: { alignItems: "center", justifyContent: "center", gap: 1 },
   dotNum: { fontSize: 12, fontWeight: "800" },
-  floatingBadge: {
-    position: "absolute",
-    top: -4,
-    right: -4,
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    borderWidth: 1.2,
-    alignItems: "center",
-    justifyContent: "center",
-    elevation: 2,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.18,
-    shadowRadius: 1,
-  },
+  dotNumThin: { fontSize: 13, fontWeight: "300" },
   viewerBackdrop: { flex: 1, justifyContent: "center", padding: 20 },
   viewerInner: { borderRadius: 24, borderWidth: 1, overflow: "hidden", padding: 10 },
   imgContainer: {

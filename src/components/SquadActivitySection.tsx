@@ -43,10 +43,7 @@ function SquadActivityTitle({
 
 function participantDisplayName(label: ProfileLabel | undefined): string {
   if (label?.displayName) return label.displayName;
-  if (label?.username) {
-    const u = label.username;
-    return u.charAt(0).toUpperCase() + u.slice(1);
-  }
+  if (label?.username) return label.username;
   return "Member";
 }
 
@@ -70,7 +67,7 @@ function milestoneCopy(row: ChallengeActivityRow, labels: Record<string, Profile
   if (row.kind === "mission_day") {
     return { title: name, subtitle: `Completed day ${row.value} of the mission` };
   }
-  return { title: name, subtitle: `${row.value}-day streak` };
+  return { title: name, subtitle: `${row.value} day streak` };
 }
 
 function NudgeActivityLine({
@@ -229,7 +226,9 @@ export const SquadActivitySection = memo(function SquadActivitySection({
 
   if (feedActivity.length === 0 && feedNudges.length === 0 && !loading) return null;
 
-  const cardBg = theme.colors.surfaceElevated;
+  // Dark mode: match the screen's own background instead of the lighter `surfaceElevated`
+  // tone, which read as a visibly different-toned card floating on top of the screen.
+  const cardBg = isDark ? theme.colors.background : theme.colors.surfaceElevated;
   const border = theme.colors.border;
 
   const mCount = effectiveActivity.length;
@@ -444,13 +443,8 @@ export const SquadActivitySection = memo(function SquadActivitySection({
               >
                 {effectiveActivity.map((row, index) => {
                   const { title, subtitle } = milestoneCopy(row, profileLabels);
-                  const isMission = row.kind === "mission_day";
                   const isCongratsBusy = nudgeBusyKey === `congrats:${row.id}`;
                   const alreadyCongratulated = congratsSentActivityIds?.has(row.id) === true;
-                  const accent = isMission ? theme.colors.green[500] : theme.colors.cyan[400];
-                  const tintBg = isMission
-                    ? isDark ? withAlpha(theme.colors.green[500], 12) : withAlpha(theme.colors.green[600], 10)
-                    : isDark ? withAlpha(theme.colors.cyan[400], 12) : withAlpha(theme.colors.cyan[500], 10);
 
                   return (
                     <View
@@ -460,14 +454,6 @@ export const SquadActivitySection = memo(function SquadActivitySection({
                         index > 0 && effectiveActivity.length > 1 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: border },
                       ]}
                     >
-                      <View style={[styles.accentBar, { backgroundColor: accent }]} />
-                      <View style={[styles.milestoneIconCircle, { backgroundColor: tintBg }]}>
-                        {isMission ? (
-                          <Flag size={theme.icon.sm} color={accent} strokeWidth={2.4} />
-                        ) : (
-                          <Flame size={theme.icon.sm} color={accent} strokeWidth={2.4} />
-                        )}
-                      </View>
                       <View style={styles.milestoneBody}>
                         <Text style={[styles.milestoneTitle, { color: theme.colors.textPrimary }]} numberOfLines={1}>
                           {title}
@@ -861,19 +847,6 @@ const styles = StyleSheet.create({
     gap: 10,
     paddingVertical: 12,
     paddingHorizontal: 4,
-  },
-  accentBar: {
-    width: 4,
-    alignSelf: "stretch",
-    minHeight: 44,
-    borderRadius: 4,
-  },
-  milestoneIconCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: "center",
-    justifyContent: "center",
   },
   milestoneBody: { flex: 1, minWidth: 0 },
   milestoneTitle: {
