@@ -25,7 +25,7 @@ import { FlashList } from "@shopify/flash-list";
 const DynamicFlashList = FlashList as any;
 import { useFocusEffect, useIsFocused } from "@react-navigation/native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { ChevronRight, Crown, Eye, Medal, Radio, RefreshCw, Search, Star, Swords, Trophy, Clock, X, Zap } from "lucide-react-native";
+import { ChevronRight, Eye, Medal, Radio, RefreshCw, Search, Swords, Trophy, Clock, X } from "lucide-react-native";
 import { Screen } from "../../src/components/Screen";
 import { Button } from "../../src/components/Button";
 import { ConfirmDialog } from "../../src/components/ConfirmDialog";
@@ -550,51 +550,12 @@ function formatWeekResetCountdown(msRemaining: number): string {
   return `Resets in ${Math.max(1, minutes)}m`;
 }
 
-function leaderboardAccent(rank: number, theme: ReturnType<typeof useTheme>["theme"]) {
-  if (rank === 1) return theme.colors.amber[500];
-  if (rank === 2) return theme.colors.cyan[400];
-  if (rank === 3) return theme.colors.indigo[400];
-  return theme.colors.textMuted;
-}
-
-function lifetimeLeagueForLevel(
-  level: number,
-  theme: ReturnType<typeof useTheme>["theme"],
-  isDark: boolean,
-) {
-  if (level >= 25) {
-    return {
-      label: "Mythic League",
-      color: theme.colors.indigo[400],
-      backgroundColor: isDark ? withAlpha(theme.colors.indigo[500], 16) : withAlpha(theme.colors.indigo[500], 9),
-    };
-  }
-  if (level >= 15) {
-    return {
-      label: "Gold League",
-      color: theme.colors.amber[500],
-      backgroundColor: isDark ? withAlpha(theme.colors.amber[500], 15) : withAlpha(theme.colors.amber[500], 11),
-    };
-  }
-  if (level >= 8) {
-    return {
-      label: "Silver League",
-      color: theme.colors.cyan[400],
-      backgroundColor: isDark ? withAlpha(theme.colors.cyan[400], 13) : withAlpha(theme.colors.cyan[500], 9),
-    };
-  }
-  if (level >= 3) {
-    return {
-      label: "Bronze League",
-      color: theme.colors.yellow[400],
-      backgroundColor: isDark ? "rgba(217, 119, 6, 0.14)" : "rgba(180, 83, 9, 0.08)",
-    };
-  }
-  return {
-    label: "Rookie League",
-    color: theme.colors.textMuted,
-    backgroundColor: isDark ? withAlpha(theme.colors.textSecondary, 8) : withAlpha(theme.colors.textSecondary, 12),
-  };
+function lifetimeLeagueForLevel(level: number, theme: ReturnType<typeof useTheme>["theme"]) {
+  if (level >= 25) return { label: "Mythic League", color: theme.colors.indigo[400] };
+  if (level >= 15) return { label: "Gold League", color: theme.colors.amber[500] };
+  if (level >= 8) return { label: "Silver League", color: theme.colors.cyan[400] };
+  if (level >= 3) return { label: "Bronze League", color: theme.colors.yellow[400] };
+  return { label: "Rookie League", color: theme.colors.textMuted };
 }
 
 const LeagueRow = memo(function LeagueRow({
@@ -613,12 +574,10 @@ const LeagueRow = memo(function LeagueRow({
   rp?: RedesignPaletteVariant | null;
 }) {
   const entranceStyle = useListCardEntrance(index);
-  const accent = leaderboardAccent(entry.rankPosition, theme);
-  const xpInLevel = xpInCurrentLevel(entry.xp);
   const usernameLabel = entry.username.replace(/^@+/, "");
   const displayName = (entry.displayName?.trim() || usernameLabel).replace(/^@+/, "");
   const showHandle = Boolean(entry.displayName);
-  const playerLeague = lifetimeLeagueForLevel(entry.level, theme, isDark);
+  const playerLeague = lifetimeLeagueForLevel(entry.level, theme);
   const identity = avatarIdentityFor(entry.userId);
   return (
     <Animated.View style={entranceStyle}>
@@ -629,40 +588,25 @@ const LeagueRow = memo(function LeagueRow({
       accessibilityLabel={`Open ${displayName} player stats`}
       style={[
         styles.leagueRow,
-        {
-          backgroundColor: playerLeague.backgroundColor,
-          borderWidth: entry.isMe ? 1.5 : 0,
-          borderColor: entry.isMe ? (rp ? rp.accent : theme.colors.indigo[400]) : "transparent",
-        },
+        { backgroundColor: "transparent", borderWidth: 0 },
       ]}
     >
-      {rp ? null : <GlassTopHighlight radius={16} />}
       <View style={styles.leagueRankSlot}>
-        {entry.rankPosition === 1 ? (
-          <Crown size={22} color={accent} fill={accent} />
-        ) : entry.rankPosition === 2 || entry.rankPosition === 3 ? (
-          <View style={[styles.medalDisc, { backgroundColor: accent }]}>
-            <Star size={11} color={theme.colors.white} fill={theme.colors.white} />
-          </View>
-        ) : (
-          <Text
-            style={[
-              styles.leagueRankText,
-              { color: accent },
-              rp ? { fontFamily: fontFamily.manropeExtraBold } : null,
-            ]}
-          >
-            #{entry.rankPosition}
-          </Text>
-        )}
+        <Text
+          style={[
+            styles.leagueRankText,
+            { color: rp ? rp.textMuted : theme.colors.textMuted },
+            rp ? { fontFamily: fontFamily.manropeExtraBold } : null,
+          ]}
+        >
+          #{entry.rankPosition}
+        </Text>
       </View>
 
-      <LevelXpRing level={entry.level} xpInLevel={xpInLevel} size={46} strokeWidth={3}>
-        <View style={[styles.leagueLevelOrb, { backgroundColor: identity.background, borderColor: identity.border }]}>
-          <Text style={[styles.leagueLevelNum, { color: identity.foreground }]}>{entry.level}</Text>
-          <Text style={[styles.leagueLevelLabel, { color: rp ? rp.textMuted : theme.colors.textMuted }]}>LVL</Text>
-        </View>
-      </LevelXpRing>
+      <View style={[styles.leagueLevelOrb, { backgroundColor: identity.background, borderColor: identity.border }]}>
+        <Text style={[styles.leagueLevelNum, { color: identity.foreground }]}>{entry.level}</Text>
+        <Text style={[styles.leagueLevelLabel, { color: rp ? rp.textMuted : theme.colors.textMuted }]}>LVL</Text>
+      </View>
 
       <View style={styles.leaguePerson}>
         <View style={styles.leagueNameRow}>
@@ -677,8 +621,13 @@ const LeagueRow = memo(function LeagueRow({
             {displayName}
           </Text>
           {entry.isMe ? (
-            <View style={[styles.youPill, { backgroundColor: rp ? rp.accent : theme.colors.indigo[600] }]}>
-              <Text style={styles.youPillText}>YOU</Text>
+            <View
+              style={[
+                styles.youPill,
+                { borderColor: rp ? rp.accent : theme.colors.indigo[400] },
+              ]}
+            >
+              <Text style={[styles.youPillText, { color: rp ? rp.accent : theme.colors.indigo[400] }]}>YOU</Text>
             </View>
           ) : null}
         </View>
@@ -702,7 +651,7 @@ const LeagueRow = memo(function LeagueRow({
               ]}
               numberOfLines={1}
             >
-              - {usernameLabel}
+              @{usernameLabel}
             </Text>
           ) : null}
         </View>
@@ -719,7 +668,6 @@ const LeagueRow = memo(function LeagueRow({
           {entry.points}
         </Text>
         <View style={styles.leagueXpLabelRow}>
-          <Zap size={11} color={theme.colors.yellow[400]} fill={theme.colors.yellow[400]} />
           <Text style={[styles.leagueXpLabel, { color: rp ? rp.textMuted : theme.colors.textMuted }]}>PTS</Text>
         </View>
       </View>
@@ -2075,6 +2023,9 @@ export default function CompeteScreen() {
           keyExtractor={(item) => item.userId}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingBottom: bottomPad }}
+          ItemSeparatorComponent={() => (
+            <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: rp ? rp.textMuted : theme.colors.textMuted, opacity: isDark ? 0.35 : 0.28 }} />
+          )}
           ListHeaderComponent={
             <>
               <View
@@ -2900,13 +2851,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  medalDisc: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-  },
   leagueRankText: {
     width: 44,
     textAlign: "center",
@@ -2933,10 +2877,11 @@ const styles = StyleSheet.create({
   leagueHandle: { flexShrink: 1, minWidth: 0, fontSize: 11, lineHeight: 15, fontWeight: "700" },
   youPill: {
     borderRadius: 999,
+    borderWidth: 1,
     paddingHorizontal: 6,
     paddingVertical: 3,
   },
-  youPillText: { color: "#fff", fontSize: 8, fontWeight: "900", letterSpacing: 0.8 },
+  youPillText: { fontSize: 8, fontWeight: "900", letterSpacing: 0.8 },
   leagueXpCol: { width: 50, alignItems: "flex-end" },
   leagueXp: { fontSize: 16, lineHeight: 20, fontWeight: "900", fontVariant: ["tabular-nums"] },
   leagueXpLabelRow: { flexDirection: "row", alignItems: "center", gap: 3, marginTop: 2 },
