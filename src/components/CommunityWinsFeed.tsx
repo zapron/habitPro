@@ -410,7 +410,7 @@ export function CommunityWinsFeed({
         ListEmptyComponent={
           !loading ? (
             <View style={[styles.emptyCard, { borderColor: theme.colors.border, backgroundColor: theme.colors.surface }]}>
-              <Flame size={28} color={theme.colors.amber[500]} />
+              <Flame size={28} color={theme.colors.textMuted} />
               <Text style={[styles.emptyTitle, { color: theme.colors.textPrimary, marginTop: 12 }]}>No wins yet</Text>
               <Text style={[styles.emptyBody, { color: theme.colors.textSecondary }]}>
                 Complete a public mini mission and choose to post it here. Pull to refresh.

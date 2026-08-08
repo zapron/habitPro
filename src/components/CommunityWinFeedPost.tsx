@@ -21,8 +21,6 @@ import {
 } from "react-native";
 import * as Haptics from "expo-haptics";
 import {
-  ChevronDown,
-  ChevronUp,
   Camera,
   Radio,
   ThumbsUp,
@@ -40,6 +38,7 @@ import { playerLeagueForLevel } from "../utils/playerLeague";
 import { storageThumbnailUri } from "../utils/imageThumbnail";
 import { avatarIdentityFor } from "../utils/avatarIdentity";
 import { withAlpha } from "../styles/theme";
+import { CohortStreakPill } from "./CohortStreakPill";
 
 function initialsFromDisplay(name: string): string {
   const trimmed = name.replace(/^@/, "").trim();
@@ -49,10 +48,37 @@ function initialsFromDisplay(name: string): string {
   return trimmed.slice(0, 2).toUpperCase();
 }
 
+/** Caption preview: manually truncated to a char budget instead of relying on `numberOfLines`
+ * to clip it — `numberOfLines` measures the whole text run (including a nested "View more"
+ * span appended after it) and can silently cut the nested span away entirely once the note
+ * is long enough to overflow, which is why "View more" wasn't showing up at all. Pre-truncating
+ * short enough that the collapsed text + " View more" reliably fits in the line budget means
+ * nothing needs to get clipped away in the first place. */
+const CAPTION_COLLAPSE_CHAR_BUDGET = 90;
+
+function truncateForCollapse(text: string, maxChars: number): string {
+  if (text.length <= maxChars) return text;
+  const slice = text.slice(0, maxChars);
+  const lastSpace = slice.lastIndexOf(" ");
+  return (lastSpace > 40 ? slice.slice(0, lastSpace) : slice).trimEnd();
+}
+
 /** Second tap within this gap counts as double-tap (cheer + burst). */
 const DOUBLE_TAP_GAP_MS = 280;
 /** RN aspectRatio is width / height; below 1 makes community moments slightly taller. */
 const COMMUNITY_PHOTO_ASPECT_RATIO = 0.9;
+/** Deliberately tight (small offset/radius) rather than soft and wide — the feed cards are
+ * edge-to-edge with zero horizontal margin, so a shadow that needs a lot of room to spread
+ * into gets visibly clipped right at the rounded corners. A tight shadow needs barely any
+ * bleed room, so it renders cleanly without giving up the edge-to-edge photo layout.
+ * Used for both themes — not just the shared `theme.shadow.card` token's softer, wider default. */
+const CARD_SHADOW = {
+  shadowColor: "#1e293b",
+  shadowOffset: { width: 0, height: 2 },
+  shadowOpacity: 0.22,
+  shadowRadius: 4,
+  elevation: 2,
+} as const;
 
 type Props = {
   win: CommunityWinFeedItem;
@@ -248,6 +274,11 @@ export const CommunityWinFeedPost = memo(function CommunityWinFeedPost({
   const noteText = (activeGalleryItem?.note ?? win.memory_note ?? "").trim();
   const hasNote = noteText.length > 0;
   const hasLongNote = noteText.length > 90 || noteText.includes("\n");
+  /** Flattened (no hard line breaks) so a short-but-multiline note still collapses to a single
+   * truncatable run instead of tripping numberOfLines on the newlines alone. */
+  const noteTextFlat = noteText.replace(/\s*\n+\s*/g, " ").trim();
+  const noteTextCollapsed = truncateForCollapse(noteTextFlat, CAPTION_COLLAPSE_CHAR_BUDGET);
+  const noteTextWasTruncated = noteTextCollapsed.length < noteTextFlat.length;
   /** Older rows used synthetic id before feed_source existed */
   const legacyHabitStreak =
     win.feed_source === "mini" && win.mini_mission_id.startsWith("habitwin:");
@@ -280,7 +311,6 @@ export const CommunityWinFeedPost = memo(function CommunityWinFeedPost({
   const showMissionTitle = !streakKicker;
   const showDetailsToggle = hasLongNote || expanded;
   const isLiveSquadWin = win.feed_source === "mini" && Boolean(win.live_squad_id);
-  const showMiniMissionBanner = showMissionTitle;
 
   const lastTapRef = useRef(0);
   const lightboxTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -407,14 +437,6 @@ export const CommunityWinFeedPost = memo(function CommunityWinFeedPost({
     }).start();
   }, [imageOpacity, reduceMotion]);
 
-  const tileBorder = useMemo(
-    () => ({
-      borderColor: isDark ? withAlpha(theme.colors.textSecondary, 20) : withAlpha(theme.colors.textSecondary, 34),
-      backgroundColor: isDark ? "rgba(15, 23, 42, 0.96)" : theme.colors.background,
-    }),
-    [isDark, theme.colors.background],
-  );
-
   const cheerButton = (
     <Pressable
       onPress={() => void runCheer()}
@@ -428,28 +450,98 @@ export const CommunityWinFeedPost = memo(function CommunityWinFeedPost({
       <Animated.View style={{ transform: [{ scale: cheerScale }] }}>
         <ThumbsUp
           size={17}
-          color={win.viewerHasCheered ? theme.colors.indigo[400] : theme.colors.textMuted}
-          fill={win.viewerHasCheered ? theme.colors.indigo[400] : "transparent"}
+          color={win.viewerHasCheered ? theme.colors.amber[500] : theme.colors.textMuted}
+          fill={win.viewerHasCheered ? theme.colors.amber[500] : "transparent"}
           strokeWidth={2}
         />
       </Animated.View>
     </Pressable>
   );
 
-  const wrapStyle = isFeed
-    ? [
-        styles.feedTile,
-        tileBorder,
-        {
-          marginBottom: 14,
-        },
-      ]
+  /** Avatar + name + league — its own header row above the photo, not an overlay on it,
+   * so the photo stays untouched and the task/caption flow below it is never split by identity. */
+  const identityHeader = (
+    <View
+      style={[styles.postIdentityRow, styles.postIdentityHeader, isFeed ? styles.padHFeed : styles.padCardInner]}
+    >
+      <Pressable
+        onPress={() => {
+          void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          onOpenPlayer?.(win);
+        }}
+        style={({ pressed }) => [styles.playerTap, { opacity: pressed ? 0.76 : 1 }]}
+        accessibilityRole="button"
+        accessibilityLabel={`Open ${primaryName} player card`}
+      >
+        <View
+          style={[
+            styles.postAvatar,
+            { backgroundColor: identity.background, borderColor: identity.border },
+          ]}
+        >
+          <Text style={[styles.postAvatarText, { color: identity.foreground }]}>{initials}</Text>
+        </View>
+        <View style={styles.playerTextCol}>
+          <View style={styles.playerNameLeagueRow}>
+            <Text style={[styles.playerName, { color: theme.colors.textPrimary }]} numberOfLines={1}>
+              {primaryName}
+            </Text>
+            <Text
+              style={[
+                styles.playerLeague,
+                {
+                  color: theme.colors.textMuted,
+                  backgroundColor: "transparent",
+                  borderColor: theme.colors.border,
+                },
+              ]}
+              numberOfLines={1}
+            >
+              {playerLeague.label}
+            </Text>
+          </View>
+          {streakKicker ? (
+            <Text style={[styles.playerMissionLine, { color: theme.colors.textSecondary }]} numberOfLines={1}>
+              {streakKicker.missionLine}
+            </Text>
+          ) : showMissionTitle ? (
+            <Text style={[styles.playerMissionLine, { color: theme.colors.textSecondary }]} numberOfLines={1}>
+              {win.title}
+            </Text>
+          ) : null}
+          {showHandle ? (
+            <Text style={[styles.playerHandle, { color: theme.colors.textMuted }]} numberOfLines={1}>
+              {handle}
+            </Text>
+          ) : null}
+        </View>
+      </Pressable>
+      {typeof win.streak_count_at_post === "number" && streakKicker ? (
+        <CohortStreakPill streak={win.streak_count_at_post} isDark={isDark} />
+      ) : showMissionTitle ? (
+        <Text style={[styles.miniMissionHeaderTag, { color: theme.colors.textMuted }]} numberOfLines={1}>
+          Mini Mission
+        </Text>
+      ) : null}
+    </View>
+  );
+
+  /** Experiment: no card chrome at all for the feed variant — no background step off the
+   * screen, no border, no shadow, no rounded corners. A thin divider between posts (rendered
+   * by the list's `ItemSeparatorComponent`) is the only thing marking where one post ends and
+   * the next begins. Kept as its own branch (not deleted) so this is a clean one-line revert
+   * back to the elevated-card version if it doesn't hold up. */
+  const outerWrapStyle = isFeed
+    ? { backgroundColor: theme.colors.background }
+    : [{ borderRadius: 16, marginBottom: 14, backgroundColor: theme.colors.surface }, CARD_SHADOW];
+
+  const innerWrapStyle = isFeed
+    ? { paddingBottom: 16 }
     : [
         styles.card,
         {
           backgroundColor: theme.colors.surface,
           borderColor: theme.colors.border,
-          ...theme.shadow.card,
         },
       ];
 
@@ -476,13 +568,16 @@ export const CommunityWinFeedPost = memo(function CommunityWinFeedPost({
             style={[
               styles.liveSquadPhotoBadge,
               {
-                backgroundColor: isDark ? "rgba(8, 47, 73, 0.88)" : "rgba(236, 254, 255, 0.94)",
-                borderColor: isDark ? withAlpha(theme.colors.cyan[400], 42) : withAlpha(theme.colors.cyan[500], 28),
+                backgroundColor: "rgba(10, 12, 20, 0.42)",
+                borderColor: "rgba(255, 255, 255, 0.28)",
               },
             ]}
           >
-            <Radio size={12} color={theme.colors.cyan[400]} strokeWidth={2.4} />
-            <Text style={[styles.liveSquadPhotoBadgeText, { color: theme.colors.cyan[400] }]} numberOfLines={1}>
+            <Radio size={10} color={"#fff"} strokeWidth={2.4} />
+            <Text
+              style={[styles.liveSquadPhotoBadgeText, { color: "#fff" }]}
+              numberOfLines={1}
+            >
               Live Squad
             </Text>
           </View>
@@ -492,19 +587,38 @@ export const CommunityWinFeedPost = memo(function CommunityWinFeedPost({
           style={[
             styles.galleryCountBadge,
             {
-              backgroundColor: isDark ? "rgba(15, 23, 42, 0.82)" : "rgba(255, 255, 255, 0.92)",
-              borderColor: isDark ? withAlpha(theme.colors.sheen, 22) : withAlpha(theme.colors.sheen, 14),
+              backgroundColor: "rgba(10, 12, 20, 0.42)",
+              borderColor: "rgba(255, 255, 255, 0.28)",
             },
           ]}
         >
-          <Images size={12} color={isDark ? "#fff" : theme.colors.textPrimary} strokeWidth={2.4} />
+          <Images size={10} color={"#fff"} strokeWidth={2.4} />
           <Text
-            style={[styles.galleryCountBadgeText, { color: isDark ? "#fff" : theme.colors.textPrimary }]}
+            style={[styles.galleryCountBadgeText, { color: "#fff" }]}
             numberOfLines={1}
           >
             {galleryImages.length}
           </Text>
         </View>
+        {streakDayLabel ? (
+          <View
+            pointerEvents="none"
+            style={[
+              styles.dayCountPhotoBadge,
+              {
+                backgroundColor: "rgba(10, 12, 20, 0.42)",
+                borderColor: "rgba(255, 255, 255, 0.28)",
+              },
+            ]}
+          >
+            <Text
+              style={[styles.dayCountPhotoBadgeText, { color: "#fff" }]}
+              numberOfLines={1}
+            >
+              {streakDayLabel}
+            </Text>
+          </View>
+        ) : null}
         <CheerBurstOverlay burstKey={burstKey} reduceMotion={reduceMotion} thumbColor={theme.colors.indigo[400]} />
       </View>
     ) : win.memory_image_url ? (
@@ -545,14 +659,36 @@ export const CommunityWinFeedPost = memo(function CommunityWinFeedPost({
             style={[
               styles.liveSquadPhotoBadge,
               {
-                backgroundColor: isDark ? "rgba(8, 47, 73, 0.88)" : "rgba(236, 254, 255, 0.94)",
-                borderColor: isDark ? withAlpha(theme.colors.cyan[400], 42) : withAlpha(theme.colors.cyan[500], 28),
+                backgroundColor: "rgba(10, 12, 20, 0.42)",
+                borderColor: "rgba(255, 255, 255, 0.28)",
               },
             ]}
           >
-            <Radio size={12} color={theme.colors.cyan[400]} strokeWidth={2.4} />
-            <Text style={[styles.liveSquadPhotoBadgeText, { color: theme.colors.cyan[400] }]} numberOfLines={1}>
+            <Radio size={10} color={"#fff"} strokeWidth={2.4} />
+            <Text
+              style={[styles.liveSquadPhotoBadgeText, { color: "#fff" }]}
+              numberOfLines={1}
+            >
               Live Squad
+            </Text>
+          </View>
+        ) : null}
+        {streakDayLabel ? (
+          <View
+            pointerEvents="none"
+            style={[
+              styles.dayCountPhotoBadge,
+              {
+                backgroundColor: "rgba(10, 12, 20, 0.42)",
+                borderColor: "rgba(255, 255, 255, 0.28)",
+              },
+            ]}
+          >
+            <Text
+              style={[styles.dayCountPhotoBadgeText, { color: "#fff" }]}
+              numberOfLines={1}
+            >
+              {streakDayLabel}
             </Text>
           </View>
         ) : null}
@@ -575,97 +711,18 @@ export const CommunityWinFeedPost = memo(function CommunityWinFeedPost({
   );
 
   return (
-    <View style={wrapStyle}>
+    <View style={outerWrapStyle}>
+    <View style={innerWrapStyle}>
+      {identityHeader}
       {imageBlock}
-
-      {streakKicker ? (
-        <LinearGradient
-          colors={
-            isDark
-              ? ["rgba(8, 47, 73, 0.72)", "rgba(49, 46, 129, 0.58)", "rgba(88, 28, 135, 0.42)"]
-              : ["rgba(207, 250, 254, 0.74)", "rgba(238, 242, 255, 0.78)", "rgba(255, 247, 237, 0.76)"]
-          }
-          start={{ x: 0, y: 0.5 }}
-          end={{ x: 1, y: 0.5 }}
-          style={[
-            styles.streakBanner,
-            {
-              borderLeftColor: isDark ? withAlpha(theme.colors.cyan[400], 82) : withAlpha(theme.colors.cyan[500], 72),
-              borderBottomColor: isDark ? withAlpha(theme.colors.cyan[400], 14) : withAlpha(theme.colors.amber[500], 14),
-            },
-            isFeed ? styles.padHFeed : styles.padCardInner,
-          ]}
-          accessibilityRole="text"
-          accessibilityLabel={`${streakKicker.line1}. ${streakKicker.missionLine}`}
-        >
-          <View style={styles.streakBannerRow}>
-            <View style={styles.streakBannerCopy}>
-              <Text style={[styles.streakLine1, { color: isDark ? theme.colors.textPrimary : theme.colors.cyan[500] }]}>
-                {streakKicker.line1}
-              </Text>
-              <Text style={[styles.streakMission, { color: isDark ? theme.colors.cyan[400] : theme.colors.indigo[600] }]} numberOfLines={2}>
-                {streakKicker.missionLine}
-              </Text>
-            </View>
-            {streakDayLabel ? (
-              <View
-                style={[
-                  styles.streakDayPill,
-                  {
-                    backgroundColor: isDark ? "rgba(15, 23, 42, 0.58)" : "rgba(255, 255, 255, 0.76)",
-                    borderColor: isDark ? withAlpha(theme.colors.cyan[400], 28) : withAlpha(theme.colors.indigo[600], 20),
-                  },
-                ]}
-              >
-                <Text style={[styles.streakDayPillText, { color: isDark ? theme.colors.cyan[400] : theme.colors.indigo[600] }]}>
-                  {streakDayLabel}
-                </Text>
-              </View>
-            ) : null}
-          </View>
-        </LinearGradient>
-      ) : null}
 
       {activeGalleryItem?.label ? (
         <View style={[styles.taskNameRow, isFeed ? styles.padHFeed : styles.padCardInner]}>
-          <ListChecks size={13} color={theme.colors.indigo[400]} />
+          <ListChecks size={13} color={theme.colors.textMuted} />
           <Text style={[styles.taskNameText, { color: theme.colors.textPrimary }]} numberOfLines={1}>
             {activeGalleryItem.label}
           </Text>
         </View>
-      ) : null}
-
-      {showMiniMissionBanner ? (
-        <LinearGradient
-          colors={
-            isDark
-              ? ["rgba(8, 47, 73, 0.72)", "rgba(49, 46, 129, 0.58)", "rgba(30, 41, 59, 0.72)"]
-              : ["rgba(236, 254, 255, 0.92)", "rgba(238, 242, 255, 0.92)", "rgba(255, 255, 255, 0.96)"]
-          }
-          start={{ x: 0, y: 0.5 }}
-          end={{ x: 1, y: 0.5 }}
-          style={[
-            styles.miniMissionBanner,
-            {
-              borderLeftColor: isDark ? withAlpha(theme.colors.cyan[400], 82) : withAlpha(theme.colors.cyan[500], 72),
-              borderBottomColor: isDark ? withAlpha(theme.colors.cyan[400], 14) : withAlpha(theme.colors.indigo[500], 14),
-            },
-            isFeed ? styles.padHFeed : styles.padCardInner,
-          ]}
-          accessibilityRole="text"
-          accessibilityLabel={`Mini Mission. ${win.title}`}
-        >
-          <Text style={[styles.miniMissionBannerLabel, { color: theme.colors.cyan[400] }]}>Mini Mission</Text>
-          <Text
-            style={[
-              styles.miniMissionBannerTitle,
-              { color: isDark ? theme.colors.textPrimary : theme.colors.indigo[600] },
-            ]}
-            numberOfLines={2}
-          >
-            {win.title}
-          </Text>
-        </LinearGradient>
       ) : null}
 
       <View
@@ -675,148 +732,71 @@ export const CommunityWinFeedPost = memo(function CommunityWinFeedPost({
           { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.colors.border },
         ]}
       >
-        <View style={styles.postIdentityRow}>
-          <Pressable
-            onPress={() => {
-              void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              onOpenPlayer?.(win);
-            }}
-            style={({ pressed }) => [styles.playerTap, { opacity: pressed ? 0.76 : 1 }]}
-            accessibilityRole="button"
-            accessibilityLabel={`Open ${primaryName} player card`}
-          >
-            <View
-              style={[
-                styles.postAvatar,
-                { backgroundColor: identity.background, borderColor: identity.border },
-              ]}
-            >
-              <Text style={[styles.postAvatarText, { color: identity.foreground }]}>{initials}</Text>
-            </View>
-            <View style={styles.playerTextCol}>
-              <View style={styles.playerNameLeagueRow}>
-                <Text style={[styles.playerName, { color: theme.colors.textPrimary }]} numberOfLines={1}>
-                  {primaryName}
-                </Text>
-                <Text
-                  style={[
-                    styles.playerLeague,
-                    {
-                      color: playerLeague.color,
-                      backgroundColor: playerLeague.backgroundColor,
-                      borderColor: playerLeague.color,
-                    },
-                  ]}
-                  numberOfLines={1}
-                >
-                  {playerLeague.label}
-                </Text>
-              </View>
-              {showHandle ? (
-                <Text style={[styles.playerHandle, { color: theme.colors.cyan[400] }]} numberOfLines={1}>
-                  {handle}
-                </Text>
-              ) : null}
-            </View>
-          </Pressable>
-
-          <View style={styles.postActionRow}>
-            <View style={styles.cheerIconRow}>
-              {cheerButton}
-              <Pressable
-                onPress={() => onOpenCheerers?.(win)}
-                disabled={win.cheerCount < 1}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                accessibilityRole="button"
-                accessibilityLabel={win.cheerCount < 1 ? "No cheers yet" : `View ${win.cheerCount} cheerers`}
-              >
-                <Text
-                  style={[
-                    styles.cheerCount,
-                    { color: win.viewerHasCheered ? theme.colors.indigo[400] : theme.colors.textMuted },
-                  ]}
-                >
-                  {win.cheerCount}
-                </Text>
-              </Pressable>
-            </View>
-            <Text style={[styles.timeInline, { color: theme.colors.textMuted }]}>
-              {formatRelativeTime(win.created_at)}
-            </Text>
-          </View>
-        </View>
         {hasNote ? (
           <View style={styles.captionRow}>
-            <View style={styles.captionTextCol}>
-              {hasNote && !expanded ? (
-                <Text style={[styles.memNotePreview, { color: theme.colors.textMuted }]} numberOfLines={2}>
-                  {noteText}
+            <Text
+              style={[styles.memNotePreview, { color: theme.colors.textMuted }]}
+              numberOfLines={expanded ? undefined : 2}
+            >
+              {expanded ? noteText : noteTextCollapsed}
+              {showDetailsToggle ? (
+                <Text
+                  onPress={onToggleExpanded}
+                  suppressHighlighting
+                  style={[styles.memNotePreview, styles.viewMoreInline, { color: theme.colors.indigo[400] }]}
+                  accessibilityRole="button"
+                  accessibilityLabel={expanded ? "View less" : "View more"}
+                >
+                  {expanded ? "  View less" : noteTextWasTruncated ? "…  View more" : "  View more"}
                 </Text>
               ) : null}
-            </View>
-            {showDetailsToggle ? (
-              <Pressable
-                onPress={onToggleExpanded}
-                style={({ pressed }) => [
-                  styles.viewMorePill,
-                  {
-                    borderColor: expanded
-                      ? theme.colors.indigo[400]
-                      : isDark ? withAlpha(theme.colors.indigo[400], 38) : withAlpha(theme.colors.indigo[600], 32),
-                    backgroundColor: expanded
-                      ? isDark ? withAlpha(theme.colors.indigo[500], 14) : withAlpha(theme.colors.indigo[600], 8)
-                      : "transparent",
-                    opacity: pressed ? 0.82 : 1,
-                  },
-                ]}
-                hitSlop={6}
-                accessibilityRole="button"
-                accessibilityLabel={expanded ? "View Less" : "View More"}
-              >
-                <View style={styles.viewMorePillInner}>
-                  <Text style={[styles.viewMorePillText, { color: theme.colors.indigo[400] }]}>
-                    {expanded ? "View Less" : "View More"}
-                  </Text>
-                  {expanded ? (
-                    <ChevronUp size={11} color={theme.colors.indigo[400]} strokeWidth={2.4} />
-                  ) : (
-                    <ChevronDown size={11} color={theme.colors.indigo[400]} strokeWidth={2.4} />
-                  )}
-                </View>
-              </Pressable>
-            ) : null}
+            </Text>
           </View>
         ) : null}
 
         {expanded ? (
           <View style={styles.expandedBlock}>
-            {hasNote ? (
-              <Text style={[styles.memNoteFull, { color: theme.colors.textSecondary }]}>{noteText}</Text>
-            ) : null}
             <Text style={[styles.completedLine, { color: theme.colors.textMuted }]}>
               Mission completed {formatCompletedAt(win.completed_at)}
             </Text>
           </View>
         ) : null}
+
+        <View style={[styles.postActionRow, styles.postActionRowFooter]}>
+          <View style={styles.cheerIconRow}>
+            {cheerButton}
+            <Pressable
+              onPress={() => onOpenCheerers?.(win)}
+              disabled={win.cheerCount < 1}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              accessibilityRole="button"
+              accessibilityLabel={win.cheerCount < 1 ? "No cheers yet" : `View ${win.cheerCount} cheerers`}
+            >
+              <Text
+                style={[
+                  styles.cheerCount,
+                  { color: win.viewerHasCheered ? theme.colors.amber[500] : theme.colors.textMuted },
+                ]}
+              >
+                {win.cheerCount}
+              </Text>
+            </Pressable>
+          </View>
+          <Text style={[styles.timeInline, { color: theme.colors.textMuted }]}>
+            {formatRelativeTime(win.created_at)}
+          </Text>
+        </View>
       </View>
+    </View>
     </View>
   );
 });
 
 const styles = StyleSheet.create({
-  feedTile: {
-    borderTopLeftRadius: 0,
-    borderTopRightRadius: 0,
-    borderBottomLeftRadius: 14,
-    borderBottomRightRadius: 14,
-    overflow: "hidden",
-    borderWidth: 1,
-  },
   card: {
     borderRadius: 16,
     borderWidth: 1,
     padding: 0,
-    marginBottom: 14,
     overflow: "hidden",
   },
   photoTouchWrap: {
@@ -856,7 +836,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 6,
     paddingTop: 10,
-    paddingBottom: 8,
+    paddingBottom: 2,
   },
   taskNameText: {
     fontSize: 13,
@@ -865,40 +845,64 @@ const styles = StyleSheet.create({
   },
   liveSquadPhotoBadge: {
     position: "absolute",
-    left: 14,
-    top: 14,
-    maxWidth: 142,
-    minHeight: 28,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    borderRadius: 9999,
-    borderWidth: 1,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  galleryCountBadge: {
-    position: "absolute",
-    right: 14,
-    top: 14,
-    minHeight: 26,
+    left: 12,
+    top: 12,
+    maxWidth: 120,
+    minHeight: 22,
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
     borderRadius: 9999,
     borderWidth: 1,
-    paddingHorizontal: 9,
-    paddingVertical: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  galleryCountBadge: {
+    position: "absolute",
+    right: 12,
+    top: 12,
+    minHeight: 20,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    borderRadius: 9999,
+    borderWidth: 1,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
   },
   galleryCountBadgeText: {
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: "800",
+    textShadowColor: "rgba(0, 0, 0, 0.55)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+  dayCountPhotoBadge: {
+    position: "absolute",
+    right: 12,
+    bottom: 12,
+    minHeight: 20,
+    justifyContent: "center",
+    borderRadius: 9999,
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  dayCountPhotoBadgeText: {
+    fontSize: 10,
+    fontWeight: "800",
+    textShadowColor: "rgba(0, 0, 0, 0.55)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
   liveSquadPhotoBadgeText: {
     flexShrink: 1,
-    fontSize: 12,
-    lineHeight: 14,
+    fontSize: 10,
+    lineHeight: 12,
     fontWeight: "900",
+    textShadowColor: "rgba(0, 0, 0, 0.55)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
   burstLayer: {
     ...StyleSheet.absoluteFillObject,
@@ -955,69 +959,21 @@ const styles = StyleSheet.create({
     textAlign: "center",
     textAlignVertical: "center",
   },
-  streakBanner: {
-    paddingTop: 8,
-    paddingBottom: 8,
-    borderLeftWidth: 4,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  streakBannerRow: {
-    minHeight: 36,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  streakBannerCopy: {
-    flex: 1,
-    minWidth: 0,
-  },
-  streakLine1: {
-    fontSize: 13,
-    fontWeight: "700",
-    lineHeight: 17,
-    letterSpacing: -0.2,
-  },
-  streakMission: {
+  playerMissionLine: {
     fontSize: 12,
     fontWeight: "700",
-    marginTop: 1,
-    lineHeight: 16,
-    letterSpacing: 0.1,
-  },
-  streakDayPill: {
-    flexShrink: 0,
-    minHeight: 23,
-    justifyContent: "center",
-    borderRadius: 9999,
-    borderWidth: 1,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  streakDayPillText: {
-    fontSize: 10,
-    lineHeight: 12,
-    fontWeight: "900",
-  },
-  miniMissionBanner: {
-    paddingTop: 8,
-    paddingBottom: 8,
-    borderLeftWidth: 4,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  miniMissionBannerLabel: {
-    fontSize: 10,
-    lineHeight: 13,
-    fontWeight: "900",
-    letterSpacing: 1,
-  },
-  miniMissionBannerTitle: {
-    fontSize: 14,
-    lineHeight: 18,
-    fontWeight: "900",
     marginTop: 2,
+    lineHeight: 16,
+  },
+  miniMissionHeaderTag: {
+    flexShrink: 0,
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
   },
   metaBlock: {
-    paddingTop: 6,
+    paddingTop: 4,
     paddingBottom: 7,
   },
   padHFeed: { paddingHorizontal: 16 },
@@ -1036,29 +992,21 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: 10,
   },
+  postIdentityHeader: {
+    paddingTop: 12,
+    paddingBottom: 10,
+  },
   postActionRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
     flexShrink: 0,
   },
-  titleViewMoreRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
-    gap: 12,
-    marginTop: 12,
+  postActionRowFooter: {
+    marginTop: 6,
   },
   captionRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
-    gap: 10,
-    marginTop: 4,
-  },
-  captionTextCol: {
-    flex: 1,
-    minWidth: 0,
+    marginTop: 0,
   },
   missionTitle: {
     fontSize: 17,
@@ -1074,18 +1022,8 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     lineHeight: 18,
   },
-  viewMorePill: {
-    flexShrink: 0,
-    paddingVertical: 2,
-    paddingHorizontal: 8,
-    borderRadius: 9999,
-    borderWidth: 1,
-    justifyContent: "center",
-  },
-  viewMorePillInner: { flexDirection: "row", alignItems: "center", gap: 3 },
-  viewMorePillText: { fontSize: 11, fontWeight: "800", lineHeight: 15, letterSpacing: 0.12 },
-  expandedBlock: { marginTop: 10 },
-  memNoteFull: { fontSize: 15, lineHeight: 22, marginBottom: 10 },
+  viewMoreInline: { fontWeight: "800" },
+  expandedBlock: { marginTop: 6 },
   completedLine: { fontSize: 13, fontWeight: "600", lineHeight: 18 },
   cheerTap: {
     paddingVertical: 2,

@@ -49,8 +49,7 @@ export function CommunityWinCheerersModal({ visible, winId, totalLikes, onClose 
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
   const { theme, isDark } = useTheme();
-  const levelPillBg = isDark ? withAlpha(theme.colors.indigo[500], 14) : withAlpha(theme.colors.indigo[600], 8);
-  const levelPillBorder = isDark ? withAlpha(theme.colors.indigo[400], 35) : withAlpha(theme.colors.indigo[500], 28);
+  const levelPillBorder = theme.colors.border;
   const [loading, setLoading] = useState(false);
   const [items, setItems] = useState<CommunityWinCheerer[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -123,19 +122,12 @@ export function CommunityWinCheerersModal({ visible, winId, totalLikes, onClose 
     () => [
       styles.heroCircle,
       {
-        backgroundColor: theme.colors.indigo[600],
-        ...(!isDark
-          ? theme.shadow.card
-          : {
-              shadowColor: theme.colors.indigo[500],
-              shadowOffset: { width: 0, height: 4 },
-              shadowOpacity: 0.35,
-              shadowRadius: 12,
-              elevation: 6,
-            }),
+        backgroundColor: theme.colors.surfaceElevated,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
       },
     ],
-    [isDark, theme.colors.indigo, theme.shadow.card],
+    [theme.colors.surfaceElevated, theme.colors.border],
   );
 
   return (
@@ -201,7 +193,7 @@ export function CommunityWinCheerersModal({ visible, winId, totalLikes, onClose 
             >
               <View style={styles.heroMainRow}>
                 <View style={heroCircleStyle}>
-                  <ThumbsUp size={32} color={theme.colors.white} fill={theme.colors.white} strokeWidth={2} />
+                  <ThumbsUp size={32} color={theme.colors.textSecondary} strokeWidth={2} />
                 </View>
                 <View style={styles.heroNumberColumn}>
                   <Text
@@ -239,7 +231,7 @@ export function CommunityWinCheerersModal({ visible, winId, totalLikes, onClose 
             >
               {loading ? (
                 <View style={[styles.center, { paddingVertical: theme.spacing.lg }]}>
-                  <ActivityIndicator size="small" color={theme.colors.indigo[400]} />
+                  <ActivityIndicator size="small" color={theme.colors.textMuted} />
                 </View>
               ) : error ? (
                 <View style={[styles.center, { paddingVertical: theme.spacing.lg }]}>
@@ -312,7 +304,7 @@ export function CommunityWinCheerersModal({ visible, winId, totalLikes, onClose 
                             style={[
                               styles.rowHandle,
                               {
-                                color: theme.colors.cyan[400],
+                                color: theme.colors.textPrimary,
                                 fontSize: theme.typography.body,
                               },
                             ]}
@@ -331,7 +323,7 @@ export function CommunityWinCheerersModal({ visible, winId, totalLikes, onClose 
                           style={[
                             styles.levelPill,
                             {
-                              backgroundColor: levelPillBg,
+                              backgroundColor: "transparent",
                               borderColor: levelPillBorder,
                             },
                           ]}
@@ -340,7 +332,7 @@ export function CommunityWinCheerersModal({ visible, winId, totalLikes, onClose 
                             style={[
                               styles.levelPillText,
                               {
-                                color: theme.colors.indigo[400],
+                                color: theme.colors.textMuted,
                                 fontSize: theme.typography.micro,
                               },
                             ]}
