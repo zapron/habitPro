@@ -23,13 +23,22 @@ Then inspect the files relevant to the user request.
 
 ## Current User Priorities
 
-- **Most current, as of 2026-08-08**: a large minimalist pass across the
+- **Most current, as of 2026-08-09**: `experiment/glass-redesign-v2`
+  (everything below — the 2026-08-08, 2026-08-06, and 2026-08-04 sessions)
+  was **merged into `main` via PR #1, merge commit `0a52ef7`**. Local
+  `main` confirmed identical to `origin/main`, `npx tsc --noEmit` clean
+  post-merge. No `package.json`/lockfile/`app.json`/`eas.json` changes
+  anywhere in the merged history, so it's OTA-safe per
+  `app-architecture.md` — no version bump/force-update needed to ship it.
+  **Not pushed as an OTA update yet** — that hasn't been requested. If
+  you're picking up work now, you should be on `main`, not the experiment
+  branch (check `git branch --show-current` before assuming otherwise).
+- **As of 2026-08-08**: a large minimalist pass across the
   cohort/squad screen, the Leaderboard, and the Community feed, plus a
   Community card *structural* restructure (header/photo/footer). Full
   detail in `docs/CURRENT_WORK.md`'s 2026-08-08 entry and
-  `docs/WORK_HISTORY.md`. **All six commits live on
-  `experiment/glass-redesign-v2`, still not merged into `main`.** Two
-  things worth knowing before touching this area again:
+  `docs/WORK_HISTORY.md`. **Now merged into `main`, see the bullet above.**
+  Two things worth knowing before touching this area again:
   - The Community feed card's elevated-card treatment (background/border/
     shadow) was built, iterated on extensively (fixing real iOS shadow-
     clipping and Android elevation bugs along the way), then **deleted
@@ -66,8 +75,8 @@ Then inspect the files relevant to the user request.
   Go (push permission is always `"unavailable"` there) — the lock-in is now
   decoupled from notification-permission success entirely. Full detail in
   `docs/CURRENT_WORK.md`'s 2026-08-06 entry and `docs/WORK_HISTORY.md`.
-  **All six commits live on `experiment/glass-redesign-v2`, still not
-  merged into `main`.** Most of this was again verified only by
+  **Now merged into `main`, see the 2026-08-09 bullet above.** Most of
+  this was again verified only by
   `tsc`/`git diff --check`, not live on-device interaction (same sandbox
   limitation as the prior session) — see `docs/CURRENT_WORK.md` for what
   specifically still needs a real look.
@@ -81,10 +90,8 @@ Then inspect the files relevant to the user request.
   repair-banner redesign, and a `StreakMemorySheet` restyle against a Claude
   Design mockup read via the `claude_design` MCP. Full detail in
   `docs/CURRENT_WORK.md`'s 2026-08-04 entry and `docs/WORK_HISTORY.md`.
-  **All six commits live on branch `experiment/glass-redesign-v2`, not
-  `main`** — check which branch you're on before assuming this is live.
-  No merge/push/OTA has happened or been requested. Most of it was **not
-  visually confirmed on-device** (the session's environment had no
+  **Now merged into `main`, see the 2026-08-09 bullet above.** Most of it
+  was **not visually confirmed on-device** (the session's environment had no
   tap-automation available) — see `docs/CURRENT_WORK.md` for exactly what
   still needs a manual look. Also: `HabitCard.tsx` now has two dead
   components (`RingDayArcs`, `LightweightMissionRing`) left over from the

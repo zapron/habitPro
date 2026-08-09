@@ -2,12 +2,30 @@
 
 This is a concise chronological log for future sessions. Keep secrets out of this file.
 
+## 2026-08-09
+
+### Merge `experiment/glass-redesign-v2` → `main`
+
+PR #1 merged, merge commit `0a52ef7`. Brings in every commit from the
+2026-08-04, 2026-08-06, and 2026-08-08 sessions (theme-pack system,
+minimalist Home/Compete/HabitCard/Timer/day-grid passes, cohort/
+Leaderboard/Community redesigns) onto `main` in one shot. Sanity-checked
+post-merge: `git log origin/main..HEAD` / `HEAD..origin/main` both empty
+(local matches remote exactly), `npx tsc --noEmit` clean, no uncommitted
+changes besides the pre-existing untracked `.mcp.json`/`.claude/`. No
+`package.json`/lockfile/`app.json`/`eas.json` touched anywhere in the
+merged history, so the whole set qualifies as OTA-safe per
+`app-architecture.md` — no version bump or force-update required to ship
+it. **Not pushed as an OTA update yet** — merge and checks only, OTA push
+not requested this session.
+
 ## 2026-08-08
 
-### Cohort/Leaderboard/Community Minimalist Pass + Community Card Restructure (branch `experiment/glass-redesign-v2`, not merged)
+### Cohort/Leaderboard/Community Minimalist Pass + Community Card Restructure (branch `experiment/glass-redesign-v2`, merged into `main` 2026-08-09 — see entry above)
 
 Six commits, all on `experiment/glass-redesign-v2` (branches off the
-previous session's tip `9743a6e`; `main` still untouched, no merge/push/OTA):
+previous session's tip `9743a6e`; merged into `main` the following day,
+see the 2026-08-09 entry above):
 
 1. `9ebdc34` — Timer digits enlarged (previously-unused `size="large"`
    variant), legend shrunk, elapsed/remaining now a small corner arrow

@@ -1,8 +1,23 @@
 # HabitPro Current Work
 
-Last updated: 2026-08-08 (continued the minimalist redesign on `experiment/glass-redesign-v2`: Timer digit/day-grid/reminder polish; Home habit card gained a plain fire+"Xd" streak indicator and lost the "Public" pill; a reusable "neutral" button style for the shared alert system, used first for Android's Add-a-photo dialog; a large cohort/squad screen pass (rankings card rebuilt around neutral numbered circles + a per-rank dull square-grid, `CohortStreakPill` extracted and reused everywhere a streak count needs showing, day-grid brought to parity with the habit-detail screen, milestones/eye-icon/level-pill/eyebrow-pill color stripped, forced-capitalization bug fixed on usernames); the Leaderboard rows lost every piece of gamified color (crowns, medals, colored XP ring, filled pills); and the Community feed's cards were restructured (header/photo/footer) and had color stripped, with the "View more" control rebuilt to fix a real bug where it could silently fail to render at all. Six commits, all on `experiment/glass-redesign-v2`, **still not merged into `main`**.).
+Last updated: 2026-08-09 (`experiment/glass-redesign-v2` merged into `main` via PR #1, merge commit `0a52ef7`; local `main` confirmed identical to `origin/main`. Merged content: continued the minimalist redesign — Timer digit/day-grid/reminder polish; Home habit card gained a plain fire+"Xd" streak indicator and lost the "Public" pill; a reusable "neutral" button style for the shared alert system, used first for Android's Add-a-photo dialog; a large cohort/squad screen pass (rankings card rebuilt around neutral numbered circles + a per-rank dull square-grid, `CohortStreakPill` extracted and reused everywhere a streak count needs showing, day-grid brought to parity with the habit-detail screen, milestones/eye-icon/level-pill/eyebrow-pill color stripped, forced-capitalization bug fixed on usernames); the Leaderboard rows lost every piece of gamified color (crowns, medals, colored XP ring, filled pills); and the Community feed's cards were restructured (header/photo/footer) and had color stripped, with the "View more" control rebuilt to fix a real bug where it could silently fail to render at all. `npx tsc --noEmit` clean on `main` post-merge. **Not yet pushed as an OTA update — merge only, no OTA/build run yet.**).
 
-## Session Handoff (2026-08-08, end of session)
+## Session Handoff (2026-08-09, post-merge)
+
+**State: clean, on `main`, merge complete.** `experiment/glass-redesign-v2`
+(all commits from the 2026-08-04 / 2026-08-06 / 2026-08-08 sessions) is
+merged into `main` via PR #1 (merge commit `0a52ef7`). `git log
+origin/main..HEAD` and `HEAD..origin/main` are both empty — local `main`
+exactly matches remote. Nothing mid-flight, nothing uncommitted except the
+pre-existing untracked `.mcp.json` and `.claude/`. `npx tsc --noEmit`
+clean on `main` post-merge. Every commit below is JS/TSX/style/doc only —
+no `package.json`/lockfile/`app.json`/`eas.json` changes this session or
+across the whole merged branch — so per `app-architecture.md`'s OTA-safe
+criteria this is eligible to ship as a normal production OTA update, no
+version bump/force-update needed. **Not pushed as OTA yet — that step
+hasn't been requested.**
+
+## Session Handoff (2026-08-08, end of session, historical — see merge note above)
 
 **State: clean, still on the experiment branch.** Everything from this
 session is committed on `experiment/glass-redesign-v2` (six commits ahead

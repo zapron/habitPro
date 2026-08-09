@@ -15,8 +15,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Bell, ExternalLink, X, Monitor, Sun, Moon, type LucideIcon } from 'lucide-react-native';
-import { useTheme, type ThemePreference, type ThemePack } from '../context/ThemeContext';
-import { Sparkles, Palette } from 'lucide-react-native';
+import { useTheme, type ThemePreference } from '../context/ThemeContext';
 import { withAlpha } from '../styles/theme';
 import { useAuth } from '../context/AuthContext';
 import { getPublicLinks, isSupabaseConfigured } from '../lib/env';
@@ -35,11 +34,6 @@ const THEME_OPTIONS: { key: ThemePreference; label: string; Icon: LucideIcon }[]
     { key: 'dark', label: 'Dark', Icon: Moon },
 ];
 
-const THEME_PACK_OPTIONS: { key: ThemePack; label: string; hint: string; Icon: LucideIcon }[] = [
-    { key: 'classic', label: 'Classic', hint: 'The original look', Icon: Sparkles },
-    { key: 'minimalist', label: 'Minimalist', hint: 'Warm, flat, one accent color', Icon: Palette },
-];
-
 interface SettingsModalProps {
     visible: boolean;
     onClose: () => void;
@@ -47,7 +41,7 @@ interface SettingsModalProps {
 
 export function SettingsModal({ visible, onClose }: SettingsModalProps) {
     const router = useRouter();
-    const { theme, isDark, preference, setPreference, themePack, setThemePack } = useTheme();
+    const { theme, isDark, preference, setPreference } = useTheme();
     const insets = useSafeAreaInsets();
     const { session } = useAuth();
     const showAccount = isSupabaseConfigured();
@@ -246,50 +240,6 @@ export function SettingsModal({ visible, onClose }: SettingsModalProps) {
                             );
                         })}
                     </View>
-
-                    <Text style={[styles.sectionLabel, { color: theme.colors.textMuted, marginTop: 14 }]}>APPEARANCE</Text>
-
-                    <View style={styles.themeRow}>
-                        {THEME_PACK_OPTIONS.map(({ key, label, hint, Icon }) => {
-                            const isActive = themePack === key;
-                            return (
-                                <TouchableOpacity
-                                    key={key}
-                                    style={[
-                                        styles.themeChip,
-                                        {
-                                            borderColor: theme.colors.border,
-                                            backgroundColor: theme.colors.surfaceElevated,
-                                        },
-                                        isActive && {
-                                            borderColor: theme.colors.indigo[500],
-                                            backgroundColor: isDark ? withAlpha(theme.colors.indigo[500], 14) : withAlpha(theme.colors.indigo[500], 8),
-                                        },
-                                    ]}
-                                    onPress={() => setThemePack(key)}
-                                    activeOpacity={0.85}
-                                    accessibilityRole="button"
-                                    accessibilityState={{ selected: isActive }}
-                                    accessibilityLabel={`Appearance ${label}: ${hint}`}
-                                >
-                                    <Icon size={16} color={isActive ? theme.colors.indigo[400] : theme.colors.textMuted} />
-                                    <Text
-                                        style={[
-                                            styles.themeChipLabel,
-                                            { color: theme.colors.textSecondary },
-                                            isActive && { color: theme.colors.indigo[400], fontWeight: '800' },
-                                        ]}
-                                        numberOfLines={1}
-                                    >
-                                        {label}
-                                    </Text>
-                                </TouchableOpacity>
-                            );
-                        })}
-                    </View>
-                    <Text style={[styles.rowBtnHint, { color: theme.colors.textMuted, marginTop: 6, marginBottom: 4 }]}>
-                        {THEME_PACK_OPTIONS.find((o) => o.key === themePack)?.hint}
-                    </Text>
 
                     {canShowNotifRow ? (
                         <>
