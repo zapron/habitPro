@@ -26,8 +26,8 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { GlassTopHighlight } from '../../src/components/GlassTopHighlight';
 import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ArrowLeft, Trash2, Lock, RotateCcw, Star, Plane, Gamepad2, Globe, User, Users, Info, Bell } from 'lucide-react-native';
-import Svg, { Circle, G } from 'react-native-svg';
+import { ArrowLeft, Trash2, Lock, RotateCcw, Plane, Gamepad2, Globe, User, Users, Info, Bell, Hammer, Camera, MessageSquare } from 'lucide-react-native';
+import Svg, { Path } from 'react-native-svg';
 import { useHabitStore } from '../../src/store/habitStore';
 import { useShallow } from 'zustand/react/shallow';
 import { Button } from '../../src/components/Button';
@@ -84,6 +84,7 @@ import { useRefreshPremiumAccess } from "../../src/hooks/useRefreshPremiumAccess
 import { useRemoteStoreRefreshOnFocus } from "../../src/hooks/useRemoteStoreRefreshOnFocus";
 import { useUsernameGate } from "../../src/context/UsernameGateContext";
 import { useNotificationGate } from "../../src/context/NotificationGateContext";
+import { getRemotePushPermissionDetails } from "../../src/lib/pushTokens";
 import { showAppAlert } from "../../src/context/AppDialogContext";
 import { isSupabaseConfigured } from '../../src/lib/env';
 import {
@@ -105,6 +106,8 @@ import { withAlpha } from "../../src/styles/theme";
 const LOCKED_CHECKIN_MSG =
     'You can only check in for the current mission day. Each day unlocks 24 hours after the mission started (day 2 after the first 24 hours, and so on).';
 
+/** Muted indigo for the one surviving accent on the Reminder/Type card's toggle — same tone as the Home FAB's `FAB_ACCENT_MUTED`. */
+const SWITCH_ACCENT_MUTED = '#4B4BB0';
 const OPERATION_STEP_DELAY_MS = 360;
 const OPERATION_FINAL_DELAY_MS = 220;
 const POST_OPERATION_BACKGROUND_DELAY_MS = 1600;
@@ -185,143 +188,88 @@ function getMilestones(totalDays: number, _mode: string): number[] {
     return markers;
 }
 
-const HabitGridBrandRing = React.memo(function HabitGridBrandRing({
+/** Fixed regardless of theme — reads consistently against both the dark-green (dark
+ * mode) and simple-green (light mode) completed-day circle fill. */
+const COMPLETED_DAY_ICON_GRAY = '#8b93a1';
+/** Experiment: light mode's completed circle uses a brighter, "simple" green
+ * (`green[500]`) instead of the dulled `green[900]`, so the day number gets a
+ * correspondingly whiter (not full-white) text color to read clearly against it —
+ * dark mode is untouched, still the dull green + `COMPLETED_DAY_ICON_GRAY` pairing. */
+const COMPLETED_DAY_TEXT_LIGHT = '#E7EAEE';
+
+/**
+ * Completed-day marker — one solid dull-green circle (no separate ring/border), with
+ * the day number and, when applicable, a small icon stacked above it: camera for a
+ * photo memory, message for a text-only memory, hammer for a day saved by a streak
+ * repair with no memory attached. A plain completed day with none of the above shows
+ * just the number.
+ */
+const CompletedDayDot = React.memo(function CompletedDayDot({
     day,
-    variant,
-    isMilestone,
-    hasMomentMedia = false,
-    repaired = false,
-    repairSource,
+    hasPhoto,
+    hasNoteOnly,
+    isRepaired,
 }: {
     day: number;
-    variant: 'completed' | 'current';
-    isMilestone: boolean;
-    hasMomentMedia?: boolean;
-    repaired?: boolean;
-    repairSource?: 'squad' | 'solo';
+    hasPhoto: boolean;
+    hasNoteOnly: boolean;
+    isRepaired: boolean;
 }) {
     const { theme, isDark } = useTheme();
-    const c = 21;
-    const outerR = 17.5;
-    const innerR = 14.1;
-    const outerCirc = 2 * Math.PI * outerR;
-    const innerCirc = 2 * Math.PI * innerR;
-    const current = variant === 'current';
-    const strokeOpacity = current ? 0.72 : 1;
-    const track = isDark ? withAlpha(theme.colors.textSecondary, 24) : withAlpha(theme.colors.textMuted, 18);
+    const iconColor = isDark ? COMPLETED_DAY_ICON_GRAY : COMPLETED_DAY_TEXT_LIGHT;
 
     return (
-        <View style={styles.brandRingWrap}>
-            <Svg width="100%" height="100%" viewBox="0 0 42 42" style={StyleSheet.absoluteFill}>
-                <G transform={`rotate(-92 ${c} ${c})`}>
-                    <Circle cx={c} cy={c} r={outerR} stroke={track} strokeWidth={3.6} fill="none" />
-                    <Circle
-                        cx={c}
-                        cy={c}
-                        r={outerR}
-                        stroke={theme.colors.cyan[400]}
-                        strokeWidth={3.8}
-                        fill="none"
-                        strokeLinecap="round"
-                        strokeOpacity={strokeOpacity}
-                        strokeDasharray={`${outerCirc * 0.58} ${outerCirc}`}
-                        strokeDashoffset={outerCirc * 0.02}
-                    />
-                    <Circle
-                        cx={c}
-                        cy={c}
-                        r={innerR}
-                        stroke={theme.colors.indigo[500]}
-                        strokeWidth={3.8}
-                        fill="none"
-                        strokeLinecap="round"
-                        strokeOpacity={strokeOpacity}
-                        strokeDasharray={`${innerCirc * 0.62} ${innerCirc}`}
-                        strokeDashoffset={-innerCirc * 0.24}
-                    />
-                    <Circle
-                        cx={c}
-                        cy={c}
-                        r={outerR}
-                        stroke={isMilestone ? theme.colors.yellow[400] : theme.colors.amber[500]}
-                        strokeWidth={3.8}
-                        fill="none"
-                        strokeLinecap="round"
-                        strokeOpacity={current ? 0.68 : 1}
-                        strokeDasharray={`${outerCirc * 0.16} ${outerCirc}`}
-                        strokeDashoffset={-outerCirc * 0.72}
-                    />
-                </G>
-            </Svg>
-            <View
+        <View style={styles.completedDotContent}>
+            {hasPhoto ? (
+                <Camera size={10} color={iconColor} strokeWidth={2.4} />
+            ) : isRepaired ? (
+                <Hammer size={10} color={iconColor} strokeWidth={2.4} />
+            ) : hasNoteOnly ? (
+                <MessageSquare size={10} color={iconColor} strokeWidth={2.4} />
+            ) : null}
+            <Text
                 style={[
-                    styles.brandRingCore,
-                    {
-                        backgroundColor: isDark ? '#0b1020' : '#ffffff',
-                        borderColor: current ? theme.colors.cyan[400] : theme.colors.border,
-                    },
+                    styles.brandRingDayText,
+                    { color: isDark ? COMPLETED_DAY_ICON_GRAY : COMPLETED_DAY_TEXT_LIGHT },
+                    day >= 10 && styles.brandRingDayTextTwoDigit,
                 ]}
             >
-                <Text
-                    style={[
-                        styles.brandRingDayText,
-                        { color: current ? theme.colors.cyan[400] : theme.colors.textPrimary },
-                        day >= 10 && styles.brandRingDayTextTwoDigit,
-                    ]}
-                >
-                    {day}
-                </Text>
-            </View>
-            {isMilestone ? (
-                <Star size={8} color={theme.colors.yellow[400]} fill={theme.colors.yellow[400]} style={styles.brandRingAccent} />
-            ) : current ? (
-                <Star size={8} color={theme.colors.cyan[400]} style={styles.brandRingAccent} />
-            ) : null}
-            {hasMomentMedia ? (
-                <View style={[styles.memoryDot, { backgroundColor: theme.colors.amber[500], borderColor: theme.colors.surface }]} />
-            ) : null}
-            {repaired ? (
-                <View
-                    style={[
-                        styles.repairDot,
-                        {
-                            backgroundColor: repairSource === 'solo' ? theme.colors.amber[500] : theme.colors.cyan[400],
-                            borderColor: theme.colors.surface,
-                        },
-                    ]}
-                />
-            ) : null}
+                {day}
+            </Text>
         </View>
     );
 });
 
+/** Filled pie-wedge path (not a stroked ring) — starts at 12 o'clock, sweeps clockwise
+ * by `progress` (0–1) of the full circle. */
+function pieSlicePath(cx: number, cy: number, r: number, progress: number): string {
+    const clamped = Math.min(0.9999, Math.max(0, progress));
+    if (clamped <= 0) return '';
+    const startAngle = -Math.PI / 2;
+    const endAngle = startAngle + clamped * 2 * Math.PI;
+    const x1 = cx + r * Math.cos(startAngle);
+    const y1 = cy + r * Math.sin(startAngle);
+    const x2 = cx + r * Math.cos(endAngle);
+    const y2 = cy + r * Math.sin(endAngle);
+    const largeArcFlag = clamped > 0.5 ? 1 : 0;
+    return `M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${largeArcFlag} 1 ${x2} ${y2} Z`;
+}
+
 /**
- * Overlay drawn inside today's existing pulsing square once the user has logged at
- * least one (but not all) of a multi-task checklist day — a green arc in ratio to
- * tasks logged / total. Purely additive: the square keeps its cyan border, its day
- * number, and its pulse animation exactly as before; this just adds the arc on top.
+ * Overlay drawn inside today's dotted current-day circle once the user has logged at
+ * least one (but not all) of a multi-task checklist day — a filled dull-green pie
+ * wedge in ratio to tasks logged / total, growing clockwise from the top. Purely
+ * additive: the circle keeps its dotted border, its day number, and its pulse
+ * animation exactly as before; this just fills in behind them.
  */
 const TaskProgressArc = React.memo(function TaskProgressArc({ progress }: { progress: number }) {
     const { theme } = useTheme();
-    const c = 21;
-    const r = 17;
-    const circ = 2 * Math.PI * r;
-    const dash = circ * Math.min(1, Math.max(0, progress));
+    const d = pieSlicePath(21, 21, 17, progress);
+    if (!d) return null;
 
     return (
         <Svg width="100%" height="100%" viewBox="0 0 42 42" style={StyleSheet.absoluteFill} pointerEvents="none">
-            <G transform={`rotate(-90 ${c} ${c})`}>
-                <Circle
-                    cx={c}
-                    cy={c}
-                    r={r}
-                    stroke={theme.colors.green[500]}
-                    strokeWidth={3}
-                    fill="none"
-                    strokeLinecap="round"
-                    strokeDasharray={`${dash} ${circ - dash}`}
-                />
-            </G>
+            <Path d={d} fill={theme.colors.green[900]} />
         </Svg>
     );
 });
@@ -335,13 +283,12 @@ const AnimatedDayCell = React.memo(function AnimatedDayCell({
     locked,
     canInteract,
     hasStreakRecord,
-    hasMomentMedia,
-    repaired,
-    repairSource,
+    hasPhoto,
+    hasNoteOnly,
+    isRepaired,
     checklistLogged,
     checklistTotal,
     onPress,
-    isSheetOpen,
     optimizeForScroll,
 }: {
     day: number;
@@ -352,21 +299,19 @@ const AnimatedDayCell = React.memo(function AnimatedDayCell({
     locked: boolean;
     canInteract: boolean;
     hasStreakRecord: boolean;
-    hasMomentMedia: boolean;
-    repaired: boolean;
-    repairSource?: "squad" | "solo";
+    hasPhoto: boolean;
+    hasNoteOnly: boolean;
+    isRepaired: boolean;
     /** Only set for the current mission day — tasks logged so far / total checklist tasks (0/0 for classic missions, or missions with a single task, where a ratio isn't meaningful). */
     checklistLogged?: number;
     checklistTotal?: number;
     onPress: (dayIndex: number, day: number) => void;
-    isSheetOpen: boolean;
     optimizeForScroll: boolean;
 }) {
     const { theme, isDark } = useTheme();
     const reduceMotion = useReducedMotion();
     const scale = useRef(new Animated.Value(1)).current;
     const shimmer = useRef(new Animated.Value(0)).current;
-    const todayPulse = useRef(new Animated.Value(1)).current;
 
     // A multi-task (2+) checklist day only shows the ratio arc; 0 or 1 tasks stays
     // on the plain existing flow below, since there's no meaningful ratio to draw.
@@ -375,26 +320,10 @@ const AnimatedDayCell = React.memo(function AnimatedDayCell({
     // All tasks logged, but Mark Day Complete not pressed yet — previews the exact
     // same completed-marker look as a real completed day (step 3 of the flow).
     const showPreCompleteBadge = isCurrentMissionDay && !isCompleted && allTasksLogged;
-    // Some (not all) tasks logged — draws the green ratio arc inside the still-pulsing square (step 2).
+    // Some (not all) tasks logged — draws the green ratio arc inside the dotted circle (step 2).
     const showProgressArc =
         isCurrentMissionDay && !isCompleted && hasMultiTaskChecklist && !allTasksLogged && (checklistLogged ?? 0) > 0;
     const visuallyDone = isCompleted || showPreCompleteBadge;
-
-    useEffect(() => {
-        if (reduceMotion || !(isCurrentMissionDay && !visuallyDone) || isSheetOpen) {
-            todayPulse.stopAnimation();
-            todayPulse.setValue(1);
-            return undefined;
-        }
-        const loop = Animated.loop(
-            Animated.sequence([
-                Animated.timing(todayPulse, { toValue: 1.06, duration: 1400, easing: Easing.inOut(Easing.ease), useNativeDriver: true, isInteraction: false }),
-                Animated.timing(todayPulse, { toValue: 1, duration: 1400, easing: Easing.inOut(Easing.ease), useNativeDriver: true, isInteraction: false }),
-            ]),
-        );
-        loop.start();
-        return () => loop.stop();
-    }, [reduceMotion, isCurrentMissionDay, visuallyDone, todayPulse, isSheetOpen]);
 
     useEffect(() => {
         if (reduceMotion || optimizeForScroll || !(isMilestone && isCompleted)) return;
@@ -410,16 +339,12 @@ const AnimatedDayCell = React.memo(function AnimatedDayCell({
 
     // ── Touch-down: instant scale shrink + haptic (fires the MOMENT finger touches) ──
     const handlePressIn = useCallback(() => {
-        // Stop pulse animation instantly to free up CPU thread for render frame
-        todayPulse.stopAnimation();
-        todayPulse.setValue(1);
-
         // Instant scale-down on touch
         Animated.spring(scale, { toValue: 0.82, tension: 250, friction: 6, useNativeDriver: true }).start();
 
         // Instantly play light touch haptic
         void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }, [scale, todayPulse]);
+    }, [scale]);
 
     // ── Touch-up: bounce back to normal scale ──
     const handlePressOut = useCallback(() => {
@@ -438,25 +363,22 @@ const AnimatedDayCell = React.memo(function AnimatedDayCell({
             ? [
                 styles.dayButtonCompleted,
                 {
-                    backgroundColor: isDark ? withAlpha(theme.colors.indigo[600], 12) : withAlpha(theme.colors.indigo[500], 8),
-                    borderColor: isMilestone ? theme.colors.amber[500] : theme.colors.indigo[500],
-                    ...(optimizeForScroll ? {} : theme.shadow.glow),
+                    backgroundColor: isDark ? theme.colors.green[900] : theme.colors.green[500],
+                    borderColor: isDark ? theme.colors.green[900] : theme.colors.green[500],
+                    borderWidth: 0,
                 },
             ]
             : [styles.dayButtonIncomplete, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }],
-        visuallyDone && isMilestone && !optimizeForScroll && styles.dayButtonMilestone,
-        isCurrentMissionDay && !visuallyDone && { borderColor: theme.colors.cyan[400], borderWidth: 2 },
+        isCurrentMissionDay && !visuallyDone && { borderColor: theme.colors.red[900], borderWidth: 2, borderStyle: 'dashed' as const },
         locked && styles.dayButtonFuture,
     ];
-
-    const animatedScale = isCurrentMissionDay && !visuallyDone ? Animated.multiply(scale, todayPulse) : scale;
 
     return (
         <Animated.View
             style={[
                 styles.dayCellFrame,
                 optimizeForScroll && isCompleted && ({ shouldRasterizeIOS: true } as any),
-                { transform: [{ scale: animatedScale as any }] },
+                { transform: [{ scale }] },
             ]}
         >
             <TouchableOpacity
@@ -470,24 +392,17 @@ const AnimatedDayCell = React.memo(function AnimatedDayCell({
             >
                 {visuallyDone ? (
                     <Animated.View style={[styles.badgeWrap, isMilestone && { opacity: shimmerOpacity }]}>
-                        <HabitGridBrandRing
-                            day={day}
-                            variant="completed"
-                            isMilestone={isMilestone}
-                            hasMomentMedia={hasMomentMedia}
-                            repaired={repaired}
-                            repairSource={repairSource}
-                        />
+                        <CompletedDayDot day={day} hasPhoto={hasPhoto} hasNoteOnly={hasNoteOnly} isRepaired={isRepaired} />
                     </Animated.View>
                 ) : locked ? (
                     <Lock size={15} color={theme.colors.textMuted} />
                 ) : isCurrentMissionDay ? (
                     <View style={styles.badgeWrap}>
-                        <Text style={[styles.dayText, styles.currentDayText, { color: theme.colors.cyan[400] }]}>{day}</Text>
                         {showProgressArc ? <TaskProgressArc progress={(checklistLogged ?? 0) / (checklistTotal ?? 1)} /> : null}
+                        <Text style={[styles.dayText, styles.currentDayText, { color: theme.colors.textMuted }]}>{day}</Text>
                     </View>
                 ) : (
-                    <Text style={[styles.dayText, isCurrentMissionDay ? { color: theme.colors.cyan[400] } : { color: theme.colors.textMuted }]}>{day}</Text>
+                    <Text style={[styles.dayText, isCurrentMissionDay ? { color: theme.colors.red[500] } : { color: theme.colors.textMuted }]}>{day}</Text>
                 )}
             </TouchableOpacity>
         </Animated.View>
@@ -1801,7 +1716,7 @@ export default function HabitDetail() {
                             onPress={() => setGroupSheetOpen(true)}
                             accessibilityLabel="Group mission"
                         >
-                            <Users size={theme.icon.xl} color={theme.colors.cyan[400]} />
+                            <Users size={theme.icon.xl} color={theme.colors.textMuted} />
                         </TouchableOpacity>
                     ) : null}
                     {!isGroupMission ? (
@@ -1810,7 +1725,7 @@ export default function HabitDetail() {
                         </TouchableOpacity>
                     ) : null}
                     <TouchableOpacity style={styles.deleteButton} onPress={handleDelete}>
-                        <Trash2 size={theme.icon.xl} color={theme.colors.red[500]} />
+                        <Trash2 size={theme.icon.xl} color={theme.colors.textMuted} />
                     </TouchableOpacity>
                 </View>
             </View>
@@ -1975,10 +1890,10 @@ export default function HabitDetail() {
                 {...({ delaysContentTouches: false } as any)}
             >
                 <View style={styles.modeRow}>
-                    <View style={[styles.modeBadge, isManual && styles.modeBadgeManual]}>
+                    <View style={[styles.modeBadge, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
                         {isManual ? <Gamepad2 size={13} color={theme.colors.amber[500]} /> : <Plane size={13} color={theme.colors.cyan[400]} />}
-                        <Text style={[styles.modeBadgeText, { color: theme.colors.cyan[400] }, isManual && { color: theme.colors.amber[500] }]}>
-                            {isManual ? 'MANUAL CONTROL' : 'AUTOPILOT'}
+                        <Text style={[styles.modeBadgeText, { color: theme.colors.textSecondary }]}>
+                            {isManual ? 'Manual control' : 'Autopilot'}
                         </Text>
                     </View>
                     <TouchableOpacity
@@ -1991,7 +1906,7 @@ export default function HabitDetail() {
                         accessibilityRole="button"
                         accessibilityLabel="Mission details and brief"
                     >
-                        <Info size={theme.icon.md} color={theme.colors.indigo[400]} />
+                        <Info size={theme.icon.md} color={theme.colors.textMuted} />
                     </TouchableOpacity>
                 </View>
 
@@ -2019,7 +1934,7 @@ export default function HabitDetail() {
                                         ? theme.colors.green[500] + '44'
                                         : habit.missionReport === 'failed'
                                             ? theme.colors.red[500] + '44'
-                                            : theme.colors.border,
+                                            : isDark ? theme.colors.border : "transparent",
                                 borderRadius: theme.radius.lg,
                                 ...theme.shadow.card,
                             },
@@ -2099,7 +2014,6 @@ export default function HabitDetail() {
                             backgroundColor: theme.colors.surface,
                             borderColor: theme.colors.border,
                             borderRadius: theme.radius.lg,
-                            ...theme.shadow.card,
                         },
                     ]}
                 >
@@ -2112,20 +2026,8 @@ export default function HabitDetail() {
                         accessibilityRole={reminderLockedTime ? undefined : "button"}
                         accessibilityLabel={reminderLockedTime ? "Daily reminder locked" : "Set reminder time"}
                     >
-                        <View
-                            style={[
-                                styles.missionControlIcon,
-                                {
-                                    backgroundColor: reminderLockedTime
-                                        ? isDark ? withAlpha(theme.colors.indigo[500], 14) : withAlpha(theme.colors.indigo[500], 10)
-                                        : isDark ? withAlpha(theme.colors.amber[500], 14) : withAlpha(theme.colors.amber[500], 12),
-                                },
-                            ]}
-                        >
-                            <Bell
-                                size={15}
-                                color={reminderLockedTime ? theme.colors.indigo[400] : theme.colors.amber[500]}
-                            />
+                        <View style={styles.missionControlIcon}>
+                            <Bell size={15} color={theme.colors.textMuted} />
                         </View>
                         <View style={styles.missionControlTextCol}>
                             <Text style={[styles.missionControlLabel, { color: theme.colors.textMuted }]} numberOfLines={1}>
@@ -2135,19 +2037,11 @@ export default function HabitDetail() {
                                 {reminderLockedTime ?? "Set time"}
                             </Text>
                         </View>
-                        <View
-                            style={[
-                                styles.missionControlTinyPill,
-                                {
-                                    borderColor: theme.colors.border,
-                                    backgroundColor: theme.colors.surfaceElevated,
-                                },
-                            ]}
-                        >
+                        <View style={styles.missionControlTinyPill}>
                             <Text
                                 style={[
                                     styles.missionControlTinyPillText,
-                                    { color: reminderLockedTime ? theme.colors.indigo[400] : theme.colors.amber[500] },
+                                    { color: theme.colors.green[900] },
                                 ]}
                                 numberOfLines={1}
                             >
@@ -2159,20 +2053,11 @@ export default function HabitDetail() {
                     <View style={[styles.missionControlsDivider, { backgroundColor: theme.colors.border }]} />
 
                     <View style={[styles.missionControlPane, Platform.OS === 'ios' && styles.missionControlPaneIos]}>
-                        <View
-                            style={[
-                                styles.missionControlIcon,
-                                {
-                                    backgroundColor: missionVisibilityIsPublic
-                                        ? isDark ? withAlpha(theme.colors.cyan[400], 12) : withAlpha(theme.colors.cyan[500], 10)
-                                        : isDark ? withAlpha(theme.colors.indigo[500], 14) : withAlpha(theme.colors.indigo[500], 10),
-                                },
-                            ]}
-                        >
+                        <View style={styles.missionControlIcon}>
                             {missionVisibilityIsPublic ? (
-                                <Globe size={15} color={theme.colors.cyan[400]} />
+                                <Globe size={15} color={withAlpha(SWITCH_ACCENT_MUTED, 50)} />
                             ) : (
-                                <User size={15} color={theme.colors.indigo[400]} />
+                                <User size={15} color={withAlpha(SWITCH_ACCENT_MUTED, 50)} />
                             )}
                         </View>
                         <View style={styles.missionControlTextCol}>
@@ -2192,7 +2077,7 @@ export default function HabitDetail() {
                                     styles.missionControlAndroidSwitch,
                                     {
                                         backgroundColor: missionVisibilityIsPublic
-                                            ? theme.colors.indigo[600]
+                                            ? SWITCH_ACCENT_MUTED
                                             : theme.colors.border,
                                     },
                                     visibilityBusy && styles.missionControlSwitchBusy,
@@ -2216,7 +2101,7 @@ export default function HabitDetail() {
                                     value={missionVisibilityIsPublic}
                                     disabled={visibilityBusy}
                                     onValueChange={handleMissionVisibilityChange}
-                                    trackColor={{ false: theme.colors.border, true: theme.colors.indigo[600] }}
+                                    trackColor={{ false: theme.colors.border, true: SWITCH_ACCENT_MUTED }}
                                     thumbColor={theme.colors.white}
                                     ios_backgroundColor={theme.colors.border}
                                 />
@@ -2227,50 +2112,67 @@ export default function HabitDetail() {
 
 
                 {eligibleRepair && repairStatus !== "applied" ? (
-                  <View
-                    style={[
-                      styles.repairBanner,
-                      {
-                        borderColor: isDark ? withAlpha(theme.colors.amber[500], 35) : withAlpha(theme.colors.amber[500], 25),
-                        backgroundColor: isDark ? withAlpha(theme.colors.amber[500], 10) : withAlpha(theme.colors.amber[500], 8),
-                      },
-                    ]}
-                  >
-                    <View style={{ flex: 1, minWidth: 0 }}>
-                      <Text style={[styles.repairTitle, { color: theme.colors.textPrimary }]}>
-                        {repairStatus === "pending" ? "Repair pending" : "Streak broken"}
-                      </Text>
-                      <Text style={[styles.repairBody, { color: theme.colors.textSecondary }]}>
-                        {repairStatus === "pending"
-                          ? "Your squad has been asked to approve. You’ll be notified when it’s applied."
-                          : `You missed day ${eligibleRepair.missionDayNumber}. Repair within 24h to keep your streak.`}
-                      </Text>
-                      <Text style={[styles.repairCost, { color: theme.colors.amber[500] }]}>
-                        {repairStatus === "pending" ? "Waiting for approvals…" : `Cost: ${eligibleRepair.xpCost} XP`}
-                      </Text>
-                    </View>
-                    <TouchableOpacity
-                      onPress={() => void openRepair()}
-                      activeOpacity={0.86}
-                      disabled={repairStatus === "pending"}
+                  repairStatus === "pending" ? (
+                    <View
                       style={[
-                        styles.repairBtn,
-                        { backgroundColor: repairStatus === "pending" ? theme.colors.border : theme.colors.amber[500] },
+                        styles.repairBanner,
+                        {
+                          borderColor: isDark ? withAlpha(theme.colors.amber[500], 35) : withAlpha(theme.colors.amber[500], 25),
+                          backgroundColor: isDark ? withAlpha(theme.colors.amber[500], 10) : withAlpha(theme.colors.amber[500], 8),
+                        },
                       ]}
-                      accessibilityRole="button"
-                      accessibilityLabel="Repair streak"
                     >
-                      <Text style={[styles.repairBtnText, { color: "#111827" }]}>
-                        {repairStatus === "pending" ? "Pending" : "Repair"}
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <Text style={[styles.repairTitle, { color: theme.colors.textPrimary }]}>
+                          Repair pending
+                        </Text>
+                        <Text style={[styles.repairBody, { color: theme.colors.textSecondary }]}>
+                          Your squad has been asked to approve. You’ll be notified when it’s applied.
+                        </Text>
+                        <Text style={[styles.repairCost, { color: theme.colors.amber[500] }]}>
+                          Waiting for approvals…
+                        </Text>
+                      </View>
+                      <View style={[styles.repairBtn, { backgroundColor: theme.colors.border }]}>
+                        <Text style={[styles.repairBtnText, { color: "#111827" }]}>Pending</Text>
+                      </View>
+                    </View>
+                  ) : (
+                    <View
+                      style={[
+                        styles.repairPlainCard,
+                        { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
+                      ]}
+                    >
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <Text style={[styles.repairTitle, { color: theme.colors.textPrimary }]}>
+                          Streak broken
+                        </Text>
+                        <Text style={[styles.repairBody, { color: theme.colors.textSecondary }]}>
+                          {`You missed day ${eligibleRepair.missionDayNumber}. Repair within 24h to keep your streak.`}
+                        </Text>
+                        <Text style={[styles.repairCost, { color: theme.colors.textMuted }]}>
+                          {`Cost: ${eligibleRepair.xpCost} XP`}
+                        </Text>
+                      </View>
+                      <TouchableOpacity
+                        onPress={() => void openRepair()}
+                        activeOpacity={0.7}
+                        style={[styles.repairPlainBtn, { borderColor: theme.colors.amber[900] }]}
+                        accessibilityRole="button"
+                        accessibilityLabel="Repair streak"
+                      >
+                        <Hammer size={13} color={theme.colors.amber[900]} strokeWidth={2.4} />
+                        <Text style={[styles.repairBtnText, { color: theme.colors.amber[900] }]}>Repair</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )
                 ) : null}
                 <StreakProgressCard
                     streak={habit.streak}
                     completedCount={effectiveCompletedCount}
                     totalDays={totalDays}
-                    ringColor={isManual ? theme.colors.amber[500] : undefined}
+                    ringColor={isManual ? (isDark ? '#B57C46' : '#8A5A2E') : undefined}
                 />
 
                 {eligibleRepair && habit ? (
@@ -2310,7 +2212,7 @@ export default function HabitDetail() {
                                     Daily reminder time
                                 </Text>
                                 <Text style={[styles.reminderHint, { color: theme.colors.textSecondary }]}>
-                                    24h time (HH:MM). You’ll get this ping if today isn’t marked, plus the last-hour safety reminder. This choice is final.
+                                    Use 24-hour time, like 21:00. We’ll remind you if today isn’t marked yet, plus send one last safety ping in the final hour. You won’t be able to change this later.
                                 </Text>
 
                                 <View style={styles.reminderChipsRow}>
@@ -2322,13 +2224,13 @@ export default function HabitDetail() {
                                             style={[
                                                 styles.reminderChip,
                                                 {
-                                                    borderColor: theme.colors.border,
+                                                    borderColor: reminderDraft === t ? SWITCH_ACCENT_MUTED : theme.colors.border,
                                                     backgroundColor:
-                                                        reminderDraft === t ? theme.colors.indigo[600] : theme.colors.surfaceElevated,
+                                                        reminderDraft === t ? withAlpha(SWITCH_ACCENT_MUTED, 18) : theme.colors.surfaceElevated,
                                                 },
                                             ]}
                                         >
-                                            <Text style={{ color: reminderDraft === t ? "#fff" : theme.colors.textSecondary, fontWeight: "800" }}>
+                                            <Text style={{ color: reminderDraft === t ? SWITCH_ACCENT_MUTED : theme.colors.textSecondary, fontWeight: "600" }}>
                                                 {t}
                                             </Text>
                                         </TouchableOpacity>
@@ -2355,7 +2257,7 @@ export default function HabitDetail() {
                                         activeOpacity={0.86}
                                         style={[styles.reminderActionBtn, { backgroundColor: theme.colors.surfaceElevated, borderColor: theme.colors.border }]}
                                     >
-                                        <Text style={{ color: theme.colors.textPrimary, fontWeight: "800" }}>Cancel</Text>
+                                        <Text style={{ color: theme.colors.textPrimary, fontWeight: "600" }}>Cancel</Text>
                                     </TouchableOpacity>
                                     <TouchableOpacity
                                         onPress={() => {
@@ -2369,9 +2271,9 @@ export default function HabitDetail() {
                                             setReminderEditorOpen(false);
                                         }}
                                         activeOpacity={0.86}
-                                        style={[styles.reminderActionBtn, { backgroundColor: theme.colors.indigo[600], borderColor: theme.colors.indigo[600] }]}
+                                        style={[styles.reminderActionBtn, { backgroundColor: SWITCH_ACCENT_MUTED, borderColor: SWITCH_ACCENT_MUTED }]}
                                     >
-                                        <Text style={{ color: "#fff", fontWeight: "900" }}>Continue</Text>
+                                        <Text style={{ color: theme.colors.white, fontWeight: "700" }}>Continue</Text>
                                     </TouchableOpacity>
                                 </View>
                             </Pressable>
@@ -2398,11 +2300,11 @@ export default function HabitDetail() {
                                 styles.unlockPill,
                                 {
                                     borderColor: theme.colors.border,
-                                    backgroundColor: isDark ? withAlpha(theme.colors.cyan[400], 10) : withAlpha(theme.colors.cyan[500], 8),
+                                    backgroundColor: 'transparent',
                                 },
                             ]}
                         >
-                            <Text style={[styles.unlockPillText, { color: theme.colors.cyan[400] }]} numberOfLines={2}>
+                            <Text style={[styles.unlockPillText, { color: theme.colors.textSecondary }]} numberOfLines={2}>
                                 {activeTrailUnlockCopy}
                             </Text>
                         </View>
@@ -2438,14 +2340,17 @@ export default function HabitDetail() {
                         const isCurrentMissionDay = canInteract && !isCompleted;
                         const streakMem = habit.streakMemories?.[dateStr];
                         const hasStreakRecord = Boolean(streakMem);
-                        const hasMomentMedia = Boolean(
-                            streakMem &&
-                                ((streakMem.note ?? '').trim().length > 0 ||
-                                    streakMem.imageUrl ||
-                                    streakMem.imageUri),
+                        const memoryTasks = streakMem?.tasks ?? [];
+                        const hasPhoto = Boolean(
+                            streakMem && (streakMem.imageUrl || streakMem.imageUri || memoryTasks.some((t) => t.proofUrls[0])),
                         );
-                        const repaired = repairedDateSet.has(dateStr);
-                        const repairSource = streakMem?.repairSource;
+                        const hasNoteOnly =
+                            !hasPhoto &&
+                            Boolean(streakMem && ((streakMem.note ?? '').trim().length > 0 || memoryTasks.some((t) => t.note?.trim())));
+                        // A repaired day's "note" is typically just the auto-generated repair
+                        // message, not a real memory — the hammer should win over the text icon
+                        // whenever a day was repaired, not only when there's no note at all.
+                        const isRepaired = !hasPhoto && repairedDateSet.has(dateStr);
                         const checklistTotal = isCurrentMissionDay ? (habit.taskChecklist?.length ?? 0) : 0;
                         // Count only entries matching a CURRENT checklist task id — same as
                         // ChecklistDaySheet's own "N/M logged" count. A raw `tasks.length` would
@@ -2470,13 +2375,12 @@ export default function HabitDetail() {
                                 locked={locked}
                                 canInteract={canInteract}
                                 hasStreakRecord={hasStreakRecord}
-                                hasMomentMedia={hasMomentMedia}
-                                repaired={repaired}
-                                repairSource={repairSource}
+                                hasPhoto={hasPhoto}
+                                hasNoteOnly={hasNoteOnly}
+                                isRepaired={isRepaired}
                                 checklistLogged={checklistLogged}
                                 checklistTotal={checklistTotal}
                                 onPress={handleDayPress} // Stable callback reference
-                                isSheetOpen={memoryUi !== null}
                                 optimizeForScroll={optimizeGridScrollForLongGrid}
                             />
                         );
@@ -2672,8 +2576,13 @@ export default function HabitDetail() {
                             const next = reminderLockPending;
                             if (!habit || !next) return;
                             void (async () => {
+                                // Ask for notification permission as a courtesy (so the alert can actually
+                                // fire when granted), but the lock-in itself — the user's one-time choice
+                                // of reminder time — is a local habit-record change and must not be blocked
+                                // by whether that permission was granted, denied, or unavailable (e.g. Expo
+                                // Go, which can never grant it). Previously this whole action silently did
+                                // nothing whenever `ok` was false.
                                 const ok = await requireNotifications("daily_reminder");
-                                if (!ok) return;
                                 setReminderLockPending(null);
                                 useHabitStore.setState((state) => ({
                                     habits: state.habits.map((h) =>
@@ -2689,7 +2598,17 @@ export default function HabitDetail() {
                                 }));
                                 requestRemoteSync({ immediate: false });
                                 void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                                showToast("Reminder locked", "success");
+                                if (ok) {
+                                    showToast("Reminder locked", "success");
+                                } else {
+                                    const details = await getRemotePushPermissionDetails();
+                                    showToast(
+                                        details.status === "unavailable"
+                                            ? "Reminder locked. Alerts need push notifications, not available in Expo Go."
+                                            : "Reminder locked. Enable notifications to actually receive the alert.",
+                                        "info",
+                                    );
+                                }
                             })();
                         },
                     },
@@ -2707,7 +2626,7 @@ const styles = StyleSheet.create({
     headerActions: { flexDirection: 'row', gap: 8 },
     iconButton: { padding: 8, borderRadius: 9999, borderWidth: 1 },
     resetButton: { padding: 8, borderRadius: 9999, backgroundColor: 'rgba(245, 158, 11, 0.12)' },
-    deleteButton: { padding: 8, borderRadius: 9999, backgroundColor: 'rgba(239, 68, 68, 0.14)' },
+    deleteButton: { padding: 8, borderRadius: 9999 },
     modeRow: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -2715,8 +2634,7 @@ const styles = StyleSheet.create({
         gap: 8,
         marginBottom: 10,
     },
-    modeBadge: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 6, paddingVertical: 4, paddingHorizontal: 10, borderRadius: 9999, backgroundColor: 'rgba(34, 211, 238, 0.1)', borderWidth: 1, borderColor: 'rgba(34, 211, 238, 0.3)' },
-    modeBadgeManual: { backgroundColor: 'rgba(245, 158, 11, 0.1)', borderColor: 'rgba(245, 158, 11, 0.3)' },
+    modeBadge: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 6, paddingVertical: 4, paddingHorizontal: 10, borderRadius: 9999, borderWidth: 1 },
     modeBadgeText: { fontSize: 11, fontWeight: '800', letterSpacing: 1 },
     modeInfoBtn: {
         justifyContent: 'center',
@@ -2797,14 +2715,12 @@ const styles = StyleSheet.create({
     missionControlAndroidSwitchThumbOff: { alignSelf: 'flex-start' },
     missionControlTinyPill: {
         minHeight: 22,
-        borderRadius: 999,
-        borderWidth: 1,
-        paddingHorizontal: 7,
+        paddingHorizontal: 4,
         alignItems: 'center',
         justifyContent: 'center',
         flexShrink: 0,
     },
-    missionControlTinyPillText: { fontSize: 9, lineHeight: 11, fontWeight: '900' },
+    missionControlTinyPillText: { fontSize: 11, lineHeight: 13, fontWeight: '900' },
     visibilityRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingHorizontal: 14, borderWidth: 1, marginBottom: 20 },
     visibilityTextCol: { flex: 1 },
     visibilityTitleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
@@ -2812,11 +2728,11 @@ const styles = StyleSheet.create({
     visibilityHint: { fontSize: 11, marginTop: 3, lineHeight: 15 },
     backdrop: { flex: 1, justifyContent: "center", alignItems: "center", paddingHorizontal: 18 },
     reminderModal: { borderWidth: 1, borderRadius: 18, padding: 16, marginHorizontal: 18, width: "100%", maxWidth: 420 },
-    reminderTitle: { fontSize: 16, fontWeight: "900" },
-    reminderHint: { fontSize: 12, lineHeight: 17, fontWeight: "600", marginTop: 6 },
+    reminderTitle: { fontSize: 16, fontWeight: "700" },
+    reminderHint: { fontSize: 12, lineHeight: 17, fontWeight: "400", marginTop: 6 },
     reminderChipsRow: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 14 },
     reminderChip: { paddingHorizontal: 12, paddingVertical: 10, borderRadius: 9999, borderWidth: 1 },
-    reminderInput: { marginTop: 14, borderWidth: 1, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 10, fontWeight: "800" },
+    reminderInput: { marginTop: 14, borderWidth: 1, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 10, fontWeight: "600" },
     reminderActionsRow: { flexDirection: "row", gap: 10, marginTop: 16 },
     reminderActionBtn: { flex: 1, paddingVertical: 12, borderRadius: 14, alignItems: "center", borderWidth: 1 },
     reminderLockedRow: {
@@ -2850,6 +2766,25 @@ const styles = StyleSheet.create({
     repairCost: { fontSize: 12, fontWeight: "900", marginTop: 6 },
     repairBtn: { paddingHorizontal: 14, paddingVertical: 10, borderRadius: 14 },
     repairBtnText: { fontSize: 12, fontWeight: "900" },
+    repairPlainCard: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 12,
+        paddingVertical: 12,
+        paddingHorizontal: 14,
+        borderWidth: 1,
+        borderRadius: 16,
+        marginBottom: 14,
+    },
+    repairPlainBtn: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 6,
+        paddingHorizontal: 14,
+        paddingVertical: 10,
+        borderRadius: 14,
+        borderWidth: 1,
+    },
     gridHeaderRow: {
         flexDirection: 'row',
         alignItems: 'flex-end',
@@ -2873,7 +2808,7 @@ const styles = StyleSheet.create({
     unlockPillText: { fontSize: 11, lineHeight: 14, fontWeight: '900', textAlign: 'center' },
     grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', paddingBottom: 24, position: 'relative' },
     dayCellFrame: { width: '13%', aspectRatio: 1, marginBottom: 14 },
-    dayButton: { width: '100%', height: '100%', borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+    dayButton: { width: '100%', height: '100%', borderRadius: 9999, alignItems: 'center', justifyContent: 'center' },
     dayButtonCompleted: { borderWidth: 1 },
     dayButtonMilestone: { shadowColor: '#fbbf24', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.45, shadowRadius: 14, elevation: 8 },
     dayButtonIncomplete: { borderWidth: 1 },
@@ -2881,21 +2816,11 @@ const styles = StyleSheet.create({
     dayText: { fontWeight: '700', fontSize: 16 },
     currentDayText: { fontSize: 18, fontWeight: '800' },
     badgeWrap: { width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center' },
-    milestoneHalo: { position: 'absolute', width: '90%', height: '90%', borderRadius: 10, backgroundColor: 'rgba(251, 191, 36, 0.16)' },
-    badgeCore: { width: '72%', height: '72%', borderRadius: 9999, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255, 255, 255, 0.16)', borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.26)' },
-    badgeCoreMilestone: { backgroundColor: 'rgba(251, 191, 36, 0.24)', borderColor: 'rgba(251, 191, 36, 0.58)' },
-    completedDayText: { color: '#ffffff', fontSize: 14, fontWeight: '800' },
-    completedDayTextMilestone: { color: '#fff7dc' },
-    badgeAccent: { position: 'absolute', top: 6, right: 6 },
-    memoryDot: { position: 'absolute', bottom: 5, width: 7, height: 7, borderRadius: 4, borderWidth: 1.5 },
-    repairDot: { position: 'absolute', bottom: 5, right: 5, width: 7, height: 7, borderRadius: 4, borderWidth: 1.5 },
-    brandRingWrap: { width: '82%', height: '82%', alignItems: 'center', justifyContent: 'center' },
-    brandRingCore: { width: 24, height: 24, borderRadius: 9999, alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
-    brandRingDayText: { fontSize: 14, fontWeight: '900' },
+    completedDotContent: { width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center', gap: 1 },
+    brandRingDayText: { fontSize: 14, fontWeight: '300' },
     brandRingDayTextTwoDigit: { fontSize: 12 },
-    brandRingAccent: { position: 'absolute', top: 2, right: 2 },
     dayButtonPlaceholder: { width: '13%', aspectRatio: 1, marginBottom: 14 },
-    dayButtonWarmup: { borderWidth: 1, borderRadius: 12, opacity: 0.56 },
+    dayButtonWarmup: { borderWidth: 1, borderRadius: 9999, opacity: 0.56 },
     missionTimerSlot: {
         padding: 16,
         marginBottom: 10,

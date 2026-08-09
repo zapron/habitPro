@@ -61,6 +61,7 @@ import {
 } from "../../src/lib/accountBackup";
 import { requestRemoteSync } from "../../src/lib/syncQueue";
 import { useAppVersion } from "../../src/context/AppVersionContext";
+import { simulateOtaUpdateReady } from "../../src/components/OtaUpdateManager";
 import { useRouter } from "expo-router";
 import { SettingsModal } from "../../src/components/SettingsModal";
 import { UsernameSetupFields } from "../../src/components/UsernameSetupFields";
@@ -2005,6 +2006,49 @@ export default function ProfileScreen() {
           </Text>
         </View>
         </Animated.View>
+
+        {__DEV__ ? (
+          <>
+            <Text style={[styles.sectionLabel, { color: theme.colors.textMuted, marginTop: 4, opacity: 0.85 }]}>
+              DEV TOOLS
+            </Text>
+            <View
+              style={[
+                styles.versionCard,
+                { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, ...theme.shadow.card, gap: 8 },
+              ]}
+            >
+              <GlassTopHighlight radius={14} />
+              <TouchableOpacity
+                onPress={() => appVersion.setDevSimulateForceUpdate(!appVersion.devSimulateForceUpdate)}
+                style={[
+                  styles.devToolChip,
+                  {
+                    backgroundColor: appVersion.devSimulateForceUpdate ? theme.colors.red[500] : theme.colors.surfaceElevated,
+                    borderColor: appVersion.devSimulateForceUpdate ? theme.colors.red[500] : theme.colors.border,
+                  },
+                ]}
+                activeOpacity={0.85}
+              >
+                <Text
+                  style={[
+                    styles.devToolChipText,
+                    { color: appVersion.devSimulateForceUpdate ? "#fff" : theme.colors.textSecondary },
+                  ]}
+                >
+                  {appVersion.devSimulateForceUpdate ? "Force update: ON" : "Simulate force update"}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => simulateOtaUpdateReady()}
+                style={[styles.devToolChip, { backgroundColor: theme.colors.surfaceElevated, borderColor: theme.colors.border }]}
+                activeOpacity={0.85}
+              >
+                <Text style={[styles.devToolChipText, { color: theme.colors.textSecondary }]}>Simulate OTA ready</Text>
+              </TouchableOpacity>
+            </View>
+          </>
+        ) : null}
       </ScrollView>
 
       <LazyMount visible={hubSheet !== null} unmountOnExit>
@@ -2521,4 +2565,12 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   versionPrimary: { fontSize: 13, fontWeight: "700", opacity: 0.92 },
+  devToolChip: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    alignItems: "center",
+  },
+  devToolChipText: { fontSize: 12, fontWeight: "800" },
 });

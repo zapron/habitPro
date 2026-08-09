@@ -37,10 +37,6 @@ import {
   ChevronRight,
   Zap,
   Bell,
-  Plane,
-  Gamepad2,
-  Globe,
-  Swords,
   Flame,
   Download,
 } from "lucide-react-native";
@@ -49,6 +45,7 @@ import { useShallow } from "zustand/react/shallow";
 import { useAuth } from "../../src/context/AuthContext";
 import { useAppVersion } from "../../src/context/AppVersionContext";
 import { isSupabaseConfigured } from "../../src/lib/env";
+import { onAppReady } from "../../src/lib/appReadySignal";
 import {
   countUnreadNotificationsCached,
   getCachedUnreadNotificationCount,
@@ -80,6 +77,8 @@ import {
   xpInCurrentLevel,
   xpProgressInCurrentLevel,
 } from "../../src/utils/xpLevel";
+import { redesignPalette } from "../../src/styles/redesignPalette";
+import { fontFamily } from "../../src/styles/fonts";
 
 const EMPTY_HABITS: Habit[] = [];
 const EMPTY_MINI_MISSIONS: MiniMission[] = [];
@@ -87,6 +86,10 @@ const HOME_NOTIFICATION_COUNT_TTL_MS = 30_000;
 const HOME_NOTIFICATION_REFRESH_DELAY_MS = 600;
 /** Durable marker so the level-up celebration fires once per level, not on every Home visit/remount. */
 const LAST_CELEBRATED_LEVEL_KEY = "habitpro.lastCelebratedLevel";
+/** Minimalist FAB fill — a toned-down version of `rp.accent` so the floating button doesn't read as bright indigo. */
+const FAB_ACCENT_MUTED = "#4B4BB0";
+/** Minimalist notification-count badge — a dull maroon instead of alert-red, noticeable without demanding attention. */
+const NOTIF_DOT_MUTED = "#8B4048";
 
 function getGreeting(): string {
   const hour = new Date().getHours();
@@ -156,48 +159,6 @@ const HEADER_BOTTOM_GAP = 6;
 type HomeSpark =
   | { kind: "lead" | "chase"; title: string; body: string; challengeId: string }
   | { kind: "mini" | "xp" | "reports"; title: string; body: string };
-
-const MainMissionLegend = memo(function MainMissionLegend({
-  theme,
-  isDark,
-}: {
-  theme: AppTheme;
-  isDark: boolean;
-}) {
-  const items = [
-    { key: "auto", label: "Auto", icon: Plane, color: theme.colors.cyan[400] },
-    { key: "manual", label: "Manual", icon: Gamepad2, color: theme.colors.amber[500] },
-    { key: "community", label: "Public", icon: Globe, color: theme.colors.cyan[400] },
-    { key: "squad", label: "Squad", icon: Swords, color: theme.colors.indigo[400] },
-  ] as const;
-
-  return (
-    <View style={styles.mainMissionLegend} accessibilityLabel="Main mission icon legend">
-      {items.map(({ key, label, icon: Icon, color }) => (
-        <View
-          key={key}
-          style={[
-            styles.legendPill,
-            {
-              backgroundColor: isDark ? withAlpha(theme.colors.textSecondary, 8) : withAlpha(theme.colors.textSecondary, 10),
-              borderColor: isDark ? withAlpha(theme.colors.textSecondary, 18) : withAlpha(theme.colors.textSecondary, 24),
-            },
-          ]}
-        >
-          <Icon size={11} color={color} strokeWidth={2.4} />
-          <Text
-            style={[styles.legendText, { color: theme.colors.textMuted }]}
-            numberOfLines={1}
-            adjustsFontSizeToFit
-            minimumFontScale={0.78}
-          >
-            {label}
-          </Text>
-        </View>
-      ))}
-    </View>
-  );
-});
 
 const ShimmerTile = memo(function ShimmerTile({
   theme,
@@ -308,7 +269,14 @@ function ListSkeleton({
 export default function Home() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { theme, isDark } = useTheme();
+  const { theme, isDark, themePack } = useTheme();
+  /**
+   * Home-specific flourishes for the "Minimalist" theme pack (Claude Design
+   * mockup) beyond what `theme.colors`/`theme.shadow` already give every
+   * other screen for free — driven by the real Settings → Appearance
+   * choice, not a standalone flag, so Classic (the default) is unaffected.
+   */
+  const rp = themePack === 'minimalist' ? (isDark ? redesignPalette.dark : redesignPalette.light) : null;
   const isFocused = useIsFocused();
   const { session, syncReady, syncError, retryHydrate } = useAuth();
   const { softUpdateAvailable, latestVersion, softUpdateUrl, softUpdateMessage } = useAppVersion();
@@ -325,6 +293,21 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState<"missions" | "reports">(
     "missions",
   );
+  const [tabTrackWidth, setTabTrackWidth] = useState(0);
+  const tabIndicatorX = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const toValue = activeTab === "missions" ? 0 : 1;
+    if (reduceMotion) {
+      tabIndicatorX.setValue(toValue);
+      return;
+    }
+    Animated.spring(tabIndicatorX, {
+      toValue,
+      useNativeDriver: true,
+      friction: 10,
+      tension: 90,
+    }).start();
+  }, [activeTab, reduceMotion, tabIndicatorX]);
   const [reportsSegment, setReportsSegment] = useState<
     "pending" | "accomplished" | "failed"
   >("pending");
@@ -344,46 +327,7 @@ export default function Home() {
   const shouldHoldForFirstSync = waitingForFirstSync && !hasLocalHomeActions;
   const cloudSyncBlocked = Boolean(showAccount && session?.user && syncError);
 
-  const bellScale = useRef(new Animated.Value(1)).current;
-  const bellBuzz = useRef(new Animated.Value(0)).current;
   const emptyIconScale = useRef(new Animated.Value(1)).current;
-
-  useEffect(() => {
-    if (reduceMotion) {
-      bellScale.setValue(1);
-      bellBuzz.setValue(0);
-      return;
-    }
-    if (unreadNotifCount > 0) {
-      const loop = Animated.loop(
-        Animated.sequence([
-          // Quick "buzz" wiggle + punch scale, then rest.
-          Animated.parallel([
-            Animated.sequence([
-              Animated.timing(bellBuzz, { toValue: 1, duration: 60, easing: Easing.out(Easing.linear), useNativeDriver: true }),
-              Animated.timing(bellBuzz, { toValue: -1, duration: 60, easing: Easing.out(Easing.linear), useNativeDriver: true }),
-              Animated.timing(bellBuzz, { toValue: 1, duration: 60, easing: Easing.out(Easing.linear), useNativeDriver: true }),
-              Animated.timing(bellBuzz, { toValue: 0, duration: 70, easing: Easing.out(Easing.linear), useNativeDriver: true }),
-            ]),
-            Animated.sequence([
-              Animated.timing(bellScale, { toValue: 1.22, duration: 110, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
-              Animated.timing(bellScale, { toValue: 0.98, duration: 110, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
-              Animated.timing(bellScale, { toValue: 1, duration: 160, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
-            ]),
-          ]),
-          Animated.delay(2400),
-        ]),
-      );
-      loop.start();
-      return () => loop.stop();
-    }
-  }, [unreadNotifCount, reduceMotion, bellScale]);
-
-  const bellBuzzStyle = useMemo(() => {
-    const rotate = bellBuzz.interpolate({ inputRange: [-1, 0, 1], outputRange: ["-12deg", "0deg", "12deg"] });
-    const translateX = bellBuzz.interpolate({ inputRange: [-1, 0, 1], outputRange: [-1.2, 0, 1.2] });
-    return { transform: [{ translateX }, { rotate }] } as const;
-  }, [bellBuzz]);
 
   useEffect(() => {
     if (reduceMotion) return;
@@ -404,9 +348,9 @@ export default function Home() {
   ], [listBottomPad]);
   const renderHabitCard = useCallback(
     ({ item, index }: { item: (typeof filteredHabits)[0]; index: number }) => (
-      <HabitCard item={item} nowMs={missionNow} index={index} />
+      <HabitCard item={item} nowMs={missionNow} index={index} redesignPalette={rp ? redesignPalette : null} />
     ),
-    [missionNow],
+    [missionNow, rp],
   );
 
   const level = levelFromTotalXp(xp);
@@ -626,6 +570,7 @@ export default function Home() {
 
   const headerOpacity = useRef(new Animated.Value(0)).current;
   const headerSlide = useRef(new Animated.Value(-15)).current;
+  const fabIntro = useRef(new Animated.Value(0)).current;
   const animXpFill = useRef(new Animated.Value(xpProgress)).current;
   const prevXpProgressRef = useRef(xpProgress);
   const [levelUpBurst, setLevelUpBurst] = useState<{ active: boolean; x: number; y: number }>({
@@ -656,6 +601,53 @@ export default function Home() {
       }),
     ]).start();
   }, [headerOpacity, headerSlide, reduceMotion]);
+
+  // FAB "forms and rises" every time Home comes into focus — starts small and low
+  // (as if surfacing from the tab bar), overshoots with a squash/stretch wobble, then
+  // settles into place. Keyed on `isFocused` (not just mount) because the tab navigator
+  // keeps Home mounted after the first visit, so a mount-only effect would only ever
+  // fire once per app session.
+  //
+  // On the very first app launch, SplashGate mounts the whole app (this screen
+  // included) underneath its splash overlay well before that overlay actually
+  // dismisses — so starting the animation immediately on focus ran it to completion
+  // invisibly behind the splash. `onAppReady` (same pattern HabitCard's entrance
+  // animation uses) defers the first play until the splash has actually faded out,
+  // and fires immediately on every focus after that.
+  useEffect(() => {
+    if (!isFocused) return undefined;
+    if (reduceMotion) {
+      fabIntro.setValue(1);
+      return undefined;
+    }
+    fabIntro.setValue(0);
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let anim: Animated.CompositeAnimation | null = null;
+    const unsubscribe = onAppReady(() => {
+      timer = setTimeout(() => {
+        anim = Animated.timing(fabIntro, {
+          toValue: 1,
+          duration: 850,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        });
+        anim.start();
+      }, 220);
+    });
+    return () => {
+      unsubscribe();
+      if (timer) clearTimeout(timer);
+      anim?.stop();
+    };
+  }, [fabIntro, reduceMotion, isFocused]);
+
+  const fabIntroStyle = useMemo(() => {
+    const translateY = fabIntro.interpolate({ inputRange: [0, 1], outputRange: [58, 0] });
+    const scaleY = fabIntro.interpolate({ inputRange: [0, 0.5, 0.75, 1], outputRange: [0.3, 1.28, 0.88, 1] });
+    const scaleX = fabIntro.interpolate({ inputRange: [0, 0.5, 0.75, 1], outputRange: [0.55, 0.8, 1.08, 1] });
+    const opacity = fabIntro.interpolate({ inputRange: [0, 0.2, 1], outputRange: [0, 1, 1] });
+    return { opacity, transform: [{ translateY }, { scaleY }, { scaleX }] } as const;
+  }, [fabIntro]);
 
   useEffect(() => {
     if (prevXpProgressRef.current === xpProgress) return;
@@ -806,12 +798,15 @@ export default function Home() {
     homeSpark?.kind === "mini"   ? Bolt   :
     homeSpark?.kind === "xp"     ? Zap    :
     Target;
-  const sparkAccent =
+  const sparkAccent = rp ? rp.accentDark :
     homeSpark?.kind === "lead"   ? theme.colors.yellow[400] :
     homeSpark?.kind === "chase"  ? theme.colors.red[500]    :
     homeSpark?.kind === "mini"   ? theme.colors.amber[500]  :
     theme.colors.cyan[400];
-  const sparkTint =
+  // Redesign preview: one calm accent-tinted pill regardless of spark kind,
+  // matching the mockup's single-hue system, instead of a different color
+  // per spark kind.
+  const sparkTint = rp ? rp.accentTint :
     homeSpark?.kind === "lead"   ? withAlpha(theme.colors.yellow[400], isDark ? 8 : 7) :
     homeSpark?.kind === "chase"  ? withAlpha(theme.colors.red[500], isDark ? 9 : 7) :
     homeSpark?.kind === "mini"   ? withAlpha(theme.colors.amber[500], isDark ? 9 : 7) :
@@ -819,10 +814,10 @@ export default function Home() {
     "transparent";
 
   return (
-    <Screen>
+    <Screen style={rp ? { backgroundColor: rp.screenBg } : undefined}>
       <StatusBar
         barStyle={isDark ? "light-content" : "dark-content"}
-        backgroundColor={theme.colors.background}
+        backgroundColor={rp ? rp.screenBg : theme.colors.background}
       />
 
       <View style={styles.rootCol}>
@@ -836,7 +831,11 @@ export default function Home() {
           ]}
         >
           <Text
-            style={[styles.headerEyebrow, { color: theme.colors.cyan[400] }]}
+            style={[
+              styles.headerEyebrow,
+              { color: rp ? rp.accent : theme.colors.cyan[400] },
+              rp ? { fontFamily: fontFamily.manropeBold } : null,
+            ]}
           >
             MISSION CONTROL
           </Text>
@@ -845,9 +844,10 @@ export default function Home() {
               style={[
                 styles.headerTitle,
                 {
-                  color: theme.colors.textPrimary,
+                  color: rp ? rp.textPrimary : theme.colors.textPrimary,
                   letterSpacing: theme.letterSpacing.tight,
                 },
+                rp ? { fontFamily: fontFamily.manropeExtraBold } : null,
               ]}
               numberOfLines={2}
             >
@@ -856,21 +856,13 @@ export default function Home() {
             <View style={styles.headerRightCluster}>
               {showAccount && session?.user ? (
                 <View style={styles.bellWrap}>
-                  <Animated.View
-                    style={{
-                      transform: [
-                        { scale: unreadNotifCount > 0 ? bellScale : 1 },
-                      ],
-                    }}
-                  >
-                    <Animated.View style={unreadNotifCount > 0 && !reduceMotion ? bellBuzzStyle : undefined}>
                     <TouchableOpacity
                       onPress={() => router.push("/notifications")}
                       style={[
                         styles.headerIconBtn,
                         {
-                          backgroundColor: theme.colors.surface,
-                          borderColor: theme.colors.border,
+                          backgroundColor: rp ? rp.screenBg : theme.colors.surface,
+                          borderColor: rp ? rp.border : theme.colors.border,
                         },
                       ]}
                       activeOpacity={0.85}
@@ -880,17 +872,15 @@ export default function Home() {
                           : "Notifications"
                       }
                     >
-                      <Bell size={20} color={theme.colors.textPrimary} />
+                      <Bell size={20} color={rp ? rp.textPrimary : theme.colors.textPrimary} />
                     </TouchableOpacity>
-                    </Animated.View>
-                  </Animated.View>
                   {unreadNotifCount > 0 ? (
                     <View
                       style={[
                         styles.notifBadge,
                         {
-                          borderColor: theme.colors.background,
-                          backgroundColor: theme.colors.red[500],
+                          borderColor: rp ? rp.screenBg : theme.colors.background,
+                          backgroundColor: rp ? NOTIF_DOT_MUTED : theme.colors.red[500],
                         },
                       ]}
                       accessibilityElementsHidden
@@ -912,21 +902,26 @@ export default function Home() {
                 style={[
                   styles.headerBadge,
                   {
-                    backgroundColor: theme.colors.surface,
-                    borderColor: theme.colors.border,
+                    backgroundColor: rp ? rp.accentTint : theme.colors.surface,
+                    borderColor: rp ? "transparent" : theme.colors.border,
                   },
                 ]}
               >
                 <Text
                   style={[
                     styles.levelNumber,
-                    { color: theme.colors.yellow[400] },
+                    { color: rp ? rp.accentDark : theme.colors.yellow[400] },
+                    rp ? { fontFamily: fontFamily.manropeExtraBold } : null,
                   ]}
                 >
                   {level}
                 </Text>
                 <Text
-                  style={[styles.levelLabel, { color: theme.colors.textMuted }]}
+                  style={[
+                    styles.levelLabel,
+                    { color: rp ? rp.accentDark : theme.colors.textMuted },
+                    rp ? { fontFamily: fontFamily.dmSansSemibold } : null,
+                  ]}
                 >
                   LVL
                 </Text>
@@ -947,27 +942,36 @@ export default function Home() {
           style={[
             styles.xpBar,
             {
-              backgroundColor: theme.colors.surface,
-              borderColor: theme.colors.border,
+              backgroundColor: rp ? rp.screenBg : theme.colors.surface,
+              borderColor: rp ? rp.border : isDark ? theme.colors.border : "transparent",
               borderRadius: theme.radius.md,
+              ...(rp ? null : theme.shadow.card),
             },
           ]}
         >
-          <GlassTopHighlight radius={theme.radius.md} />
+          {rp ? null : <GlassTopHighlight radius={theme.radius.md} />}
           <View style={styles.xpInfo}>
             <View style={styles.xpLeft}>
-              <Zap
-                size={12}
-                color={theme.colors.yellow[400]}
-                fill={theme.colors.yellow[400]}
-              />
+              {rp ? null : (
+                <Zap size={12} color={theme.colors.yellow[400]} fill={theme.colors.yellow[400]} />
+              )}
               <Text
-                style={[styles.xpLabel, { color: theme.colors.textSecondary }]}
+                style={[
+                  styles.xpLabel,
+                  { color: rp ? rp.textPrimary : theme.colors.textSecondary },
+                  rp ? { fontFamily: fontFamily.manropeBold } : null,
+                ]}
               >
                 Level {level}
               </Text>
             </View>
-            <Text style={[styles.xpValue, { color: theme.colors.textMuted }]}>
+            <Text
+              style={[
+                styles.xpValue,
+                { color: rp ? rp.textMuted : theme.colors.textMuted },
+                rp ? { fontFamily: fontFamily.dmSansMedium } : null,
+              ]}
+            >
               {xpInLevel} / {XP_PER_LEVEL} XP
             </Text>
           </View>
@@ -975,7 +979,7 @@ export default function Home() {
             style={[
               styles.xpTrack,
               {
-                backgroundColor: isDark ? withAlpha(theme.colors.sheen, 6) : withAlpha(theme.colors.sheen, 6),
+                backgroundColor: rp ? rp.trackBg : withAlpha(theme.colors.sheen, 6),
               },
             ]}
             onLayout={(e) => setXpTrackWidth(e.nativeEvent.layout.width)}
@@ -997,12 +1001,16 @@ export default function Home() {
                 },
               ]}
             >
-              <LinearGradient
-                colors={["#f97316", "#fde047"]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={{ flex: 1, borderRadius: 3 }}
-              />
+              {rp ? (
+                <View style={{ flex: 1, borderRadius: 3, backgroundColor: rp.accent }} />
+              ) : (
+                <LinearGradient
+                  colors={["#f97316", "#fde047"]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={{ flex: 1, borderRadius: 3 }}
+                />
+              )}
             </Animated.View>
           </View>
           {homeSpark ? (
@@ -1026,18 +1034,38 @@ export default function Home() {
                   strokeWidth={2.6}
                   fill={homeSpark?.kind === "chase" ? sparkAccent : "transparent"}
                 />
-                <Text style={[styles.sparkInlineText, { color: theme.colors.textSecondary }]} numberOfLines={1}>
-                  <Text style={[styles.sparkInlineTitle, { color: theme.colors.textPrimary }]}>
+                <Text
+                  style={[
+                    styles.sparkInlineText,
+                    { color: rp ? rp.textSecondary : theme.colors.textSecondary },
+                    rp ? { fontFamily: fontFamily.dmSansMedium } : null,
+                  ]}
+                  numberOfLines={1}
+                >
+                  <Text
+                    style={[
+                      styles.sparkInlineTitle,
+                      { color: rp ? rp.textPrimary : theme.colors.textPrimary },
+                      rp ? { fontFamily: fontFamily.manropeBold } : null,
+                    ]}
+                  >
                     {homeSpark.title}
                   </Text>
                   {"  "}
                   {homeSpark.body}
                 </Text>
-                <ChevronRight size={14} color={theme.colors.textMuted} />
+                <ChevronRight size={14} color={rp ? rp.textMuted : theme.colors.textMuted} />
               </Animated.View>
             </TouchableOpacity>
           ) : stats.missionsCount > 0 ? (
-            <Text style={[styles.sparkInlineText, { color: theme.colors.textMuted, marginTop: 7, paddingTop: 6 }]} numberOfLines={1}>
+            <Text
+              style={[
+                styles.sparkInlineText,
+                { color: rp ? rp.textMuted : theme.colors.textMuted, marginTop: 7, paddingTop: 6 },
+                rp ? { fontFamily: fontFamily.dmSansMedium } : null,
+              ]}
+              numberOfLines={1}
+            >
               All missions on track — keep the streak alive.
             </Text>
           ) : null}
@@ -1092,30 +1120,47 @@ export default function Home() {
           style={[
             styles.miniBanner,
             {
-              backgroundColor: theme.colors.surface,
-              borderColor: isDark ? withAlpha(theme.colors.amber[500], 30) : withAlpha(theme.colors.amber[500], 25),
+              backgroundColor: rp ? rp.screenBg : theme.colors.surface,
+              borderColor: rp ? rp.border : isDark ? withAlpha(theme.colors.amber[500], 30) : withAlpha(theme.colors.amber[500], 25),
               borderRadius: theme.radius.lg,
             },
           ]}
           activeOpacity={0.85}
           onPress={() => router.push("/mini")}
         >
-          <GlassTopHighlight radius={theme.radius.lg} />
+          {rp ? null : <GlassTopHighlight radius={theme.radius.lg} />}
           <View style={styles.miniBannerLeft}>
-            <View style={styles.commandIconMini}>
+            <View style={[styles.commandIconMini, rp ? { backgroundColor: rp.accentTint, borderRadius: 12 } : null]}>
               {miniMissionStats.live > 0 ? (
                 <FireLottie
                   source={{ uri: FIRE_LOTTIE_URI }}
                   size={28}
                 />
               ) : (
-                <Bolt size={18} color={theme.colors.yellow[400]} />
+                <Bolt size={18} color={rp ? rp.accentDark : theme.colors.yellow[400]} />
               )}
             </View>
             <View style={{ marginLeft: 10 }}>
-              <Text style={{ color: theme.colors.textPrimary, fontWeight: "700", fontSize: 15 }}>Mini Missions</Text>
+              <Text
+                style={{
+                  color: rp ? rp.textPrimary : theme.colors.textPrimary,
+                  fontWeight: "700",
+                  fontSize: 15,
+                  ...(rp ? { fontFamily: fontFamily.manropeBold } : null),
+                }}
+              >
+                Mini Missions
+              </Text>
               {miniMissionStats.live === 0 ? (
-                <Text style={{ color: theme.colors.textMuted, fontSize: 11 }}>Browse side-quests</Text>
+                <Text
+                  style={{
+                    color: rp ? rp.textMuted : theme.colors.textMuted,
+                    fontSize: 11,
+                    ...(rp ? { fontFamily: fontFamily.dmSansMedium } : null),
+                  }}
+                >
+                  Browse side-quests
+                </Text>
               ) : null}
             </View>
           </View>
@@ -1123,80 +1168,103 @@ export default function Home() {
             {miniMissionStats.live > 0 ? (
               <MiniMissionLiveGradientLabel count={miniMissionStats.live} reduceMotion={reduceMotion} />
             ) : null}
-            <ChevronRight size={20} color={theme.colors.textMuted} />
+            <ChevronRight size={20} color={rp ? rp.textMuted : theme.colors.textMuted} />
           </View>
         </TouchableOpacity>
 
         <View style={styles.mainMissionsHeader}>
-          <Text style={[styles.missionsLabel, { color: theme.colors.textMuted }]}>
+          <Text
+            style={[
+              styles.missionsLabel,
+              { color: rp ? rp.textMuted : theme.colors.textMuted },
+              rp ? { fontFamily: fontFamily.manropeBold } : null,
+            ]}
+          >
             MAIN MISSIONS
           </Text>
-          <MainMissionLegend theme={theme} isDark={isDark} />
         </View>
 
         <View
           style={[
             styles.tabContainer,
             {
-              backgroundColor: theme.colors.surface,
-              borderColor: theme.colors.border,
+              backgroundColor: rp
+                ? (isDark ? rp.screenBg : rp.chipBg)
+                : (isDark ? theme.colors.surface : theme.colors.surfaceElevated),
+              borderColor: "transparent",
             },
           ]}
+          onLayout={(event) => {
+            const fullWidth = event.nativeEvent.layout.width;
+            const trackWidth = Math.max(0, fullWidth - 2 * 4 - 2 * 1);
+            setTabTrackWidth(trackWidth);
+          }}
         >
-          <TouchableOpacity
-            style={[
-              styles.tab,
-              activeTab === "missions" && [
-                styles.tabSelected,
-                {
-                  backgroundColor: theme.colors.indigo[600],
-                  ...theme.shadow.glow,
-                },
-              ],
-            ]}
-            onPress={() => setActiveTab("missions")}
-            activeOpacity={0.8}
-          >
-            <Text
+          {tabTrackWidth > 0 ? (
+            <Animated.View
+              pointerEvents="none"
               style={[
-                styles.tabText,
-                { color: theme.colors.textSecondary },
-                activeTab === "missions" && styles.activeTabText,
-              ]}
-            >
-              Main Missions
-              {stats.missionsCount > 0 ? ` (${stats.missionsCount})` : ""}
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.tab,
-              activeTab === "reports" && [
-                styles.tabSelected,
+                styles.tabIndicator,
                 {
-                  backgroundColor: theme.colors.indigo[600],
-                  ...theme.shadow.glow,
+                  width: tabTrackWidth / 2,
+                  backgroundColor: rp
+                    ? (isDark ? rp.chipBg : rp.screenBg)
+                    : (isDark ? theme.colors.surfaceElevated : theme.colors.surface),
+                  ...(rp ? null : theme.shadow.card),
+                  transform: [
+                    {
+                      translateX: tabIndicatorX.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [0, tabTrackWidth / 2],
+                      }),
+                    },
+                  ],
                 },
-              ],
-            ]}
-            onPress={() => setActiveTab("reports")}
-            activeOpacity={0.8}
-          >
-            <Text
-              style={[
-                styles.tabText,
-                { color: theme.colors.textSecondary },
-                activeTab === "reports" && styles.activeTabText,
               ]}
-            >
-              Reports{stats.reportsCount > 0 ? ` (${stats.reportsCount})` : ""}
-            </Text>
-          </TouchableOpacity>
+            />
+          ) : null}
+          {(
+            [
+              ["missions", "Main Missions", stats.missionsCount] as const,
+              ["reports", "Reports", stats.reportsCount] as const,
+            ] as const
+          ).map(([key, label, count]) => {
+            const selected = activeTab === key;
+            return (
+              <TouchableOpacity
+                key={key}
+                style={styles.tab}
+                onPress={() => setActiveTab(key)}
+                activeOpacity={0.8}
+              >
+                <Text
+                  style={[
+                    styles.tabText,
+                    { color: rp ? rp.textSecondary : theme.colors.textSecondary },
+                    rp ? { fontFamily: fontFamily.dmSansSemibold } : null,
+                    selected && { color: rp ? rp.accent : theme.colors.indigo[600] },
+                  ]}
+                >
+                  {label}
+                </Text>
+                {selected && count > 0 ? (
+                  <View
+                    style={[
+                      styles.tabCountBadge,
+                      { backgroundColor: rp ? rp.accent : theme.colors.indigo[600] },
+                    ]}
+                  >
+                    <Text style={styles.tabCountBadgeText}>{count}</Text>
+                  </View>
+                ) : null}
+              </TouchableOpacity>
+            );
+          })}
         </View>
 
         {activeTab === "reports" ? (
           <View
-            style={[styles.reportSegRow, { borderColor: theme.colors.border }]}
+            style={[styles.reportSegRow, { borderColor: rp ? rp.border : theme.colors.border }]}
           >
             {(
               [
@@ -1210,7 +1278,9 @@ export default function Home() {
                 style={[
                   styles.reportSegBtn,
                   reportsSegment === key && {
-                    backgroundColor: isDark ? withAlpha(theme.colors.indigo[500], 20) : withAlpha(theme.colors.indigo[600], 12),
+                    backgroundColor: rp
+                      ? rp.accentTint
+                      : isDark ? withAlpha(theme.colors.indigo[500], 20) : withAlpha(theme.colors.indigo[600], 12),
                   },
                 ]}
                 onPress={() => setReportsSegment(key)}
@@ -1219,8 +1289,9 @@ export default function Home() {
                 <Text
                   style={[
                     styles.reportSegText,
-                    { color: theme.colors.textSecondary },
-                    reportsSegment === key && { color: theme.colors.indigo[400] },
+                    { color: rp ? rp.textSecondary : theme.colors.textSecondary },
+                    rp ? { fontFamily: fontFamily.dmSansSemibold } : null,
+                    reportsSegment === key && { color: rp ? rp.accentDark : theme.colors.indigo[400] },
                   ]}
                   numberOfLines={1}
                 >
@@ -1366,11 +1437,10 @@ export default function Home() {
         style={[
           styles.fab,
           {
-            backgroundColor: theme.colors.indigo[600],
-            ...theme.shadow.glow,
-            opacity: headerOpacity,
-            transform: [{ translateY: headerSlide }],
+            backgroundColor: rp ? FAB_ACCENT_MUTED : theme.colors.indigo[600],
+            ...(rp ? null : theme.shadow.glow),
           },
+          fabIntroStyle,
         ]}
       >
         <TouchableOpacity
@@ -1398,7 +1468,7 @@ const styles = StyleSheet.create({
   header: { marginBottom: HEADER_BOTTOM_GAP },
   headerGreetingRow: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     justifyContent: "space-between",
     gap: 10,
     marginTop: 2,
@@ -1512,32 +1582,6 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 6,
   },
-  mainMissionLegend: {
-    flexDirection: "row",
-    flexWrap: "nowrap",
-    justifyContent: "flex-end",
-    alignItems: "center",
-    gap: 3,
-    flex: 1,
-    minWidth: 0,
-  },
-  legendPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 2,
-    borderWidth: 1,
-    borderRadius: 9999,
-    paddingHorizontal: 4,
-    paddingVertical: 2,
-    minHeight: 20,
-    flexShrink: 1,
-  },
-  legendText: {
-    fontSize: 8,
-    lineHeight: 10,
-    fontWeight: "800",
-    flexShrink: 1,
-  },
   tabContainer: {
     flexDirection: "row",
     borderRadius: 14,
@@ -1547,15 +1591,31 @@ const styles = StyleSheet.create({
   },
   tab: {
     flex: 1,
+    flexDirection: "row",
     paddingVertical: 10,
     alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
     borderRadius: 10,
     minHeight: 42,
+  },
+  tabIndicator: {
+    position: "absolute",
+    top: 4,
+    bottom: 4,
+    left: 4,
+    borderRadius: 10,
+  },
+  tabText: { fontWeight: "700" },
+  tabCountBadge: {
+    minWidth: 20,
+    height: 20,
+    paddingHorizontal: 5,
+    borderRadius: 10,
+    alignItems: "center",
     justifyContent: "center",
   },
-  tabSelected: { paddingVertical: 11 },
-  tabText: { fontWeight: "700" },
-  activeTabText: { color: "#ffffff" },
+  tabCountBadgeText: { color: "#ffffff", fontSize: 11, fontWeight: "800" },
   reportSegRow: {
     flexDirection: "row",
     borderRadius: 12,

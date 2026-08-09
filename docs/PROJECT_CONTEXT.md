@@ -85,6 +85,8 @@ Read these in this order for future work:
 - Moment lightbox is an aspect-aware photo card with note/meta below it, intended to avoid black bars and feel like a scrapbook/Instax card.
 - The honeycomb build-in animation uses React Native `Animated`, not Reanimated, because Expo Go hit a Worklets native/JS version mismatch when Reanimated was imported in the gallery.
 - Long mission detail performance is sensitive on Android. Active Trail batching, non-blocking decorative animations (`isInteraction: false`), and decoupling moments from full marker rendering are intentional.
+- (2026-08-06) The honeycomb's stacked-day auto-cycling wave transition was removed — decided against after a minimalist-design review; a stacked day now shows one static cover, full set still reachable by tapping into the swipeable viewer. The hex *shape* itself was deliberately kept (a "keep the shape, strip the decoration" call, not a move to circles) after comparing two mockup directions against real reference apps.
+- (2026-08-06) The habit-detail day grid moved from a two-ring "double circle" completed-day marker to one solid dulled-green circle, with icon priority camera > repaired (hammer) > text note > plain day number.
 
 ### Mini Missions
 
@@ -251,6 +253,47 @@ Do not treat this as a tiny UI toggle. It touches local state, Supabase RPCs, Li
   revisiting: Android's `BlurView` renders as a flat tint with no actual blur
   unless `experimentalBlurMethod` is set, which Expo's own docs flag as
   performance/graphics-risky.
+
+### Classic/Minimalist Theme-Pack System + Visual Redesign Pass (2026-08-04, branch `experiment/glass-redesign-v2`, not merged)
+
+- Real, shipped-to-branch (not experimental in the "may be thrown away"
+  sense — this is intended to eventually reach `main`, just not merged yet)
+  **theme-pack system**: `themePack: 'classic' | 'minimalist'`, orthogonal
+  to the existing light/dark/system preference, persisted separately,
+  selectable from Settings. `useTheme()` resolves one of four full
+  `AppTheme` objects. Minimalist palette lives in
+  `src/styles/redesignPalette.ts` (warm neutral ground, single indigo
+  accent `#5B5BD6`, flat/zero-shadow); `AppText` resolves font family from
+  `theme.fontFamily` at render time so text switches automatically across
+  the whole app when the pack changes.
+- On top of that foundation: Home/Compete adopted the minimalist palette
+  where the automatic swap isn't enough, both screens' segmented tabs (and
+  every other segmented control in the app — Challenge detail, Mini
+  Missions, community-player/my-journey's shared segment + mode toggle)
+  got a fluid animated sliding indicator instead of an instant per-tab
+  background swap. `HabitCard.tsx` was redesigned around a small circular
+  day-grid badge (replacing a fire-icon streak ring), and the habit detail
+  screen's day grid moved from rounded-squares with a multi-arc "brand
+  ring" to plain circles with a simple photo/text corner badge, mirroring
+  the cohort screen's own per-day dot design. `StreakMemorySheet`'s
+  create-flow was restyled against a Claude Design mockup read via the
+  `claude_design` MCP.
+- **Flagged experimental within this pass**: `StreakMemoryGallery.tsx`'s
+  stacked-moment hex tiles ("Your moments" honeycomb) — replaced
+  independent per-tile random transition timers with a shared turn-based
+  scheduler so only one hex transitions at a time, in day order, as an
+  explicit "wave" rather than several tiles flickering at random. Pacing
+  was tuned across several rounds of verbal feedback, never confirmed by
+  actually watching it render.
+- All six commits (`1bec56c` dev-tooling, `9d979fc` theme-pack foundation,
+  `155c558` Home/Compete + HabitCard, `1e9bd5b` tab-indicator rollout,
+  `eeefd7c` habit-detail redesign, `0012252` memory-sheet + gallery wave)
+  live on `experiment/glass-redesign-v2`, branched from `main` at `dd6c66c`.
+  **Not merged into `main`, not pushed, no OTA/build.** Most of this was
+  not visually confirmed on-device/simulator (no tap-automation available
+  in that session's environment) — see `docs/CURRENT_WORK.md`'s
+  2026-08-04 entry for exactly what still needs a manual look before
+  merging.
 
 ## Build And Release Direction
 

@@ -24,7 +24,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as ImagePicker from "expo-image-picker";
-import { Flag, Globe, ImageIcon, Lock, Quote, Users, X } from "lucide-react-native";
+import { Camera, Flag, Globe, ImageIcon, Lock, Quote, Square, Users, X } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import { useTheme } from "../context/ThemeContext";
 import type { StreakMemory } from "../types/habit";
@@ -282,12 +282,16 @@ export const StreakMemorySheet = React.memo(function StreakMemorySheet({
           { text: "Cancel", style: "cancel", onPress: releasePickerLock },
           {
             text: "Take photo",
+            style: "neutral",
+            icon: <Camera size={18} color={theme.colors.textSecondary} strokeWidth={2} />,
             onPress: () => {
               launchPicker("camera");
             },
           },
           {
             text: "Photo library",
+            style: "neutral",
+            icon: <ImageIcon size={18} color={theme.colors.textSecondary} strokeWidth={2} />,
             onPress: () => {
               launchPicker("library");
             },
@@ -471,8 +475,8 @@ export const StreakMemorySheet = React.memo(function StreakMemorySheet({
                     isView
                       ? { backgroundColor: `${theme.colors.indigo[600]}33`, borderColor: theme.colors.indigo[500] }
                       : {
-                          backgroundColor: isDark ? withAlpha(theme.colors.green[500], 14) : withAlpha(theme.colors.green[600], 12),
-                          borderColor: isDark ? withAlpha(theme.colors.green[500], 45) : withAlpha(theme.colors.green[600], 35),
+                          backgroundColor: isDark ? withAlpha(theme.colors.green[500], 16) : withAlpha(theme.colors.green[600], 12),
+                          borderWidth: 0,
                         },
                   ]}
                 >
@@ -737,7 +741,7 @@ export const StreakMemorySheet = React.memo(function StreakMemorySheet({
                       style={[
                         styles.kicker,
                         isMemoryCreate && styles.kickerMemory,
-                        { color: theme.colors.cyan[400] },
+                        { color: theme.colors.indigo[400] },
                       ]}
                     >
                       {isMini ? "MINI MISSION" : `DAY ${dayLabel}`}
@@ -774,10 +778,18 @@ export const StreakMemorySheet = React.memo(function StreakMemorySheet({
                       ]}
                     >
                       <View style={styles.immutableNoticeIconWrap}>
-                        <Lock
-                          size={15}
-                          color={isDark ? theme.colors.yellow[400] : theme.colors.amber[500]}
-                        />
+                        {noticeVariant === "editable-until-complete" ? (
+                          <Square
+                            size={15}
+                            color={isDark ? theme.colors.yellow[400] : theme.colors.amber[500]}
+                            strokeWidth={2.2}
+                          />
+                        ) : (
+                          <Lock
+                            size={15}
+                            color={isDark ? theme.colors.yellow[400] : theme.colors.amber[500]}
+                          />
+                        )}
                       </View>
                       <View style={styles.immutableNoticeTextCol}>
                         <Text
@@ -1019,8 +1031,7 @@ export const StreakMemorySheet = React.memo(function StreakMemorySheet({
                           styles.btnSecondaryMemory,
                           stackMemoryActions && styles.btnMemoryStacked,
                           {
-                            borderColor: theme.colors.border,
-                            backgroundColor: isDark ? "rgba(148, 163, 184, 0.12)" : theme.colors.slate[750],
+                            backgroundColor: theme.colors.surfaceElevated,
                             opacity: submitting ? 0.5 : 1,
                           },
                         ]}
@@ -1047,17 +1058,20 @@ export const StreakMemorySheet = React.memo(function StreakMemorySheet({
                         styles.btnPrimary,
                         styles.btnPrimaryMemory,
                         (stackMemoryActions || isEditingPrefill) && styles.btnMemoryStacked,
-                        { backgroundColor: theme.colors.indigo[600], ...theme.shadow.glow, opacity: submitting ? 0.92 : 1 },
+                        {
+                          backgroundColor: isDark ? withAlpha(theme.colors.indigo[500], 20) : withAlpha(theme.colors.indigo[600], 12),
+                          opacity: submitting ? 0.92 : 1,
+                        },
                       ]}
                     >
                       {submitting ? (
-                        <ActivityIndicator color={theme.colors.white} />
+                        <ActivityIndicator color={theme.colors.indigo[400]} />
                       ) : (
                         <Text
                           style={[
                             styles.btnPrimaryText,
                             styles.btnPrimaryTextMemory,
-                            { color: theme.colors.white },
+                            { color: theme.colors.indigo[400] },
                             Platform.OS === "android" ? styles.btnMemoryTextAndroid : null,
                           ]}
                           numberOfLines={2}
@@ -1238,9 +1252,9 @@ const styles = StyleSheet.create({
   photoSlotMemory: {
     width: "100%",
     alignSelf: "stretch",
-    height: 128,
-    borderRadius: 12,
-    borderWidth: 2,
+    height: 140,
+    borderRadius: 20,
+    borderWidth: 1.5,
     borderStyle: "dashed",
     overflow: "hidden",
   },
@@ -1270,12 +1284,13 @@ const styles = StyleSheet.create({
     textAlignVertical: "top",
   },
   inputMemory: {
-    minHeight: 52,
+    minHeight: 64,
     marginTop: 4,
-    paddingVertical: 9,
-    fontSize: 12,
-    lineHeight: 17,
-    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    fontSize: 13.5,
+    lineHeight: 19,
+    borderRadius: 16,
   },
   counter: { alignSelf: "flex-end", fontSize: 11, marginTop: 4, marginBottom: 4 },
   counterMemory: { marginTop: 6, marginBottom: 0 },
@@ -1332,10 +1347,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   btnSecondaryMemory: {
+    flex: 1,
     minHeight: 58,
     paddingVertical: 10,
     paddingHorizontal: 8,
-    borderRadius: 12,
+    borderRadius: 16,
+    borderWidth: 0,
   },
   btnSecondaryText: { fontWeight: "700", fontSize: 14, textAlign: "center" },
   btnSecondaryTextMemory: {
@@ -1355,10 +1372,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   btnPrimaryMemory: {
+    flex: 1.25,
     minHeight: 58,
     paddingVertical: 10,
     paddingHorizontal: 8,
-    borderRadius: 12,
+    borderRadius: 16,
   },
   btnPrimaryText: { fontWeight: "800", fontSize: 15 },
   btnPrimaryTextMemory: {

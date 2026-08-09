@@ -7,7 +7,8 @@ import {
   Platform,
   type StyleProp,
 } from "react-native";
-import { fontFamily } from "../styles/fonts";
+import { fontFamily as classicFontFamily } from "../styles/fonts";
+import { useTheme } from "../context/ThemeContext";
 
 function numericWeight(w: TextStyle["fontWeight"]): number {
   if (w == null || w === "normal") return 400;
@@ -20,14 +21,21 @@ function numericWeight(w: TextStyle["fontWeight"]): number {
 }
 
 /**
- * Resolves `fontWeight` → Plus Jakarta file (React Native does not map weights for custom families).
- * Respects explicit `fontFamily` (e.g. for monospace later).
+ * Resolves `fontWeight` → the active theme pack's font file (React Native
+ * does not map weights for custom families). Respects explicit `fontFamily`
+ * (e.g. for monospace later). `fonts` is whichever theme is currently active
+ * (`theme.fontFamily`) — Classic maps to Plus Jakarta Sans, the Minimalist
+ * pack maps to Manrope/DM Sans — so this one function drives font-switching
+ * for every screen without each one needing to know which pack is active.
  */
-export function resolveAppTextStyle(style: StyleProp<TextStyle>): TextStyle {
+export function resolveAppTextStyle(
+  style: StyleProp<TextStyle>,
+  fonts: Record<"regular" | "medium" | "semibold" | "bold", string> = classicFontFamily,
+): TextStyle {
   const f = StyleSheet.flatten(style) as (TextStyle & { fontFamily?: string }) | undefined;
   if (!f) {
     return {
-      fontFamily: fontFamily.regular,
+      fontFamily: fonts.regular,
       ...(Platform.OS === "android" ? { includeFontPadding: false } : {}),
     };
   }
@@ -40,12 +48,12 @@ export function resolveAppTextStyle(style: StyleProp<TextStyle>): TextStyle {
   const w = numericWeight(f.fontWeight);
   const fam: TextStyle["fontFamily"] =
     w >= 700
-      ? fontFamily.bold
+      ? fonts.bold
       : w >= 600
-        ? fontFamily.semibold
+        ? fonts.semibold
         : w >= 500
-          ? fontFamily.medium
-          : fontFamily.regular;
+          ? fonts.medium
+          : fonts.regular;
   const { fontWeight: _omit, ...rest } = f;
   return {
     ...rest,
@@ -55,9 +63,13 @@ export function resolveAppTextStyle(style: StyleProp<TextStyle>): TextStyle {
 }
 
 /**
- * App-wide `Text` — Plus Jakarta Sans with weight → face mapping (aligned with tryitfirst-mobile-v2).
+ * App-wide `Text` — weight → face mapping, sourced from the active theme
+ * pack (Classic: Plus Jakarta Sans. Minimalist: Manrope/DM Sans) so every
+ * screen's text switches automatically with the theme pack, no per-screen
+ * changes needed.
  */
 export const Text = forwardRef<RNText, TextProps>(function Text({ style, ...props }, ref) {
-  const merged = useMemo(() => resolveAppTextStyle(style), [style]);
+  const { theme } = useTheme();
+  const merged = useMemo(() => resolveAppTextStyle(style, theme.fontFamily), [style, theme.fontFamily]);
   return <RNText ref={ref} {...props} style={merged} />;
 });

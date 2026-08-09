@@ -1030,6 +1030,24 @@ Color token discipline (as of 2026-07-31):
   `theme.colors.scrim` (modal/sheet backdrop dimming — always a dark tint
   regardless of app theme) and `theme.colors.sheen` (the glass-highlight
   flip — white in dark mode, dark ink in light mode).
+- `green`/`red`/`amber` each gained a `900` step (2026-08-06): a deliberately
+  dulled/muted shade of the same hue for contexts that want the semantic
+  meaning (streak broken, day repaired, notable streak) without reading as
+  a bright alert next to an otherwise-neutral card — `red[900]` #6B1E1E and
+  `amber[900]` #6B4413 are the same value in both light and dark. `green[900]`
+  is the **exception**: it started that way (#1B4332 both themes) but the
+  same near-black value read as too heavy against a white background, so
+  light mode got its own lighter step (#2D6A4F, 2026-08-06) — dark mode kept
+  #1B4332. **Don't assume a `900` token is theme-invariant just because
+  most of them are** — check `theme.ts` directly. (A 2026-08-08 session
+  experiment tried swapping `green[900]` for the brighter `green[500]` in
+  one specific component — the habit-detail/cohort day-grid's completed
+  circle, light mode only — rather than changing the shared token; that
+  stayed local to those call sites, `green[900]` itself is unchanged since
+  08-06.) This is the first `900` step added to the palette; only these
+  three hues have one so far. If a future ask wants "the dull/muted version
+  of X," reach for a `900` step on that hue first — add one the same way if
+  it doesn't exist yet, rather than hand-picking a fresh hex.
 - `GlassTopHighlight.tsx` (the shared glass-sheen top highlight) renders
   **nothing in light mode** — a first attempt at a light-mode tint (a
   slate-colored version of the same gradient) read as a flat gray smudge
@@ -1052,6 +1070,84 @@ Color token discipline (as of 2026-07-31):
   despite the hook call being present. Fix was just adding `theme` to the
   destructure. Moral either way: don't assume `theme` is in scope just
   because `isDark` clearly is — check what's actually destructured.
+- `AppDialogContext.tsx`'s shared `showAppAlert` supports a `"neutral"`
+  button style (2026-08-08) — same quiet bordered look as `"cancel"`, plus
+  an optional `icon` slot on `AppDialogButton` — for dialogs where every
+  option should read as an equal-weight choice (e.g. a photo-source
+  picker) rather than one filled primary CTA. Purely additive: existing
+  callers that don't set either field are unaffected. Reach for this
+  before hand-rolling a bespoke dialog when the ask is "make this alert's
+  buttons quieter/equal-weight."
+- `CohortStreakPill` (`src/components/CohortStreakPill.tsx`, 2026-08-08) is
+  a small shared building block — colorless filled flame icon immediately
+  followed by "Xd", no pill/border/background — for showing a streak count
+  inline anywhere in the app. Used in the cohort screen (leader card +
+  participant rows) and the Community feed's post header. Check both
+  families of call sites before changing its shape/props.
+
+### Theme Packs (as of 2026-08-04, branch `experiment/glass-redesign-v2`, not merged)
+
+A second, orthogonal preference alongside light/dark/system:
+`themePack: 'classic' | 'minimalist'` (`src/context/ThemeContext.tsx`),
+persisted separately in AsyncStorage (`@habitpro_theme_pack`), selectable
+from `SettingsModal`'s "APPEARANCE" section. `useTheme()` resolves one of
+four full `AppTheme` objects based on `(themePack, isDark)`:
+`darkTheme`/`lightTheme` (Classic, the original palette, unchanged) or
+`minimalistDarkTheme`/`minimalistLightTheme` (`src/styles/theme.ts`).
+
+- **Minimalist pack**: warm neutral ground (not cool slate-blue), a single
+  accent (`#5B5BD6`) instead of the classic indigo ramp, flat bordered
+  cards (shadow set to zero opacity/elevation — `GlassTopHighlight` renders
+  nothing for this pack, same as its existing light-mode no-op), Manrope
+  (display) + DM Sans (body) instead of Plus Jakarta Sans. Semantic colors
+  (cyan/amber/yellow/red/green) are unchanged from the matching Classic
+  palette.
+- **Why this scales with almost no per-screen work**: `AppText`'s `Text`
+  component resolves `fontWeight` -> font file via `theme.fontFamily` (from
+  `useTheme()`) at render time instead of a static import — every screen's
+  text switches families automatically when the pack changes. Any screen
+  already reading `theme.colors.*`/`theme.shadow.*` (the large majority of
+  the app) inherits the new palette/flat-shadow for free the same way.
+- **Extra hand-authored flourishes, not automatic**: Home (`index.tsx`),
+  Compete (`compete.tsx`), and `HabitCard.tsx` each derive a local `rp`
+  value (`themePack === 'minimalist' ? redesignPalette.dark/light : null`,
+  from the new `src/styles/redesignPalette.ts`) for things the automatic
+  token swap doesn't reach — recolored streak-ring track, tab-tray
+  backgrounds, chip fills, etc. `HabitCard` takes an optional
+  `redesignPalette` prop for the same purpose, passed non-null only by Home
+  when the pack is minimalist.
+- **Sliding tab indicator**: introduced alongside the theme pack (though
+  independent of it — applies in Classic too). Every segmented control in
+  the app (Home's Main Missions/Reports, Compete's Challenges/Leaderboard,
+  Challenge detail's Streaks/Activity/Repairs, Mini Missions'
+  Active/Queued/Completed/Failed, the Missions/Minis + Public/Private
+  controls shared by `community-player/[id].tsx`/`my-journey.tsx`) now
+  animates an `Animated.spring`-driven indicator behind the tabs instead of
+  swapping each tab's background instantly. Each instance measures its own
+  track width via `onLayout` and respects `reduceMotion`.
+- **`HabitCard.tsx`'s streak badge**: the old fire-icon streak ring
+  (`RingDayArcs`/`LightweightMissionRing`, SVG arcs) was replaced by
+  `MiniDayGrid` — a small top-right badge, one circle per mission day
+  (GitHub-contributions style), the day open for check-in blinking red, a
+  repair-eligible day showing a muted hammer icon instead of a colored
+  circle. `RingDayArcs`/`LightweightMissionRing` are still defined in the
+  file but are now dead code (nothing calls them) — safe to delete next
+  time that file is touched.
+- **Habit detail day grid** (`app/habit/[id].tsx`): the old
+  `HabitGridBrandRing` (multi-arc SVG ring + milestone star + generic
+  ambiguous "has a memory" dot) was replaced by `CompletedDayDot` — plain
+  circle + day number, with a small camera/message-square corner badge only
+  when that day has a photo/text memory, mirroring the cohort screen's own
+  per-day dot design (`CohortPeerStreakDots`) rather than inventing new
+  glyphs. Every grid cell (locked/current/completed/plain) is now circular,
+  not a rounded square. Milestone/repaired-day-specific treatment is
+  deferred, not dropped — the user has separate plans for that.
+- **Not visually confirmed on-device**: most of this pass was verified by
+  `npx tsc --noEmit` plus whatever screen happened to already be open in
+  the simulator — the session's environment had no tap-automation
+  available. See `docs/CURRENT_WORK.md`'s 2026-08-04 entry for the specific
+  list of what still needs a manual look before this is considered
+  production-ready or merged into `main`.
 
 ## Important User Flows
 
@@ -1142,7 +1238,7 @@ Also not limited to `showAppAlert`/`openUpsell` — any two full-screen `<Modal>
   - **Actual fix**: never open the Modal until the async data is fully ready — matching the `isSelf` pattern that never had this problem on either platform. The loading state moved *outside* the Modal entirely (a small `ActivityIndicator` shown on the tapped dot itself, via a `pendingTap` state), and `setOpen(...)` is only ever called once, with complete data. The Modal now only ever mounts with final content already in place, on both the peer and self paths alike — it never needs to update or remount mid-flight at all. When a Modal's content depends on an async fetch, prefer delaying the Modal's `visible` transition until the data is ready over trying to show/swap a loading state inside an already-open Modal — that in-between state is what caused both the original bug and the failed first fix attempt.
 - **Changing what a data field *means* requires auditing every place that already derives from its old meaning, not just the place that writes it.** The "Mark Day Complete" redesign (2026-07-25, `docs/CATALOG_ARCHITECTURE.md` addendum) changed checklist missions so that logging a task writes a `streakMemories[date]` entry *before* the day is completed — breaking a previously-safe assumption ("any memory entry for a date is proof that date should be in `completedDates`") that three independent, pre-existing self-heal call sites all relied on: `habitStore.ts`'s `completedDatesWithMemoryEvidence` (backing both `repairHabitCompletedDatesFromMemories` and `onRehydrateStorage`, so it also refires on every app cold start), a matching `useEffect` in `app/habit/[id].tsx`, and `src/lib/sync.ts`'s `habitFromRow` (runs on every remote pull/delta sync — the one that made the bug reproduce fastest). All three force-added a date to `completedDates` the instant its first task was logged, silently re-completing the day and firing the squad notification early. Fixed by requiring a *classic* marker (`note`/`imageUrl`/`imageUri`/`checkInOnly`/`repairSource`) before counting a memory as completion evidence, not mere key presence. When changing an existing field/flag's meaning, grep for every reader of it first — the bug surfaces where the reader is, not where the writer changed.
 - **`useEffect` runs after render — a ref sized to match a prop at render time, then "corrected" for a changed prop inside a `useEffect`, has a window where the render reads a too-short/stale ref.** Found in `StreakMemoryGallery.tsx`'s hex-stack shuffle animation (2026-07-26): one `Animated.Value` per stacked photo lived in a `useRef` array sized to the current photo count, resized inside a `useEffect` when the count grew. The render that *first* saw a 2-photo day gain a 3rd task (logging it while that day's hex tile was still mounted on screen) indexed the not-yet-resized array, got `undefined`, and called `undefined.interpolate(...)` — a hard crash, identical on iOS and Android since it's a plain JS `TypeError`, not anything native. Only triggered by an *update* to an already-mounted component; a fresh mount always sizes correctly from its `useState`/`useRef` initializer, which is why it only reproduced on a task's 3rd-and-later log, never the 1st or 2nd. Fixed by moving the resize into a plain, guarded `if` block in the render body (mutating a ref during render takes effect immediately for that same render; a paired `setState` call there is React's documented "adjust state while rendering" pattern, safe as long as it's guarded so it can't loop). When a ref/array needs to track a prop that can grow while the owning component stays mounted, do the resize synchronously in the render body, not in an effect.
-- **`SplashGate` (`src/components/SplashGate.tsx`) mounts the real app content immediately, *underneath* its splash overlay** — the overlay is a separate absolutely-positioned layer on top (`AnimatedSplashOverlay`, z-index 9999), not something the real screens render behind a gate for. A mount-triggered animation (e.g. `HabitCard`'s stack-up entrance, added 2026-07-26) that starts immediately in a `useEffect` on mount will therefore run to completion *behind the still-opaque splash* on the very first cold launch (the overlay's minimum display time is 2.4s+), and the user only ever sees it play on a later remount (tab switch, navigating back) — never on actual app startup, which is usually the one moment it matters most. Fixed with a one-shot signal, `src/lib/appReadySignal.ts` (`markAppReady()` called from `SplashGate`'s `onDismissed`; `onAppReady(callback)` fires immediately if already latched, otherwise waits) — any "first impression" mount animation should start inside `onAppReady(...)`, not directly in its own effect, or check this pattern before assuming a "the animation isn't working" report is about the animation's tuning rather than its timing.
+- **`SplashGate` (`src/components/SplashGate.tsx`) mounts the real app content immediately, *underneath* its splash overlay** — the overlay is a separate absolutely-positioned layer on top (`AnimatedSplashOverlay`, z-index 9999), not something the real screens render behind a gate for. A mount-triggered animation (e.g. `HabitCard`'s stack-up entrance, added 2026-07-26) that starts immediately in a `useEffect` on mount will therefore run to completion *behind the still-opaque splash* on the very first cold launch (the overlay's minimum display time is 2.4s+), and the user only ever sees it play on a later remount (tab switch, navigating back) — never on actual app startup, which is usually the one moment it matters most. Fixed with a one-shot signal, `src/lib/appReadySignal.ts` (`markAppReady()` called from `SplashGate`'s `onDismissed`; `onAppReady(callback)` fires immediately if already latched, otherwise waits) — any "first impression" mount animation should start inside `onAppReady(...)`, not directly in its own effect, or check this pattern before assuming a "the animation isn't working" report is about the animation's tuning rather than its timing. Second confirmed instance (2026-08-06): the Home FAB's "forms and rises" entrance hit the exact same bug — worth checking for this pattern by default on any new mount-triggered Home-screen animation, not just re-discovering it each time.
 - **A `ScrollView`/`FlatList` where every pixel is covered by tappable children must never set `canCancelContentTouches={false}`.** This is an iOS-only prop; React Native's own doc comment on it reads "When false, once tracking starts, won't try to drag if the touch moves." Found in `CohortNudgeChips.tsx`'s horizontal nudge-chip row (2026-07-31), reported by the user as "I can scroll on Android but not iOS" — exactly the signature of an iOS-only prop nobody remembered was there. Since the whole scrollable width is Pressable chips, a touch always starts tracking on a child first, and with this prop set, iOS never lets the ScrollView reclaim that touch to scroll no matter how far the finger drags. Android ignores the prop entirely, which is why it worked there. Fix: remove it, let it default to `true`. `directionalLockEnabled` (a different prop, just prevents diagonal drift once a direction is committed) is unrelated and fine to keep. When a scroll container feels frozen on iOS only and every child is tappable, check for this prop before assuming a gesture-responder conflict.
 - **Off-palette color drift and a whole class of "no `theme` in scope" bugs, found via a repo-wide color-token sweep (2026-07-31).** A grep for `isDark ? "rgba(...)" : "rgba(...)"` turned up ~289 hand-typed color decisions instead of routing through `src/styles/theme.ts`; several of the most-repeated ones were confirmed off-palette — stock Tailwind hex (`rgba(99,102,241,...)`) instead of this app's actual indigo token (`#7C5CF2`/`#5B3FDE`), invisible because nothing ever compared the hand-typed literal against the real token. Fixed by adding `withAlpha(hex, alphaPercent)` to `theme.ts` (derives a tint directly from a real token) plus two new tokens for jobs that aren't a brand-hue tint — `scrim` (backdrop dimming, always dark) and `sheen` (the glass-highlight flip, white in dark mode / dark ink in light mode) — then converting every instance where both sides of the ternary confidently matched a known token. Separately, this surfaced a real latent-crash pattern in two related but distinct forms: (1) a component that receives `isDark` as a **prop** rather than calling `useTheme()` itself has no `theme` object in scope at all (`ShimmerBlock.tsx`, `fuel/FuelQuickMinutesStrip.tsx`, `fuel/FuelTimePresetButton.tsx`) — fixed by importing `darkTheme`/`lightTheme` directly and selecting per the `isDark` prop; (2) `FocusMissionControlModal` (`app/mini/[id].tsx`) does call `useTheme()`, but only ever destructured `{ isDark }` from it, never `theme` — fixed by adding `theme` to the destructure. When converting any hardcoded color to a theme reference, confirm `theme` (not just `isDark`) is actually in scope — check the destructure, don't assume it from the hook call alone. Full list of what was and wasn't converted (a handful of genuinely one-off colors were deliberately left as literals rather than forced into a token with exactly one caller) in `docs/CURRENT_WORK.md`.
 

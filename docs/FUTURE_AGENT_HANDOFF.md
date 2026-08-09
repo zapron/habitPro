@@ -23,7 +23,74 @@ Then inspect the files relevant to the user request.
 
 ## Current User Priorities
 
-- **Most current, as of 2026-07-31**: a design-lead-style UI/UX audit pass
+- **Most current, as of 2026-08-08**: a large minimalist pass across the
+  cohort/squad screen, the Leaderboard, and the Community feed, plus a
+  Community card *structural* restructure (header/photo/footer). Full
+  detail in `docs/CURRENT_WORK.md`'s 2026-08-08 entry and
+  `docs/WORK_HISTORY.md`. **All six commits live on
+  `experiment/glass-redesign-v2`, still not merged into `main`.** Two
+  things worth knowing before touching this area again:
+  - The Community feed card's elevated-card treatment (background/border/
+    shadow) was built, iterated on extensively (fixing real iOS shadow-
+    clipping and Android elevation bugs along the way), then **deleted
+    entirely** in favor of a flat, chrome-free card per an explicit "let's
+    try that" experiment. If the user says "go back" on this, it needs to
+    be rebuilt from `docs/CURRENT_WORK.md`'s 2026-08-08 entry (which has
+    the specifics) — it is not toggled behind a flag, it's gone.
+  - `CohortStreakPill` (`src/components/CohortStreakPill.tsx`) is now a
+    shared "colorless flame + Xd" building block reused in the cohort
+    screen *and* the Community feed's post header — if it changes, check
+    both call sites.
+  Same sandbox limitation as every prior session — none of this was
+  confirmed live on-device; see `docs/CURRENT_WORK.md` for the specific
+  spots most worth a real look.
+- **As of 2026-08-06**: continued the minimalist redesign with
+  a "dull it down further" pass — Home's XP-bar dot, FAB fill, notification
+  badge, and streak/status colors across `HabitCard`/`StreakProgressCard`
+  all moved from vivid to muted, plus a new `900`-level dulled shade added
+  to `green`/`red`/`amber` in `theme.ts` to back that consistently instead
+  of one-off hex picks (see app-architecture.md's "Color token discipline").
+  The habit detail day grid was reworked from a two-ring "double circle"
+  into one solid `green[900]` circle with an icon-priority system (camera >
+  hammer-for-repaired > message-square > plain number), and the in-progress
+  day's checklist indicator changed from a stroked ring-arc to an actual
+  filled pie-slice. The Reminder/Type card lost its colored icon chips.
+  `Timer.tsx` gained a minimalist-only "fire holds, then collapses so the
+  digits grow into the space" mount animation, lost its elapsed/remaining
+  toggle pill (the whole digit block is the tap target now), and the
+  memory-capture honeycomb (`StreakMemoryGallery.tsx`) had its wave
+  cross-fade, quote glyph, and 4-color kicker system stripped entirely,
+  keeping only the hex silhouette (a "Concept B" redesign chosen after
+  reviewing a published audit artifact against real minimalist references).
+  Also fixed a real bug: reminder "Lock time" silently did nothing in Expo
+  Go (push permission is always `"unavailable"` there) — the lock-in is now
+  decoupled from notification-permission success entirely. Full detail in
+  `docs/CURRENT_WORK.md`'s 2026-08-06 entry and `docs/WORK_HISTORY.md`.
+  **All six commits live on `experiment/glass-redesign-v2`, still not
+  merged into `main`.** Most of this was again verified only by
+  `tsc`/`git diff --check`, not live on-device interaction (same sandbox
+  limitation as the prior session) — see `docs/CURRENT_WORK.md` for what
+  specifically still needs a real look.
+- **As of 2026-08-04**: a Classic/Minimalist theme-pack system
+  (new `themePack` preference, Settings-selectable) plus a large iterative
+  visual-redesign pass — Home/Compete tab restyle with an animated sliding
+  indicator (rolled out to every other segmented control in the app too),
+  a from-scratch `HabitCard` redesign (circular day-grid badge replacing the
+  fire-icon streak ring, colorless mission-type pills, repair-as-hammer-icon
+  instead of a separate button), the habit detail screen's day grid and
+  repair-banner redesign, and a `StreakMemorySheet` restyle against a Claude
+  Design mockup read via the `claude_design` MCP. Full detail in
+  `docs/CURRENT_WORK.md`'s 2026-08-04 entry and `docs/WORK_HISTORY.md`.
+  **All six commits live on branch `experiment/glass-redesign-v2`, not
+  `main`** — check which branch you're on before assuming this is live.
+  No merge/push/OTA has happened or been requested. Most of it was **not
+  visually confirmed on-device** (the session's environment had no
+  tap-automation available) — see `docs/CURRENT_WORK.md` for exactly what
+  still needs a manual look. Also: `HabitCard.tsx` now has two dead
+  components (`RingDayArcs`, `LightweightMissionRing`) left over from the
+  old fire-ring design, no longer called anywhere — worth removing next
+  time that file is touched, not urgent on its own.
+- **As of 2026-07-31**: a design-lead-style UI/UX audit pass
   shipped (XP-gain badge, leaderboard medals + countdown, nudge feedback,
   pulsing invite dot, Quick Complete confirmation dialog — OTA'd, runtime
   `1.1.35`, commit `7322dec`), followed by a full color-token sweep (see
@@ -205,7 +272,10 @@ If the user reports Home jank after splash:
 
 1. Inspect `app/(tabs)/index.tsx` and `src/components/HabitCard.tsx`.
 2. Check how many `HabitCard` rows mount initially.
-3. Temporarily replace Android long-mission `RingDayArcs` with a lightweight progress ring/text.
+3. As of 2026-08-04, the per-card streak indicator is `MiniDayGrid` (a
+   circle-grid badge), not the old `RingDayArcs`/`LightweightMissionRing`
+   SVG ring (both now dead code, unused) — if Android is slow rendering the
+   grid on a long mission, look there first instead of the old ring code.
 4. Confirm whether touch response improves before changing mission detail.
 5. Keep splash out of the blame path unless profiling shows splash-specific stalls; the user clarified the jank starts on Home after splash.
 

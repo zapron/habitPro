@@ -1,14 +1,6 @@
 import { Text } from "./AppText";
-import { Animated, Easing, Platform, StyleSheet, View } from "react-native";
-import { Sun } from "lucide-react-native";
-import { useEffect, useMemo, useRef } from "react";
+import { Platform, StyleSheet, View } from "react-native";
 import type { AppTheme } from "../styles/theme";
-import { FireLottie } from "./FireLottie";
-import { withAlpha } from "../styles/theme";
-
-// Easy-off switch for trying Lottie in the UI.
-const USE_FIRE_LOTTIE = true;
-const FIRE_LOTTIE_URI = "https://fonts.gstatic.com/s/e/notoemoji/latest/1f525/lottie.json";
 
 /** Rich streak-board headline. Copy matches `challenge/[id]` cohort logic. */
 export type CohortMastheadModel =
@@ -30,33 +22,6 @@ export function CohortMastheadTrophyNarrative({ theme, model, isDark = false }: 
   const base = theme.colors.textSecondary;
   const nameColor = theme.colors.textPrimary;
   const streakAccent = theme.colors.indigo[400];
-
-  const pulse = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulse, { toValue: 1, duration: 1100, easing: Easing.out(Easing.quad), useNativeDriver: true }),
-        Animated.timing(pulse, { toValue: 0, duration: 1100, easing: Easing.in(Easing.quad), useNativeDriver: true }),
-      ]),
-      { resetBeforeIteration: false },
-    );
-    loop.start();
-    return () => {
-      loop.stop();
-    };
-  }, [pulse]);
-
-  const sunGlowStyle = useMemo(() => {
-    const opacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.16, 0.34] });
-    const scale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.12] });
-    return { opacity, transform: [{ scale }] } as const;
-  }, [pulse]);
-
-  const sunPulseStyle = useMemo(() => {
-    const scale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.04] });
-    return { transform: [{ scale }] } as const;
-  }, [pulse]);
 
   const body = (() => {
     switch (model.kind) {
@@ -81,7 +46,7 @@ export function CohortMastheadTrophyNarrative({ theme, model, isDark = false }: 
           <Text style={[styles.body, { color: base }]} numberOfLines={4} {...textProps}>
             <Text style={{ color: nameColor, fontWeight: "700" }}>{model.leadersCount}</Text>
             <Text> tied with a </Text>
-            <Text style={{ color: streakAccent, fontWeight: "800" }}>{model.streakDays}-day streak</Text>
+            <Text style={{ color: streakAccent, fontWeight: "800" }}>{model.streakDays} day streak</Text>
             <Text>, who pulls ahead?</Text>
           </Text>
         );
@@ -90,7 +55,7 @@ export function CohortMastheadTrophyNarrative({ theme, model, isDark = false }: 
           <Text style={[styles.body, { color: base }]} numberOfLines={4} {...textProps}>
             <Text style={{ color: nameColor, fontWeight: "700" }}>{model.leaderName}</Text>
             <Text> is leading on a </Text>
-            <Text style={{ color: streakAccent, fontWeight: "800" }}>{model.streakDays}-day streak</Text>
+            <Text style={{ color: streakAccent, fontWeight: "800" }}>{model.streakDays} day streak</Text>
             <Text>.</Text>
           </Text>
         );
@@ -99,25 +64,6 @@ export function CohortMastheadTrophyNarrative({ theme, model, isDark = false }: 
 
   return (
     <View style={styles.row}>
-      <View style={styles.iconBadge}>
-        {USE_FIRE_LOTTIE ? (
-          <FireLottie source={{ uri: FIRE_LOTTIE_URI }} size={44} />
-        ) : (
-          <>
-            <Animated.View
-              style={[
-                styles.sunGlow,
-                { backgroundColor: isDark ? withAlpha(theme.colors.yellow[400], 65) : withAlpha(theme.colors.yellow[400], 55) },
-                sunGlowStyle,
-              ]}
-            />
-            <Animated.View style={sunPulseStyle}>
-              <Sun size={22} color={theme.colors.amber[500]} strokeWidth={2.1} />
-            </Animated.View>
-          </>
-        )}
-      </View>
-
       <View style={styles.textColumn}>
         {body}
       </View>
@@ -164,20 +110,6 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
     justifyContent: "center",
-  },
-  iconBadge: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    alignItems: "center",
-    justifyContent: "center",
-    overflow: "hidden",
-  },
-  sunGlow: {
-    position: "absolute",
-    width: 22,
-    height: 22,
-    borderRadius: 9999,
   },
   body: {
     fontSize: 13,

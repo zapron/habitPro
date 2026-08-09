@@ -166,10 +166,7 @@ function parseGroupMissionDisplay(g: ChallengeGroupRow | null): { title: string;
 
 function participantDisplayName(label: ProfileLabel | undefined): string {
   if (label?.displayName) return label.displayName;
-  if (label?.username) {
-    const u = label.username;
-    return u.charAt(0).toUpperCase() + u.slice(1);
-  }
+  if (label?.username) return label.username;
   return "Member";
 }
 
@@ -221,6 +218,7 @@ const STREAK_SKELETON_CARD_COUNT = 3;
 const EMPTY_SENT_PRESET_NUDGE_KINDS = new Set<PresetChallengeNudgeKind>();
 
 type ChallengeDetailTab = "streaks" | "activity" | "repairs";
+const DETAIL_TAB_ORDER: ChallengeDetailTab[] = ["streaks", "activity", "repairs"];
 
 function normalizeChallengeDetailTab(value: string | string[] | undefined): ChallengeDetailTab {
   const raw = Array.isArray(value) ? value[0] : value;
@@ -409,34 +407,22 @@ const ParticipantCard = memo(function ParticipantCard({
               {nameOnCard}
             </Text>
           </Pressable>
-          {memberLevel != null ? (
-            <View style={[styles.levelPill, themedStyles.levelPill]}>
-              <Text style={[styles.levelPillText, { color: theme.colors.yellow[400] }]}>
-                Lv {memberLevel}
-              </Text>
-            </View>
-          ) : null}
-          {habit ? (
-            <View
-              style={[
-                styles.memoryVisibilityPill,
-                {
-                  borderColor: squadVisible
-                    ? isDark ? withAlpha(theme.colors.cyan[400], 36) : withAlpha(theme.colors.cyan[500], 28)
-                    : theme.colors.border,
-                  backgroundColor: squadVisible
-                    ? isDark ? withAlpha(theme.colors.cyan[400], 12) : withAlpha(theme.colors.cyan[500], 8)
-                    : isDark ? withAlpha(theme.colors.textSecondary, 10) : withAlpha(theme.colors.textMuted, 7),
-                },
-              ]}
-              accessibilityLabel={squadVisible ? "Memories visible to squad" : "Memories private"}
-            >
+          <View style={styles.participantBadgeRow}>
+            {memberLevel != null ? (
+              <View style={[styles.levelPill, themedStyles.levelPill]}>
+                <Text style={[styles.levelPillText, { color: theme.colors.amber[500] }]}>
+                  Lv {memberLevel}
+                </Text>
+              </View>
+            ) : null}
+            {habit ? (
               <VisibilityIcon
-                size={13}
-                color={squadVisible ? theme.colors.cyan[400] : theme.colors.textMuted}
+                size={11}
+                color={theme.colors.textMuted}
+                accessibilityLabel={squadVisible ? "Memories visible to squad" : "Memories private"}
               />
-            </View>
-          ) : null}
+            ) : null}
+          </View>
         </View>
         <View style={styles.participantHeaderSpacer} />
         <View style={styles.participantHeaderStreakWrap}>
@@ -490,6 +476,7 @@ export default function ChallengeDetailScreen() {
   const requestedTab = normalizeChallengeDetailTab(tab);
   const router = useRouter();
   const { theme, isDark } = useTheme();
+  const reduceMotion = useReducedMotion();
   const insets = useSafeAreaInsets();
   const { showToast } = useToast();
   const { session } = useAuth();
@@ -576,6 +563,21 @@ export default function ChallengeDetailScreen() {
   const [missionDetailsOpen, setMissionDetailsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<ChallengeDetailTab>(requestedTab);
   const [streakContentReady, setStreakContentReady] = useState(false);
+  const [detailTabsWidth, setDetailTabsWidth] = useState(0);
+  const detailTabAnim = useRef(new Animated.Value(DETAIL_TAB_ORDER.indexOf(requestedTab))).current;
+  useEffect(() => {
+    const toValue = DETAIL_TAB_ORDER.indexOf(activeTab);
+    if (reduceMotion) {
+      detailTabAnim.setValue(toValue);
+      return;
+    }
+    Animated.spring(detailTabAnim, {
+      toValue,
+      useNativeDriver: true,
+      friction: 10,
+      tension: 90,
+    }).start();
+  }, [activeTab, reduceMotion, detailTabAnim]);
 
   const themedStyles = useMemo(() => {
     return {
@@ -585,8 +587,7 @@ export default function ChallengeDetailScreen() {
         ...theme.shadow.card,
       },
       levelPill: {
-        borderColor: theme.colors.border,
-        backgroundColor: isDark ? withAlpha(theme.colors.yellow[400], 12) : withAlpha(theme.colors.yellow[400], 12),
+        backgroundColor: isDark ? withAlpha(theme.colors.amber[500], 18) : withAlpha(theme.colors.amber[500], 16),
       },
       recoveryCard: {
         backgroundColor: theme.colors.surface,
@@ -1896,11 +1897,12 @@ export default function ChallengeDetailScreen() {
                 style={[
                   styles.dayPill,
                   {
-                    backgroundColor: isDark ? withAlpha(theme.colors.indigo[500], 20) : withAlpha(theme.colors.indigo[500], 14),
+                    borderColor: theme.colors.border,
+                    backgroundColor: isDark ? "rgba(255,255,255,0.06)" : theme.colors.surfaceElevated,
                   },
                 ]}
               >
-                <Text style={[styles.dayPillText, { color: theme.colors.indigo[400] }]}>
+                <Text style={[styles.dayPillText, { color: theme.colors.textSecondary }]}>
                   Day {viewerMissionSlot} of {missionTotalDays}
                 </Text>
               </View>
@@ -1920,12 +1922,41 @@ export default function ChallengeDetailScreen() {
             style={[
               styles.detailTabs,
               {
-                backgroundColor: isDark ? "rgba(15, 23, 42, 0.72)" : theme.colors.surface,
+                backgroundColor: isDark ? theme.colors.surface : theme.colors.surfaceElevated,
                 borderColor: theme.colors.border,
               },
             ]}
+            onLayout={(event) => {
+              const fullWidth = event.nativeEvent.layout.width;
+              setDetailTabsWidth(Math.max(0, fullWidth - 2 * 4 - 2 * 1));
+            }}
           >
             <GlassTopHighlight radius={18} />
+            {detailTabsWidth > 0 ? (() => {
+              const itemWidth = (detailTabsWidth - 4 * (DETAIL_TAB_ORDER.length - 1)) / DETAIL_TAB_ORDER.length;
+              const step = itemWidth + 4;
+              return (
+                <Animated.View
+                  pointerEvents="none"
+                  style={[
+                    styles.detailTabIndicator,
+                    {
+                      width: itemWidth,
+                      backgroundColor: isDark ? theme.colors.surfaceElevated : theme.colors.surface,
+                      ...theme.shadow.card,
+                      transform: [
+                        {
+                          translateX: detailTabAnim.interpolate({
+                            inputRange: DETAIL_TAB_ORDER.map((_, i) => i),
+                            outputRange: DETAIL_TAB_ORDER.map((_, i) => i * step),
+                          }),
+                        },
+                      ],
+                    },
+                  ]}
+                />
+              );
+            })() : null}
             {detailTabs.map((tab) => {
               const active = activeTab === tab.key;
               const attentionBadge = tab.key === "repairs" && tab.count === "!";
@@ -1940,19 +1971,12 @@ export default function ChallengeDetailScreen() {
                       : `Show ${tab.label}`
                   }
                   onPress={() => setActiveTab(tab.key)}
-                  style={[
-                    styles.detailTab,
-                    {
-                      backgroundColor: active
-                        ? theme.colors.indigo[500]
-                        : "transparent",
-                    },
-                  ]}
+                  style={styles.detailTab}
                 >
                   <Text
                     style={[
                       styles.detailTabText,
-                      { color: active ? theme.colors.white : theme.colors.textSecondary },
+                      { color: active ? theme.colors.indigo[600] : theme.colors.textSecondary },
                     ]}
                     numberOfLines={1}
                   >
@@ -1964,14 +1988,14 @@ export default function ChallengeDetailScreen() {
                         styles.detailTabBadge,
                         {
                           backgroundColor: active
-                            ? "rgba(255,255,255,0.18)"
+                            ? theme.colors.indigo[600]
                             : attentionBadge
                               ? isDark ? withAlpha(theme.colors.amber[500], 16) : withAlpha(theme.colors.amber[500], 12)
                             : isDark
                               ? "rgba(148, 163, 184, 0.14)"
                               : theme.colors.surfaceElevated,
                           borderColor: active
-                            ? "rgba(255,255,255,0.26)"
+                            ? theme.colors.indigo[600]
                             : attentionBadge
                               ? isDark ? withAlpha(theme.colors.amber[500], 42) : withAlpha(theme.colors.amber[500], 34)
                             : theme.colors.border,
@@ -2756,9 +2780,9 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     paddingHorizontal: 12,
     borderRadius: 9999,
-    borderWidth: 0,
+    borderWidth: 1,
   },
-  dayPillText: { fontSize: 11, fontWeight: "800", letterSpacing: 0.3 },
+  dayPillText: { fontSize: 12, fontWeight: "700", letterSpacing: 0.3 },
   plusGateRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 14 },
   plusGateText: { fontSize: 12, fontWeight: "700" },
   detailTabs: {
@@ -2780,10 +2804,17 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 6,
   },
+  detailTabIndicator: {
+    position: "absolute",
+    top: 4,
+    bottom: 4,
+    left: 4,
+    borderRadius: 14,
+  },
   detailTabText: {
     fontSize: 13,
     lineHeight: 17,
-    fontWeight: "900",
+    fontWeight: "700",
   },
   detailTabBadge: {
     minWidth: 22,
@@ -3156,22 +3187,18 @@ const styles = StyleSheet.create({
   participantHeaderStreakWrap: {
     flexShrink: 0,
   },
-  levelPill: {
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderRadius: 9999,
-    borderWidth: 1,
-  },
-  levelPillText: { fontSize: 11, fontWeight: "800", letterSpacing: 0.2 },
-  memoryVisibilityPill: {
-    width: 24,
-    height: 24,
-    borderRadius: 9999,
-    borderWidth: 1,
+  participantBadgeRow: {
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
+    gap: 6,
     flexShrink: 0,
   },
+  levelPill: {
+    paddingVertical: 1,
+    paddingHorizontal: 4,
+    borderRadius: 9999,
+  },
+  levelPillText: { fontSize: 7, fontWeight: "800", letterSpacing: 0.1 },
   participantName: {
     fontSize: 18,
     fontWeight: "800",

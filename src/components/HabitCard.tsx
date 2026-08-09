@@ -12,7 +12,7 @@ import {
 } from "react-native";
 import { useRouter } from 'expo-router';
 import { GlassTopHighlight } from './GlassTopHighlight';
-import { Flame, Check, CircleX, Plane, Gamepad2, Globe, Swords, Users } from 'lucide-react-native';
+import { Check, CircleX, Users, Plane, Gamepad2, Swords, Hammer, Flame } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
 import { withAlpha } from '../styles/theme';
 import { Habit } from '../types/habit';
@@ -26,6 +26,8 @@ import { useReducedMotion } from "../hooks/useReducedMotion";
 import { showAppAlert } from "../context/AppDialogContext";
 import Svg, { Circle, G } from "react-native-svg";
 import { prewarmChallengeStreaks } from "../lib/groupChallengesApi";
+import { fontFamily } from "../styles/fonts";
+import type { redesignPalette } from "../styles/redesignPalette";
 
 const prewarmedGroupStreakIds = new Set<string>();
 const ANDROID_SEGMENTED_RING_DAY_LIMIT = 45;
@@ -113,6 +115,125 @@ const RingBoundaryDots = memo(function RingBoundaryDots({
   }
 
   return <View style={{ position: "absolute", left: 0, top: 0, width: ringSize, height: ringSize }}>{nodes}</View>;
+});
+
+/**
+ * GitHub-contributions-style badge: one small circle per mission day, filled
+ * for completed days, empty for the rest. The day currently open for
+ * check-in (if any) blinks red instead, so "you can mark this one" reads at
+ * a glance without a separate hint.
+ */
+const MiniDayGrid = memo(function MiniDayGrid({
+  size,
+  totalDays,
+  habit,
+  nowMs,
+  completedDateSet,
+  doneColor,
+  emptyColor,
+  activeDateStr,
+  activeColor,
+  reduceMotion,
+  repairDateStr,
+  repairColor,
+  onRepairPress,
+}: {
+  size: number;
+  totalDays: number;
+  habit: Habit;
+  nowMs: number;
+  completedDateSet: ReadonlySet<string>;
+  doneColor: string;
+  emptyColor: string;
+  activeDateStr?: string | null;
+  activeColor?: string;
+  reduceMotion?: boolean;
+  repairDateStr?: string | null;
+  repairColor?: string;
+  onRepairPress?: () => void;
+}) {
+  const days = Math.max(1, Math.floor(totalDays));
+  const columns = Math.max(1, Math.ceil(Math.sqrt(days)));
+  const rows = Math.max(1, Math.ceil(days / columns));
+  const gap = 2;
+  const cell = Math.max(3, Math.floor((size - gap * (Math.max(columns, rows) - 1)) / Math.max(columns, rows)));
+
+  const blink = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    if (!activeDateStr || reduceMotion) {
+      blink.stopAnimation();
+      blink.setValue(1);
+      return undefined;
+    }
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(blink, { toValue: 0.2, duration: 500, useNativeDriver: true, isInteraction: false }),
+        Animated.timing(blink, { toValue: 1, duration: 500, useNativeDriver: true, isInteraction: false }),
+      ]),
+    );
+    loop.start();
+    return () => {
+      loop.stop();
+      blink.setValue(1);
+    };
+  }, [activeDateStr, reduceMotion, blink]);
+
+  const cells = [];
+  for (let day = 0; day < days; day++) {
+    const dateStr = calendarDateForHabitMissionDayIndex(habit, day, nowMs);
+    const done = Boolean(dateStr && completedDateSet.has(dateStr));
+    const isActive = Boolean(activeDateStr && dateStr === activeDateStr);
+    const isRepair = Boolean(repairDateStr && dateStr === repairDateStr);
+    cells.push(
+      isRepair ? (
+        <TouchableOpacity
+          key={day}
+          onPress={onRepairPress}
+          hitSlop={6}
+          activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel="Repair streak"
+          style={{ width: cell, height: cell, alignItems: "center", justifyContent: "center" }}
+        >
+          <Hammer size={Math.max(cell, 6)} color={repairColor} strokeWidth={2.2} />
+        </TouchableOpacity>
+      ) : isActive ? (
+        <Animated.View
+          key={day}
+          style={{
+            width: cell,
+            height: cell,
+            borderRadius: cell / 2,
+            backgroundColor: activeColor,
+            opacity: blink,
+          }}
+        />
+      ) : (
+        <View
+          key={day}
+          style={{
+            width: cell,
+            height: cell,
+            borderRadius: cell / 2,
+            backgroundColor: done ? doneColor : emptyColor,
+          }}
+        />
+      ),
+    );
+  }
+
+  return (
+    <View
+      style={{
+        width: columns * cell + gap * (columns - 1),
+        flexDirection: "row",
+        flexWrap: "wrap",
+        gap,
+      }}
+    >
+      {cells}
+    </View>
+  );
 });
 
 const RingDayArcs = memo(function RingDayArcs({
@@ -240,18 +361,30 @@ interface HabitCardProps {
     nowMs: number;
     /** Position in the currently rendered list — drives this card's entrance stagger delay when it first mounts (capped for long lists). */
     index: number;
+    /**
+     * "habitPro light mode redesign" palette (Claude Design mockup) — passed
+     * only by Home while previewing that direction (light + dark variants;
+     * this card picks the one matching its own theme). Leave unset for the
+     * normal themed card.
+     */
+    redesignPalette?: typeof redesignPalette | null;
 }
 
-export const HabitCard = memo(({ item, nowMs, index }: HabitCardProps) => {
+export const HabitCard = memo(({ item, nowMs, index, redesignPalette }: HabitCardProps) => {
     const router = useRouter();
     const { theme, isDark } = useTheme();
     const reduceMotion = useReducedMotion();
+    const rp = redesignPalette ? (isDark ? redesignPalette.dark : redesignPalette.light) : null;
     const totalDays = Math.max(1, item.totalDays ?? 21);
     const needsReport = useMemo(() => needsMainMissionOutcome(item, nowMs), [item, nowMs]);
     const missionWon = item.missionReport === 'accomplished';
     const missionFailed = item.missionReport === 'failed';
     const failedOutcomeColor = isDark ? "#fca5a5" : "#fb7185";
     const isManual = (item.mode ?? 'autopilot') === 'manual';
+    const contextTags = [
+        { label: isManual ? "Manual" : "Auto", icon: isManual ? Gamepad2 : Plane },
+        item.challengeGroupId ? { label: "Squad", icon: Swords } : null,
+    ].filter((tag): tag is { label: string; icon: typeof Plane } => Boolean(tag));
     const completedDateSet = useMemo(() => new Set(item.completedDates), [item.completedDates]);
     /** Mission completion: distinct days checked / campaign length */
     const campaignProgress = Math.min(item.completedDates.length / totalDays, 1);
@@ -281,11 +414,12 @@ export const HabitCard = memo(({ item, nowMs, index }: HabitCardProps) => {
       showQuickMarkComplete && activeCheckinDateStr
         ? (item.streakMemories?.[activeCheckinDateStr]?.tasks?.length ?? 0)
         : 0;
-    const taskProgressLabel = showQuickMarkComplete
+    /** Fits the ring's tiny center micro-label — replaces "STREAK" there when a checklist day is in progress, instead of a separate pill taking up its own row above the title. */
+    const ringMicroLabel = showQuickMarkComplete
       ? loggedChecklistTasks >= totalChecklistTasks
-        ? "All tasks logged"
-        : `${loggedChecklistTasks}/${totalChecklistTasks} tasks pending`
-      : null;
+        ? "DONE"
+        : `${loggedChecklistTasks}/${totalChecklistTasks} TASKS`
+      : "STREAK";
 
     const handleQuickMarkComplete = (event: { stopPropagation: () => void }) => {
       event.stopPropagation();
@@ -375,8 +509,11 @@ export const HabitCard = memo(({ item, nowMs, index }: HabitCardProps) => {
       };
     }, [item.challengeGroupId]);
 
-    const pulseScale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.22] });
-    const pulseOpacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.22, 0.62] });
+    // "Ping" ripple behind the solid status dot — reads as a live indicator
+    // rather than the plain pulsing square this replaced (which looked like a
+    // stray, unstyled checkbox at rest).
+    const pulseHaloScale = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1.8] });
+    const pulseHaloOpacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.5, 0] });
 
     // "Stack up from below" mount animation — fires once when this card first
     // appears (initial list load, a tab switch that remounts the list, or a
@@ -441,275 +578,204 @@ export const HabitCard = memo(({ item, nowMs, index }: HabitCardProps) => {
         }, 0);
     };
 
+    // A Pressable's onPress still fires on release even after onLongPress has
+    // already fired — this flag suppresses that so a long-press-to-complete
+    // doesn't also immediately navigate into the habit afterward.
+    const longPressFiredRef = useRef(false);
+    const handleCardLongPress = () => {
+        if (!showQuickMarkComplete) return;
+        longPressFiredRef.current = true;
+        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        handleQuickMarkComplete({ stopPropagation: () => {} });
+    };
+
     return (
         <Animated.View style={entranceStyle}>
         <Pressable
-            onPress={openHabit}
+            onPressIn={() => { longPressFiredRef.current = false; }}
+            onPress={() => {
+                if (longPressFiredRef.current) return;
+                openHabit();
+            }}
+            onLongPress={showQuickMarkComplete ? handleCardLongPress : undefined}
+            delayLongPress={500}
             accessibilityRole="button"
             accessibilityLabel={`Open ${item.title}`}
             style={[
                 styles.card,
                 {
-                    backgroundColor: theme.colors.surface,
+                    backgroundColor: rp ? rp.screenBg : theme.colors.surface,
                     borderRadius: theme.radius.lg,
-                    borderColor: theme.colors.border,
-                    ...theme.shadow.card,
+                    borderColor: rp ? rp.border : isDark ? theme.colors.border : "transparent",
+                    ...(rp ? null : theme.shadow.card),
                 },
             ]}
         >
-            <GlassTopHighlight radius={theme.radius.lg} />
+            {rp ? null : <GlassTopHighlight radius={theme.radius.lg} />}
             <View style={styles.cardContent}>
                     <View style={styles.pillRow}>
-                            {isManual ? (
-                                <Gamepad2 size={14} color={theme.colors.amber[500]} />
-                            ) : (
-                                <Plane size={14} color={theme.colors.cyan[400]} />
-                            )}
-                            {(item.visibility ?? 'solo') === 'public' && (
-                                <Globe size={14} color={theme.colors.cyan[400]} />
-                            )}
-                            {Boolean(item.challengeGroupId) && (
-                                <Swords size={14} color={theme.colors.indigo[400]} />
-                            )}
-                            {streakCheckinAvailable && !missionWon && !missionFailed ? (
+                            {contextTags.map(({ label, icon: TagIcon }) => (
                                 <View
-                                    style={styles.pulseGlyphWrap}
-                                    accessibilityLabel="Streak check-in available"
-                                    accessibilityRole="image"
-                                >
-                                    <Animated.View
-                                        pointerEvents="none"
-                                        style={[
-                                            styles.pulseGlyphHalo,
-                                            {
-                                                borderColor: theme.colors.cyan[400],
-                                                backgroundColor: withAlpha(theme.colors.cyan[400], 10),
-                                                transform: [{ scale: reduceMotion ? 1 : pulseScale }],
-                                                opacity: reduceMotion ? 0.5 : pulseOpacity,
-                                            },
-                                        ]}
-                                    />
-                                </View>
-                            ) : null}
-                            {item.missionReport === 'accomplished' && (
-                                <Text style={[styles.reportPillText, { color: theme.colors.green[500] }]}>ACCOMPLISHED</Text>
-                            )}
-                            {needsReport && (
-                                <Text style={[styles.reportPillText, { color: theme.colors.amber[500] }]}>REVIEW DUE</Text>
-                            )}
-                            {repair && !missionWon && !missionFailed && !needsReport ? (
-                              <TouchableOpacity
-                                onPress={() => {
-                                  void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                                  router.push({
-                                    pathname: `/habit/${item.id}`,
-                                    params: { repair: "1", repairDate: repair.dateStr },
-                                  });
-                                }}
-                                activeOpacity={0.85}
-                                accessibilityRole="button"
-                                accessibilityLabel="Repair streak"
-                              >
-                                <Text style={[styles.repairCta, { color: theme.colors.amber[500] }]}>REPAIR</Text>
-                              </TouchableOpacity>
-                            ) : null}
-                            {taskProgressLabel ? (
-                                <View
+                                    key={label}
                                     style={[
-                                        styles.taskProgressPill,
-                                        loggedChecklistTasks >= totalChecklistTasks
-                                            ? {
-                                                  borderColor: isDark ? withAlpha(theme.colors.green[500], 50) : withAlpha(theme.colors.green[600], 32),
-                                                  backgroundColor: isDark ? withAlpha(theme.colors.green[500], 12) : withAlpha(theme.colors.green[500], 8),
-                                              }
-                                            : {
-                                                  borderColor: isDark ? withAlpha(theme.colors.cyan[400], 50) : withAlpha(theme.colors.cyan[500], 32),
-                                                  backgroundColor: isDark ? withAlpha(theme.colors.cyan[400], 12) : withAlpha(theme.colors.cyan[400], 8),
-                                              },
+                                        styles.contextPill,
+                                        {
+                                            backgroundColor: rp
+                                                ? rp.chipBg
+                                                : withAlpha(theme.colors.textSecondary, isDark ? 8 : 10),
+                                            borderColor: rp
+                                                ? rp.border
+                                                : withAlpha(theme.colors.textSecondary, isDark ? 18 : 24),
+                                        },
                                     ]}
                                 >
+                                    <TagIcon size={8} color={rp ? rp.textMuted : theme.colors.textMuted} strokeWidth={2} />
                                     <Text
                                         style={[
-                                            styles.taskProgressPillText,
-                                            {
-                                                color:
-                                                    loggedChecklistTasks >= totalChecklistTasks
-                                                        ? theme.colors.green[500]
-                                                        : theme.colors.cyan[500],
-                                            },
+                                            styles.contextPillText,
+                                            { color: rp ? rp.textMuted : theme.colors.textMuted },
+                                            rp ? { fontFamily: fontFamily.dmSansMedium } : null,
                                         ]}
-                                        numberOfLines={1}
                                     >
-                                        {taskProgressLabel}
+                                        {label}
+                                    </Text>
+                                </View>
+                            ))}
+                            {item.streak > 0 ? (
+                                <View style={styles.streakInline}>
+                                    <Flame size={8} color={rp ? rp.textMuted : theme.colors.textMuted} strokeWidth={2} />
+                                    <Text style={[styles.streakInlineText, { color: rp ? rp.textMuted : theme.colors.textMuted }]}>
+                                        {item.streak}d
                                     </Text>
                                 </View>
                             ) : null}
+                            {needsReport && (
+                                <Text style={[styles.reportPillText, { color: theme.colors.amber[500] }]}>REVIEW DUE</Text>
+                            )}
                     </View>
 
-                    <Text style={[styles.cardTitle, { color: theme.colors.textPrimary, fontSize: theme.typography.h3 }]}>{item.title}</Text>
+                    <Text
+                        style={[
+                            styles.cardTitle,
+                            {
+                                color: rp ? rp.textPrimary : theme.colors.textPrimary,
+                                fontSize: theme.typography.h3,
+                                ...(rp ? { fontFamily: fontFamily.manropeBold } : null),
+                            },
+                        ]}
+                    >
+                        {item.title}
+                    </Text>
 
-                    {showQuickMarkComplete || item.challengeGroupId ? (
-                      <View style={styles.cardStats}>
-                          {item.challengeGroupId ? (
-                            <TouchableOpacity
-                                onPress={(event) => {
-                                    event.stopPropagation();
-                                    router.push(`/challenge/${item.challengeGroupId}`);
-                                }}
-                                activeOpacity={0.82}
-                                style={[
-                                    styles.groupStreakButton,
-                                    {
-                                        borderColor: isDark ? withAlpha(theme.colors.amber[500], 72) : withAlpha(theme.colors.amber[500], 42),
-                                        backgroundColor: isDark ? withAlpha(theme.colors.amber[500], 13) : withAlpha(theme.colors.amber[500], 10),
-                                    },
-                                ]}
-                                accessibilityRole="button"
-                                accessibilityLabel="View group streaks"
+                    {item.challengeGroupId || showQuickMarkComplete ? (
+                      <View style={styles.cardButtons}>
+                        {item.challengeGroupId ? (
+                          <TouchableOpacity
+                            style={[
+                              styles.cardButton,
+                              {
+                                borderColor: rp ? rp.border : theme.colors.border,
+                                backgroundColor: rp ? rp.chipBg : theme.colors.surfaceElevated,
+                              },
+                            ]}
+                            onPress={(event) => {
+                              event.stopPropagation();
+                              router.push(`/challenge/${item.challengeGroupId}`);
+                            }}
+                            activeOpacity={0.75}
+                          >
+                            <Users size={13} color={theme.colors.amber[500]} strokeWidth={2} />
+                            <Text
+                              style={[
+                                styles.cardButtonText,
+                                { color: rp ? rp.textSecondary : theme.colors.textSecondary },
+                                rp ? { fontFamily: fontFamily.dmSansMedium } : null,
+                              ]}
                             >
-                                <Users size={12} color={theme.colors.amber[500]} strokeWidth={2.6} />
-                                <Text style={[styles.groupStreakButtonText, { color: theme.colors.amber[500] }]} numberOfLines={1}>
-                                    Group Streaks
-                                </Text>
-                            </TouchableOpacity>
-                          ) : null}
-                          {showQuickMarkComplete ? (
-                            <TouchableOpacity
-                                onPress={handleQuickMarkComplete}
-                                activeOpacity={0.82}
-                                style={[
-                                    styles.markCompleteButton,
-                                    {
-                                        borderColor: isDark ? withAlpha(theme.colors.green[500], 72) : withAlpha(theme.colors.green[600], 42),
-                                        backgroundColor: isDark ? withAlpha(theme.colors.green[500], 13) : withAlpha(theme.colors.green[500], 10),
-                                    },
-                                ]}
-                                accessibilityRole="button"
-                                accessibilityLabel="Mark today complete"
+                              Group streak
+                            </Text>
+                          </TouchableOpacity>
+                        ) : null}
+                        {showQuickMarkComplete ? (
+                          <TouchableOpacity
+                            style={[
+                              styles.cardButton,
+                              {
+                                borderColor: rp ? rp.border : theme.colors.border,
+                                backgroundColor: rp ? rp.chipBg : theme.colors.surfaceElevated,
+                              },
+                            ]}
+                            onPress={(event) => {
+                              event.stopPropagation();
+                              handleCardLongPress();
+                            }}
+                            activeOpacity={0.75}
+                          >
+                            <Check size={13} color={theme.colors.green[500]} strokeWidth={2.5} />
+                            <Text
+                              style={[
+                                styles.cardButtonText,
+                                { color: rp ? rp.textSecondary : theme.colors.textSecondary },
+                                rp ? { fontFamily: fontFamily.dmSansMedium } : null,
+                              ]}
                             >
-                                <Check size={12} color={theme.colors.green[500]} strokeWidth={2.8} />
-                                <Text style={[styles.markCompleteButtonText, { color: theme.colors.green[500] }]} numberOfLines={1}>
-                                    Quick Complete
-                                </Text>
-                            </TouchableOpacity>
-                          ) : null}
+                              Mark done
+                            </Text>
+                          </TouchableOpacity>
+                        ) : null}
                       </View>
                     ) : null}
             </View>
 
-            {(() => {
-              const ringSize = HABIT_RING_SIZE;
-              const strokeWidth = 4;
-              const slot = getHabitActiveMissionDaySlot(item, nowMs);
-              const useLightweightRing =
-                Platform.OS === "android" && totalDays > ANDROID_SEGMENTED_RING_DAY_LIMIT;
-
-              return (
-                <View
-                  style={[
-                    styles.ringWrap,
-                    { width: ringSize, height: ringSize },
-                    !missionFailed && { marginTop: HABIT_RING_LABEL_GAP },
-                  ]}
-                >
-                  {!missionFailed ? (
-                    <Text
-                        style={[
-                            styles.cardStreakTopRight,
-                            missionWon
-                                ? { color: theme.colors.green[500] }
-                                : needsReport
-                                    ? { color: theme.colors.amber[500] }
-                                : item.streak >= 14
-                                    ? { color: '#fbbf24' }
-                                    : item.streak >= 7
-                                        ? { color: '#f59e0b' }
-                                        : item.streak > 0
-                                            ? { color: theme.colors.amber[500] }
-                                            : { color: theme.colors.textMuted },
-                        ]}
-                        numberOfLines={1}
-                    >
-                        {missionWon
-                            ? 'Completed!'
-                            : needsReport
-                              ? 'Confirm mission outcome'
-                              : `${Math.round(campaignProgress * 100)}% Complete`}
-                    </Text>
-                  ) : null}
-                  {!missionWon && !missionFailed && useLightweightRing ? (
-                    <LightweightMissionRing
-                      ringSize={ringSize}
-                      strokeWidth={strokeWidth}
-                      progress={campaignProgress}
-                      doneColor={theme.colors.indigo[400]}
-                      futureColor={isDark ? withAlpha(theme.colors.textSecondary, 22) : withAlpha(theme.colors.textMuted, 22)}
-                    />
-                  ) : !missionWon && !missionFailed ? (
-                    <RingDayArcs
-                      ringSize={ringSize}
-                      strokeWidth={strokeWidth}
-                      totalDays={totalDays}
-                      slot={slot}
-                      habit={item}
-                      nowMs={nowMs}
-                      // Use brand color for "done", and a calmer neutral for "missed".
-                      doneColor={theme.colors.indigo[400]}
-                      missedColor={isDark ? withAlpha(theme.colors.textSecondary, 55) : withAlpha(theme.colors.textMuted, 55)}
-                      pendingColor={isDark ? withAlpha(theme.colors.textSecondary, 75) : withAlpha(theme.colors.textMuted, 75)}
-                      futureColor={isDark ? withAlpha(theme.colors.textSecondary, 22) : withAlpha(theme.colors.textMuted, 22)}
-                      completedDateSet={completedDateSet}
-                    />
-                  ) : null}
-
-                  <View
-                    style={[
-                      styles.ringCenter,
-                      {
-                        width: ringSize - strokeWidth * 2 - 6,
-                        height: ringSize - strokeWidth * 2 - 6,
-                        borderRadius: (ringSize - strokeWidth * 2 - 6) / 2,
-                        backgroundColor: theme.colors.surfaceElevated,
-                      },
-                    ]}
-                  >
-                    {missionWon ? (
-                      <Check size={20} color={theme.colors.green[500]} strokeWidth={3} />
-                    ) : missionFailed ? (
-                      <CircleX size={38} color={failedOutcomeColor} strokeWidth={2.1} />
-                    ) : (
-                      <View style={styles.ringCenterInner}>
-                        <Text
-                          style={[
-                            styles.streakNumber,
-                            {
-                              color: theme.colors.textPrimary,
-                              ...(isDark
-                                ? {
-                                    textShadowColor: "rgba(0,0,0,0.45)",
-                                    textShadowOffset: { width: 0, height: 1 },
-                                    textShadowRadius: 3,
-                                  }
-                                : null),
-                            },
-                          ]}
-                        >
-                          {item.streak}d
-                        </Text>
-                        <Text
-                          numberOfLines={1}
-                          adjustsFontSizeToFit
-                          minimumFontScale={0.8}
-                          style={[styles.streakMicroLabel, { color: theme.colors.textMuted }]}
-                        >
-                          STREAK
-                        </Text>
-                      </View>
-                    )}
-                  </View>
-                </View>
-              );
-            })()}
+            <View
+              style={[
+                styles.ringWrap,
+                {
+                  width: 76,
+                  height: 76,
+                  padding: 10,
+                },
+              ]}
+            >
+              <MiniDayGrid
+                size={56}
+                totalDays={totalDays}
+                habit={item}
+                nowMs={nowMs}
+                completedDateSet={completedDateSet}
+                doneColor={
+                  missionFailed
+                    ? theme.colors.red[900]
+                    : missionWon
+                      ? theme.colors.green[900]
+                      : needsReport
+                        ? theme.colors.amber[500]
+                        : rp ? rp.accent : theme.colors.green[900]
+                }
+                emptyColor={
+                  rp
+                    ? rp.trackBg
+                    : isDark
+                      ? withAlpha(theme.colors.textSecondary, 22)
+                      : withAlpha(theme.colors.textMuted, 18)
+                }
+                activeDateStr={activeCheckinDateStr}
+                activeColor={theme.colors.red[500]}
+                reduceMotion={reduceMotion}
+                repairDateStr={
+                  repair && !missionWon && !missionFailed && !needsReport ? repair.dateStr : null
+                }
+                repairColor={rp ? rp.textMuted : theme.colors.textMuted}
+                onRepairPress={() => {
+                  if (!repair) return;
+                  void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  router.push({
+                    pathname: `/habit/${item.id}`,
+                    params: { repair: "1", repairDate: repair.dateStr },
+                  });
+                }}
+              />
+            </View>
         </Pressable>
         </Animated.View>
     );
@@ -717,7 +783,7 @@ export const HabitCard = memo(({ item, nowMs, index }: HabitCardProps) => {
 
 const styles = StyleSheet.create({
     card: {
-        padding: 20,
+        padding: 16,
         marginBottom: 16,
         borderWidth: 1,
         flexDirection: 'row',
@@ -731,8 +797,8 @@ const styles = StyleSheet.create({
         right: 0,
         height: 18,
     },
-    cardContent: { flex: 1 },
-    pillRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 10, marginBottom: 8 },
+    cardContent: { flex: 1, justifyContent: 'space-between', minHeight: 80, paddingRight: 90 },
+    pillRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginBottom: 8 },
     // Anchored to `ringWrap` itself (not `cardContent`) via `bottom: '100%'` — sits
     // flush above wherever the ring visually ends up, regardless of how tall
     // `cardContent`'s own content is. Anchoring to cardContent instead (the previous
@@ -756,7 +822,22 @@ const styles = StyleSheet.create({
         textAlign: 'right',
     },
     reportPillText: { fontSize: 10, fontWeight: '800', letterSpacing: 0.8 },
-    repairCta: { fontSize: 10, fontWeight: "900", letterSpacing: 0.9 },
+    contextPill: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 2,
+        paddingVertical: 1.5,
+        paddingHorizontal: 5,
+        borderRadius: 999,
+        borderWidth: 1,
+    },
+    contextPillText: { fontSize: 8, fontWeight: '700', letterSpacing: 0.2 },
+    streakInline: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 0,
+    },
+    streakInlineText: { fontSize: 8, fontWeight: '700', letterSpacing: 0.2 },
     pulseGlyphWrap: {
         width: 16,
         height: 16,
@@ -766,60 +847,42 @@ const styles = StyleSheet.create({
     },
     pulseGlyphHalo: {
         position: "absolute",
-        left: 2,
-        top: 2,
+        width: 14,
+        height: 14,
+        borderRadius: 7,
+    },
+    pulseGlyphRing: {
+        position: "absolute",
         width: 12,
         height: 12,
-        borderRadius: 3,
-        borderWidth: 1,
-        zIndex: 0,
+        borderRadius: 6,
+        borderWidth: 1.5,
     },
-    ringWrap: { position: "relative", alignItems: "center", justifyContent: "center" },
+    pulseGlyphDot: {
+        width: 6,
+        height: 6,
+        borderRadius: 3,
+    },
+    ringWrap: { position: "absolute", top: 16, right: 16, alignItems: "center", justifyContent: "center", flexDirection: "column" },
     ringCenter: { alignItems: "center", justifyContent: "center" },
     ringCenterInner: { alignItems: "center", justifyContent: "center" },
     ringInner: { alignItems: 'center', justifyContent: 'center', paddingTop: 2 },
-    cardTitle: { fontWeight: '800', marginBottom: 4, flexShrink: 1 },
-    taskProgressPill: {
-        borderWidth: 1,
-        borderRadius: 9999,
-        paddingVertical: 3,
-        paddingHorizontal: 9,
-        flexShrink: 0,
-    },
-    taskProgressPillText: { fontSize: 10.5, fontWeight: '800', letterSpacing: 0.2 },
+    cardTitle: { fontWeight: '800', marginBottom: 12, flexShrink: 1, fontSize: 18, lineHeight: 24 },
     cardStats: { flexDirection: 'row', alignItems: 'center', marginTop: 10, flexWrap: 'nowrap', gap: 6 },
     cardStreak: { fontWeight: '600', fontSize: 12 },
     cardProgress: { flexShrink: 0 },
-    groupStreakButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 4,
-        minHeight: 30,
-        paddingVertical: 5,
-        paddingHorizontal: 8,
+    groupStreakBadge: {
+        position: 'absolute',
+        top: -9,
+        left: -9,
+        width: 20,
+        height: 20,
         borderRadius: 10,
         borderWidth: 1,
-        flexShrink: 1,
-        minWidth: 0,
-        overflow: 'hidden',
-    },
-    groupStreakButtonText: { fontSize: 10, fontWeight: '900', letterSpacing: 0, flexShrink: 1 },
-    markCompleteButton: {
-        flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
-        gap: 4,
-        minHeight: 30,
-        paddingVertical: 5,
-        paddingHorizontal: 8,
-        borderRadius: 10,
-        borderWidth: 1,
-        flexShrink: 1,
-        minWidth: 0,
-        overflow: 'hidden',
     },
-    markCompleteButtonText: { fontSize: 10, fontWeight: '900', letterSpacing: 0, flexShrink: 1 },
+    quickCompleteHint: { fontSize: 10.5, fontWeight: '600', letterSpacing: 0.1 },
     progressText: { fontWeight: '700', fontSize: 18 },
     streakNumber: { fontWeight: "800", fontSize: 12.5, letterSpacing: -0.15, lineHeight: 15 },
     streakMicroLabel: { fontSize: 8.5, fontWeight: "900", letterSpacing: 1.0, marginTop: 1 },
@@ -831,5 +894,29 @@ const styles = StyleSheet.create({
         marginTop: 8,
         overflow: 'hidden',
         width: '90%',
+    },
+    cardButtons: {
+        flexDirection: 'row',
+        gap: 6,
+        marginTop: 12,
+    },
+    cardButton: {
+        flex: 1,
+        maxWidth: '50%',
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 4,
+        paddingVertical: 6,
+        paddingHorizontal: 10,
+        borderRadius: 6,
+        borderWidth: 1,
+    },
+    cardButtonPrimary: {
+        borderWidth: 1,
+    },
+    cardButtonText: {
+        fontSize: 12,
+        fontWeight: '500',
     },
 });

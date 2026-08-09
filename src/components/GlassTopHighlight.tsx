@@ -20,10 +20,14 @@ type Props = {
  * slate-tinted version was tried instead and just read as a flat gray smudge
  * across the top of a white card, which looked worse than nothing. Light mode
  * renders no highlight at all for now; dark mode is unchanged.
+ *
+ * The Minimalist theme pack never renders this at all, in either light or
+ * dark — that pack is deliberately flat (border + flat fill only, no glass
+ * or shadow anywhere), so this glassy dark-mode sheen would fight it.
  */
 export function GlassTopHighlight({ radius }: Props) {
-  const { isDark } = useTheme();
-  if (!isDark) return null;
+  const { isDark, themePack } = useTheme();
+  if (!isDark || themePack === 'minimalist') return null;
   return (
     <LinearGradient
       pointerEvents="none"

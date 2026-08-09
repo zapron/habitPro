@@ -1,34 +1,26 @@
 import { Text } from "./AppText";
 import { memo } from "react";
 import { StyleSheet, View } from "react-native";
+import { Flame } from "lucide-react-native";
 import { useTheme } from "../context/ThemeContext";
-
-const HOT_STREAK_MIN = 3;
 
 type Props = {
   streak: number;
   isDark: boolean;
 };
 
+/** Dulled on dark surfaces (a saturated red would glow), brighter on light ones where it needs to hold its own against white. */
+const FIRE_COLOR_DARK = "#B4555C";
+const FIRE_COLOR_LIGHT = "#DC2626";
+
 export const CohortStreakPill = memo(function CohortStreakPill({ streak, isDark }: Props) {
   const { theme } = useTheme();
-  const hot = streak >= HOT_STREAK_MIN;
-  const cyan = theme.colors.cyan[400];
-
-  const chrome = hot
-    ? {
-        borderColor: isDark ? "rgba(251, 191, 36, 0.42)" : "rgba(249, 115, 22, 0.26)",
-        backgroundColor: isDark ? "rgba(251, 191, 36, 0.09)" : "rgba(255, 247, 237, 0.88)",
-      }
-    : {
-        borderColor: `${cyan}44`,
-        backgroundColor: `${cyan}14`,
-      };
-  const textColor = hot ? (isDark ? "#fde68a" : "#ea580c") : cyan;
+  const fireColor = isDark ? FIRE_COLOR_DARK : FIRE_COLOR_LIGHT;
 
   return (
-    <View style={[styles.pill, chrome]}>
-      <Text style={[styles.label, { color: textColor }]}>{streak} day streak</Text>
+    <View style={styles.pill}>
+      <Flame size={14} color={fireColor} fill={fireColor} strokeWidth={2.2} />
+      <Text style={[styles.label, { color: theme.colors.textSecondary }]}>{streak}d</Text>
     </View>
   );
 });
@@ -40,14 +32,14 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
     flexDirection: "row",
     alignItems: "center",
+    gap: 0,
     paddingVertical: 2,
     paddingHorizontal: 8,
     borderRadius: 9999,
-    borderWidth: 1,
   },
   label: {
     fontSize: 12,
-    fontWeight: "800",
+    fontWeight: "700",
     letterSpacing: 0.15,
   },
 });

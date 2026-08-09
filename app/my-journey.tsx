@@ -48,6 +48,7 @@ import { LevelXpRing } from "../src/components/LevelXpRing";
 import { GlassTopHighlight } from "../src/components/GlassTopHighlight";
 import { useListCardEntrance } from "../src/hooks/useListCardEntrance";
 import { useCardMaterialize } from "../src/hooks/useCardMaterialize";
+import { useReducedMotion } from "../src/hooks/useReducedMotion";
 import { useAuth } from "../src/context/AuthContext";
 import { useTheme } from "../src/context/ThemeContext";
 import { showAppAlert } from "../src/context/AppDialogContext";
@@ -598,19 +599,59 @@ function StoryToggle({
   onChange: (mode: JourneyMode) => void;
   theme: AppTheme;
 }) {
+  const reduceMotion = useReducedMotion();
+  const [trackWidth, setTrackWidth] = useState(0);
+  const anim = useRef(new Animated.Value(mode === "public" ? 0 : 1)).current;
+  useEffect(() => {
+    const toValue = mode === "public" ? 0 : 1;
+    if (reduceMotion) {
+      anim.setValue(toValue);
+      return;
+    }
+    Animated.spring(anim, { toValue, useNativeDriver: true, friction: 10, tension: 90 }).start();
+  }, [mode, reduceMotion, anim]);
+
   return (
-    <View style={[styles.modeToggle, { borderColor: theme.colors.border, backgroundColor: theme.colors.surface }]}>
+    <View
+      style={[styles.modeToggle, { borderColor: theme.colors.border, backgroundColor: theme.colors.surface }]}
+      onLayout={(event) => {
+        const fullWidth = event.nativeEvent.layout.width;
+        setTrackWidth(Math.max(0, fullWidth - 2 * 4 - 2 * 1));
+      }}
+    >
       <GlassTopHighlight radius={15} />
+      {trackWidth > 0 ? (
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            styles.modeToggleIndicator,
+            {
+              width: (trackWidth - 4) / 2,
+              backgroundColor: anim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [theme.colors.indigo[600], theme.colors.cyan[500]],
+              }),
+              transform: [
+                {
+                  translateX: anim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [0, (trackWidth - 4) / 2 + 4],
+                  }),
+                },
+              ],
+            },
+          ]}
+        />
+      ) : null}
       {(["public", "private"] as const).map((nextMode) => {
         const active = mode === nextMode;
-        const accent = nextMode === "public" ? theme.colors.indigo[600] : theme.colors.cyan[500];
         return (
           <Pressable
             key={nextMode}
             onPress={() => onChange(nextMode)}
             accessibilityRole="button"
             accessibilityState={{ selected: active }}
-            style={[styles.modeToggleButton, { backgroundColor: active ? accent : "transparent" }]}
+            style={styles.modeToggleButton}
           >
             {nextMode === "public" ? (
               <Globe size={14} color={active ? "#FFFFFF" : theme.colors.indigo[400]} />
@@ -644,7 +685,6 @@ function TabButton({
 }) {
   const color = active ? theme.colors.textPrimary : theme.colors.textMuted;
   const accent = kind === "missions" ? theme.colors.amber[500] : theme.colors.cyan[400];
-  const activeBackground = kind === "missions" ? "rgba(245, 158, 11, 0.14)" : "rgba(34, 211, 238, 0.14)";
   return (
     <Pressable
       onPress={onPress}
@@ -654,7 +694,6 @@ function TabButton({
         styles.segmentButton,
         {
           borderColor: active ? accent : "transparent",
-          backgroundColor: active ? activeBackground : "transparent",
         },
       ]}
     >
@@ -1562,6 +1601,17 @@ export default function MyJourneyScreen() {
   const routeTab = paramString(params.tab) === "minis" ? "minis" : "missions";
   const [journeyMode, setJourneyMode] = useState<JourneyMode>(routeMode);
   const [activeTab, setActiveTab] = useState<StoryTab>(routeTab);
+  const reduceMotionForTabs = useReducedMotion();
+  const [segmentTrackWidth, setSegmentTrackWidth] = useState(0);
+  const segmentAnim = useRef(new Animated.Value(activeTab === "missions" ? 0 : 1)).current;
+  useEffect(() => {
+    const toValue = activeTab === "missions" ? 0 : 1;
+    if (reduceMotionForTabs) {
+      segmentAnim.setValue(toValue);
+      return;
+    }
+    Animated.spring(segmentAnim, { toValue, useNativeDriver: true, friction: 10, tension: 90 }).start();
+  }, [activeTab, reduceMotionForTabs, segmentAnim]);
   const [publicStory, setPublicStory] = useState<CommunityPlayerStory | null>(null);
   const [loadingPublic, setLoadingPublic] = useState(true);
   const [publicMissionHasMore, setPublicMissionHasMore] = useState(false);
@@ -1988,7 +2038,35 @@ export default function MyJourneyScreen() {
         </Text>
       </View>
 
-      <View style={[styles.segmentRow, { borderBottomColor: theme.colors.border }]}>
+      <View
+        style={[styles.segmentRow, { borderBottomColor: theme.colors.border }]}
+        onLayout={(event) => {
+          setSegmentTrackWidth(event.nativeEvent.layout.width);
+        }}
+      >
+        {segmentTrackWidth > 0 ? (
+          <Animated.View
+            pointerEvents="none"
+            style={[
+              styles.journeySegmentIndicator,
+              {
+                width: (segmentTrackWidth - 6) / 2,
+                backgroundColor: segmentAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: ["rgba(245, 158, 11, 0.14)", "rgba(34, 211, 238, 0.14)"],
+                }),
+                transform: [
+                  {
+                    translateX: segmentAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [0, (segmentTrackWidth - 6) / 2 + 6],
+                    }),
+                  },
+                ],
+              },
+            ]}
+          />
+        ) : null}
         <TabButton
           active={activeTab === "missions"}
           label="Missions"
@@ -2277,10 +2355,12 @@ const styles = StyleSheet.create({
   modeBlock: { marginTop: 14, gap: 7 },
   modeToggle: { minHeight: 42, borderRadius: 15, borderWidth: 1, padding: 4, flexDirection: "row", gap: 4 },
   modeToggleButton: { flex: 1, borderRadius: 11, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 },
+  modeToggleIndicator: { position: "absolute", top: 4, bottom: 4, left: 4, borderRadius: 11 },
   modeToggleText: { fontSize: 13, lineHeight: 17, fontWeight: "900" },
   modeHint: { fontSize: 11, lineHeight: 15, fontWeight: "800", paddingHorizontal: 2 },
   segmentRow: { flexDirection: "row", gap: 6, marginTop: 14, marginBottom: 10, paddingBottom: 8, borderBottomWidth: 1 },
   segmentButton: { flex: 1, minHeight: 44, borderRadius: 14, borderWidth: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 8 },
+  journeySegmentIndicator: { position: "absolute", top: 0, bottom: 8, left: 0, borderRadius: 14 },
   segmentLabelRow: { maxWidth: "100%", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7 },
   segmentLabel: { flexShrink: 1, minWidth: 0, fontSize: 16, lineHeight: 20, fontWeight: "900" },
   segmentCountBadge: { minWidth: 27, height: 27, borderRadius: 999, borderWidth: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 6 },

@@ -41,6 +41,7 @@ import { Screen } from "../../src/components/Screen";
 import { GlassTopHighlight } from "../../src/components/GlassTopHighlight";
 import { useListCardEntrance } from "../../src/hooks/useListCardEntrance";
 import { useCardMaterialize } from "../../src/hooks/useCardMaterialize";
+import { useReducedMotion } from "../../src/hooks/useReducedMotion";
 import { useTheme } from "../../src/context/ThemeContext";
 import { useAuth } from "../../src/context/AuthContext";
 import { useToast } from "../../src/context/ToastContext";
@@ -274,7 +275,6 @@ function SegmentButton({
 }) {
   const color = active ? theme.colors.textPrimary : theme.colors.textMuted;
   const accent = kind === "missions" ? theme.colors.amber[500] : theme.colors.cyan[400];
-  const activeBackground = kind === "missions" ? "rgba(245, 158, 11, 0.14)" : "rgba(34, 211, 238, 0.14)";
   const inactiveBadgeBackground = "rgba(148, 163, 184, 0.1)";
   return (
     <Pressable
@@ -285,7 +285,6 @@ function SegmentButton({
         styles.segmentButton,
         {
           borderColor: active ? accent : "transparent",
-          backgroundColor: active ? activeBackground : "transparent",
         },
       ]}
     >
@@ -1332,6 +1331,17 @@ export default function CommunityPlayerStoryScreen() {
   const routeTab = paramString(params.tab) === "minis" ? "minis" : "missions";
   const [story, setStory] = useState<CommunityPlayerStory | null>(null);
   const [activeTab, setActiveTab] = useState<StoryTab>(routeTab);
+  const reduceMotionForSegment = useReducedMotion();
+  const [segmentTrackWidth, setSegmentTrackWidth] = useState(0);
+  const segmentAnim = useRef(new Animated.Value(activeTab === "missions" ? 0 : 1)).current;
+  useEffect(() => {
+    const toValue = activeTab === "missions" ? 0 : 1;
+    if (reduceMotionForSegment) {
+      segmentAnim.setValue(toValue);
+      return;
+    }
+    Animated.spring(segmentAnim, { toValue, useNativeDriver: true, friction: 10, tension: 90 }).start();
+  }, [activeTab, reduceMotionForSegment, segmentAnim]);
   const [loading, setLoading] = useState(true);
   const [storyHasMore, setStoryHasMore] = useState(false);
   const [storyFetchedCount, setStoryFetchedCount] = useState(0);
@@ -1834,8 +1844,35 @@ export default function CommunityPlayerStoryScreen() {
               backgroundColor: isDark ? "rgba(15, 23, 42, 0.42)" : theme.colors.surfaceElevated,
             },
           ]}
+          onLayout={(event) => {
+            const fullWidth = event.nativeEvent.layout.width;
+            setSegmentTrackWidth(Math.max(0, fullWidth - 2 * 4 - 2 * 1));
+          }}
         >
           <GlassTopHighlight radius={18} />
+          {segmentTrackWidth > 0 ? (
+            <Animated.View
+              pointerEvents="none"
+              style={[
+                styles.segmentIndicator,
+                {
+                  width: (segmentTrackWidth - 6) / 2,
+                  backgroundColor: segmentAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: ["rgba(245, 158, 11, 0.14)", "rgba(34, 211, 238, 0.14)"],
+                  }),
+                  transform: [
+                    {
+                      translateX: segmentAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [0, (segmentTrackWidth - 6) / 2 + 6],
+                      }),
+                    },
+                  ],
+                },
+              ]}
+            />
+          ) : null}
           <SegmentButton
             active={activeTab === "missions"}
             label="Missions"
@@ -2193,6 +2230,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     position: "relative",
+  },
+  segmentIndicator: {
+    position: "absolute",
+    top: 4,
+    bottom: 4,
+    left: 4,
+    borderRadius: 14,
   },
   segmentLabelRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, minWidth: 0 },
   segmentLabel: { flexShrink: 1, fontSize: 14, lineHeight: 18, fontWeight: "900" },

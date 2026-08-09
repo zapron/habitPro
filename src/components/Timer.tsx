@@ -1,12 +1,19 @@
 import { Text } from "./AppText";
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
-import { Animated, StyleSheet, TouchableOpacity, View } from "react-native";
+import { Animated, Easing, StyleSheet, TouchableOpacity, View } from "react-native";
+import { ArrowDown, ArrowUp } from "lucide-react-native";
 import { GlassTopHighlight } from "./GlassTopHighlight";
 import { useTheme } from '../context/ThemeContext';
 import { AnimatedFire } from './AnimatedFire';
 import { FireLottie } from "./FireLottie";
 import { SplitFlapTimeDisplay, type ProgressivePhase } from './SplitFlapTimeDisplay';
+import { useReducedMotion } from '../hooks/useReducedMotion';
 import type { HabitMode } from '../types/habit';
+
+/** Minimalist-only mount animation: the fire icon holds briefly, then collapses
+ * to width 0 so the timer's flex:1 content reflows to fill the freed space. */
+const INTRO_HOLD_MS = 4000;
+const INTRO_COLLAPSE_MS = 480;
 
 const FIRE_LOTTIE_URI = "https://fonts.gstatic.com/s/e/notoemoji/latest/1f525/lottie.json";
 
@@ -47,8 +54,47 @@ function msToParts(ms: number) {
 }
 
 export function Timer({ startDate, mode = 'autopilot', endDate, missionTimezone, missionEndMs }: TimerProps) {
-    const { theme } = useTheme();
+    const { theme, themePack } = useTheme();
     const isManual = mode === 'manual';
+    const reduceMotion = useReducedMotion();
+    const introEnabled = themePack === 'minimalist' && !reduceMotion;
+
+    const [iconBoxWidth, setIconBoxWidth] = useState<number | null>(null);
+    const introWidthAnim = useRef(new Animated.Value(0)).current;
+    const introMarginAnim = useRef(new Animated.Value(16)).current;
+    const introOpacityAnim = useRef(new Animated.Value(1)).current;
+    /** Digits pop slightly larger once the fire icon has cleared out of the way — the
+     * emphasis beat that says "this is the time you have right now." Starts partway
+     * through the icon's collapse so it reads as cause-and-effect, not simultaneous. */
+    const introDigitScale = useRef(new Animated.Value(1)).current;
+    const introPlayedRef = useRef(false);
+
+    const handleIconLayout = useCallback((e: { nativeEvent: { layout: { width: number } } }) => {
+        if (iconBoxWidth !== null) return;
+        const width = e.nativeEvent.layout.width;
+        introWidthAnim.setValue(width);
+        setIconBoxWidth(width);
+    }, [iconBoxWidth, introWidthAnim]);
+
+    useEffect(() => {
+        if (!introEnabled || iconBoxWidth === null || introPlayedRef.current) return;
+        introPlayedRef.current = true;
+        const timer = setTimeout(() => {
+            Animated.parallel([
+                Animated.timing(introWidthAnim, { toValue: 0, duration: INTRO_COLLAPSE_MS, easing: Easing.out(Easing.cubic), useNativeDriver: false }),
+                Animated.timing(introMarginAnim, { toValue: 0, duration: INTRO_COLLAPSE_MS, easing: Easing.out(Easing.cubic), useNativeDriver: false }),
+                Animated.timing(introOpacityAnim, { toValue: 0, duration: INTRO_COLLAPSE_MS * 0.7, easing: Easing.out(Easing.quad), useNativeDriver: false }),
+                Animated.spring(introDigitScale, {
+                    toValue: 1.08,
+                    delay: INTRO_COLLAPSE_MS * 0.55,
+                    friction: 5,
+                    tension: 90,
+                    useNativeDriver: true,
+                }),
+            ]).start();
+        }, INTRO_HOLD_MS);
+        return () => clearTimeout(timer);
+    }, [introEnabled, iconBoxWidth, introWidthAnim, introMarginAnim, introOpacityAnim, introDigitScale]);
 
     // Effective end timestamp — manual uses endDate, others use missionEndMs
     const effectiveEndMs = isManual && endDate
@@ -120,7 +166,6 @@ export function Timer({ startDate, mode = 'autopilot', endDate, missionTimezone,
 
     const activeDisplay = showRemaining ? remainingDisplay : elapsedDisplay;
     const activePhase = showRemaining ? remainingPhase : elapsedPhase;
-    const label = isExpired ? "TIME'S UP" : showRemaining ? 'TIME LEFT' : 'MISSION ACTIVE';
 
     return (
         <View
@@ -129,63 +174,71 @@ export function Timer({ startDate, mode = 'autopilot', endDate, missionTimezone,
                 {
                     backgroundColor: theme.colors.surface,
                     borderRadius: theme.radius.lg,
-                    borderColor: isManual ? 'rgba(245, 158, 11, 0.35)' : theme.colors.border,
+                    borderColor: theme.colors.border,
                     ...theme.shadow.card,
                 },
             ]}
         >
             <GlassTopHighlight radius={theme.radius.lg} />
-            <View
-                style={[
-                    styles.iconContainer,
-                    isManual && { backgroundColor: 'rgba(245, 158, 11, 0.15)', borderColor: 'rgba(245, 158, 11, 0.4)' },
-                ]}
-            >
-                <FireLottie source={{ uri: FIRE_LOTTIE_URI }} size={56} />
-            </View>
-            <View style={styles.contentContainer}>
-                <View style={styles.labelRow}>
-                    <Text style={[styles.label, { color: theme.colors.textSecondary }]}>{label}</Text>
-                    {canToggle ? (
-                        <TouchableOpacity
-                            onPress={handleToggle}
-                            hitSlop={10}
-                            style={[
-                                styles.togglePill,
-                                {
-                                    borderColor: theme.colors.indigo[500],
-                                    backgroundColor: `${theme.colors.indigo[500]}22`,
-                                },
-                            ]}
-                        >
-                            <Text style={[styles.toggleText, { color: theme.colors.indigo[400] }]}>
-                                {showRemaining ? '↑ elapsed' : '↓ left'}
-                            </Text>
-                        </TouchableOpacity>
-                    ) : null}
+            {canToggle ? (
+                <View style={styles.cornerArrow} pointerEvents="none">
+                    {showRemaining ? (
+                        <ArrowDown size={13} color={theme.colors.textMuted} strokeWidth={2.4} />
+                    ) : (
+                        <ArrowUp size={13} color={theme.colors.textMuted} strokeWidth={2.4} />
+                    )}
                 </View>
-                <Animated.View style={{ opacity: fadeAnim }}>
-                    <SplitFlapTimeDisplay
-                        display={activeDisplay || fallbackDisplay(activePhase)}
-                        phase={activePhase}
-                        timeColor={isExpired ? theme.colors.red[500] : theme.colors.textPrimary}
-                        digitTextShadow={
-                            isExpired
-                                ? { textShadowColor: 'rgba(239, 68, 68, 0.45)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 6 }
-                                : { textShadowColor: 'rgba(99, 102, 241, 0.45)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 6 }
-                        }
-                    />
-                    <View style={styles.legendContainer}>
-                        {LEGEND_BY_PHASE[activePhase].map((legendLabel, i) => (
-                            <Fragment key={legendLabel}>
-                                {i > 0 ? <View style={styles.legendGap} /> : null}
-                                <View style={styles.legendCol}>
-                                    <Text style={[styles.legendText, { color: theme.colors.textMuted }]}>{legendLabel}</Text>
-                                </View>
-                            </Fragment>
-                        ))}
+            ) : null}
+            {introEnabled ? (
+                <Animated.View
+                    onLayout={handleIconLayout}
+                    style={
+                        iconBoxWidth !== null
+                            ? { width: introWidthAnim, marginRight: introMarginAnim, opacity: introOpacityAnim, overflow: 'hidden' }
+                            : { marginRight: 16 }
+                    }
+                >
+                    <View style={[styles.iconContainer, { marginRight: 0 }]}>
+                        <FireLottie source={{ uri: FIRE_LOTTIE_URI }} size={56} />
                     </View>
                 </Animated.View>
+            ) : (
+                <View style={styles.iconContainer}>
+                    <FireLottie source={{ uri: FIRE_LOTTIE_URI }} size={56} />
+                </View>
+            )}
+            <View style={styles.contentContainer}>
+                <TouchableOpacity
+                    onPress={canToggle ? handleToggle : undefined}
+                    disabled={!canToggle}
+                    activeOpacity={0.7}
+                    accessibilityRole={canToggle ? "button" : undefined}
+                    accessibilityLabel={canToggle ? (showRemaining ? "Show time elapsed" : "Show time left") : undefined}
+                >
+                    <Animated.View style={{ opacity: fadeAnim, transform: [{ scale: introDigitScale }] }}>
+                        <SplitFlapTimeDisplay
+                            display={activeDisplay || fallbackDisplay(activePhase)}
+                            phase={activePhase}
+                            size="large"
+                            timeColor={isExpired ? theme.colors.red[500] : theme.colors.textPrimary}
+                            digitTextShadow={
+                                isExpired
+                                    ? { textShadowColor: 'rgba(239, 68, 68, 0.45)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 6 }
+                                    : { textShadowColor: 'rgba(99, 102, 241, 0.45)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 6 }
+                            }
+                        />
+                        <View style={styles.legendContainer}>
+                            {LEGEND_BY_PHASE[activePhase].map((legendLabel, i) => (
+                                <Fragment key={legendLabel}>
+                                    {i > 0 ? <View style={styles.legendGap} /> : null}
+                                    <View style={styles.legendCol}>
+                                        <Text style={[styles.legendText, { color: theme.colors.textMuted }]}>{legendLabel}</Text>
+                                    </View>
+                                </Fragment>
+                            ))}
+                        </View>
+                    </Animated.View>
+                </TouchableOpacity>
             </View>
         </View>
     );
@@ -196,6 +249,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         padding: 16,
+        paddingTop: 24,
         marginBottom: 10,
         borderWidth: 1,
     },
@@ -208,37 +262,22 @@ const styles = StyleSheet.create({
     },
     iconContainer: {
         marginRight: 16,
-        backgroundColor: 'rgba(245, 158, 11, 0.1)',
-        padding: 9,
-        borderRadius: 18,
-        borderWidth: 1,
-        borderColor: 'rgba(245, 158, 11, 0.3)',
+        // Nudges the flame's optical center up to match the big digits' center,
+        // not the digits+legend combined block's center (the legend row below
+        // adds height only on that side, which used to be negligible back when
+        // the digits were tiny — now that they're large, the mismatch is visible).
+        marginBottom: 14,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     contentContainer: {
         flex: 1,
     },
-    labelRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        marginBottom: 4,
-    },
-    label: {
-        fontSize: 12,
-        fontWeight: 'bold',
-        letterSpacing: 1.5,
-        textTransform: 'uppercase',
-    },
-    togglePill: {
-        paddingHorizontal: 8,
-        paddingVertical: 3,
-        borderRadius: 999,
-        borderWidth: 1,
-    },
-    toggleText: {
-        fontSize: 10,
-        fontWeight: '700',
-        letterSpacing: 0.5,
+    cornerArrow: {
+        position: 'absolute',
+        top: 8,
+        right: 8,
+        opacity: 0.55,
     },
     legendContainer: {
         flexDirection: 'row',
@@ -258,8 +297,9 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     legendText: {
-        fontSize: 10,
-        fontWeight: 'bold',
+        fontSize: 9,
+        fontWeight: '700',
+        letterSpacing: 0.4,
         textAlign: 'center',
     },
 });

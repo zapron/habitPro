@@ -25,7 +25,7 @@ import { FlashList } from "@shopify/flash-list";
 const DynamicFlashList = FlashList as any;
 import { useFocusEffect, useIsFocused } from "@react-navigation/native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { ChevronRight, Crown, Eye, Medal, Radio, RefreshCw, Search, Star, Swords, Trophy, Clock, X, Zap } from "lucide-react-native";
+import { ChevronRight, Eye, Medal, Radio, RefreshCw, Search, Swords, Trophy, Clock, X } from "lucide-react-native";
 import { Screen } from "../../src/components/Screen";
 import { Button } from "../../src/components/Button";
 import { ConfirmDialog } from "../../src/components/ConfirmDialog";
@@ -89,6 +89,8 @@ import {
 import { formatDateDisplay } from "../../src/utils/dateDisplay";
 import { levelFromTotalXp, xpInCurrentLevel } from "../../src/utils/xpLevel";
 import { withAlpha } from "../../src/styles/theme";
+import { redesignPalette, type RedesignPaletteVariant } from "../../src/styles/redesignPalette";
+import { fontFamily } from "../../src/styles/fonts";
 
 const WEEKLY_RANK_PAGE_SIZE = 20;
 const COMPETE_INVITES_PAGE_SIZE = 20;
@@ -193,11 +195,13 @@ function InviteMissionHeader({
   theme,
   isDark,
   onPress,
+  statusPill,
 }: {
   meta: InviteCardMeta | undefined;
   theme: ReturnType<typeof useTheme>["theme"];
   isDark: boolean;
   onPress?: () => void;
+  statusPill?: React.ReactNode;
 }) {
   const name = meta?.challengeName ?? "Group mission";
   const pill = meta?.pillLabel ?? "Group";
@@ -207,16 +211,19 @@ function InviteMissionHeader({
         <Text style={[styles.inviteChallengeName, { color: theme.colors.textPrimary }]} numberOfLines={2}>
           {name}
         </Text>
-        <View
-          style={[
-            styles.inviteKindPill,
-            {
-              backgroundColor: isDark ? withAlpha(theme.colors.indigo[500], 18) : withAlpha(theme.colors.indigo[600], 10),
-              borderColor: isDark ? withAlpha(theme.colors.indigo[400], 45) : withAlpha(theme.colors.indigo[600], 28),
-            },
-          ]}
-        >
-          <Text style={[styles.inviteKindPillText, { color: theme.colors.indigo[400] }]}>{pill}</Text>
+        <View style={styles.invitePillsCol}>
+          <View
+            style={[
+              styles.inviteKindPill,
+              {
+                backgroundColor: isDark ? withAlpha(theme.colors.indigo[500], 18) : withAlpha(theme.colors.indigo[600], 10),
+                borderColor: isDark ? withAlpha(theme.colors.indigo[400], 45) : withAlpha(theme.colors.indigo[600], 28),
+              },
+            ]}
+          >
+            <Text style={[styles.inviteKindPillText, { color: theme.colors.indigo[400] }]}>{pill}</Text>
+          </View>
+          {statusPill}
         </View>
       </View>
       {meta?.description ? (
@@ -394,6 +401,7 @@ function ActiveChallengeCard({
   isDark,
   onRequestAbandon,
   index,
+  rp,
 }: {
   enrollment: ChallengeEnrollment;
   habits: Habit[];
@@ -402,6 +410,7 @@ function ActiveChallengeCard({
   isDark: boolean;
   onRequestAbandon: () => void;
   index: number;
+  rp?: RedesignPaletteVariant | null;
 }) {
   // Must run before the early-return below — hooks can't be called conditionally.
   const entranceStyle = useListCardEntrance(index);
@@ -423,32 +432,66 @@ function ActiveChallengeCard({
     <View
       style={[
         styles.activeCard,
-        { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, ...theme.shadow.card },
+        rp
+          ? { backgroundColor: rp.screenBg, borderColor: rp.border }
+          : { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, ...theme.shadow.card },
       ]}
     >
-      <GlassTopHighlight radius={16} />
+      {rp ? null : <GlassTopHighlight radius={16} />}
       <View style={styles.activeCardTop}>
         <View style={{ flex: 1 }}>
-          <Text style={[styles.activeTitle, { color: theme.colors.textPrimary }]}>{template.title}</Text>
-          <Text style={[styles.activeSub, { color: theme.colors.textSecondary }]}>{template.goalLine}</Text>
+          <Text
+            style={[
+              styles.activeTitle,
+              { color: rp ? rp.textPrimary : theme.colors.textPrimary },
+              rp ? { fontFamily: fontFamily.manropeBold } : null,
+            ]}
+          >
+            {template.title}
+          </Text>
+          <Text
+            style={[
+              styles.activeSub,
+              { color: rp ? rp.textSecondary : theme.colors.textSecondary },
+              rp ? { fontFamily: fontFamily.dmSansMedium } : null,
+            ]}
+          >
+            {template.goalLine}
+          </Text>
         </View>
-        <TouchableOpacity onPress={onRequestAbandon} hitSlop={10} style={[styles.abandonBtn, { borderColor: theme.colors.border }]}>
-          <X size={18} color={theme.colors.textMuted} />
+        <TouchableOpacity onPress={onRequestAbandon} hitSlop={10} style={[styles.abandonBtn, { borderColor: rp ? rp.border : theme.colors.border }]}>
+          <X size={18} color={rp ? rp.textMuted : theme.colors.textMuted} />
         </TouchableOpacity>
       </View>
 
-      <View style={[styles.track, { backgroundColor: isDark ? withAlpha(theme.colors.sheen, 6) : withAlpha(theme.colors.sheen, 6) }]}>
+      <View style={[styles.track, { backgroundColor: rp ? rp.trackBg : withAlpha(theme.colors.sheen, 6) }]}>
         <View
-          style={[styles.fill, { width: `${pct}%`, backgroundColor: theme.colors.indigo[500] }]}
+          style={[styles.fill, { width: `${pct}%`, backgroundColor: rp ? rp.accent : theme.colors.indigo[500] }]}
         />
       </View>
 
       <View style={styles.activeMeta}>
         <View style={styles.metaRow}>
-          <Clock size={14} color={theme.colors.textMuted} />
-          <Text style={[styles.metaText, { color: theme.colors.textMuted }]}>{formatEndsIn(progress.endsAtMs)}</Text>
+          <Clock size={14} color={rp ? rp.textMuted : theme.colors.textMuted} />
+          <Text
+            style={[
+              styles.metaText,
+              { color: rp ? rp.textMuted : theme.colors.textMuted },
+              rp ? { fontFamily: fontFamily.dmSansMedium } : null,
+            ]}
+          >
+            {formatEndsIn(progress.endsAtMs)}
+          </Text>
         </View>
-        <Text style={[styles.progressText, { color: theme.colors.cyan[400] }]}>{progressLabel}</Text>
+        <Text
+          style={[
+            styles.progressText,
+            { color: rp ? rp.accentDark : theme.colors.cyan[400] },
+            rp ? { fontFamily: fontFamily.manropeBold } : null,
+          ]}
+        >
+          {progressLabel}
+        </Text>
       </View>
     </View>
     </Animated.View>
@@ -507,51 +550,12 @@ function formatWeekResetCountdown(msRemaining: number): string {
   return `Resets in ${Math.max(1, minutes)}m`;
 }
 
-function leaderboardAccent(rank: number, theme: ReturnType<typeof useTheme>["theme"]) {
-  if (rank === 1) return theme.colors.amber[500];
-  if (rank === 2) return theme.colors.cyan[400];
-  if (rank === 3) return theme.colors.indigo[400];
-  return theme.colors.textMuted;
-}
-
-function lifetimeLeagueForLevel(
-  level: number,
-  theme: ReturnType<typeof useTheme>["theme"],
-  isDark: boolean,
-) {
-  if (level >= 25) {
-    return {
-      label: "Mythic League",
-      color: theme.colors.indigo[400],
-      backgroundColor: isDark ? withAlpha(theme.colors.indigo[500], 16) : withAlpha(theme.colors.indigo[500], 9),
-    };
-  }
-  if (level >= 15) {
-    return {
-      label: "Gold League",
-      color: theme.colors.amber[500],
-      backgroundColor: isDark ? withAlpha(theme.colors.amber[500], 15) : withAlpha(theme.colors.amber[500], 11),
-    };
-  }
-  if (level >= 8) {
-    return {
-      label: "Silver League",
-      color: theme.colors.cyan[400],
-      backgroundColor: isDark ? withAlpha(theme.colors.cyan[400], 13) : withAlpha(theme.colors.cyan[500], 9),
-    };
-  }
-  if (level >= 3) {
-    return {
-      label: "Bronze League",
-      color: theme.colors.yellow[400],
-      backgroundColor: isDark ? "rgba(217, 119, 6, 0.14)" : "rgba(180, 83, 9, 0.08)",
-    };
-  }
-  return {
-    label: "Rookie League",
-    color: theme.colors.textMuted,
-    backgroundColor: isDark ? withAlpha(theme.colors.textSecondary, 8) : withAlpha(theme.colors.textSecondary, 12),
-  };
+function lifetimeLeagueForLevel(level: number, theme: ReturnType<typeof useTheme>["theme"]) {
+  if (level >= 25) return { label: "Mythic League", color: theme.colors.indigo[400] };
+  if (level >= 15) return { label: "Gold League", color: theme.colors.amber[500] };
+  if (level >= 8) return { label: "Silver League", color: theme.colors.cyan[400] };
+  if (level >= 3) return { label: "Bronze League", color: theme.colors.yellow[400] };
+  return { label: "Rookie League", color: theme.colors.textMuted };
 }
 
 const LeagueRow = memo(function LeagueRow({
@@ -560,20 +564,20 @@ const LeagueRow = memo(function LeagueRow({
   isDark,
   onPress,
   index,
+  rp,
 }: {
   entry: WeeklyLeaderboardEntry;
   theme: ReturnType<typeof useTheme>["theme"];
   isDark: boolean;
   onPress: (entry: WeeklyLeaderboardEntry) => void;
   index: number;
+  rp?: RedesignPaletteVariant | null;
 }) {
   const entranceStyle = useListCardEntrance(index);
-  const accent = leaderboardAccent(entry.rankPosition, theme);
-  const xpInLevel = xpInCurrentLevel(entry.xp);
   const usernameLabel = entry.username.replace(/^@+/, "");
   const displayName = (entry.displayName?.trim() || usernameLabel).replace(/^@+/, "");
   const showHandle = Boolean(entry.displayName);
-  const playerLeague = lifetimeLeagueForLevel(entry.level, theme, isDark);
+  const playerLeague = lifetimeLeagueForLevel(entry.level, theme);
   const identity = avatarIdentityFor(entry.userId);
   return (
     <Animated.View style={entranceStyle}>
@@ -584,61 +588,87 @@ const LeagueRow = memo(function LeagueRow({
       accessibilityLabel={`Open ${displayName} player stats`}
       style={[
         styles.leagueRow,
-        {
-          backgroundColor: playerLeague.backgroundColor,
-          borderWidth: entry.isMe ? 1.5 : 0,
-          borderColor: entry.isMe ? theme.colors.indigo[400] : "transparent",
-        },
+        { backgroundColor: "transparent", borderWidth: 0 },
       ]}
     >
-      <GlassTopHighlight radius={16} />
       <View style={styles.leagueRankSlot}>
-        {entry.rankPosition === 1 ? (
-          <Crown size={22} color={accent} fill={accent} />
-        ) : entry.rankPosition === 2 || entry.rankPosition === 3 ? (
-          <View style={[styles.medalDisc, { backgroundColor: accent }]}>
-            <Star size={11} color={theme.colors.white} fill={theme.colors.white} />
-          </View>
-        ) : (
-          <Text style={[styles.leagueRankText, { color: accent }]}>#{entry.rankPosition}</Text>
-        )}
+        <Text
+          style={[
+            styles.leagueRankText,
+            { color: rp ? rp.textMuted : theme.colors.textMuted },
+            rp ? { fontFamily: fontFamily.manropeExtraBold } : null,
+          ]}
+        >
+          #{entry.rankPosition}
+        </Text>
       </View>
 
-      <LevelXpRing level={entry.level} xpInLevel={xpInLevel} size={46} strokeWidth={3}>
-        <View style={[styles.leagueLevelOrb, { backgroundColor: identity.background, borderColor: identity.border }]}>
-          <Text style={[styles.leagueLevelNum, { color: identity.foreground }]}>{entry.level}</Text>
-          <Text style={[styles.leagueLevelLabel, { color: theme.colors.textMuted }]}>LVL</Text>
-        </View>
-      </LevelXpRing>
+      <View style={[styles.leagueLevelOrb, { backgroundColor: identity.background, borderColor: identity.border }]}>
+        <Text style={[styles.leagueLevelNum, { color: identity.foreground }]}>{entry.level}</Text>
+        <Text style={[styles.leagueLevelLabel, { color: rp ? rp.textMuted : theme.colors.textMuted }]}>LVL</Text>
+      </View>
 
       <View style={styles.leaguePerson}>
         <View style={styles.leagueNameRow}>
-          <Text style={[styles.leagueName, { color: theme.colors.textPrimary }]} numberOfLines={1}>
+          <Text
+            style={[
+              styles.leagueName,
+              { color: rp ? rp.textPrimary : theme.colors.textPrimary },
+              rp ? { fontFamily: fontFamily.manropeBold } : null,
+            ]}
+            numberOfLines={1}
+          >
             {displayName}
           </Text>
           {entry.isMe ? (
-            <View style={[styles.youPill, { backgroundColor: theme.colors.indigo[600] }]}>
-              <Text style={styles.youPillText}>YOU</Text>
+            <View
+              style={[
+                styles.youPill,
+                { borderColor: rp ? rp.accent : theme.colors.indigo[400] },
+              ]}
+            >
+              <Text style={[styles.youPillText, { color: rp ? rp.accent : theme.colors.indigo[400] }]}>YOU</Text>
             </View>
           ) : null}
         </View>
         <View style={styles.leagueMetaRow}>
-          <Text style={[styles.leagueTier, { color: playerLeague.color }]} numberOfLines={1}>
+          <Text
+            style={[
+              styles.leagueTier,
+              { color: playerLeague.color },
+              rp ? { fontFamily: fontFamily.dmSansSemibold } : null,
+            ]}
+            numberOfLines={1}
+          >
             {playerLeague.label}
           </Text>
           {showHandle ? (
-            <Text style={[styles.leagueHandle, { color: theme.colors.textMuted }]} numberOfLines={1}>
-              - {usernameLabel}
+            <Text
+              style={[
+                styles.leagueHandle,
+                { color: rp ? rp.textMuted : theme.colors.textMuted },
+                rp ? { fontFamily: fontFamily.dmSansMedium } : null,
+              ]}
+              numberOfLines={1}
+            >
+              @{usernameLabel}
             </Text>
           ) : null}
         </View>
       </View>
 
       <View style={styles.leagueXpCol}>
-        <Text style={[styles.leagueXp, { color: theme.colors.textPrimary }]}>{entry.points}</Text>
+        <Text
+          style={[
+            styles.leagueXp,
+            { color: rp ? rp.textPrimary : theme.colors.textPrimary },
+            rp ? { fontFamily: fontFamily.manropeExtraBold } : null,
+          ]}
+        >
+          {entry.points}
+        </Text>
         <View style={styles.leagueXpLabelRow}>
-          <Zap size={11} color={theme.colors.yellow[400]} fill={theme.colors.yellow[400]} />
-          <Text style={[styles.leagueXpLabel, { color: theme.colors.textMuted }]}>PTS</Text>
+          <Text style={[styles.leagueXpLabel, { color: rp ? rp.textMuted : theme.colors.textMuted }]}>PTS</Text>
         </View>
       </View>
     </TouchableOpacity>
@@ -647,7 +677,9 @@ const LeagueRow = memo(function LeagueRow({
 });
 
 export default function CompeteScreen() {
-  const { theme, isDark } = useTheme();
+  const { theme, isDark, themePack } = useTheme();
+  /** Compete-specific flourishes for the Minimalist pack, same as Home — driven by the real Settings → Appearance choice. */
+  const rp = themePack === 'minimalist' ? (isDark ? redesignPalette.dark : redesignPalette.light) : null;
   const { showToast } = useToast();
   const reduceMotion = useReducedMotion();
   const insets = useSafeAreaInsets();
@@ -671,6 +703,16 @@ export default function CompeteScreen() {
   const inviteNeedsCommunityForAccept = !isPremium && !premiumLoading;
   const [segment, setSegment] = useState<CompeteSegment>("challenges");
   const [challengesSubTab, setChallengesSubTab] = useState<ChallengesSubTab>("missions");
+  const [segmentTrackWidth, setSegmentTrackWidth] = useState(0);
+  const segmentAnim = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const toValue = segment === "challenges" ? 0 : 1;
+    if (reduceMotion) {
+      segmentAnim.setValue(toValue);
+      return;
+    }
+    Animated.spring(segmentAnim, { toValue, useNativeDriver: true, friction: 10, tension: 90 }).start();
+  }, [segment, reduceMotion, segmentAnim]);
   const [groupInvites, setGroupInvites] = useState<ChallengeInviteRow[]>([]);
   const [liveMiniInvites, setLiveMiniInvites] = useState<LiveMiniInviteForMe[]>([]);
   const [inviteCardMeta, setInviteCardMeta] = useState<Record<string, InviteCardMeta>>({});
@@ -1567,14 +1609,12 @@ export default function CompeteScreen() {
         key={`live:${participant.id}`}
         style={[
           styles.card,
-          {
-            backgroundColor: theme.colors.surface,
-            borderColor: theme.colors.border,
-            ...theme.shadow.card,
-          },
+          rp
+            ? { backgroundColor: rp.screenBg, borderColor: rp.border }
+            : { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, ...theme.shadow.card },
         ]}
       >
-        <GlassTopHighlight radius={16} />
+        {rp ? null : <GlassTopHighlight radius={16} />}
         {pending ? (
           <Animated.View
             pointerEvents="none"
@@ -1683,45 +1723,45 @@ export default function CompeteScreen() {
 
     const cardStyle = [
       styles.card,
-      {
-        backgroundColor: theme.colors.surface,
-        borderColor: highlighted ? theme.colors.indigo[400] : theme.colors.border,
-        borderWidth: highlighted ? 2 : 1,
-        ...theme.shadow.card,
-      },
+      rp
+        ? {
+            backgroundColor: rp.screenBg,
+            borderColor: highlighted ? rp.accent : rp.border,
+            borderWidth: highlighted ? 2 : 1,
+          }
+        : {
+            backgroundColor: theme.colors.surface,
+            borderColor: highlighted ? theme.colors.indigo[400] : theme.colors.border,
+            borderWidth: highlighted ? 2 : 1,
+            ...theme.shadow.card,
+          },
     ];
 
     const groupStreaksButton = (
       <TouchableOpacity
         onPress={() => router.push(`/challenge/${inv.challenge_id}`)}
-        activeOpacity={0.84}
+        activeOpacity={0.6}
         accessibilityRole="button"
         accessibilityLabel={`View group streaks: ${missionTitle}`}
-        style={[
-          styles.inviteGroupStreaksBtn,
-          {
-            backgroundColor: isDark ? withAlpha(theme.colors.amber[500], 13) : withAlpha(theme.colors.amber[500], 10),
-            borderColor: isDark ? withAlpha(theme.colors.amber[500], 62) : withAlpha(theme.colors.amber[500], 42),
-            shadowColor: theme.colors.amber[500],
-          },
-        ]}
+        style={styles.inviteGroupStreaksBtn}
       >
-        <Eye size={19} color={theme.colors.amber[500]} strokeWidth={2.6} />
+        <Eye size={17} color={theme.colors.amber[500]} strokeWidth={2.4} />
         <Text style={[styles.inviteGroupStreaksBtnText, { color: theme.colors.amber[500] }]}>
           View Group Streaks
         </Text>
       </TouchableOpacity>
     );
 
+    const statusPill = (
+      <InviteStatusPill
+        variant={inv.status === "accepted" ? "accepted" : "declined"}
+        label={inv.status === "accepted" ? "Accepted" : "Declined"}
+        theme={theme}
+      />
+    );
+
     const resolvedBlock = (
       <>
-        <View style={styles.inviteStatusRow}>
-          <InviteStatusPill
-            variant={inv.status === "accepted" ? "accepted" : "declined"}
-            label={inv.status === "accepted" ? "Accepted" : "Declined"}
-            theme={theme}
-          />
-        </View>
         {inv.status === "accepted" ? (
           <Text style={[styles.inviteStatusSubtext, { color: theme.colors.textSecondary }]}>
             You're part of this group mission.
@@ -1743,7 +1783,7 @@ export default function CompeteScreen() {
     if (pending) {
       return (
         <View key={`group:${inv.id}`} style={cardStyle}>
-          <GlassTopHighlight radius={16} />
+          {rp ? null : <GlassTopHighlight radius={16} />}
           <Animated.View
             pointerEvents="none"
             style={[
@@ -1797,12 +1837,13 @@ export default function CompeteScreen() {
     if (inv.status === "accepted" && canOpenMission) {
       return (
         <View key={`group:${inv.id}`} style={cardStyle}>
-          <GlassTopHighlight radius={16} />
+          {rp ? null : <GlassTopHighlight radius={16} />}
           <InviteMissionHeader
             meta={meta}
             theme={theme}
             isDark={isDark}
             onPress={() => router.push(`/habit/${linkedHabitId}`)}
+            statusPill={statusPill}
           />
           <InviteRequesterLine username={requesterLabel?.username} theme={theme} />
           {resolvedBlock}
@@ -1812,8 +1853,8 @@ export default function CompeteScreen() {
 
     return (
       <View key={`group:${inv.id}`} style={cardStyle}>
-        <GlassTopHighlight radius={16} />
-        <InviteMissionHeader meta={meta} theme={theme} isDark={isDark} />
+        {rp ? null : <GlassTopHighlight radius={16} />}
+        <InviteMissionHeader meta={meta} theme={theme} isDark={isDark} statusPill={statusPill} />
         <InviteRequesterLine username={requesterLabel?.username} theme={theme} />
         {resolvedBlock}
       </View>
@@ -1821,70 +1862,98 @@ export default function CompeteScreen() {
   };
 
   return (
-    <Screen>
-      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={theme.colors.background} />
+    <Screen style={rp ? { backgroundColor: rp.screenBg } : undefined}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={rp ? rp.screenBg : theme.colors.background} />
 
       <Text
         style={[
           styles.title,
           {
-            color: theme.colors.textPrimary,
+            color: rp ? rp.textPrimary : theme.colors.textPrimary,
             fontSize: theme.typography.h1,
             letterSpacing: theme.letterSpacing.tight,
           },
+          rp ? { fontFamily: fontFamily.manropeExtraBold } : null,
         ]}
       >
         Compete
       </Text>
-      <Text style={[styles.subtitle, { color: theme.colors.textSecondary, fontSize: theme.typography.caption }]}>
+      <Text
+        style={[
+          styles.subtitle,
+          { color: rp ? rp.textSecondary : theme.colors.textSecondary, fontSize: theme.typography.caption },
+          rp ? { fontFamily: fontFamily.dmSansMedium } : null,
+        ]}
+      >
         Weekly tiers and time-boxed challenges.
       </Text>
 
       <View
         style={[
           styles.segmentWrap,
-          { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
-          { marginBottom: segment === "challenges" ? 8 : 18 },
+          {
+            backgroundColor: rp
+              ? (isDark ? rp.screenBg : rp.chipBg)
+              : (isDark ? theme.colors.surface : theme.colors.surfaceElevated),
+            borderColor: "transparent",
+          },
+          { marginBottom: segment === "challenges" ? 0 : 18 },
         ]}
+        onLayout={(event) => {
+          const fullWidth = event.nativeEvent.layout.width;
+          setSegmentTrackWidth(Math.max(0, fullWidth - 2 * 4 - 2 * 1));
+        }}
       >
-        <GlassTopHighlight radius={14} />
+        {segmentTrackWidth > 0 ? (
+          <Animated.View
+            pointerEvents="none"
+            style={[
+              styles.segmentIndicator,
+              {
+                width: (segmentTrackWidth - 4) / 2,
+                backgroundColor: rp
+                  ? (isDark ? rp.chipBg : rp.screenBg)
+                  : (isDark ? theme.colors.surfaceElevated : theme.colors.surface),
+                ...(rp ? null : theme.shadow.card),
+                transform: [
+                  {
+                    translateX: segmentAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [0, (segmentTrackWidth - 4) / 2 + 4],
+                    }),
+                  },
+                ],
+              },
+            ]}
+          />
+        ) : null}
         <TouchableOpacity
-          style={[
-            styles.segment,
-            segment === "challenges" && [
-              styles.segmentActive,
-              { backgroundColor: theme.colors.indigo[600], ...theme.shadow.glow },
-            ],
-          ]}
+          style={styles.segment}
           onPress={() => setSegment("challenges")}
           activeOpacity={0.85}
         >
-          <Swords size={16} color={segment === "challenges" ? theme.colors.white : theme.colors.textMuted} />
+          <Swords size={16} color={segment === "challenges" ? (rp ? rp.accent : theme.colors.indigo[600]) : rp ? rp.textMuted : theme.colors.textMuted} />
           <Text
             style={[
               styles.segmentLabel,
-              { color: segment === "challenges" ? theme.colors.white : theme.colors.textSecondary },
+              { color: segment === "challenges" ? (rp ? rp.accent : theme.colors.indigo[600]) : rp ? rp.textSecondary : theme.colors.textSecondary },
+              rp ? { fontFamily: fontFamily.dmSansSemibold } : null,
             ]}
           >
             Challenges
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[
-            styles.segment,
-            segment === "leaderboard" && [
-              styles.segmentActive,
-              { backgroundColor: theme.colors.indigo[600], ...theme.shadow.glow },
-            ],
-          ]}
+          style={styles.segment}
           onPress={() => setSegment("leaderboard")}
           activeOpacity={0.85}
         >
-          <Medal size={16} color={segment === "leaderboard" ? theme.colors.white : theme.colors.textMuted} />
+          <Medal size={16} color={segment === "leaderboard" ? (rp ? rp.accent : theme.colors.indigo[600]) : rp ? rp.textMuted : theme.colors.textMuted} />
           <Text
             style={[
               styles.segmentLabel,
-              { color: segment === "leaderboard" ? theme.colors.white : theme.colors.textSecondary },
+              { color: segment === "leaderboard" ? (rp ? rp.accent : theme.colors.indigo[600]) : rp ? rp.textSecondary : theme.colors.textSecondary },
+              rp ? { fontFamily: fontFamily.dmSansSemibold } : null,
             ]}
           >
             Leaderboard
@@ -1895,14 +1964,9 @@ export default function CompeteScreen() {
       {segment === "challenges" ? (
         <View style={styles.challengesSubOuter}>
           <TouchableOpacity
-            style={[
-              styles.challengesSubPill,
-              challengesSubTab === "missions" && {
-                backgroundColor: isDark ? withAlpha(theme.colors.indigo[500], 20) : withAlpha(theme.colors.indigo[600], 12),
-              },
-            ]}
+            style={styles.challengesSubPill}
             onPress={() => setChallengesSubTab("missions")}
-            activeOpacity={0.85}
+            activeOpacity={0.6}
             accessibilityRole="button"
             accessibilityLabel="Weeklies"
           >
@@ -1911,22 +1975,22 @@ export default function CompeteScreen() {
                 styles.challengesSubText,
                 {
                   color:
-                    challengesSubTab === "missions" ? theme.colors.indigo[400] : theme.colors.textSecondary,
+                    challengesSubTab === "missions"
+                      ? rp ? rp.accent : theme.colors.indigo[600]
+                      : rp ? rp.textSecondary : theme.colors.textSecondary,
+                  fontWeight: challengesSubTab === "missions" ? "800" : "600",
                 },
+                rp ? { fontFamily: fontFamily.dmSansSemibold } : null,
               ]}
             >
               Weeklies
             </Text>
           </TouchableOpacity>
+          <View style={[styles.challengesSubDivider, { backgroundColor: rp ? rp.border : theme.colors.border }]} />
           <TouchableOpacity
-            style={[
-              styles.challengesSubPill,
-              challengesSubTab === "invites" && {
-                backgroundColor: isDark ? withAlpha(theme.colors.indigo[500], 20) : withAlpha(theme.colors.indigo[600], 12),
-              },
-            ]}
+            style={styles.challengesSubPill}
             onPress={() => setChallengesSubTab("invites")}
-            activeOpacity={0.85}
+            activeOpacity={0.6}
             accessibilityRole="button"
             accessibilityLabel={`Group invites, ${pendingInviteCount} pending`}
           >
@@ -1936,8 +2000,12 @@ export default function CompeteScreen() {
                   styles.challengesSubText,
                   {
                     color:
-                      challengesSubTab === "invites" ? theme.colors.indigo[400] : theme.colors.textSecondary,
+                      challengesSubTab === "invites"
+                        ? rp ? rp.accent : theme.colors.indigo[600]
+                        : rp ? rp.textSecondary : theme.colors.textSecondary,
+                    fontWeight: challengesSubTab === "invites" ? "800" : "600",
                   },
+                  rp ? { fontFamily: fontFamily.dmSansSemibold } : null,
                 ]}
               >
                 Invites ({pendingInviteCount})
@@ -1955,97 +2023,170 @@ export default function CompeteScreen() {
           keyExtractor={(item) => item.userId}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingBottom: bottomPad }}
+          ItemSeparatorComponent={() => (
+            <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: rp ? rp.textMuted : theme.colors.textMuted, opacity: isDark ? 0.35 : 0.28 }} />
+          )}
           ListHeaderComponent={
             <>
               <View
                 style={[
                   styles.leagueHero,
-                  {
-                    backgroundColor: theme.colors.surface,
-                    borderColor: theme.colors.border,
-                    ...theme.shadow.card,
-                  },
+                  rp
+                    ? { backgroundColor: rp.screenBg, borderColor: rp.border }
+                    : { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, ...theme.shadow.card },
                 ]}
               >
-                <GlassTopHighlight radius={18} />
+                {rp ? null : <GlassTopHighlight radius={18} />}
                 <View style={styles.leagueHeroTop}>
                   <View style={styles.leagueHeroText}>
-                    <Text style={[styles.leagueTitle, { color: theme.colors.textPrimary }]}>Weekly Ranks</Text>
-                    <Text style={[styles.leagueBody, { color: theme.colors.textSecondary }]}>
+                    <Text
+                      style={[
+                        styles.leagueTitle,
+                        { color: rp ? rp.textPrimary : theme.colors.textPrimary },
+                        rp ? { fontFamily: fontFamily.manropeExtraBold } : null,
+                      ]}
+                    >
+                      Weekly Ranks
+                    </Text>
+                    <Text
+                      style={[
+                        styles.leagueBody,
+                        { color: rp ? rp.textSecondary : theme.colors.textSecondary },
+                        rp ? { fontFamily: fontFamily.dmSansMedium } : null,
+                      ]}
+                    >
                       Ranked by habit check-ins and mini missions completed this week.
                     </Text>
                     <View style={styles.leagueHeroPills}>
-                      <View style={[styles.leagueHeroPill, { borderColor: theme.colors.border }]}>
+                      <View style={[styles.leagueHeroPill, { borderColor: rp ? rp.border : theme.colors.border }]}>
                         <Trophy size={13} color={theme.colors.amber[500]} />
-                        <Text style={[styles.leagueHeroPillText, { color: theme.colors.textSecondary }]}>
+                        <Text
+                          style={[
+                            styles.leagueHeroPillText,
+                            { color: rp ? rp.textSecondary : theme.colors.textSecondary },
+                            rp ? { fontFamily: fontFamily.dmSansMedium } : null,
+                          ]}
+                        >
                           {myWeeklyRank ? `Rank #${myWeeklyRank.rankPosition}` : "Enter with a username"}
                         </Text>
                       </View>
-                      <View style={[styles.leagueHeroPill, { borderColor: theme.colors.border }]}>
-                        <Medal size={13} color={theme.colors.indigo[400]} />
-                        <Text style={[styles.leagueHeroPillText, { color: theme.colors.textSecondary }]}>
+                      <View style={[styles.leagueHeroPill, { borderColor: rp ? rp.border : theme.colors.border }]}>
+                        <Medal size={13} color={rp ? rp.accent : theme.colors.indigo[400]} />
+                        <Text
+                          style={[
+                            styles.leagueHeroPillText,
+                            { color: rp ? rp.textSecondary : theme.colors.textSecondary },
+                            rp ? { fontFamily: fontFamily.dmSansMedium } : null,
+                          ]}
+                        >
                           {tier.label} this week
                         </Text>
                       </View>
-                      <View style={[styles.leagueHeroPill, { borderColor: theme.colors.border }]}>
+                      <View style={[styles.leagueHeroPill, { borderColor: rp ? rp.border : theme.colors.border }]}>
                         <Clock size={13} color={theme.colors.amber[500]} />
-                        <Text style={[styles.leagueHeroPillText, { color: theme.colors.textSecondary }]}>
+                        <Text
+                          style={[
+                            styles.leagueHeroPillText,
+                            { color: rp ? rp.textSecondary : theme.colors.textSecondary },
+                            rp ? { fontFamily: fontFamily.dmSansMedium } : null,
+                          ]}
+                        >
                           {weekResetLabel}
                         </Text>
                       </View>
                     </View>
                   </View>
                   <LevelXpRing level={level} xpInLevel={xpInLevel} size={92} strokeWidth={5}>
-                    <View style={[styles.leagueHeroOrb, { borderColor: theme.colors.border }]}>
-                      <Text style={[styles.leagueHeroLevel, { color: theme.colors.textPrimary }]}>{level}</Text>
-                      <Text style={[styles.leagueHeroLevelLabel, { color: theme.colors.textMuted }]}>LVL</Text>
+                    <View style={[styles.leagueHeroOrb, { borderColor: rp ? rp.border : theme.colors.border }]}>
+                      <Text
+                        style={[
+                          styles.leagueHeroLevel,
+                          { color: rp ? rp.textPrimary : theme.colors.textPrimary },
+                          rp ? { fontFamily: fontFamily.manropeExtraBold } : null,
+                        ]}
+                      >
+                        {level}
+                      </Text>
+                      <Text style={[styles.leagueHeroLevelLabel, { color: rp ? rp.textMuted : theme.colors.textMuted }]}>LVL</Text>
                     </View>
                   </LevelXpRing>
                 </View>
 
-                <View style={[styles.leagueStatsBand, { borderColor: theme.colors.border }]}>
+                <View style={[styles.leagueStatsBand, { borderColor: rp ? rp.border : theme.colors.border }]}>
                   <View style={styles.leagueStatMini}>
-                    <Text style={[styles.leagueStatValue, { color: theme.colors.indigo[400] }]}>{weeklyScore}</Text>
-                    <Text style={[styles.leagueStatLabel, { color: theme.colors.textMuted }]}>week pts</Text>
+                    <Text
+                      style={[
+                        styles.leagueStatValue,
+                        { color: rp ? rp.accentDark : theme.colors.indigo[400] },
+                        rp ? { fontFamily: fontFamily.manropeExtraBold } : null,
+                      ]}
+                    >
+                      {weeklyScore}
+                    </Text>
+                    <Text style={[styles.leagueStatLabel, { color: rp ? rp.textMuted : theme.colors.textMuted }]}>week pts</Text>
                   </View>
-                  <View style={[styles.leagueStatDivider, { backgroundColor: theme.colors.border }]} />
+                  <View style={[styles.leagueStatDivider, { backgroundColor: rp ? rp.border : theme.colors.border }]} />
                   <View style={styles.leagueStatMini}>
-                    <Text style={[styles.leagueStatValue, { color: theme.colors.cyan[400] }]}>{habitCheckInsWeek}</Text>
-                    <Text style={[styles.leagueStatLabel, { color: theme.colors.textMuted }]}>check-ins</Text>
+                    <Text
+                      style={[
+                        styles.leagueStatValue,
+                        { color: rp ? rp.textPrimary : theme.colors.cyan[400] },
+                        rp ? { fontFamily: fontFamily.manropeExtraBold } : null,
+                      ]}
+                    >
+                      {habitCheckInsWeek}
+                    </Text>
+                    <Text style={[styles.leagueStatLabel, { color: rp ? rp.textMuted : theme.colors.textMuted }]}>check-ins</Text>
                   </View>
-                  <View style={[styles.leagueStatDivider, { backgroundColor: theme.colors.border }]} />
+                  <View style={[styles.leagueStatDivider, { backgroundColor: rp ? rp.border : theme.colors.border }]} />
                   <View style={styles.leagueStatMini}>
-                    <Text style={[styles.leagueStatValue, { color: theme.colors.amber[500] }]}>{minisWeek}</Text>
-                    <Text style={[styles.leagueStatLabel, { color: theme.colors.textMuted }]}>minis/week</Text>
+                    <Text
+                      style={[
+                        styles.leagueStatValue,
+                        { color: rp ? rp.textPrimary : theme.colors.amber[500] },
+                        rp ? { fontFamily: fontFamily.manropeExtraBold } : null,
+                      ]}
+                    >
+                      {minisWeek}
+                    </Text>
+                    <Text style={[styles.leagueStatLabel, { color: rp ? rp.textMuted : theme.colors.textMuted }]}>minis/week</Text>
                   </View>
                 </View>
               </View>
 
               <View style={styles.leagueToolbar}>
-                <Text style={[styles.sectionLabel, { color: theme.colors.textMuted, marginBottom: 0 }]}>
+                <Text
+                  style={[
+                    styles.sectionLabel,
+                    { color: rp ? rp.textMuted : theme.colors.textMuted, marginBottom: 0 },
+                    rp ? { fontFamily: fontFamily.manropeBold } : null,
+                  ]}
+                >
                   {isLeagueSearching ? "SEARCH RESULTS" : "THIS WEEK"}
                 </Text>
                 <View style={styles.leagueSearchRow}>
                   <View
                     style={[
                       styles.leagueSearchBox,
-                      {
-                        backgroundColor: theme.colors.surface,
-                        borderColor: theme.colors.border,
-                        ...theme.shadow.card,
-                      },
+                      rp
+                        ? { backgroundColor: rp.chipBg, borderColor: "transparent" }
+                        : { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, ...theme.shadow.card },
                     ]}
                   >
-                    <Search size={15} color={theme.colors.textMuted} />
+                    <Search size={15} color={rp ? rp.textMuted : theme.colors.textMuted} />
                     <TextInput
                       value={leagueSearch}
                       onChangeText={setLeagueSearch}
                       placeholder="Search username"
-                      placeholderTextColor={theme.colors.textMuted}
+                      placeholderTextColor={rp ? rp.textMuted : theme.colors.textMuted}
                       autoCapitalize="none"
                       autoCorrect={false}
                       returnKeyType="search"
-                      style={[styles.leagueSearchInput, { color: theme.colors.textPrimary }]}
+                      style={[
+                        styles.leagueSearchInput,
+                        { color: rp ? rp.textPrimary : theme.colors.textPrimary },
+                        rp ? { fontFamily: fontFamily.dmSansMedium } : null,
+                      ]}
                     />
                     {leagueSearch.length > 0 ? (
                       <TouchableOpacity
@@ -2053,9 +2194,9 @@ export default function CompeteScreen() {
                         activeOpacity={0.75}
                         accessibilityRole="button"
                         accessibilityLabel="Clear leaderboard search"
-                        style={[styles.leagueSearchClear, { backgroundColor: theme.colors.background }]}
+                        style={[styles.leagueSearchClear, { backgroundColor: rp ? rp.screenBg : theme.colors.background }]}
                       >
-                        <X size={13} color={theme.colors.textSecondary} />
+                        <X size={13} color={rp ? rp.textSecondary : theme.colors.textSecondary} />
                       </TouchableOpacity>
                     ) : null}
                   </View>
@@ -2066,17 +2207,16 @@ export default function CompeteScreen() {
                       activeOpacity={0.85}
                       style={[
                         styles.leagueRefresh,
-                        {
-                          borderColor: theme.colors.border,
-                          backgroundColor: theme.colors.surface,
-                          opacity: leagueLoading || leagueLoadingMore ? 0.72 : 1,
-                        },
+                        rp
+                          ? { borderColor: rp.border, backgroundColor: rp.chipBg }
+                          : { borderColor: theme.colors.border, backgroundColor: theme.colors.surface },
+                        { opacity: leagueLoading || leagueLoadingMore ? 0.72 : 1 },
                       ]}
                     >
                       {leagueLoading ? (
-                        <ActivityIndicator size="small" color={theme.colors.indigo[400]} />
+                        <ActivityIndicator size="small" color={rp ? rp.accent : theme.colors.indigo[400]} />
                       ) : (
-                        <RefreshCw size={15} color={theme.colors.textSecondary} />
+                        <RefreshCw size={15} color={rp ? rp.textSecondary : theme.colors.textSecondary} />
                       )}
                     </TouchableOpacity>
                   )}
@@ -2090,14 +2230,12 @@ export default function CompeteScreen() {
                       key={i}
                       style={[
                         styles.leagueRow,
-                        {
-                          backgroundColor: theme.colors.surface,
-                          borderColor: theme.colors.border,
-                          ...theme.shadow.card,
-                        },
+                        rp
+                          ? { backgroundColor: rp.screenBg, borderColor: rp.border }
+                          : { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, ...theme.shadow.card },
                       ]}
                     >
-                      <GlassTopHighlight radius={16} />
+                      {rp ? null : <GlassTopHighlight radius={16} />}
                       <ShimmerBlock isDark={isDark} height={22} radius={11} style={{ width: 34 }} />
                       <ShimmerBlock isDark={isDark} height={50} radius={25} style={{ width: 50 }} />
                       <View style={{ flex: 1, gap: 8 }}>
@@ -2112,23 +2250,23 @@ export default function CompeteScreen() {
                 <View
                   style={[
                     styles.card,
-                    { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, ...theme.shadow.card, marginBottom: 10 },
+                    rp ? { backgroundColor: rp.screenBg, borderColor: rp.border, marginBottom: 10 } : { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, ...theme.shadow.card, marginBottom: 10 },
                   ]}
                 >
-                  <GlassTopHighlight radius={16} />
-                  <Text style={[styles.emptyTitle, { color: theme.colors.textPrimary }]}>Weekly Ranks unavailable</Text>
-                  <Text style={[styles.emptyBody, { color: theme.colors.textSecondary }]}>{leagueListError}</Text>
+                  {rp ? null : <GlassTopHighlight radius={16} />}
+                  <Text style={[styles.emptyTitle, { color: rp ? rp.textPrimary : theme.colors.textPrimary }]}>Weekly Ranks unavailable</Text>
+                  <Text style={[styles.emptyBody, { color: rp ? rp.textSecondary : theme.colors.textSecondary }]}>{leagueListError}</Text>
                 </View>
               ) : isLeagueSearching && leagueSearchReady && leagueSearchRows.length === 0 ? (
                 <View
                   style={[
                     styles.card,
-                    { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, ...theme.shadow.card, marginBottom: 10 },
+                    rp ? { backgroundColor: rp.screenBg, borderColor: rp.border, marginBottom: 10 } : { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, ...theme.shadow.card, marginBottom: 10 },
                   ]}
                 >
-                  <GlassTopHighlight radius={16} />
-                  <Text style={[styles.emptyTitle, { color: theme.colors.textPrimary }]}>No such user available</Text>
-                  <Text style={[styles.emptyBody, { color: theme.colors.textSecondary }]}>
+                  {rp ? null : <GlassTopHighlight radius={16} />}
+                  <Text style={[styles.emptyTitle, { color: rp ? rp.textPrimary : theme.colors.textPrimary }]}>No such user available</Text>
+                  <Text style={[styles.emptyBody, { color: rp ? rp.textSecondary : theme.colors.textSecondary }]}>
                     Try another username or clear search to return to the weekly ranks.
                   </Text>
                 </View>
@@ -2136,12 +2274,12 @@ export default function CompeteScreen() {
                 <View
                   style={[
                     styles.card,
-                    { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, ...theme.shadow.card, marginBottom: 10 },
+                    rp ? { backgroundColor: rp.screenBg, borderColor: rp.border, marginBottom: 10 } : { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, ...theme.shadow.card, marginBottom: 10 },
                   ]}
                 >
-                  <GlassTopHighlight radius={16} />
-                  <Text style={[styles.emptyTitle, { color: theme.colors.textPrimary }]}>No weekly scores yet</Text>
-                  <Text style={[styles.emptyBody, { color: theme.colors.textSecondary }]}>
+                  {rp ? null : <GlassTopHighlight radius={16} />}
+                  <Text style={[styles.emptyTitle, { color: rp ? rp.textPrimary : theme.colors.textPrimary }]}>No weekly scores yet</Text>
+                  <Text style={[styles.emptyBody, { color: rp ? rp.textSecondary : theme.colors.textSecondary }]}>
                     Create a username from Profile and complete habits or minis this week.
                   </Text>
                 </View>
@@ -2155,6 +2293,7 @@ export default function CompeteScreen() {
               theme={theme}
               isDark={isDark}
               onPress={handleLeagueRowPress}
+              rp={rp}
             />
           )}
           ListFooterComponent={
@@ -2167,7 +2306,7 @@ export default function CompeteScreen() {
                   style={[
                     styles.loadMoreLeague,
                     {
-                      backgroundColor: theme.colors.surface,
+                      backgroundColor: rp ? rp.chipBg : theme.colors.surface,
                       opacity: leagueLoadingMore ? 0.72 : 1,
                       marginTop: 10,
                     },
@@ -2202,14 +2341,12 @@ export default function CompeteScreen() {
                       key={i}
                       style={[
                         styles.card,
-                        {
-                          backgroundColor: theme.colors.surface,
-                          borderColor: theme.colors.border,
-                          ...theme.shadow.card,
-                        },
+                        rp
+                          ? { backgroundColor: rp.screenBg, borderColor: rp.border }
+                          : { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, ...theme.shadow.card },
                       ]}
                     >
-                      <GlassTopHighlight radius={16} />
+                      {rp ? null : <GlassTopHighlight radius={16} />}
                       <View style={{ gap: 10 }}>
                         <ShimmerBlock
                           isDark={isDark}
@@ -2229,11 +2366,16 @@ export default function CompeteScreen() {
                 </View>
               ) : mixedInvites.length === 0 ? (
                 <View
-                  style={[styles.card, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, ...theme.shadow.card }]}
+                  style={[
+                    styles.card,
+                    rp
+                      ? { backgroundColor: rp.screenBg, borderColor: rp.border }
+                      : { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, ...theme.shadow.card },
+                  ]}
                 >
-                  <GlassTopHighlight radius={16} />
-                  <Text style={[styles.emptyTitle, { color: theme.colors.textPrimary }]}>No invites yet</Text>
-                  <Text style={[styles.emptyBody, { color: theme.colors.textSecondary }]}>
+                  {rp ? null : <GlassTopHighlight radius={16} />}
+                  <Text style={[styles.emptyTitle, { color: rp ? rp.textPrimary : theme.colors.textPrimary }]}>No invites yet</Text>
+                  <Text style={[styles.emptyBody, { color: rp ? rp.textSecondary : theme.colors.textSecondary }]}>
                     When someone invites you to a group mission or Live Mini Mission, it will show up here.
                   </Text>
                 </View>
@@ -2252,17 +2394,17 @@ export default function CompeteScreen() {
                       style={[
                         styles.loadMoreLeague,
                         {
-                          backgroundColor: isDark ? "rgba(148, 163, 184, 0.08)" : theme.colors.surfaceElevated,
-                          borderColor: theme.colors.border,
+                          backgroundColor: rp ? rp.chipBg : isDark ? "rgba(148, 163, 184, 0.08)" : theme.colors.surfaceElevated,
+                          borderColor: rp ? rp.border : theme.colors.border,
                           borderWidth: 1,
                           opacity: invitesLoadingMore ? 0.72 : 1,
                         },
                       ]}
                     >
                       {invitesLoadingMore ? (
-                        <ActivityIndicator size="small" color={theme.colors.cyan[400]} />
+                        <ActivityIndicator size="small" color={rp ? rp.accent : theme.colors.cyan[400]} />
                       ) : (
-                        <Text style={[styles.loadMoreLeagueText, { color: theme.colors.textSecondary }]}>
+                        <Text style={[styles.loadMoreLeagueText, { color: rp ? rp.textSecondary : theme.colors.textSecondary }]}>
                           Load older invites
                         </Text>
                       )}
@@ -2273,14 +2415,41 @@ export default function CompeteScreen() {
             </>
           ) : (
             <>
-              <Text style={[styles.sectionLabel, { color: theme.colors.textMuted }]}>ACTIVE</Text>
+              <Text
+                style={[
+                  styles.sectionLabel,
+                  { color: rp ? rp.textMuted : theme.colors.textMuted },
+                  rp ? { fontFamily: fontFamily.manropeBold } : null,
+                ]}
+              >
+                ACTIVE
+              </Text>
               {enrollments.length === 0 ? (
                 <View
-                  style={[styles.card, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, ...theme.shadow.card }]}
+                  style={[
+                    styles.card,
+                    rp
+                      ? { backgroundColor: rp.screenBg, borderColor: rp.border }
+                      : { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, ...theme.shadow.card },
+                  ]}
                 >
-                  <GlassTopHighlight radius={16} />
-                  <Text style={[styles.emptyTitle, { color: theme.colors.textPrimary }]}>No active challenges</Text>
-                  <Text style={[styles.emptyBody, { color: theme.colors.textSecondary }]}>
+                  {rp ? null : <GlassTopHighlight radius={16} />}
+                  <Text
+                    style={[
+                      styles.emptyTitle,
+                      { color: rp ? rp.textPrimary : theme.colors.textPrimary },
+                      rp ? { fontFamily: fontFamily.manropeBold } : null,
+                    ]}
+                  >
+                    No active challenges
+                  </Text>
+                  <Text
+                    style={[
+                      styles.emptyBody,
+                      { color: rp ? rp.textSecondary : theme.colors.textSecondary },
+                      rp ? { fontFamily: fontFamily.dmSansMedium } : null,
+                    ]}
+                  >
                     Pick a challenge below. Up to two at a time. Progress uses your habit + mini mission data on this device.
                   </Text>
                 </View>
@@ -2295,26 +2464,61 @@ export default function CompeteScreen() {
                     theme={theme}
                     isDark={isDark}
                     onRequestAbandon={() => setLeaveEnrollmentId(e.id)}
+                    rp={rp}
                   />
                 ))
               )}
 
-              <Text style={[styles.sectionLabel, { color: theme.colors.textMuted, marginTop: 14 }]}>BROWSE</Text>
+              <Text
+                style={[
+                  styles.sectionLabel,
+                  { color: rp ? rp.textMuted : theme.colors.textMuted, marginTop: 14 },
+                  rp ? { fontFamily: fontFamily.manropeBold } : null,
+                ]}
+              >
+                BROWSE
+              </Text>
               {catalog.map((t) => (
                 <TouchableOpacity
                   key={t.id}
-                  style={[styles.catalogCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}
+                  style={[
+                    styles.catalogCard,
+                    rp
+                      ? { backgroundColor: rp.screenBg, borderColor: rp.border }
+                      : { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
+                  ]}
                   onPress={() => handleJoin(t.id)}
                   activeOpacity={0.88}
                 >
-                  <GlassTopHighlight radius={16} />
-                  <Text style={[styles.catalogTitle, { color: theme.colors.textPrimary }]}>{t.title}</Text>
-                  <Text style={[styles.catalogSub, { color: theme.colors.textSecondary }]}>{t.subtitle}</Text>
-                  <Text style={[styles.catalogGoal, { color: theme.colors.textMuted }]}>{t.goalLine}</Text>
-                  <Text style={[styles.catalogMeta, { color: theme.colors.textMuted }]}>
+                  {rp ? null : <GlassTopHighlight radius={16} />}
+                  <Text
+                    style={[
+                      styles.catalogTitle,
+                      { color: rp ? rp.textPrimary : theme.colors.textPrimary },
+                      rp ? { fontFamily: fontFamily.manropeBold } : null,
+                    ]}
+                  >
+                    {t.title}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.catalogSub,
+                      { color: rp ? rp.textSecondary : theme.colors.textSecondary },
+                      rp ? { fontFamily: fontFamily.dmSansMedium } : null,
+                    ]}
+                  >
+                    {t.subtitle}
+                  </Text>
+                  <Text style={[styles.catalogGoal, { color: rp ? rp.textMuted : theme.colors.textMuted }]}>{t.goalLine}</Text>
+                  <Text style={[styles.catalogMeta, { color: rp ? rp.textMuted : theme.colors.textMuted }]}>
                     {t.durationDays} days - {t.target} {t.metric === "min_streak" ? "goal" : "target"}
                   </Text>
-                  <View style={[styles.joinCta, { backgroundColor: theme.colors.indigo[600], ...theme.shadow.glow }]}>
+                  <View
+                    style={[
+                      styles.joinCta,
+                      rp ? { backgroundColor: rp.accent } : { backgroundColor: theme.colors.indigo[600], ...theme.shadow.glow },
+                    ]}
+                  >
                     <Text style={styles.joinCtaText}>Join</Text>
                   </View>
                 </TouchableOpacity>
@@ -2322,21 +2526,45 @@ export default function CompeteScreen() {
 
               {completed.length > 0 ? (
                 <>
-                  <Text style={[styles.sectionLabel, { color: theme.colors.textMuted, marginTop: 14 }]}>RECENT WINS</Text>
-                  <View
-                    style={[styles.card, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, ...theme.shadow.card }]}
+                  <Text
+                    style={[
+                      styles.sectionLabel,
+                      { color: rp ? rp.textMuted : theme.colors.textMuted, marginTop: 14 },
+                      rp ? { fontFamily: fontFamily.manropeBold } : null,
+                    ]}
                   >
-                    <GlassTopHighlight radius={16} />
+                    RECENT WINS
+                  </Text>
+                  <View
+                    style={[
+                    styles.card,
+                    rp
+                      ? { backgroundColor: rp.screenBg, borderColor: rp.border }
+                      : { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, ...theme.shadow.card },
+                  ]}
+                  >
+                    {rp ? null : <GlassTopHighlight radius={16} />}
                     {completed.slice(0, 6).map((c, i) => {
                       const tpl = getChallengeTemplate(c.templateId);
                       return (
                         <View
                           key={`${c.templateId}-${c.completedAt}`}
-                          style={[styles.winRow, i > 0 && { borderTopColor: theme.colors.border, borderTopWidth: StyleSheet.hairlineWidth }]}
+                          style={[
+                            styles.winRow,
+                            i > 0 && { borderTopColor: rp ? rp.border : theme.colors.border, borderTopWidth: StyleSheet.hairlineWidth },
+                          ]}
                         >
                           <Medal size={16} color={theme.colors.amber[500]} />
-                          <Text style={[styles.winTitle, { color: theme.colors.textPrimary }]}>{tpl?.title ?? c.templateId}</Text>
-                          <Text style={[styles.winDate, { color: theme.colors.textMuted }]}>
+                          <Text
+                            style={[
+                              styles.winTitle,
+                              { color: rp ? rp.textPrimary : theme.colors.textPrimary },
+                              rp ? { fontFamily: fontFamily.manropeBold } : null,
+                            ]}
+                          >
+                            {tpl?.title ?? c.templateId}
+                          </Text>
+                          <Text style={[styles.winDate, { color: rp ? rp.textMuted : theme.colors.textMuted }]}>
                             {formatDateDisplay(c.completedAt, c.completedAt)}
                           </Text>
                         </View>
@@ -2402,17 +2630,29 @@ const styles = StyleSheet.create({
   },
   segmentActive: {},
   segmentLabel: { fontWeight: "700", fontSize: 12 },
-  /** Secondary row — mirrors tryitfirst-mobile-v2 dashboard selling/buying sub-tabs (rounded pills + brand tint). */
+  segmentIndicator: {
+    position: "absolute",
+    top: 4,
+    bottom: 4,
+    left: 4,
+    borderRadius: 10,
+  },
+  /** Secondary row — plain text tabs with a thin vertical divider between them and just a color/weight change to mark the selected one (no pill background). */
   challengesSubOuter: {
     flexDirection: "row",
+    alignItems: "center",
     gap: 8,
-    marginTop: 4,
+    marginTop: 0,
     marginBottom: 10,
+  },
+  challengesSubDivider: {
+    width: StyleSheet.hairlineWidth,
+    alignSelf: "stretch",
+    marginVertical: 6,
   },
   invitesLabelRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   challengesSubPill: {
     flex: 1,
-    borderRadius: 12,
     paddingVertical: 8,
     alignItems: "center",
     justifyContent: "center",
@@ -2420,7 +2660,6 @@ const styles = StyleSheet.create({
   challengesSubText: {
     textAlign: "center",
     fontSize: 12,
-    fontWeight: "600",
   },
   card: {
     position: "relative",
@@ -2441,18 +2680,24 @@ const styles = StyleSheet.create({
   cardTitle: { fontWeight: "800", fontSize: 17, marginBottom: 10 },
   inviteTitleRow: {
     flexDirection: "row",
-    flexWrap: "wrap",
-    alignItems: "center",
+    alignItems: "flex-start",
     gap: 10,
     marginBottom: 4,
   },
   inviteChallengeName: {
     flex: 1,
-    minWidth: 140,
+    minWidth: 100,
     fontSize: 21,
     fontWeight: "800",
     letterSpacing: -0.3,
     lineHeight: 26,
+  },
+  invitePillsCol: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "flex-end",
+    gap: 8,
+    flexShrink: 0,
   },
   inviteKindPill: {
     borderRadius: 9999,
@@ -2606,13 +2851,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  medalDisc: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-  },
   leagueRankText: {
     width: 44,
     textAlign: "center",
@@ -2639,10 +2877,11 @@ const styles = StyleSheet.create({
   leagueHandle: { flexShrink: 1, minWidth: 0, fontSize: 11, lineHeight: 15, fontWeight: "700" },
   youPill: {
     borderRadius: 999,
+    borderWidth: 1,
     paddingHorizontal: 6,
     paddingVertical: 3,
   },
-  youPillText: { color: "#fff", fontSize: 8, fontWeight: "900", letterSpacing: 0.8 },
+  youPillText: { fontSize: 8, fontWeight: "900", letterSpacing: 0.8 },
   leagueXpCol: { width: 50, alignItems: "flex-end" },
   leagueXp: { fontSize: 16, lineHeight: 20, fontWeight: "900", fontVariant: ["tabular-nums"] },
   leagueXpLabelRow: { flexDirection: "row", alignItems: "center", gap: 3, marginTop: 2 },
@@ -2729,16 +2968,15 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
+    gap: 6,
     marginTop: 14,
-    minHeight: 46,
-    paddingVertical: 9,
-    paddingHorizontal: 16,
-    borderRadius: 999,
-    borderWidth: 1,
-    overflow: "hidden",
+    minHeight: 40,
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+    borderRadius: 6,
+    alignSelf: "flex-start",
   },
-  inviteGroupStreaksBtnText: { fontSize: 15, fontWeight: "900", letterSpacing: 0, backgroundColor: "transparent" },
+  inviteGroupStreaksBtnText: { fontSize: 15, fontWeight: "700", letterSpacing: 0, backgroundColor: "transparent" },
   inviteActions: { flexDirection: "row", gap: 10, alignItems: "center" },
   declineBtn: {
     flex: 1,

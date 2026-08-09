@@ -18,7 +18,12 @@ import { withAlpha } from "../styles/theme";
 export type AppDialogButton = {
   text: string;
   onPress?: () => void;
-  style?: "default" | "cancel" | "destructive";
+  /** "neutral" renders the same quiet bordered look as "cancel", for dialogs where
+   * every option should read as equal-weight choices rather than one primary CTA
+   * (e.g. an "add a photo" source picker). */
+  style?: "default" | "cancel" | "destructive" | "neutral";
+  /** Optional leading icon — lets a dialog distinguish otherwise-identical neutral buttons without color. */
+  icon?: ReactNode;
 };
 
 export type AppDialogOptions = {
@@ -150,7 +155,7 @@ export function AppDialogProvider({ children }: { children: ReactNode }) {
                   const variant =
                     button.style === "destructive"
                       ? "danger"
-                      : button.style === "cancel"
+                      : button.style === "cancel" || button.style === "neutral"
                         ? "secondary"
                         : "primary";
                   return (
@@ -158,6 +163,7 @@ export function AppDialogProvider({ children }: { children: ReactNode }) {
                       key={`${button.text}-${index}`}
                       title={button.text}
                       variant={variant}
+                      icon={button.icon}
                       onPress={() => {
                         close();
                         button.onPress?.();
@@ -184,7 +190,14 @@ export function showAppAlert(
     globalShowAlert(title, message, buttons, options);
     return;
   }
-  NativeAlert.alert(title, message, buttons, options);
+  // Native Alert has no "neutral" style (or icon) — this fallback only fires
+  // before the provider mounts, so it just needs to not crash, not match pixel-for-pixel.
+  const nativeButtons = buttons?.map((button) => ({
+    text: button.text,
+    onPress: button.onPress,
+    style: button.style === "neutral" ? ("default" as const) : button.style,
+  }));
+  NativeAlert.alert(title, message, nativeButtons, options);
 }
 
 export function useAppDialog(): AppDialogContextValue {

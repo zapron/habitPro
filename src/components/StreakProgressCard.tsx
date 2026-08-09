@@ -8,10 +8,8 @@ import {
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { GlassTopHighlight } from "./GlassTopHighlight";
-import { Crown } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
 import { useReducedMotion } from '../hooks/useReducedMotion';
-import { AnimatedFire } from './AnimatedFire';
 
 interface StreakProgressCardProps {
     streak: number;
@@ -38,57 +36,33 @@ function intensityFor(streak: number): Intensity {
  * strip.
  */
 export function StreakProgressCard({ streak, completedCount, totalDays, ringColor }: StreakProgressCardProps) {
-    const { theme } = useTheme();
+    const { theme, isDark } = useTheme();
     const reduceMotion = useReducedMotion();
-    const glow = useRef(new Animated.Value(0)).current;
-    const lastStreakRef = useRef<number | null>(null);
     const pctAnim = useRef(new Animated.Value(0)).current;
     const [displayPct, setDisplayPct] = useState(0);
 
     const intensity = intensityFor(streak);
-    const pulses = intensity === 'hot' || intensity === 'epic' || intensity === 'legendary';
 
-    useEffect(() => {
-        if (!pulses || reduceMotion) {
-            glow.setValue(reduceMotion ? 1 : 0);
-            return undefined;
-        }
-        if (lastStreakRef.current === streak) return undefined;
-        lastStreakRef.current = streak;
-        const loop = Animated.loop(
-            Animated.sequence([
-                Animated.timing(glow, {
-                    toValue: 1,
-                    duration: 1500,
-                    easing: Easing.inOut(Easing.ease),
-                    useNativeDriver: true,
-                    isInteraction: false,
-                }),
-                Animated.timing(glow, {
-                    toValue: 0,
-                    duration: 1500,
-                    easing: Easing.inOut(Easing.ease),
-                    useNativeDriver: true,
-                    isInteraction: false,
-                }),
-            ]),
-        );
-        loop.start();
-        return () => loop.stop();
-    }, [pulses, reduceMotion, streak, glow]);
+    // Dulled-down versions of the same gold/terracotta/maroon hues used elsewhere for
+    // this card — still readable as "this streak is notable" without the saturated
+    // yellow/amber/red reading as an alert. Tuned per theme so it stays legible on
+    // both a near-black and a near-white card background.
+    const mutedGold = isDark ? '#C9A758' : '#8C7530';
+    const mutedTerracotta = isDark ? '#B57C46' : '#8A5A2E';
+    const mutedMaroon = isDark ? '#B25C5C' : '#8B4048';
 
     const tierColor =
         intensity === 'legendary'
-            ? theme.colors.yellow[400]
+            ? mutedGold
             : intensity === 'epic'
-                ? theme.colors.red[500]
-                : theme.colors.amber[500];
+                ? mutedMaroon
+                : mutedTerracotta;
     const tierColorSoft =
         intensity === 'legendary'
-            ? theme.colors.amber[500]
+            ? mutedTerracotta
             : intensity === 'epic'
-                ? theme.colors.amber[500]
-                : theme.colors.yellow[400];
+                ? mutedTerracotta
+                : mutedGold;
     const tierBorder =
         intensity === 'legendary'
             ? 'rgba(251, 191, 36, 0.5)'
@@ -108,8 +82,6 @@ export function StreakProgressCard({ streak, completedCount, totalDays, ringColo
                     ? `${streak}-day streak on fire!`
                     : `${streak}-day streak!`;
 
-    const iconGlowOpacity = glow.interpolate({ inputRange: [0, 1], outputRange: [0.16, 0.4] });
-    const iconScale = glow.interpolate({ inputRange: [0, 1], outputRange: [1, 1.06] });
     const progress = totalDays > 0 ? completedCount / totalDays : 0;
     const pct = Math.round(Math.min(1, Math.max(0, progress)) * 100);
     const barColor = ringColor ?? tierColor;
@@ -151,7 +123,10 @@ export function StreakProgressCard({ streak, completedCount, totalDays, ringColo
                     styles.card,
                     {
                         backgroundColor: theme.colors.surface,
-                        borderColor: intensity === 'none' ? theme.colors.border : tierBorder,
+                        borderColor:
+                            intensity === 'none'
+                                ? isDark ? theme.colors.border : "transparent"
+                                : theme.colors.border,
                         borderRadius: theme.radius.lg,
                         ...theme.shadow.card,
                     },
@@ -159,23 +134,6 @@ export function StreakProgressCard({ streak, completedCount, totalDays, ringColo
             >
                 <GlassTopHighlight radius={theme.radius.lg} />
                 <View style={styles.row}>
-                    {intensity !== 'none' ? (
-                        <View style={styles.iconCol}>
-                            {pulses ? (
-                                <Animated.View
-                                    pointerEvents="none"
-                                    style={[styles.iconGlow, { backgroundColor: tierColor, opacity: iconGlowOpacity }]}
-                                />
-                            ) : null}
-                            <Animated.View style={{ transform: [{ scale: pulses ? iconScale : 1 }] }}>
-                                {intensity === 'legendary' ? (
-                                    <Crown size={30} color={tierColor} fill={tierColor} />
-                                ) : (
-                                    <AnimatedFire size={24} color={tierColor} />
-                                )}
-                            </Animated.View>
-                        </View>
-                    ) : null}
                     <View style={styles.contentCol}>
                         {intensity !== 'none' ? (
                             <Text style={[styles.title, { color: tierColor }]} numberOfLines={1}>
@@ -210,7 +168,7 @@ export function StreakProgressCard({ streak, completedCount, totalDays, ringColo
                             </View>
                             <Text style={styles.dayCount} numberOfLines={1}>
                                 <Text style={{ color: barColor, fontWeight: '800' }}>{completedCount}</Text>
-                                <Text style={{ color: theme.colors.textMuted }}>/{totalDays}d</Text>
+                                <Text style={{ color: theme.colors.textMuted }}>/{totalDays} d</Text>
                             </Text>
                         </View>
                     </View>
@@ -221,7 +179,7 @@ export function StreakProgressCard({ streak, completedCount, totalDays, ringColo
 }
 
 const styles = StyleSheet.create({
-    wrap: { marginBottom: 16, marginHorizontal: 3 },
+    wrap: { marginBottom: 16, marginHorizontal: 0 },
     card: {
         paddingVertical: 16,
         paddingHorizontal: 18,
@@ -235,8 +193,6 @@ const styles = StyleSheet.create({
         height: 18,
     },
     row: { flexDirection: 'row', alignItems: 'center', gap: 14 },
-    iconCol: { width: 46, height: 46, alignItems: 'center', justifyContent: 'center' },
-    iconGlow: { position: 'absolute', width: 46, height: 46, borderRadius: 23 },
     contentCol: { flex: 1, minWidth: 0, gap: 8, justifyContent: 'center' },
     eyebrow: { fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1 },
     title: { fontSize: 16, fontWeight: '800', letterSpacing: 0.2 },

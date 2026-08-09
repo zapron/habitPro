@@ -200,7 +200,6 @@ export function ChecklistDaySheet({
               style={[
                 styles.completeBtn,
                 {
-                  borderColor: theme.colors.green[500],
                   backgroundColor: `${theme.colors.green[500]}14`,
                 },
               ]}
@@ -338,7 +337,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
-    borderWidth: 1,
     borderRadius: 12,
     paddingVertical: 13,
     marginTop: 4,
