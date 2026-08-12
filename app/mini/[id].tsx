@@ -187,6 +187,9 @@ const formatDuration = (ms: number) => {
 /** Survives screen unmount so reopening the card does not re-fire "time's up" for the same timer window. */
 const foregroundExpiryNotifiedEndMsByMissionId = new Map<string, number>();
 
+/** Stable empty object so `mission?.draftTasks ?? EMPTY_DRAFT_TASKS` doesn't create a new reference every render. */
+const EMPTY_DRAFT_TASKS: Record<string, StreakMemoryTaskEntry> = {};
+
 function getPlannedEndMs(m: {
   startedAt?: string;
   estimatedMinutes: number;
@@ -1183,8 +1186,13 @@ export default function MiniMissionDetail() {
   const [liveMiniSheetPrimed, setLiveMiniSheetPrimed] = useState(false);
   const [timerCheckInPromptOpen, setTimerCheckInPromptOpen] = useState(false);
   const timerCheckInPromptSeenRef = useRef<string | null>(null);
-  /** Checklist mini missions only — logged tasks held locally until "Complete Mission" finalizes them. */
-  const [draftTaskEntries, setDraftTaskEntries] = useState<Record<string, StreakMemoryTaskEntry>>({});
+  /**
+   * Checklist mini missions only — logged tasks for the current run, persisted on the
+   * mission record itself (`mission.draftTasks`) so they survive the app being
+   * backgrounded/killed before "Complete Mission" finalizes them, same as a main
+   * mission's per-task log entries survive in `habit.streakMemories`.
+   */
+  const draftTaskEntries = mission?.draftTasks ?? EMPTY_DRAFT_TASKS;
   const [taskMemoryUi, setTaskMemoryUi] = useState<
     | { kind: "create"; task: TaskChecklistItem }
     | { kind: "view"; task: TaskChecklistItem; entry: StreakMemoryTaskEntry }
@@ -1193,7 +1201,6 @@ export default function MiniMissionDetail() {
   const [checklistCompleting, setChecklistCompleting] = useState(false);
 
   useEffect(() => {
-    setDraftTaskEntries({});
     setTaskMemoryUi(null);
   }, [missionId]);
 
@@ -1721,23 +1728,25 @@ export default function MiniMissionDetail() {
       includedInShare: priorEntry?.includedInShare,
     };
 
-    setDraftTaskEntries((prev) => ({ ...prev, [ctx.task.id]: taskEntry }));
+    useHabitStore.getState().setMiniMissionDraftTask(mission.id, ctx.task.id, taskEntry);
     // StreakMemorySheet calls onClose() itself right after onCommit resolves — that
     // handler closes taskMemoryUi and reopens the checklist sheet (see the mount below).
   };
 
   /**
-   * Mirrors handleToggleTaskInclusion in app/habit/[id].tsx, but simpler: a mini
-   * mission's tasks live in local draft state (draftTaskEntries) until "Complete
-   * Mission" commits them, so there's no store patch to make here — just flip the
-   * flag in place. handleChecklistCompleteCommit's gallery filter (and the
-   * completionMemory.tasks it persists) both read this same field afterward.
+   * Mirrors handleToggleTaskInclusion in app/habit/[id].tsx: a mini mission's tasks
+   * live in `mission.draftTasks` (persisted, see setMiniMissionDraftTask) until
+   * "Complete Mission" commits them — just flip the flag in place. handleChecklistCompleteCommit's
+   * gallery filter (and the completionMemory.tasks it persists) both read this same
+   * field afterward.
    */
   const handleToggleMiniTaskInclusion = (taskId: string) => {
-    setDraftTaskEntries((prev) => {
-      const entry = prev[taskId];
-      if (!entry) return prev;
-      return { ...prev, [taskId]: { ...entry, includedInShare: entry.includedInShare === false } };
+    if (!mission) return;
+    const entry = draftTaskEntries[taskId];
+    if (!entry) return;
+    useHabitStore.getState().setMiniMissionDraftTask(mission.id, taskId, {
+      ...entry,
+      includedInShare: entry.includedInShare === false,
     });
   };
 
@@ -1834,7 +1843,7 @@ export default function MiniMissionDetail() {
         }
       }
 
-      setDraftTaskEntries({});
+      // completeMiniMission() already clears mission.draftTasks — nothing to reset locally.
       setCompleteSheetOpen(false);
       setTimerFrozenAtMs(null);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);

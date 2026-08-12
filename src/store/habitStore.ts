@@ -17,6 +17,7 @@ import {
   type MissionReport,
   type MissionVisibility,
   type StreakMemory,
+  type StreakMemoryTaskEntry,
 } from "../types/habit";
 import { MAX_RESERVE_FUEL_MINUTES } from "../constants/miniMission";
 import { recordAccountDeletedMissionId } from "../lib/accountBackup";
@@ -808,6 +809,7 @@ export const useHabitStore = create<HabitStore>()(
                 ? { communityFeedRevoked: nextRevoked }
                 : {}),
               ...(completionMemory ? { completionMemory } : {}),
+              draftTasks: undefined,
             };
           }),
         }));
@@ -822,6 +824,7 @@ export const useHabitStore = create<HabitStore>()(
             return {
               ...mission,
               status: "cancelled",
+              draftTasks: undefined,
             };
           }),
         }));
@@ -837,6 +840,7 @@ export const useHabitStore = create<HabitStore>()(
             return {
               ...m,
               status: "missed",
+              draftTasks: undefined,
             };
           }),
         }));
@@ -864,10 +868,36 @@ export const useHabitStore = create<HabitStore>()(
               startedAt: now,
               extendedMinutes: 0,
               scheduledStartAt: undefined,
+              draftTasks: undefined,
             };
           }),
         }));
         requestRemoteSync({ immediate: true });
+      },
+      setMiniMissionDraftTask: (id, taskId, entry) => {
+        set((state) => ({
+          miniMissions: state.miniMissions.map((m) => {
+            if (m.id !== id) return m;
+            return { ...m, draftTasks: { ...m.draftTasks, [taskId]: entry } };
+          }),
+        }));
+      },
+      removeMiniMissionDraftTask: (id, taskId) => {
+        set((state) => ({
+          miniMissions: state.miniMissions.map((m) => {
+            if (m.id !== id || !m.draftTasks || !(taskId in m.draftTasks)) return m;
+            const { [taskId]: _removed, ...rest } = m.draftTasks;
+            return { ...m, draftTasks: rest };
+          }),
+        }));
+      },
+      clearMiniMissionDraftTasks: (id) => {
+        set((state) => ({
+          miniMissions: state.miniMissions.map((m) => {
+            if (m.id !== id || !m.draftTasks) return m;
+            return { ...m, draftTasks: undefined };
+          }),
+        }));
       },
       extendMiniMission: (id, extraMinutes) => {
         set((state) => ({

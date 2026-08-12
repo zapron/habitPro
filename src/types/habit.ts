@@ -162,6 +162,13 @@ export interface MiniMission {
    * docs/MINI_MISSION_CATALOG_ARCHITECTURE.md.
    */
   taskChecklist?: TaskChecklistItem[];
+  /**
+   * In-progress per-task log entries for a `taskChecklist` mission, keyed by taskId —
+   * mirrors what `Habit.streakMemories[date].tasks` gives main missions, but for the
+   * single active run of a mini mission before it's marked complete. Local-only (not
+   * synced to Supabase); cleared once the mission completes/fails/is cancelled.
+   */
+  draftTasks?: Record<string, StreakMemoryTaskEntry>;
 }
 
 export type AddHabitInput = {
@@ -265,6 +272,13 @@ export type HabitStore = {
     },
   ) => void;
   extendMiniMission: (id: string, extraMinutes: number) => void;
+  /**
+   * Logs (or updates) one task's draft entry for the mission's current run, so it
+   * survives the app being backgrounded/killed before the whole mission is completed.
+   */
+  setMiniMissionDraftTask: (id: string, taskId: string, entry: StreakMemoryTaskEntry) => void;
+  removeMiniMissionDraftTask: (id: string, taskId: string) => void;
+  clearMiniMissionDraftTasks: (id: string) => void;
   /** User explicitly decided an expired timer check-in was not completed. */
   failMiniMission: (id: string) => void;
   cancelMiniMission: (id: string) => void;
