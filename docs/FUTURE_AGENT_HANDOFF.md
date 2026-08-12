@@ -23,7 +23,26 @@ Then inspect the files relevant to the user request.
 
 ## Current User Priorities
 
-- **Most current, as of 2026-08-09**: `experiment/glass-redesign-v2`
+- **Most current, as of 2026-08-12**: 7 commits on `main`
+  (`5c37bad`..`fae0a49`) — Minimalist is now the app's **only** theme pack
+  (Classic's code still exists, just unreachable — do not build a new
+  picker back in without checking with the user first); the "@" prefix was
+  removed from every displayed username app-wide; three real bugs were
+  fixed (Android keyboard covering invite-search sheets; streak-repair
+  firing for pre-join days on a group challenge, backed by a Supabase
+  migration the user has **already applied**; mini-mission task logs lost
+  on app close — this one is **local-only, not Supabase-synced**, unlike
+  the streak-repair fix); and both the Mini Missions screen (list+detail)
+  and Live Squad screen got a minimalist redesign pass, the latter
+  explicitly built to mirror `CohortLeaderHero`'s rank-circle/square-grid
+  language. Full detail in `docs/CURRENT_WORK.md`'s 2026-08-12 entry.
+  `npx tsc --noEmit` clean, no `package.json`/lockfile/`app.json`/
+  `eas.json` changes — OTA-safe. **Not pushed as OTA yet.** None of this
+  was confirmed live on-device (same sandbox limitation as every prior
+  session) — Live Squad's newly-flattened participant rows are probably
+  the single spot most worth a real look, given how dense that screen's
+  content is.
+- **As of 2026-08-09**: `experiment/glass-redesign-v2`
   (everything below — the 2026-08-08, 2026-08-06, and 2026-08-04 sessions)
   was **merged into `main` via PR #1, merge commit `0a52ef7`**. Local
   `main` confirmed identical to `origin/main`, `npx tsc --noEmit` clean

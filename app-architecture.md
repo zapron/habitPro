@@ -1085,15 +1085,23 @@ Color token discipline (as of 2026-07-31):
   participant rows) and the Community feed's post header. Check both
   families of call sites before changing its shape/props.
 
-### Theme Packs (as of 2026-08-04, branch `experiment/glass-redesign-v2`, not merged)
+### Theme Packs (on `main`; Minimalist-only as of 2026-08-12)
 
 A second, orthogonal preference alongside light/dark/system:
-`themePack: 'classic' | 'minimalist'` (`src/context/ThemeContext.tsx`),
-persisted separately in AsyncStorage (`@habitpro_theme_pack`), selectable
-from `SettingsModal`'s "APPEARANCE" section. `useTheme()` resolves one of
-four full `AppTheme` objects based on `(themePack, isDark)`:
-`darkTheme`/`lightTheme` (Classic, the original palette, unchanged) or
-`minimalistDarkTheme`/`minimalistLightTheme` (`src/styles/theme.ts`).
+`themePack: 'classic' | 'minimalist'` (`src/context/ThemeContext.tsx`).
+**As of 2026-08-12, Minimalist is hardcoded as the only reachable pack** —
+`ThemeContext`'s default is `'minimalist'` and it deliberately does not
+restore any pack previously saved to AsyncStorage (`@habitpro_theme_pack`,
+still read/written by the untouched `setThemePack`/storage plumbing, just
+never called from any UI), and the Classic/Minimalist picker was removed
+from `SettingsModal`'s "APPEARANCE" section entirely. Classic's theme
+objects and all the `themePack === 'minimalist'` branches below are still
+in the codebase, just permanently unreachable — nothing was deleted, so a
+picker could be reintroduced later without rebuilding anything (check with
+the user first). `useTheme()` resolves one of four full `AppTheme` objects
+based on `(themePack, isDark)`: `darkTheme`/`lightTheme` (Classic, the
+original palette, unchanged) or `minimalistDarkTheme`/`minimalistLightTheme`
+(`src/styles/theme.ts`).
 
 - **Minimalist pack**: warm neutral ground (not cool slate-blue), a single
   accent (`#5B5BD6`) instead of the classic indigo ramp, flat bordered

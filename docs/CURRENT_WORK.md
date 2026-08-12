@@ -1,6 +1,87 @@
 # HabitPro Current Work
 
-Last updated: 2026-08-09 (`experiment/glass-redesign-v2` merged into `main` via PR #1, merge commit `0a52ef7`; local `main` confirmed identical to `origin/main`. Merged content: continued the minimalist redesign — Timer digit/day-grid/reminder polish; Home habit card gained a plain fire+"Xd" streak indicator and lost the "Public" pill; a reusable "neutral" button style for the shared alert system, used first for Android's Add-a-photo dialog; a large cohort/squad screen pass (rankings card rebuilt around neutral numbered circles + a per-rank dull square-grid, `CohortStreakPill` extracted and reused everywhere a streak count needs showing, day-grid brought to parity with the habit-detail screen, milestones/eye-icon/level-pill/eyebrow-pill color stripped, forced-capitalization bug fixed on usernames); the Leaderboard rows lost every piece of gamified color (crowns, medals, colored XP ring, filled pills); and the Community feed's cards were restructured (header/photo/footer) and had color stripped, with the "View more" control rebuilt to fix a real bug where it could silently fail to render at all. `npx tsc --noEmit` clean on `main` post-merge. **Not yet pushed as an OTA update — merge only, no OTA/build run yet.**).
+Last updated: 2026-08-12 (Minimalist made the app's only theme pack, Classic picker removed; "@" prefix dropped from every displayed username app-wide; three real bugs fixed — streak-repair firing for days before a user joined a group challenge mid-way (+ Supabase migration adding `habits.joined_challenge_at`, already applied), Android keyboard covering invite-search sheets, mini-mission task logs lost on app close/backgrounding; Mini Missions screen (list + detail) and Live Squad screen both got a minimalist redesign pass, the latter explicitly mirroring the cohort screen's rank-circle/square-grid language. Seven commits, `npx tsc --noEmit` clean throughout, no `package.json`/lockfile/`app.json`/`eas.json` changes — OTA-safe. **Not yet pushed as OTA — see the handoff section below for the full readiness check.**).
+
+## Session Handoff (2026-08-12)
+
+**State: clean, on `main`, 7 commits ahead of the 2026-08-09 merge point.**
+Nothing mid-flight, nothing uncommitted except the pre-existing untracked
+`.mcp.json`/`.claude/`. `npx tsc --noEmit` clean after every commit below.
+Commits, oldest to newest:
+
+1. `5c37bad` — **Minimalist is now the app's only theme pack.** `ThemeContext.tsx`'s
+   default flipped to `'minimalist'` and the AsyncStorage-saved pack is no longer
+   restored on load (always resolves to minimalist regardless of any prior
+   selection); the Classic/Minimalist picker removed from `SettingsModal.tsx`.
+   Classic's theme code is untouched, just unreachable — nothing deleted.
+2. `64d5cde` — **"@" prefix dropped from every displayed username.** 20
+   occurrences across 14 files (helper functions in `notifications.tsx`,
+   `my-journey.tsx`, `challenge-memory.tsx`, `community-player/[id].tsx`,
+   `live-mini/[id].tsx`, `journey-moment/[id].tsx`, plus inline JSX in
+   `profile.tsx`, `compete.tsx`, `GroupChallengeSheet.tsx`,
+   `LiveMiniInviteSheet.tsx`, Community-feed/cohort components) — usernames
+   render plain (`raktim_24`) everywhere now. `src/lib/oauthRedirect.ts`'s
+   `@owner/slug` Expo project identifier was correctly left alone (not a
+   username).
+3. `baf216b` — **Fixed Android keyboard covering invite-search sheets.**
+   `GroupChallengeSheet.tsx`/`LiveMiniInviteSheet.tsx` both hardcoded
+   `behavior={Platform.OS === "ios" ? "padding" : undefined}` — Android got no
+   behavior at all, so `KeyboardAvoidingView` did nothing. Switched Android to
+   `"height"`.
+4. `a6a1b23` — **Fixed streak-repair prompts firing for days before a user
+   joined a group challenge mid-way.** Root cause: `Habit.startDate` is the
+   cohort's shared day-1 anchor, not this participant's own tracking start, so
+   completing your actual first tracked day (e.g. day 10 of 30) surfaced "you
+   missed day 9." Added `Habit.joinedChallengeAt` (set only on accept-invite)
+   and guarded `getEligibleStreakRepair` (`src/utils/streakRepairEligibility.ts`)
+   so it never offers a repair before it. Includes the Supabase migration
+   `supabase/migrations/20260812120000_habit_joined_challenge_at.sql` —
+   **already applied by the user** (`supabase db push` succeeded) — which adds
+   `habits.joined_challenge_at` and fixes `rpc_sync_dirty_state`'s
+   `jsonb_to_recordset` column list to actually carry it through (the same bug
+   class that silently dropped `task_checklist` twice before).
+5. `8416991` — **Fixed mini-mission task logs being lost on app close/
+   backgrounding.** Main-mission per-task logs persist into the store
+   (`habit.streakMemories`); mini-mission drafts only ever lived in the
+   screen's local React state. Added `MiniMission.draftTasks` (persisted on
+   the mission record) plus `setMiniMissionDraftTask`/
+   `removeMiniMissionDraftTask`/`clearMiniMissionDraftTasks` store actions;
+   `app/mini/[id].tsx` now reads/writes through them. Local-only (not synced
+   to Supabase) — survives close/background/resume on the same device, which
+   is what was reported; full cross-device durability would need a schema
+   migration like #4's.
+6. `e12cb6b` — **Mini Missions screen minimalist redesign (list + detail).**
+   FAB now hidden only when Active is empty; Waiting/Done/Failed cards
+   flattened (redundant status pills dropped, Done's footer merged to one
+   line, Failed's Retry became a text link and Open Squad a real elevated
+   button); whole list moved from bordered per-row cards to a flat hairline-
+   divided list; tabs rebuilt to match Home's segmented control exactly,
+   including an always-visible count badge so a tab's footprint never changes
+   on selection (fixing a real visual-inconsistency report). Detail screen's
+   "waiting to start" state is now one composed card with a concrete "finish
+   by ~HH:MM" estimate instead of three floating disconnected pieces. Took
+   inspiration from a Claude Design mock (1a/2a "quiet mono" direction) via
+   the `claude_design` MCP.
+7. `fae0a49` — **Live Squad screen minimalist redesign**, explicitly mirroring
+   `CohortLeaderHero`: rank badge → plain numbered circle (was amber Trophy +
+   colored pill), hero pace rows → the identical 14-square grid/rank-palette
+   Cohort uses (was a solid colored bar), level pill → transparent/bordered,
+   "PARTICIPANTS" header + colored dot legend → plain "Participants" label,
+   participant rows flattened to a hairline-divided list, "Invite more" card
+   flattened to match Mini Missions' Keep-Screen-On row treatment, redundant
+   fastest-time chip and animated progress-bar sheen removed. Status pill and
+   cyan on tappable elements left untouched — genuinely informative/consistent
+   signals, not decoration.
+
+**Production OTA readiness**: all 7 commits are JS/TS/TSX only — confirmed via
+`git diff 5c37bad..HEAD -- package.json package-lock.json app.json eas.json`
+(empty). No native modules, no dependency changes, no version bump. The one
+non-JS change (the Supabase migration) is a backend schema change already
+applied directly to the database, independent of the app bundle/OTA
+mechanism entirely. Per `app-architecture.md`'s OTA-safe criteria, this
+batch is eligible to ship as a normal production OTA update, no
+force-update/version bump needed. **Not pushed yet — that step hasn't been
+requested this session.**
 
 ## Session Handoff (2026-08-09, post-merge)
 

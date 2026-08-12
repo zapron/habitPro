@@ -2,6 +2,52 @@
 
 This is a concise chronological log for future sessions. Keep secrets out of this file.
 
+## 2026-08-12
+
+### Minimalist-only theme pack, "@" prefix removal, 3 bug fixes, Mini Missions + Live Squad redesigns
+
+Seven commits on `main` (`5c37bad`..`fae0a49`), oldest to newest:
+
+1. `5c37bad` — Minimalist is now the app's only theme pack (default flipped,
+   AsyncStorage-saved pack no longer restored, Classic/Minimalist picker
+   removed from Settings). Classic's code stays, just unreachable.
+2. `64d5cde` — "@" prefix dropped from every displayed username app-wide (20
+   occurrences, 14 files). `oauthRedirect.ts`'s `@owner/slug` project id left
+   alone.
+3. `baf216b` — Fixed Android keyboard covering `GroupChallengeSheet`/
+   `LiveMiniInviteSheet`'s search input — both hardcoded no
+   `KeyboardAvoidingView` behavior on Android; switched to `"height"`.
+4. `a6a1b23` — Fixed streak-repair prompts firing for days before a user
+   joined a group challenge mid-way. Added `Habit.joinedChallengeAt` +
+   guarded `getEligibleStreakRepair`. Supabase migration
+   `20260812120000_habit_joined_challenge_at.sql` adds
+   `habits.joined_challenge_at` and fixes `rpc_sync_dirty_state`'s
+   `jsonb_to_recordset` column list (same bug class that dropped
+   `task_checklist` twice before) — **already applied** by the user via
+   `supabase db push`.
+5. `8416991` — Fixed mini-mission task logs lost on app close/backgrounding.
+   Added `MiniMission.draftTasks` + 3 store actions
+   (`setMiniMissionDraftTask`/`removeMiniMissionDraftTask`/
+   `clearMiniMissionDraftTasks`); `app/mini/[id].tsx` now persists through
+   the store instead of local React state. Local-only, not Supabase-synced.
+6. `e12cb6b` — Mini Missions screen minimalist redesign (list: FAB
+   visibility fix, flat hairline-divided cards, Home-matching tabs with an
+   always-visible count badge; detail: composed "waiting to start" ready
+   card). Took inspiration from a Claude Design mock via the
+   `claude_design` MCP.
+7. `fae0a49` — Live Squad screen minimalist redesign, explicitly mirroring
+   `CohortLeaderHero` (rank circle, square-grid pace rows, neutral level
+   pill, plain "Participants" label, flat hairline-divided rows, removed
+   redundant fastest-time chip and progress-bar sheen animation).
+
+`npx tsc --noEmit` clean throughout. No `package.json`/lockfile/`app.json`/
+`eas.json` changes anywhere in this set — confirmed OTA-safe per
+`app-architecture.md`. Not pushed as OTA yet (not requested this session).
+Not visually confirmed on-device — same sandbox limitation as every prior
+session, see `docs/CURRENT_WORK.md`'s 2026-08-12 entry for what's worth a
+real look (Live Squad's flattened rows especially, given how dense that
+screen's content is).
+
 ## 2026-08-09
 
 ### Merge `experiment/glass-redesign-v2` → `main`
