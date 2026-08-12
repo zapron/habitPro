@@ -266,7 +266,7 @@ export const CohortPeerStreakDots = memo(function CohortPeerStreakDots({
     setImgLoading(false);
   }, []);
 
-  const handle = peerUsername ? `@${peerUsername}` : "Member";
+  const handle = peerUsername ? peerUsername : "Member";
 
   const openRemoteMemory = useCallback(
     async (dateStr: string, dayNum: number, fallbackMemory?: StreakMemory, expectedMemory?: "photo" | "text") => {

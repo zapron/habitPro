@@ -446,7 +446,7 @@ export function LiveMiniInviteSheet({ visible, mission, onClose }: Props) {
                               >
                                 <View style={styles.resultIdentity}>
                                   <Text style={[styles.username, { color: theme.colors.textPrimary }]}>
-                                    @{item.username}
+                                    {item.username}
                                   </Text>
                                   {item.display_name ? (
                                     <Text style={[styles.displayName, { color: theme.colors.textMuted }]} numberOfLines={1}>

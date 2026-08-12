@@ -329,7 +329,7 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
                       >
                         <View style={{ flex: 1 }}>
                           <Text style={{ color: theme.colors.textPrimary, fontWeight: "700" }}>
-                            @{item.username}
+                            {item.username}
                           </Text>
                           {item.display_name ? (
                             <Text style={{ color: theme.colors.textMuted, fontSize: 12 }}>{item.display_name}</Text>

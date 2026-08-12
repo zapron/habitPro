@@ -30,7 +30,7 @@ export function CommunityWinDetailModal({ visible, win, onClose, onPressImage }:
 
   if (!win) return null;
 
-  const handle = win.username ? `@${win.username}` : "Someone";
+  const handle = win.username ? win.username : "Someone";
   const streakKicker =
     win.feed_source === "habit_streak" &&
     typeof win.streak_mission_day === "number" &&

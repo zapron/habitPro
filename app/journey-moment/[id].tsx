@@ -34,7 +34,7 @@ function paramString(value: string | string[] | undefined): string {
 
 function ownerLabel(win: CommunityWinFeedItem): string {
   const handle = win.username?.trim();
-  if (handle) return `@${handle.toLowerCase()}`;
+  if (handle) return handle.toLowerCase();
   const display = win.displayName?.trim();
   if (display) return display;
   return "Player";

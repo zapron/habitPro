@@ -1784,7 +1784,7 @@ export default function MyJourneyScreen() {
   } : null);
   const weeklyRank: CommunityPlayerWeeklyRank | null = publicStory?.weeklyRank ?? null;
   const primaryName = shownProfile?.displayName || shownProfile?.username || username || "You";
-  const handle = shownProfile?.username ? `@${shownProfile.username}` : username ? `@${username}` : "Your journey";
+  const handle = shownProfile?.username ? shownProfile.username : username ? username : "Your journey";
   const missionPreviewPhotoSize = Math.max(72, Math.min(86, (width - 54) / 4.35));
   const recentProofSize = Math.max(84, Math.min(104, width * 0.23));
   const totalPublicPhotos = publicStory?.totalPhotoMoments ?? publicPhotoPosts.length;

@@ -347,7 +347,7 @@ function liveMiniStatusVariant(status: LiveMiniInviteForMe["participant"]["statu
 
 function requesterHandle(username: string | null | undefined): string {
   const clean = username?.trim().toLowerCase();
-  return clean ? `@${clean}` : "Someone";
+  return clean ? clean : "Someone";
 }
 
 function InviteRequesterLine({
@@ -651,7 +651,7 @@ const LeagueRow = memo(function LeagueRow({
               ]}
               numberOfLines={1}
             >
-              @{usernameLabel}
+              {usernameLabel}
             </Text>
           ) : null}
         </View>

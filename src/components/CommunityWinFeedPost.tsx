@@ -256,7 +256,7 @@ export const CommunityWinFeedPost = memo(function CommunityWinFeedPost({
 }: Props) {
   const { width: windowWidth } = useWindowDimensions();
   const isOwn = sessionUserId === win.user_id;
-  const handle = win.username ? `@${win.username}` : "Someone";
+  const handle = win.username ? win.username : "Someone";
   const displayName = win.displayName?.trim() || null;
   const normalizedDisplayName = displayName?.replace(/^@/, "").trim().toLowerCase();
   const normalizedHandle = win.username?.trim().toLowerCase() ?? null;

@@ -80,9 +80,9 @@ function fallbackHandle(value: string): string | null {
 
 function memberLabel(detail: ChallengeMemoryDetail | null, fallbackUsername: string): string {
   if (detail?.subjectDisplayName) return detail.subjectDisplayName;
-  if (detail?.subjectUsername) return `@${detail.subjectUsername}`;
+  if (detail?.subjectUsername) return detail.subjectUsername;
   const handle = fallbackHandle(fallbackUsername);
-  return handle ? `@${handle}` : "Squad member";
+  return handle ? handle : "Squad member";
 }
 
 function statusTitle(status: ChallengeMemoryStatus, photoSyncState: ChallengeMemoryDetail["photoSyncState"]): string {

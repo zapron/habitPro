@@ -126,7 +126,7 @@ export function CommunityPlayerDrawer({ visible, player, onClose }: Props) {
   const level = shown ? levelFromTotalXp(shown.xp) : 0;
   const xpInLevel = shown ? xpInCurrentLevel(shown.xp) : 0;
   const league = playerLeagueForLevel(level, theme, isDark);
-  const handle = shown?.username ? `@${shown.username}` : "Someone";
+  const handle = shown?.username ? shown.username : "Someone";
   const displayName = shown?.displayName?.trim() || null;
   const normalizedDisplayName = displayName?.replace(/^@/, "").trim().toLowerCase();
   const normalizedHandle = shown?.username?.trim().toLowerCase() ?? null;

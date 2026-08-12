@@ -76,13 +76,13 @@ function groupMissionInviteSubtitle(n: NotificationRow): string {
   const p = n.payload ?? {};
   const u = p.inviter_username;
   const from =
-    typeof u === "string" && u.trim().length > 0 ? `From @${u.trim().toLowerCase()}` : "Group mission";
+    typeof u === "string" && u.trim().length > 0 ? `From ${u.trim().toLowerCase()}` : "Group mission";
   return `${from} · Tap to view in Compete`;
 }
 
 function inviteeLabel(p: Record<string, unknown>): string {
   const u = p.invitee_username;
-  if (typeof u === "string" && u.trim().length > 0) return `@${u.trim().toLowerCase()}`;
+  if (typeof u === "string" && u.trim().length > 0) return u.trim().toLowerCase();
   return "Someone";
 }
 
@@ -204,7 +204,7 @@ function notificationSubtitle(n: NotificationRow): string | null {
     case "live_mini_invite": {
       const u = p.inviter_username;
       const from =
-        typeof u === "string" && u.trim().length > 0 ? `From @${u.trim().toLowerCase()}` : "Live Squad";
+        typeof u === "string" && u.trim().length > 0 ? `From ${u.trim().toLowerCase()}` : "Live Squad";
       const title = typeof p.mini_mission_title === "string" ? p.mini_mission_title : "mini mission";
       return `${from} invited you to "${title}"`;
     }
@@ -215,7 +215,7 @@ function notificationSubtitle(n: NotificationRow): string | null {
     case "live_mini_completed": {
       const u = p.participant_username;
       const who =
-        typeof u === "string" && u.trim().length > 0 ? `@${u.trim().toLowerCase()}` : "Someone";
+        typeof u === "string" && u.trim().length > 0 ? u.trim().toLowerCase() : "Someone";
       return `${who} completed the live mini mission`;
     }
     case "challenge_invite_accepted":
@@ -225,7 +225,7 @@ function notificationSubtitle(n: NotificationRow): string | null {
     case "challenge_nudge": {
       const from = p.from_username;
       const who =
-        typeof from === "string" && from.trim().length > 0 ? `@${from.trim().toLowerCase()}` : "Someone";
+        typeof from === "string" && from.trim().length > 0 ? from.trim().toLowerCase() : "Someone";
       const kind = p.kind;
       const context = nudgeDayContext(p);
       const suffix = context ? ` · ${context} · Tap to open squad` : " · Tap to open squad";
@@ -241,7 +241,7 @@ function notificationSubtitle(n: NotificationRow): string | null {
     case "challenge_squad_checkin": {
       const from = p.actor_username;
       const who =
-        typeof from === "string" && from.trim().length > 0 ? `@${from.trim().toLowerCase()}` : "Someone";
+        typeof from === "string" && from.trim().length > 0 ? from.trim().toLowerCase() : "Someone";
       const mission =
         typeof p.habit_title === "string" && p.habit_title.trim().length > 0 ? p.habit_title.trim() : "Mission";
       return `${who} updated the streak on “${mission}” · Tap for squad`;
@@ -251,7 +251,7 @@ function notificationSubtitle(n: NotificationRow): string | null {
       if (!parsed) return "Someone cheered your Community win · Tap to view";
       const who =
         parsed.from_username && parsed.from_username !== "someone"
-          ? `@${parsed.from_username.toLowerCase()}`
+          ? parsed.from_username.toLowerCase()
           : "Someone";
       const title = parsed.mini_mission_title;
       if (parsed.feed_source === "habit_streak") {

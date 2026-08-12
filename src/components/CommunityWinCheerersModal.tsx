@@ -310,7 +310,7 @@ export function CommunityWinCheerersModal({ visible, winId, totalLikes, onClose 
                             ]}
                             numberOfLines={1}
                           >
-                            {c.username ? `@${c.username}` : "Someone"}
+                            {c.username ? c.username : "Someone"}
                           </Text>
                           <Text
                             style={[styles.rowSubline, { color: theme.colors.textMuted }]}

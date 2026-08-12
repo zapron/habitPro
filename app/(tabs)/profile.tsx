@@ -1610,7 +1610,7 @@ export default function ProfileScreen() {
             <Text style={[styles.totalXp, { color: theme.colors.textSecondary }]}>Total XP: {xp}</Text>
             {showAccount && username ? (
               <Text style={[styles.handle, { color: theme.colors.cyan[400] }]} numberOfLines={1}>
-                @{username}
+                {username}
               </Text>
             ) : showAccount && session?.user && !accountHydrating && !cloudSyncBlocked ? (
               <UsernameSetupFields compact />
