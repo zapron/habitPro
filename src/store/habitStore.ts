@@ -300,6 +300,7 @@ export const useHabitStore = create<HabitStore>()(
         missionTimezone: missionTimezoneOverride,
         requestRemoteSync: shouldRequestRemoteSync = true,
         taskChecklist,
+        joinedChallengeAt,
       }) => {
         const now = startDateOverride ?? new Date().toISOString();
         const totalDays =
@@ -338,6 +339,7 @@ export const useHabitStore = create<HabitStore>()(
               }
             : {}),
           ...(taskChecklist && taskChecklist.length > 0 ? { taskChecklist } : {}),
+          ...(joinedChallengeAt ? { joinedChallengeAt } : {}),
         };
         set((state) => ({ habits: [...state.habits, newHabit] }));
         if (shouldRequestRemoteSync) {

@@ -21,7 +21,7 @@ import {
 } from "./streakMemoryStorage";
 
 const HABIT_ROW_SELECT =
-  "user_id, id, title, description, mode, visibility, start_date, end_date, completed_dates, streak, total_days, is_completed, status, streak_memories, challenge_group_id, challenge_creator_timezone, mission_timezone, mission_report, mission_report_at, reminder_enabled, reminder_time_local, reminder_locked, task_checklist";
+  "user_id, id, title, description, mode, visibility, start_date, end_date, completed_dates, streak, total_days, is_completed, status, streak_memories, challenge_group_id, challenge_creator_timezone, mission_timezone, mission_report, mission_report_at, reminder_enabled, reminder_time_local, reminder_locked, task_checklist, joined_challenge_at";
 
 export type RemoteSnapshot = Pick<HabitStore, "habits" | "miniMissions" | "xp" | "username"> & {
   cohortPeerHabits: Habit[];
@@ -287,6 +287,7 @@ function habitFromRow(row: {
   reminder_time_local?: string | null;
   reminder_locked?: boolean | null;
   task_checklist?: unknown;
+  joined_challenge_at?: string | null;
 }): Habit {
   const vis: MissionVisibility =
     row.visibility === "public" || row.visibility === "solo"
@@ -367,6 +368,7 @@ function habitFromRow(row: {
     challengeCreatorTimezone: row.challenge_creator_timezone ?? null,
     missionTimezone: row.mission_timezone ?? null,
     taskChecklist: parseTaskChecklist(row.task_checklist),
+    joinedChallengeAt: row.joined_challenge_at ?? undefined,
   };
 }
 
@@ -395,6 +397,7 @@ function habitToRow(sessionUserId: string, h: Habit) {
     reminder_time_local: h.reminderTimeLocal ?? null,
     reminder_locked: h.reminderLocked ?? false,
     task_checklist: h.taskChecklist ?? null,
+    joined_challenge_at: h.joinedChallengeAt ?? null,
   };
 }
 

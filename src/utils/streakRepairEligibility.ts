@@ -3,6 +3,7 @@ import { getStreakRepairXpCost, STREAK_REPAIR_WINDOW_HOURS } from "../constants/
 import {
   MS_PER_MISSION_DAY,
   calendarDateForHabitMissionDayIndex,
+  calendarDateKeyForTimestamp,
   calendarDayEndUtcMsForDateKey,
   getHabitActiveMissionDaySlot,
   getHabitMissionTimeZone,
@@ -33,6 +34,16 @@ export function getEligibleStreakRepair(habit: Habit, nowMs: number): EligibleSt
   const dateStr = calendarDateForHabitMissionDayIndex(habit, prevIndex, nowMs);
   if (!dateStr) return null;
   if ((habit.completedDates ?? []).includes(dateStr)) return null;
+
+  // A user who joined an existing group challenge mid-way never tracked days before
+  // they joined — never offer a repair for one of those (see Habit.joinedChallengeAt).
+  if (habit.joinedChallengeAt) {
+    const joinDateKey = calendarDateKeyForTimestamp(
+      new Date(habit.joinedChallengeAt).getTime(),
+      getHabitMissionTimeZone(habit),
+    );
+    if (dateStr < joinDateKey) return null;
+  }
 
   const prevEndMs = usesCalendarDayMission(habit)
     ? calendarDayEndUtcMsForDateKey(dateStr, getHabitMissionTimeZone(habit))

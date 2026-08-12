@@ -1284,6 +1284,10 @@ export default function CompeteScreen() {
             endDate: mode === "manual" ? tplEnd : undefined,
             taskChecklist,
             requestRemoteSync: false,
+            // startDate above is the cohort's day-1 anchor, not when this device
+            // actually starts tracking — record the real join moment so streak-repair
+            // never treats a day before this as "missed" (see Habit.joinedChallengeAt).
+            joinedChallengeAt: new Date().toISOString(),
           }),
         );
 

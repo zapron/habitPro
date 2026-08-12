@@ -97,6 +97,15 @@ export interface Habit {
   challengeCreatorTimezone?: string | null;
   /** IANA timezone captured when this mission was created; enables calendar-day reset. */
   missionTimezone?: string | null;
+  /**
+   * When this device joined an EXISTING group challenge mid-way (i.e. `startDate` is the
+   * cohort's original day-1 anchor, not when this participant actually started tracking).
+   * Absent for the challenge creator and for solo/manual habits — only set on accept-invite.
+   * Syncs to Supabase (`habits.joined_challenge_at`) so it survives re-hydration across
+   * devices/sign-outs. Used to stop streak-repair eligibility from ever treating a day
+   * before the user joined as "missed." See `getEligibleStreakRepair`.
+   */
+  joinedChallengeAt?: string;
   /** Calendar dates repaired via Streak Repair (treated like completed for streak computation). */
   repairedDates?: string[];
 
@@ -174,6 +183,8 @@ export type AddHabitInput = {
   requestRemoteSync?: boolean;
   /** Optional task checklist — see docs/CATALOG_ARCHITECTURE.md. Empty/absent = classic mission. */
   taskChecklist?: TaskChecklistItem[];
+  /** Set when joining an existing group challenge mid-way — see `Habit.joinedChallengeAt`. */
+  joinedChallengeAt?: string;
 };
 
 export type HabitStore = {
