@@ -20,18 +20,15 @@ import {
   Clock3,
   CircleCheck,
   ArrowLeft,
-  Check,
   Timer,
   Globe,
   Radio,
-  Camera,
   Plus,
   CircleX,
 } from "lucide-react-native";
 import { Screen } from "../../src/components/Screen";
 import { Button } from "../../src/components/Button";
 import { MiniMissionFireProgressBar } from "../../src/components/MiniMissionFireProgressBar";
-import { GlassTopHighlight } from "../../src/components/GlassTopHighlight";
 import { useListCardEntrance } from "../../src/hooks/useListCardEntrance";
 import { useTheme } from "../../src/context/ThemeContext";
 import { useHabitStore } from "../../src/store/habitStore";
@@ -49,7 +46,6 @@ import {
   MINI_MISSION_KEEP_SCREEN_ON_KEY,
   MINI_MISSIONS_LIST_KEEP_AWAKE_TAG,
 } from "../../src/constants/miniMissionKeepAwake";
-import { withAlpha } from "../../src/styles/theme";
 
 type MiniTab = "active" | "queued" | "completed" | "failed";
 const MINI_LIST_CLOCK_MS = 5000;
@@ -109,6 +105,7 @@ const MiniMissionCard = memo(function MiniMissionCard({ item, index }: { item: M
 
   const needsCheckIn = displayStatus === "review";
   const isTimerUp = displayStatus === "failed";
+  const isWaiting = !needsCheckIn && !isTimerUp && !isInProgress && !isCompleted && !isCancelled;
 
   // Status styling
   const statusConfig = needsCheckIn
@@ -123,21 +120,15 @@ const MiniMissionCard = memo(function MiniMissionCard({ item, index }: { item: M
           ? { label: "Cancelled", color: theme.colors.textMuted }
           : { label: "Waiting", color: theme.colors.textSecondary };
 
+  const hasMoment = Boolean(
+    item.completionMemory?.note ||
+    item.completionMemory?.imageUri ||
+    item.completionMemory?.imageUrl,
+  );
+
   return (
     <Animated.View style={entranceStyle}>
-    <View
-      style={[
-        styles.card,
-        {
-          backgroundColor: theme.colors.surface,
-          borderColor: theme.colors.border,
-          borderRadius: theme.radius.lg,
-          borderWidth: 1,
-          ...theme.shadow.card,
-        },
-      ]}
-    >
-      <GlassTopHighlight radius={theme.radius.lg} />
+    <View style={styles.card}>
       <TouchableOpacity
         activeOpacity={0.9}
         onPress={() => router.push(`/mini/${item.id}`)}
@@ -145,34 +136,29 @@ const MiniMissionCard = memo(function MiniMissionCard({ item, index }: { item: M
         accessibilityLabel={`Open mission: ${item.title}`}
       >
       {/* Top row: title + status badge */}
-      <View style={[styles.cardTopRow, isTimerUp && styles.failedCardTopRow]}>
+      <View style={styles.cardTopRow}>
         <View style={styles.cardTitleRow}>
           {(item.visibility ?? "solo") === "public" && (
             <Globe size={theme.icon.md} color={theme.colors.cyan[400]} style={styles.publicTitleIcon} />
           )}
-          <Text style={[styles.cardTitle, { color: theme.colors.textPrimary, fontSize: theme.typography.h3 }]} numberOfLines={1}>
+          <Text style={[styles.cardTitle, { color: theme.colors.textPrimary, fontSize: 13 }]} numberOfLines={1}>
             {item.title}
           </Text>
         </View>
-        {!isTimerUp ? (
+        {item.liveSquadId || (!isWaiting && !isCompleted && !isTimerUp) ? (
           <View style={styles.cardBadgeStack}>
+            {/* Live now shows top-right on every tab, including Failed, same spot as Done */}
             {item.liveSquadId ? (
-              <View
-                style={[
-                  styles.liveBadge,
-                  {
-                    backgroundColor: isDark ? withAlpha(theme.colors.cyan[400], 12) : withAlpha(theme.colors.cyan[500], 10),
-                    borderColor: isDark ? withAlpha(theme.colors.cyan[400], 30) : withAlpha(theme.colors.cyan[500], 20),
-                  },
-                ]}
-              >
-                <Radio size={12} color={theme.colors.cyan[400]} />
-                <Text style={[styles.liveBadgeText, { color: theme.colors.cyan[400] }]}>Live</Text>
+              <View style={[styles.liveBadge, { borderColor: theme.colors.border }]}>
+                <Text style={[styles.liveBadgeText, { color: theme.colors.textSecondary }]}>Live</Text>
               </View>
             ) : null}
-            <View style={[styles.statusBadge, { backgroundColor: statusConfig.color + "18" }]}>
-              <Text style={[styles.statusBadgeText, { color: statusConfig.color }]}>{statusConfig.label}</Text>
-            </View>
+            {/* "Waiting"/"Completed"/"Failed" are redundant with the tab they're already filtered into — skip the pill there */}
+            {!isWaiting && !isCompleted && !isTimerUp ? (
+              <View style={[styles.statusBadge, { backgroundColor: statusConfig.color + "18" }]}>
+                <Text style={[styles.statusBadgeText, { color: statusConfig.color }]}>{statusConfig.label}</Text>
+              </View>
+            ) : null}
           </View>
         ) : null}
       </View>
@@ -221,86 +207,51 @@ const MiniMissionCard = memo(function MiniMissionCard({ item, index }: { item: M
         </View>
       )}
 
-      {/* Queued: show estimated time */}
-      {!isInProgress && !isCompleted && !isCancelled && !isTimerUp && (
+      {/* Queued: show estimated time — plain, no chip chrome */}
+      {isWaiting && (
         <View style={styles.cardFooter}>
-          <View style={[styles.metaPill, { borderColor: theme.colors.border, backgroundColor: theme.colors.surfaceElevated }]}>
-            <Clock3 size={14} color={theme.colors.cyan[400]} />
-            <Text style={[styles.metaText, { color: theme.colors.textPrimary }]}>{totalMinutes} min</Text>
+          <View style={styles.plainMetaRow}>
+            <Clock3 size={14} color={theme.colors.textMuted} />
+            <Text style={[styles.metaText, { color: theme.colors.textSecondary }]}>{totalMinutes} min</Text>
           </View>
         </View>
       )}
 
-      {/* Completed: show completion info */}
+      {/* Completed: one plain line, no icons — matches the "quiet mono" design reference */}
       {isCompleted && item.startedAt && item.completedAt && (
-        <View style={styles.cardFooter}>
-          <View style={[styles.metaPill, { borderColor: theme.colors.green[500] + "40", backgroundColor: theme.colors.green[500] + "10" }]}>
-            <Check size={14} color={theme.colors.green[500]} />
-            <Text style={[styles.metaText, { color: theme.colors.green[500] }]}>
-              Done in {Math.ceil((new Date(item.completedAt).getTime() - new Date(item.startedAt).getTime()) / 60000)} min
-            </Text>
-          </View>
-          {(item.completionMemory?.note ||
-            item.completionMemory?.imageUri ||
-            item.completionMemory?.imageUrl) && (
-            <View style={styles.momentBadge}>
-              <Camera size={12} color={theme.colors.amber[500]} />
-              <Text style={[styles.momentBadgeText, { color: theme.colors.amber[500] }]}>Moment</Text>
-            </View>
-          )}
-          <Text style={[styles.totalTime, { color: theme.colors.textMuted }]}>of {totalMinutes} min</Text>
-        </View>
+        <Text style={[styles.completedMetaText, { color: theme.colors.green[500] }]}>
+          Done in {Math.ceil((new Date(item.completedAt).getTime() - new Date(item.startedAt).getTime()) / 60000)} of {totalMinutes} min
+          {hasMoment ? " · Moment" : ""}
+        </Text>
       )}
       </TouchableOpacity>
 
+      {/* Failed: no "Failed" pill (Live moved up top, same spot as Done) — Retry stays a plain text link, Open Squad is a real elevated button so it reads clearly as the primary action */}
       {isTimerUp ? (
         <View style={styles.failedMetaInlineRow}>
-          {item.liveSquadId ? (
-            <View
-              style={[
-                styles.liveBadge,
-                {
-                  backgroundColor: isDark ? withAlpha(theme.colors.cyan[400], 12) : withAlpha(theme.colors.cyan[500], 10),
-                  borderColor: isDark ? withAlpha(theme.colors.cyan[400], 30) : withAlpha(theme.colors.cyan[500], 20),
-                },
-              ]}
-            >
-              <Radio size={12} color={theme.colors.cyan[400]} />
-              <Text style={[styles.liveBadgeText, { color: theme.colors.cyan[400] }]}>Live</Text>
-            </View>
-          ) : null}
-          <View style={[styles.statusBadge, { backgroundColor: statusConfig.color + "18" }]}>
-            <Text style={[styles.statusBadgeText, { color: statusConfig.color }]}>{statusConfig.label}</Text>
-          </View>
           <Text style={[styles.failedInlineTime, { color: theme.colors.textMuted }]} numberOfLines={1}>
-            {totalMinutes} min total
+            {totalMinutes} min
           </Text>
           {item.liveSquadId ? (
             <Button
               title="Open Squad"
-              variant="subtle"
+              variant="secondary"
               icon={<Radio size={13} color={theme.colors.indigo[400]} />}
               onPress={() => router.push(`/live-mini/${item.liveSquadId}`)}
-              style={[
-                styles.inlineActionButton,
-                { borderColor: theme.colors.indigo[400], backgroundColor: theme.colors.indigo[500] + "1f" },
-              ]}
+              style={styles.openSquadButton}
               textStyle={[styles.inlineActionText, { color: theme.colors.indigo[400] }]}
               accessibilityLabel={`Open Squad: ${item.title}`}
             />
           ) : (
-            <Button
-              title="Retry"
-              variant="subtle"
-              icon={<Timer size={13} color={theme.colors.green[500]} />}
+            <TouchableOpacity
+              style={styles.inlineActionLink}
               onPress={handleRetry}
-              style={[
-                styles.inlineActionButton,
-                { borderColor: theme.colors.green[500], backgroundColor: theme.colors.green[500] + "1f" },
-              ]}
-              textStyle={[styles.inlineActionText, { color: theme.colors.green[500] }]}
+              accessibilityRole="button"
               accessibilityLabel={`Retry mission: ${item.title}`}
-            />
+            >
+              <Timer size={13} color={theme.colors.green[500]} />
+              <Text style={[styles.inlineActionText, { color: theme.colors.green[500] }]}>Retry</Text>
+            </TouchableOpacity>
           )}
         </View>
       ) : null}
@@ -487,13 +438,11 @@ export default function MiniMissionsScreen() {
         style={[
           styles.keepScreenRow,
           {
-            backgroundColor: theme.colors.surface,
-            borderColor: theme.colors.border,
-            borderRadius: theme.radius.md,
+            borderTopColor: theme.colors.border,
+            borderBottomColor: theme.colors.border,
           },
         ]}
       >
-        <GlassTopHighlight radius={theme.radius.md} />
         <View style={styles.keepScreenTextCol}>
           <Text style={[styles.keepScreenLabel, { color: theme.colors.textPrimary, fontSize: theme.typography.caption }]}>
             Keep screen on
@@ -512,13 +461,18 @@ export default function MiniMissionsScreen() {
       </View>
 
       <View
-        style={[styles.tabContainer, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, borderRadius: theme.radius.md }]}
+        style={[
+          styles.tabContainer,
+          {
+            backgroundColor: isDark ? theme.colors.surface : theme.colors.surfaceElevated,
+            borderColor: "transparent",
+          },
+        ]}
         onLayout={(event) => {
           const fullWidth = event.nativeEvent.layout.width;
           setTabTrackWidth(Math.max(0, fullWidth - 2 * 4 - 2 * 1));
         }}
       >
-        <GlassTopHighlight radius={theme.radius.md} />
         {tabTrackWidth > 0 ? (
           <Animated.View
             pointerEvents="none"
@@ -526,7 +480,8 @@ export default function MiniMissionsScreen() {
               styles.tabIndicator,
               {
                 width: tabTrackWidth / 4,
-                backgroundColor: theme.colors.indigo[600],
+                backgroundColor: isDark ? theme.colors.surfaceElevated : theme.colors.surface,
+                ...theme.shadow.card,
                 transform: [
                   {
                     translateX: tabIndicatorX.interpolate({
@@ -539,41 +494,54 @@ export default function MiniMissionsScreen() {
             ]}
           />
         ) : null}
-        <TouchableOpacity
-          style={styles.tab}
-          onPress={() => { setTab("active"); if (view === "running") router.replace("/mini?tab=active"); }}
-        >
-          <Text
-            style={[styles.tabText, { color: theme.colors.textSecondary }, (tab === "active" || view === "running") && styles.activeTabText]}
-            numberOfLines={1}
-          >
-            Active ({activeCount})
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.tab}
-          onPress={() => { setTab("queued"); if (view === "running") router.replace("/mini?tab=queued"); }}
-        >
-          <Text style={[styles.tabText, { color: theme.colors.textSecondary }, tab === "queued" && styles.activeTabText]} numberOfLines={1}>
-            Waiting ({queuedCount})
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.tab}
-          onPress={() => { setTab("completed"); if (view === "running") router.replace("/mini?tab=completed"); }}
-        >
-          <Text style={[styles.tabText, { color: theme.colors.textSecondary }, tab === "completed" && styles.activeTabText]} numberOfLines={1}>
-            Done ({completedCount})
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.tab}
-          onPress={() => { setTab("failed"); if (view === "running") router.replace("/mini?tab=failed"); }}
-        >
-          <Text style={[styles.tabText, { color: theme.colors.textSecondary }, tab === "failed" && styles.activeTabText]} numberOfLines={1}>
-            Failed ({failedCount})
-          </Text>
-        </TouchableOpacity>
+        {(
+          [
+            ["active", "Active", activeCount] as const,
+            ["queued", "Waiting", queuedCount] as const,
+            ["completed", "Done", completedCount] as const,
+            ["failed", "Failed", failedCount] as const,
+          ] as const
+        ).map(([key, label, count]) => {
+          const selected = tab === key || (key === "active" && view === "running");
+          return (
+            <TouchableOpacity
+              key={key}
+              style={styles.tab}
+              onPress={() => {
+                setTab(key);
+                if (view === "running") router.replace(`/mini?tab=${key}`);
+              }}
+              activeOpacity={0.8}
+            >
+              <Text
+                style={[
+                  styles.tabText,
+                  { color: theme.colors.textSecondary },
+                  selected && { color: theme.colors.indigo[600] },
+                ]}
+                numberOfLines={1}
+              >
+                {label}
+              </Text>
+              {/* Badge is always rendered (not just when selected) so a tab's own footprint never changes on selection — only its color does */}
+              <View
+                style={[
+                  styles.tabCountBadge,
+                  { backgroundColor: selected ? theme.colors.indigo[600] : theme.colors.border },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.tabCountBadgeText,
+                    !selected && { color: theme.colors.textSecondary },
+                  ]}
+                >
+                  {count}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          );
+        })}
       </View>
 
       <View style={styles.listWrap}>
@@ -628,36 +596,41 @@ export default function MiniMissionsScreen() {
             keyExtractor={(item) => item.id}
             showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.listContent}
+            ItemSeparatorComponent={() => (
+              <View style={[styles.rowDivider, { backgroundColor: theme.colors.border }]} />
+            )}
           />
         )}
       </View>
 
-      <View
-        style={[
-          styles.fabWrap,
-          {
-            bottom: Math.max(insets.bottom, 12) + 12,
-            right: Math.max(insets.right, 16),
-          },
-        ]}
-        pointerEvents="box-none"
-      >
-        <TouchableOpacity
-          accessibilityRole="button"
-          accessibilityLabel="Create mini mission"
-          onPress={() => router.push("/mini/create")}
-          activeOpacity={0.92}
+      {tab === "active" && filtered.length === 0 ? null : (
+        <View
           style={[
-            styles.fab,
+            styles.fabWrap,
             {
-              backgroundColor: theme.colors.indigo[600],
-              ...theme.shadow.glow,
+              bottom: Math.max(insets.bottom, 12) + 12,
+              right: Math.max(insets.right, 16),
             },
           ]}
+          pointerEvents="box-none"
         >
-          <Plus size={28} color={theme.colors.white} strokeWidth={2.5} />
-        </TouchableOpacity>
-      </View>
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel="Create mini mission"
+            onPress={() => router.push("/mini/create")}
+            activeOpacity={0.92}
+            style={[
+              styles.fab,
+              {
+                backgroundColor: theme.colors.indigo[600],
+                ...theme.shadow.glow,
+              },
+            ]}
+          >
+            <Plus size={28} color={theme.colors.white} strokeWidth={2.5} />
+          </TouchableOpacity>
+        </View>
+      )}
     </Screen>
   );
 }
@@ -673,9 +646,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderWidth: 1,
+    paddingVertical: 16,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: StyleSheet.hairlineWidth,
     marginBottom: 14,
   },
   keepScreenTextCol: { flex: 1 },
@@ -686,27 +659,33 @@ const styles = StyleSheet.create({
   statsCard: { flex: 1, alignItems: "center", justifyContent: "center", paddingVertical: 10, borderWidth: 1 },
   statsValue: { fontSize: 22, fontWeight: "800" },
   statsLabel: { fontSize: 11 },
-  tabContainer: { flexDirection: "row", borderWidth: 1, padding: 4, marginBottom: 14 },
-  tab: { flex: 1, alignItems: "center", justifyContent: "center", paddingVertical: 10, borderRadius: 10 },
+  tabContainer: { flexDirection: "row", borderRadius: 14, padding: 4, marginBottom: 10, borderWidth: 1 },
+  tab: { flex: 1, flexDirection: "row", paddingVertical: 10, alignItems: "center", justifyContent: "center", gap: 6, borderRadius: 10, minHeight: 42 },
   tabIndicator: { position: "absolute", top: 4, bottom: 4, left: 4, borderRadius: 10 },
-  tabText: { fontWeight: "700", fontSize: 11 },
-  activeTabText: { color: "#ffffff" },
+  tabText: { fontWeight: "700", fontSize: 13 },
+  tabCountBadge: { minWidth: 20, height: 20, paddingHorizontal: 5, borderRadius: 10, alignItems: "center", justifyContent: "center" },
+  tabCountBadgeText: { color: "#ffffff", fontSize: 11, fontWeight: "800" },
   listWrap: { flex: 1 },
   listContent: { paddingBottom: 100 },
-  // Card styles
-  card: { padding: 16, marginBottom: 12 },
-  inlineActionButton: {
+  rowDivider: { height: StyleSheet.hairlineWidth },
+  // Card styles — flat list rows, no chip/border/shadow chrome (divider comes from the list's own ItemSeparatorComponent)
+  card: { paddingVertical: 14 },
+  inlineActionLink: {
+    marginLeft: "auto",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  inlineActionText: { fontSize: 12, fontWeight: "700" },
+  openSquadButton: {
     marginLeft: "auto",
     minHeight: 0,
-    borderRadius: 9,
-    borderWidth: 1.5,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    gap: 4,
+    borderRadius: 10,
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+    gap: 5,
   },
-  inlineActionText: { fontSize: 11, fontWeight: "800" },
   cardTopRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 4 },
-  failedCardTopRow: { alignItems: "flex-start", marginBottom: 0 },
   cardTitleRow: { flex: 1, flexDirection: "row", alignItems: "center", marginRight: 8, minWidth: 0 },
   publicTitleIcon: { marginRight: 6 },
   cardTitle: { fontWeight: "700", flex: 1, minWidth: 0 },
@@ -721,7 +700,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 3,
   },
-  liveBadgeText: { fontSize: 10, fontWeight: "900" },
+  liveBadgeText: { fontSize: 10, fontWeight: "700" },
   statusBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 9999 },
   statusBadgeText: { fontSize: 11, fontWeight: "800", letterSpacing: 0.3 },
   cardObjective: { lineHeight: 20, marginBottom: 4 },
@@ -736,19 +715,9 @@ const styles = StyleSheet.create({
   // Footer (queued / completed)
   cardFooter: { marginTop: 10, flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" },
   metaPill: { flexDirection: "row", alignItems: "center", gap: 6, borderRadius: 9999, borderWidth: 1, paddingVertical: 4, paddingHorizontal: 10 },
+  plainMetaRow: { flexDirection: "row", alignItems: "center", gap: 6 },
   metaText: { fontSize: 12, fontWeight: "700" },
-  momentBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 9999,
-    borderWidth: 1,
-    borderColor: "rgba(245, 158, 11, 0.35)",
-    backgroundColor: "rgba(245, 158, 11, 0.12)",
-  },
-  momentBadgeText: { fontSize: 11, fontWeight: "800" },
+  completedMetaText: { fontSize: 11.5, fontWeight: "600", letterSpacing: 0.1, marginTop: 5 },
   // Empty state
   empty: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 24 },
   emptyIconContainer: {

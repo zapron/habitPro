@@ -84,6 +84,8 @@ import {
   postCommunityWin,
 } from "../../src/lib/communityWinsApi";
 import { MAX_RESERVE_FUEL_MINUTES } from "../../src/constants/miniMission";
+import { formatTimeDisplay } from "../../src/utils/dateDisplay";
+import { GlassTopHighlight } from "../../src/components/GlassTopHighlight";
 import {
   MINI_MISSION_DETAIL_KEEP_AWAKE_TAG,
   MINI_MISSION_KEEP_SCREEN_ON_KEY,
@@ -2017,6 +2019,17 @@ export default function MiniMissionDetail() {
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
     };
 
+    // "Waiting to start" — pending has no scheduled time, scheduled has a future one.
+    const isPureWaiting = mission.status === "pending" || mission.status === "scheduled";
+    const readyObjective =
+      typeof mission.objective === "string" && mission.objective.trim().length > 0
+        ? mission.objective.trim()
+        : null;
+    const readyTimingLabel =
+      mission.status === "scheduled" && mission.scheduledStartAt
+        ? `Starts at ${formatTimeDisplay(mission.scheduledStartAt)}`
+        : `Finish by ~${formatTimeDisplay(new Date(Date.now() + totalMinutes * 60 * 1000))} if you start now`;
+
   return (
     <Screen>
       <OperationProgressDialog
@@ -2198,85 +2211,156 @@ export default function MiniMissionDetail() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.titleRow}>
-          <Text
-            style={[
-              styles.title,
-              {
-                color: theme.colors.textPrimary,
-                fontSize: theme.typography.h1,
-                lineHeight: Math.round(theme.typography.h1 * 1.12),
-              },
-            ]}
-            numberOfLines={2}
-          >
-            {mission.title}
-          </Text>
-          <TouchableOpacity
-            style={styles.infoButton}
-            onPress={() => {
-              void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              setMissionDetailsOpen(true);
-            }}
-            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-            accessibilityRole="button"
-            accessibilityLabel="Mini mission details"
-          >
-            <Info size={theme.icon.md} color={theme.colors.indigo[400]} />
-          </TouchableOpacity>
-        </View>
-
-        {mission.status === "in_progress" ? (
-          <IsolatedFlightCountdown
-            startedAt={mission.startedAt || ""}
-            totalMinutes={totalMinutes}
-            status={mission.status}
-            completeSheetOpen={completeSheetOpen}
-            timerFrozenAtMs={timerFrozenAtMs}
-            onTimerExpired={() => setIsTimerUpState(true)}
-          />
-        ) : null}
-        <View style={styles.topPillsRow}>
-          {mission.status === "completed" ? (
-            <View
-              style={[
-                styles.completedPill,
-                {
-                  backgroundColor: isDark ? withAlpha(theme.colors.green[500], 14) : withAlpha(theme.colors.green[600], 12),
-                  borderColor: isDark ? withAlpha(theme.colors.green[500], 28) : withAlpha(theme.colors.green[600], 22),
-                },
-              ]}
-            >
-              <Check size={16} color={theme.colors.green[500]} />
-              <Text style={[styles.completedPillText, { color: theme.colors.green[500] }]}>
-                Completed
-              </Text>
-            </View>
-          ) : null}
-
+        {isPureWaiting ? (
           <View
             style={[
-              styles.metaPill,
+              styles.readyCard,
               {
+                backgroundColor: theme.colors.surface,
                 borderColor: theme.colors.border,
-                backgroundColor: theme.colors.surfaceElevated,
+                borderRadius: theme.radius.lg,
+                ...theme.shadow.card,
               },
             ]}
           >
-            <Clock3 size={14} color={theme.colors.cyan[400]} />
-            <Text style={[styles.metaText, { color: theme.colors.textPrimary }]}>
-              {isTimerCheckInReview
-                ? "Check In"
-                : mission.status === "in_progress" && !isTimerUpState
-                ? allowReserveFuel
-                  ? `${totalMinutes} min · reserve ${reserveUsed}/${MAX_RESERVE_FUEL_MINUTES}`
-                  : `${totalMinutes} min`
-                : allowReserveFuel && (mission.extendedMinutes ?? 0) > 0
-                  ? `${totalMinutes} min (+${mission.extendedMinutes ?? 0})`
-                  : `${totalMinutes} min`}
+            <GlassTopHighlight radius={theme.radius.lg} />
+            <View style={styles.titleRow}>
+              <Text
+                style={[
+                  styles.title,
+                  {
+                    color: theme.colors.textPrimary,
+                    fontSize: theme.typography.h1,
+                    lineHeight: Math.round(theme.typography.h1 * 1.12),
+                  },
+                ]}
+                numberOfLines={2}
+              >
+                {mission.title}
+              </Text>
+              <TouchableOpacity
+                style={styles.infoButton}
+                onPress={() => {
+                  void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setMissionDetailsOpen(true);
+                }}
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                accessibilityRole="button"
+                accessibilityLabel="Mini mission details"
+              >
+                <Info size={theme.icon.md} color={theme.colors.indigo[400]} />
+              </TouchableOpacity>
+            </View>
+
+            {readyObjective ? (
+              <Text
+                style={[styles.readyCardObjective, { color: theme.colors.textSecondary }]}
+                numberOfLines={3}
+              >
+                {readyObjective}
+              </Text>
+            ) : null}
+
+            <View style={[styles.readyCardDivider, { backgroundColor: theme.colors.border }]} />
+
+            <View style={styles.readyCardMetaRow}>
+              <Clock3 size={15} color={theme.colors.cyan[400]} />
+              <Text style={[styles.readyCardMetaText, { color: theme.colors.textPrimary }]}>
+                {totalMinutes} min
+              </Text>
+              <Text style={[styles.readyCardMetaSep, { color: theme.colors.textMuted }]}>·</Text>
+              <Text style={[styles.readyCardMetaText, { color: theme.colors.textSecondary }]} numberOfLines={1}>
+                {readyTimingLabel}
+              </Text>
+            </View>
+
+            <Text style={[styles.readyCardHint, { color: theme.colors.textMuted }]}>
+              Ready when you are.
             </Text>
           </View>
-        </View>
+        ) : (
+          <>
+            <View style={styles.titleRow}>
+              <Text
+                style={[
+                  styles.title,
+                  {
+                    color: theme.colors.textPrimary,
+                    fontSize: theme.typography.h1,
+                    lineHeight: Math.round(theme.typography.h1 * 1.12),
+                  },
+                ]}
+                numberOfLines={2}
+              >
+                {mission.title}
+              </Text>
+              <TouchableOpacity
+                style={styles.infoButton}
+                onPress={() => {
+                  void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setMissionDetailsOpen(true);
+                }}
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                accessibilityRole="button"
+                accessibilityLabel="Mini mission details"
+              >
+                <Info size={theme.icon.md} color={theme.colors.indigo[400]} />
+              </TouchableOpacity>
+            </View>
+
+            {mission.status === "in_progress" ? (
+              <IsolatedFlightCountdown
+                startedAt={mission.startedAt || ""}
+                totalMinutes={totalMinutes}
+                status={mission.status}
+                completeSheetOpen={completeSheetOpen}
+                timerFrozenAtMs={timerFrozenAtMs}
+                onTimerExpired={() => setIsTimerUpState(true)}
+              />
+            ) : null}
+            <View style={styles.topPillsRow}>
+              {mission.status === "completed" ? (
+                <View
+                  style={[
+                    styles.completedPill,
+                    {
+                      backgroundColor: isDark ? withAlpha(theme.colors.green[500], 14) : withAlpha(theme.colors.green[600], 12),
+                      borderColor: isDark ? withAlpha(theme.colors.green[500], 28) : withAlpha(theme.colors.green[600], 22),
+                    },
+                  ]}
+                >
+                  <Check size={16} color={theme.colors.green[500]} />
+                  <Text style={[styles.completedPillText, { color: theme.colors.green[500] }]}>
+                    Completed
+                  </Text>
+                </View>
+              ) : null}
+
+              <View
+                style={[
+                  styles.metaPill,
+                  {
+                    borderColor: theme.colors.border,
+                    backgroundColor: theme.colors.surfaceElevated,
+                  },
+                ]}
+              >
+                <Clock3 size={14} color={theme.colors.cyan[400]} />
+                <Text style={[styles.metaText, { color: theme.colors.textPrimary }]}>
+                  {isTimerCheckInReview
+                    ? "Check In"
+                    : mission.status === "in_progress" && !isTimerUpState
+                    ? allowReserveFuel
+                      ? `${totalMinutes} min · reserve ${reserveUsed}/${MAX_RESERVE_FUEL_MINUTES}`
+                      : `${totalMinutes} min`
+                    : allowReserveFuel && (mission.extendedMinutes ?? 0) > 0
+                      ? `${totalMinutes} min (+${mission.extendedMinutes ?? 0})`
+                      : `${totalMinutes} min`}
+                </Text>
+              </View>
+            </View>
+          </>
+        )}
 
         {mission.status === "completed" && mission.liveSquadId ? (
           <TouchableOpacity
@@ -2307,7 +2391,7 @@ export default function MiniMissionDetail() {
           </TouchableOpacity>
         ) : null}
 
-        {mission.status !== "completed" ? (
+        {!isPureWaiting && mission.status !== "completed" ? (
           <Text style={[styles.timerHint, { color: theme.colors.textSecondary }]}>
             {isTimerCheckInReview
               ? "Time is up. Confirm whether you completed it, then save a memory if you want."
@@ -2825,6 +2909,33 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     transform: [{ translateY: 3 }],
+  },
+  readyCard: {
+    borderWidth: 1,
+    padding: 18,
+    marginBottom: 18,
+  },
+  readyCardObjective: {
+    fontSize: 14,
+    lineHeight: 20,
+    marginTop: 2,
+  },
+  readyCardDivider: {
+    height: StyleSheet.hairlineWidth,
+    marginTop: 16,
+    marginBottom: 14,
+  },
+  readyCardMetaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  readyCardMetaText: { fontSize: 13, fontWeight: "700", flexShrink: 1 },
+  readyCardMetaSep: { fontSize: 13, fontWeight: "700" },
+  readyCardHint: {
+    fontSize: 13,
+    marginTop: 14,
+    textAlign: "center",
   },
   timerHint: { textAlign: "center", marginTop: 4, marginBottom: 4, paddingHorizontal: 4 },
   topPillsRow: {
