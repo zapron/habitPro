@@ -87,6 +87,14 @@ function preserveLocalMiniProgress(
       preserved = true;
       return localMini;
     }
+    // draftTasks is local-only (never pushed/pulled, see MiniMission.draftTasks) — even
+    // when the remote mini otherwise wins, an in-progress checklist run's logged-so-far
+    // tasks must still survive, or they silently vanish the moment this mission's dirty
+    // flag happens to clear from some unrelated field push before the user finishes.
+    if (localMini?.draftTasks && remoteMini.status === "in_progress" && !remoteMini.draftTasks) {
+      preserved = true;
+      return { ...remoteMini, draftTasks: localMini.draftTasks };
+    }
     return remoteMini;
   });
 

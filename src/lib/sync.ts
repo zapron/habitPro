@@ -1446,7 +1446,6 @@ function mergeDirtyLocalIntoRemote(
   const dirtyMiniIds = new Set(local.dirtyMiniMissionIds ?? []);
   const pendingHabitDeletes = new Set(local.pendingDeleteHabitIds ?? []);
   const pendingMiniDeletes = new Set(local.pendingDeleteMiniMissionIds ?? []);
-  if (dirtyHabitIds.size === 0 && dirtyMiniIds.size === 0) return remote;
 
   let preservedLocalChange = false;
   const habitsById = new Map(remote.habits.map((habit) => [habit.id, habit]));
@@ -1469,6 +1468,20 @@ function mergeDirtyLocalIntoRemote(
       ...mission,
       ownerUserId: mission.ownerUserId ?? userId,
     });
+  }
+
+  // draftTasks is local-only (never pushed/pulled, see MiniMission.draftTasks) — carry it
+  // forward regardless of dirty status, or a mission whose dirty flag already cleared from
+  // an unrelated field push (timer tick, fuel extend, ...) silently loses its in-progress
+  // task logs the next time this device signs in / cold-starts. Deliberately not gated by
+  // the dirtyHabitIds/dirtyMiniIds early-return above, since this can be the only thing
+  // that needs preserving.
+  for (const mission of local.miniMissions) {
+    if (!mission.draftTasks || !belongsToUser(mission, userId)) continue;
+    const merged = miniMissionsById.get(mission.id);
+    if (!merged || merged.status !== "in_progress" || merged.draftTasks) continue;
+    preservedLocalChange = true;
+    miniMissionsById.set(mission.id, { ...merged, draftTasks: mission.draftTasks });
   }
 
   if (!preservedLocalChange) return remote;
