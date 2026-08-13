@@ -17,7 +17,9 @@ import { getSupabase } from "./supabase";
 import {
   shouldUploadLocalStreakImage,
   uploadHabitStreakMemoryImage,
+  uploadHabitStreakTaskMemoryImage,
   uploadMiniStreakMemoryImage,
+  uploadMiniStreakTaskMemoryImage,
 } from "./streakMemoryStorage";
 
 const HABIT_ROW_SELECT =
@@ -90,11 +92,29 @@ let cachedSessionUserId: string | null = null;
 let commitHabitMemoryUpload:
   | ((habitId: string, dateStr: string, imageUrl: string) => void)
   | null = null;
+let commitHabitTaskMemoryUpload:
+  | ((habitId: string, dateStr: string, taskId: string, imageUrl: string) => void)
+  | null = null;
+let commitMiniTaskMemoryUpload:
+  | ((miniMissionId: string, taskId: string, imageUrl: string) => void)
+  | null = null;
 
 export function registerHabitMemoryUploadCommitter(
   fn: (habitId: string, dateStr: string, imageUrl: string) => void,
 ) {
   commitHabitMemoryUpload = fn;
+}
+
+export function registerHabitTaskMemoryUploadCommitter(
+  fn: (habitId: string, dateStr: string, taskId: string, imageUrl: string) => void,
+) {
+  commitHabitTaskMemoryUpload = fn;
+}
+
+export function registerMiniTaskMemoryUploadCommitter(
+  fn: (miniMissionId: string, taskId: string, imageUrl: string) => void,
+) {
+  commitMiniTaskMemoryUpload = fn;
 }
 
 export function updateCachedAuthSession(uid: string | null) {
@@ -117,7 +137,7 @@ async function hasMatchingAuthSession(
   return uid === sessionUserId;
 }
 
-function isHttpImageUri(uri: string | undefined): boolean {
+export function isHttpImageUri(uri: string | undefined): boolean {
   return Boolean(uri?.startsWith("http://") || uri?.startsWith("https://"));
 }
 
@@ -137,6 +157,57 @@ function scheduleHabitMemoryUpload(habitId: string, dateStr: string, memory: Str
     });
 }
 
+/** Task-scoped counterpart to `scheduleHabitMemoryUpload` — see that function for the shape. */
+function scheduleHabitTaskMemoryUpload(habitId: string, dateStr: string, task: StreakMemoryTaskEntry) {
+  const localUri = task.proofUrls[0];
+  if (!localUri || !shouldUploadLocalStreakImage(localUri) || isHttpImageUri(localUri)) return;
+
+  void uploadHabitStreakTaskMemoryImage({ habitId, dateStr, taskId: task.taskId, localUri })
+    .then((imageUrl) => {
+      commitHabitTaskMemoryUpload?.(habitId, dateStr, task.taskId, imageUrl);
+      void import("./syncQueue").then(({ requestRemoteSync }) => {
+        requestRemoteSync({ immediate: true });
+      });
+    })
+    .catch((e) => {
+      console.warn("[habitPro] background task image upload failed", e);
+    });
+}
+
+/** Mini-mission counterpart to `scheduleHabitTaskMemoryUpload`, for a finalized `completionMemory.tasks` entry. */
+function scheduleMiniTaskMemoryUpload(miniMissionId: string, task: StreakMemoryTaskEntry) {
+  const localUri = task.proofUrls[0];
+  if (!localUri || !shouldUploadLocalStreakImage(localUri) || isHttpImageUri(localUri)) return;
+
+  void uploadMiniStreakTaskMemoryImage({ miniMissionId, taskId: task.taskId, localUri })
+    .then((imageUrl) => {
+      commitMiniTaskMemoryUpload?.(miniMissionId, task.taskId, imageUrl);
+      void import("./syncQueue").then(({ requestRemoteSync }) => {
+        requestRemoteSync({ immediate: true });
+      });
+    })
+    .catch((e) => {
+      console.warn("[habitPro] background mini task image upload failed", e);
+    });
+}
+
+/**
+ * Strips a device-local `proofUrls[0]` before push (same reasoning as `memoryForRemote`'s
+ * imageUri cleanup — a `file://`/`content://` path is meaningless on another device) and,
+ * when `schedule` is given, kicks off a background upload attempt so the real URL shows up
+ * on a later sync pass instead of the photo staying missing forever.
+ */
+function taskEntryForRemote(
+  task: StreakMemoryTaskEntry,
+  schedule?: (task: StreakMemoryTaskEntry) => void,
+): StreakMemoryTaskEntry {
+  const localUri = task.proofUrls[0];
+  if (!localUri || isHttpImageUri(localUri)) return task;
+  if (!shouldUploadLocalStreakImage(localUri)) return task;
+  schedule?.(task);
+  return { ...task, proofUrls: [] };
+}
+
 async function memoryForRemote(
   memory: StreakMemory,
   uploadLocalImage: (localUri: string) => Promise<string>,
@@ -148,10 +219,7 @@ async function memoryForRemote(
   if (!next.imageUrl && localUri) {
     if (isHttpImageUri(localUri)) {
       next.imageUrl = localUri;
-    } else if (shouldUploadLocalStreakImage(localUri)) {
-      if (options?.deferLocalUpload) {
-        return next;
-      }
+    } else if (shouldUploadLocalStreakImage(localUri) && !options?.deferLocalUpload) {
       try {
         next.imageUrl = await uploadLocalImage(localUri);
       } catch (e) {
@@ -160,6 +228,11 @@ async function memoryForRemote(
     }
   }
 
+  // A device-local imageUri (file://, content://, ...) is meaningless on any other
+  // device/session — never let it cross the network boundary. This also covers the
+  // deferLocalUpload case above: the upload is still pending (scheduleHabitMemoryUpload/
+  // retryPendingMemoryUploads will fill in imageUrl and re-push later), so this record
+  // is pushed with neither field rather than a path only this device can resolve.
   if (next.imageUri && (!isHttpImageUri(next.imageUri) || next.imageUrl)) {
     delete next.imageUri;
   }
@@ -188,7 +261,10 @@ async function habitForRemote(h: Habit): Promise<Habit> {
         (uri) => uploadHabitStreakMemoryImage({ habitId: h.id, dateStr, localUri: uri }),
         { deferLocalUpload: needsBackgroundUpload },
       );
-      return [dateStr, nextMemory] as const;
+      const nextTasks = memory.tasks?.map((task) =>
+        taskEntryForRemote(task, (t) => scheduleHabitTaskMemoryUpload(h.id, dateStr, t)),
+      );
+      return [dateStr, nextTasks ? { ...nextMemory, tasks: nextTasks } : nextMemory] as const;
     }),
   );
 
@@ -200,7 +276,8 @@ async function habitForRemote(h: Habit): Promise<Habit> {
     if (
       nextMemory !== prev ||
       nextMemory.imageUri !== prev.imageUri ||
-      nextMemory.imageUrl !== prev.imageUrl
+      nextMemory.imageUrl !== prev.imageUrl ||
+      nextMemory.tasks !== prev.tasks
     ) {
       changed = true;
     }
@@ -218,11 +295,16 @@ async function miniMissionForRemote(m: MiniMission): Promise<MiniMission> {
       localUri,
     }),
   );
+  const nextTasks = m.completionMemory.tasks?.map((task) =>
+    taskEntryForRemote(task, (t) => scheduleMiniTaskMemoryUpload(m.id, t)),
+  );
+  const finalMemory = nextTasks ? { ...nextMemory, tasks: nextTasks } : nextMemory;
 
-  return nextMemory !== m.completionMemory ||
-    nextMemory.imageUri !== m.completionMemory.imageUri ||
-    nextMemory.imageUrl !== m.completionMemory.imageUrl
-    ? { ...m, completionMemory: nextMemory }
+  return finalMemory !== m.completionMemory ||
+    finalMemory.imageUri !== m.completionMemory.imageUri ||
+    finalMemory.imageUrl !== m.completionMemory.imageUrl ||
+    finalMemory.tasks !== m.completionMemory.tasks
+    ? { ...m, completionMemory: finalMemory }
     : m;
 }
 
@@ -260,6 +342,46 @@ function hasClassicCompletionEvidence(memory: unknown): boolean {
   if (!memory || typeof memory !== "object") return false;
   const m = memory as Record<string, unknown>;
   return Boolean(m.note || m.imageUrl || m.imageUri || m.checkInOnly || m.repairSource);
+}
+
+/**
+ * Strips a device-local `imageUri`/task `proofUrls[0]` from a memory just pulled from
+ * Supabase. Before the push-side fix in memoryForRemote/taskEntryForRemote above, a
+ * failed or still-pending upload could leave a `file://`/`content://` path baked into an
+ * already-synced row — meaningless (and renders as a broken image) on any device other
+ * than the one that captured it. Must run AFTER completion-evidence detection, which
+ * still needs to see the original (a local imageUri counts as "this day was logged"
+ * even though the photo itself can't render on this device).
+ */
+function sanitizeRemoteMemory(memory: StreakMemory): StreakMemory {
+  let next = memory;
+  if (next.imageUri && !isHttpImageUri(next.imageUri)) {
+    const { imageUri: _drop, ...rest } = next;
+    next = rest;
+  }
+  if (next.tasks?.some((t) => t.proofUrls[0] && !isHttpImageUri(t.proofUrls[0]))) {
+    next = {
+      ...next,
+      tasks: next.tasks.map((t) =>
+        t.proofUrls[0] && !isHttpImageUri(t.proofUrls[0]) ? { ...t, proofUrls: [] } : t,
+      ),
+    };
+  }
+  return next;
+}
+
+function sanitizeRemoteStreakMemories(
+  memories: Record<string, StreakMemory> | undefined,
+): Record<string, StreakMemory> | undefined {
+  if (!memories) return memories;
+  const next: Record<string, StreakMemory> = {};
+  let changed = false;
+  for (const [dateStr, memory] of Object.entries(memories)) {
+    const sanitized = sanitizeRemoteMemory(memory);
+    next[dateStr] = sanitized;
+    if (sanitized !== memory) changed = true;
+  }
+  return changed ? next : memories;
 }
 
 function habitFromRow(row: {
@@ -358,7 +480,7 @@ function habitFromRow(row: {
     status,
     missionReport: effectiveReport,
     missionReportAt,
-    streakMemories,
+    streakMemories: sanitizeRemoteStreakMemories(streakMemories),
     streakMemoryMarkers,
     repairedDates,
     reminderEnabled: row.reminder_enabled ?? false,
@@ -449,13 +571,13 @@ function miniCompletionMemoryFromRow(
         ? rec.createdAt
         : new Date().toISOString();
     if (!note && !imageUri && !imageUrl && !tasks) return undefined;
-    return {
+    return sanitizeRemoteMemory({
       createdAt,
       ...(note ? { note } : {}),
       ...(imageUri ? { imageUri } : {}),
       ...(imageUrl ? { imageUrl } : {}),
       ...(tasks ? { tasks } : {}),
-    };
+    });
   } catch {
     return undefined;
   }

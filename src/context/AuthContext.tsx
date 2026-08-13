@@ -12,7 +12,7 @@ import { InteractionManager, Platform } from "react-native";
 import * as AppleAuthentication from "expo-apple-authentication";
 import * as WebBrowser from "expo-web-browser";
 import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
-import { useHabitStore } from "../store/habitStore";
+import { useHabitStore, retryPendingMemoryUploads } from "../store/habitStore";
 import { useChallengeStore } from "../store/challengeStore";
 import { isSupabaseConfigured, logSupabaseEnvHint } from "../lib/env";
 import {
@@ -203,6 +203,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (!cancelled && activeAuthUserIdRef.current === uid) {
           markRemoteFocusRefreshFresh(uid);
           setSyncReady(true);
+          // Catch up any memory/task photo whose upload failed or never finished in a
+          // previous session (and was never retried since nothing re-dirtied it) — see
+          // retryPendingMemoryUploads for why this can't just rely on the opportunistic
+          // per-push scheduling in sync.ts.
+          retryPendingMemoryUploads();
         }
       })
       .catch((e) => {

@@ -229,6 +229,12 @@ export type HabitStore = {
   setStreakMemory: (id: string, date: string, memory: StreakMemory | null) => void;
   /** Merge into an existing streak memory (e.g. Community flags); no-op if no memory for date. */
   patchStreakMemory: (id: string, date: string, patch: Partial<StreakMemory>) => void;
+  /** Updates one already-logged task's photo URL within a day's streak memory (e.g. after a background re-upload succeeds). No-op if the date/task isn't logged. */
+  patchStreakMemoryTaskProof: (id: string, date: string, taskId: string, imageUrl: string) => void;
+  /** Merge into a mini mission's finalized completionMemory (e.g. Community flags, background re-upload). No-op if the mission has no completionMemory. */
+  patchMiniCompletionMemory: (id: string, patch: Partial<StreakMemory>) => void;
+  /** Updates one already-logged task's photo URL within a finalized mini mission's completionMemory. No-op if not present. */
+  patchMiniCompletionMemoryTaskProof: (id: string, taskId: string, imageUrl: string) => void;
   /**
    * Checklist main missions only: explicit "Mark Day Complete" action. Toggles the
    * day on (streak/XP/squad notification) — task-by-task logging no longer does

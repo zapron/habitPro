@@ -9,7 +9,20 @@ import {
   requestRemoteMiniMissionDelete,
   requestRemoteSync,
 } from "../lib/syncQueue";
-import { registerHabitMemoryUploadCommitter } from "../lib/sync";
+import {
+  registerHabitMemoryUploadCommitter,
+  registerHabitTaskMemoryUploadCommitter,
+  registerMiniTaskMemoryUploadCommitter,
+  isHttpImageUri,
+} from "../lib/sync";
+import {
+  canUseStreakMemoryUpload,
+  shouldUploadLocalStreakImage,
+  uploadHabitStreakMemoryImage,
+  uploadHabitStreakTaskMemoryImage,
+  uploadMiniStreakMemoryImage,
+  uploadMiniStreakTaskMemoryImage,
+} from "../lib/streakMemoryStorage";
 import {
   Habit,
   HabitStore,
@@ -554,6 +567,55 @@ export const useHabitStore = create<HabitStore>()(
         }));
         requestRemoteSync({ immediate: false });
       },
+      patchStreakMemoryTaskProof: (id, date, taskId, imageUrl) => {
+        set((state) => ({
+          habits: state.habits.map((habit) => {
+            if (habit.id !== id) return habit;
+            const prevMemory = habit.streakMemories?.[date];
+            if (!prevMemory?.tasks) return habit;
+            let found = false;
+            const nextTasks = prevMemory.tasks.map((t) => {
+              if (t.taskId !== taskId) return t;
+              found = true;
+              return { ...t, proofUrls: [imageUrl] };
+            });
+            if (!found) return habit;
+            return {
+              ...habit,
+              streakMemories: {
+                ...(habit.streakMemories ?? {}),
+                [date]: { ...prevMemory, tasks: nextTasks },
+              },
+            };
+          }),
+        }));
+        requestRemoteSync({ immediate: false });
+      },
+      patchMiniCompletionMemory: (id, patch) => {
+        set((state) => ({
+          miniMissions: state.miniMissions.map((m) => {
+            if (m.id !== id || !m.completionMemory) return m;
+            return { ...m, completionMemory: { ...m.completionMemory, ...patch } };
+          }),
+        }));
+        requestRemoteSync({ immediate: false });
+      },
+      patchMiniCompletionMemoryTaskProof: (id, taskId, imageUrl) => {
+        set((state) => ({
+          miniMissions: state.miniMissions.map((m) => {
+            if (m.id !== id || !m.completionMemory?.tasks) return m;
+            let found = false;
+            const nextTasks = m.completionMemory.tasks.map((t) => {
+              if (t.taskId !== taskId) return t;
+              found = true;
+              return { ...t, proofUrls: [imageUrl] };
+            });
+            if (!found) return m;
+            return { ...m, completionMemory: { ...m.completionMemory, tasks: nextTasks } };
+          }),
+        }));
+        requestRemoteSync({ immediate: false });
+      },
       markChecklistDayComplete: (id, date, nowMs = Date.now()) => {
         const habitBefore = get().habits.find((h) => h.id === id);
         // A plain toggle would un-complete an already-completed day — this action
@@ -1088,3 +1150,124 @@ registerSyncCommitHandler((snap) => {
 registerHabitMemoryUploadCommitter((habitId, dateStr, imageUrl) => {
   useHabitStore.getState().patchStreakMemory(habitId, dateStr, { imageUrl });
 });
+
+registerHabitTaskMemoryUploadCommitter((habitId, dateStr, taskId, imageUrl) => {
+  useHabitStore.getState().patchStreakMemoryTaskProof(habitId, dateStr, taskId, imageUrl);
+});
+
+registerMiniTaskMemoryUploadCommitter((miniMissionId, taskId, imageUrl) => {
+  const mission = useHabitStore.getState().getMiniMission(miniMissionId);
+  // Finalized missions store the task in completionMemory.tasks; a still-active
+  // checklist run stores it in draftTasks — commit to whichever one actually has it.
+  if (mission?.completionMemory?.tasks?.some((t) => t.taskId === taskId)) {
+    useHabitStore.getState().patchMiniCompletionMemoryTaskProof(miniMissionId, taskId, imageUrl);
+    return;
+  }
+  const draft = mission?.draftTasks?.[taskId];
+  if (draft) {
+    useHabitStore.getState().setMiniMissionDraftTask(miniMissionId, taskId, {
+      ...draft,
+      proofUrls: [imageUrl],
+    });
+  }
+});
+
+/** True when a task entry's photo is stuck on a device-local path (upload never succeeded/finished). */
+function taskNeedsUploadRetry(task: StreakMemoryTaskEntry): boolean {
+  const uri = task.proofUrls[0];
+  return Boolean(uri && shouldUploadLocalStreakImage(uri) && !isHttpImageUri(uri));
+}
+
+/**
+ * Sweeps every habit/mini-mission for a memory or task photo stuck on a device-local
+ * path — an upload that failed or never finished, and (since nothing re-dirties that
+ * record on its own) was never retried. `scheduleHabit*MemoryUpload` in sync.ts only
+ * fires opportunistically when a record happens to be dirty-pushed again; this is the
+ * explicit backstop so a one-off memory that's never touched again still eventually
+ * uploads and becomes visible on other devices. Call once per successful auth hydration
+ * (see AuthContext.tsx) — fire-and-forget, each upload commits independently as it
+ * resolves.
+ */
+export function retryPendingMemoryUploads(): void {
+  if (!canUseStreakMemoryUpload()) return;
+  const { habits, miniMissions } = useHabitStore.getState();
+
+  for (const habit of habits) {
+    if (!habit.streakMemories) continue;
+    for (const [dateStr, memory] of Object.entries(habit.streakMemories)) {
+      const localUri = memory.imageUri;
+      if (localUri && shouldUploadLocalStreakImage(localUri) && !isHttpImageUri(localUri)) {
+        uploadHabitStreakMemoryImage({ habitId: habit.id, dateStr, localUri })
+          .then((imageUrl) => {
+            useHabitStore.getState().patchStreakMemory(habit.id, dateStr, { imageUrl });
+          })
+          .catch((e) => {
+            if (__DEV__) console.warn("[habitPro] retry habit memory upload failed", e);
+          });
+      }
+      for (const task of memory.tasks ?? []) {
+        if (!taskNeedsUploadRetry(task)) continue;
+        uploadHabitStreakTaskMemoryImage({
+          habitId: habit.id,
+          dateStr,
+          taskId: task.taskId,
+          localUri: task.proofUrls[0],
+        })
+          .then((imageUrl) => {
+            useHabitStore.getState().patchStreakMemoryTaskProof(habit.id, dateStr, task.taskId, imageUrl);
+          })
+          .catch((e) => {
+            if (__DEV__) console.warn("[habitPro] retry habit task upload failed", e);
+          });
+      }
+    }
+  }
+
+  for (const mission of miniMissions) {
+    const classicUri = mission.completionMemory?.imageUri;
+    if (classicUri && shouldUploadLocalStreakImage(classicUri) && !isHttpImageUri(classicUri)) {
+      uploadMiniStreakMemoryImage({ miniMissionId: mission.id, localUri: classicUri })
+        .then((imageUrl) => {
+          useHabitStore.getState().patchMiniCompletionMemory(mission.id, { imageUrl });
+        })
+        .catch((e) => {
+          if (__DEV__) console.warn("[habitPro] retry mini memory upload failed", e);
+        });
+    }
+    for (const task of mission.completionMemory?.tasks ?? []) {
+      if (!taskNeedsUploadRetry(task)) continue;
+      uploadMiniStreakTaskMemoryImage({
+        miniMissionId: mission.id,
+        taskId: task.taskId,
+        localUri: task.proofUrls[0],
+      })
+        .then((imageUrl) => {
+          useHabitStore.getState().patchMiniCompletionMemoryTaskProof(mission.id, task.taskId, imageUrl);
+        })
+        .catch((e) => {
+          if (__DEV__) console.warn("[habitPro] retry mini task upload failed", e);
+        });
+    }
+    // In-progress checklist run, not finalized yet — same treatment so the photo is
+    // already uploaded by the time "Complete Mission" bakes draftTasks into completionMemory.
+    for (const [taskId, entry] of Object.entries(mission.draftTasks ?? {})) {
+      if (!taskNeedsUploadRetry(entry)) continue;
+      uploadMiniStreakTaskMemoryImage({
+        miniMissionId: mission.id,
+        taskId,
+        localUri: entry.proofUrls[0],
+      })
+        .then((imageUrl) => {
+          const current = useHabitStore.getState().getMiniMission(mission.id)?.draftTasks?.[taskId];
+          if (!current) return;
+          useHabitStore.getState().setMiniMissionDraftTask(mission.id, taskId, {
+            ...current,
+            proofUrls: [imageUrl],
+          });
+        })
+        .catch((e) => {
+          if (__DEV__) console.warn("[habitPro] retry mini draft task upload failed", e);
+        });
+    }
+  }
+}
