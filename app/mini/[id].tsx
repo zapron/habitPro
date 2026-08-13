@@ -1196,7 +1196,7 @@ export default function MiniMissionDetail() {
    */
   const draftTaskEntries = mission?.draftTasks ?? EMPTY_DRAFT_TASKS;
   const [taskMemoryUi, setTaskMemoryUi] = useState<
-    | { kind: "create"; task: TaskChecklistItem }
+    | { kind: "create"; task: TaskChecklistItem; prefill?: { note?: string; imageUri?: string } }
     | { kind: "view"; task: TaskChecklistItem; entry: StreakMemoryTaskEntry }
     | null
   >(null);
@@ -2093,7 +2093,18 @@ export default function MiniMissionDetail() {
               canPublishCommunity={isSupabaseConfigured() && !!session?.user && !socialLocked}
               onSelectTask={(task) => {
                 const existing = draftTaskEntries[task.id];
-                setTaskMemoryUi(existing ? { kind: "view", task, entry: existing } : { kind: "create", task });
+                // A mini mission is only ever "locked" once completeMiniMission() runs — while
+                // this checklist sheet is reachable at all, editing an already-logged task is
+                // always allowed (mirrors habit's dayCompleted gate in app/habit/[id].tsx).
+                if (mission.status === "completed" && existing) {
+                  setTaskMemoryUi({ kind: "view", task, entry: existing });
+                  return;
+                }
+                setTaskMemoryUi({
+                  kind: "create",
+                  task,
+                  prefill: existing ? { note: existing.note, imageUri: existing.proofUrls[0] } : undefined,
+                });
               }}
               onToggleTaskInclusion={handleToggleMiniTaskInclusion}
               onComplete={(opts) => void handleChecklistCompleteCommit(opts)}
@@ -2120,6 +2131,7 @@ export default function MiniMissionDetail() {
               }
               missionTitle={taskMemoryUi?.task.label ?? mission.title}
               dayLabel="1"
+              prefill={taskMemoryUi?.kind === "create" ? taskMemoryUi.prefill : undefined}
               onClose={() => setTaskMemoryUi(null)}
               onCommit={taskMemoryUi?.kind !== "view" ? handleTaskMemoryCommit : undefined}
             />
