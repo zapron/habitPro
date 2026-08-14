@@ -238,8 +238,8 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
     <>
     <Modal visible={visible} animationType="slide" transparent statusBarTranslucent onRequestClose={onClose}>
       <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={0}
+        behavior="padding"
+        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 12}
         style={styles.keyboardAvoider}
       >
         <View style={[styles.backdrop, { backgroundColor: theme.colors.background === '#ffffff' ? 'rgba(0,0,0,0.2)' : 'rgba(0,0,0,0.4)' }]}>

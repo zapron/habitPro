@@ -298,8 +298,8 @@ export function LiveMiniInviteSheet({ visible, mission, onClose }: Props) {
   return (
     <Modal visible={visible} animationType="slide" transparent statusBarTranslucent onRequestClose={onClose}>
       <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={0}
+        behavior="padding"
+        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 12}
         style={styles.keyboardAvoider}
       >
         <View
