@@ -37,6 +37,7 @@ import {
   getCachedLiveMiniSquad,
   formatLiveMiniElapsed,
   isLiveMiniInviteActionable,
+  refreshLiveMiniMissed,
   subscribeLiveMiniSquad,
 } from "../../src/lib/liveMiniMissionsApi";
 import { syncLiveMiniFromLocalMission } from "../../src/lib/liveMiniMissionProgress";
@@ -179,6 +180,18 @@ function statusTone(status: LiveMiniParticipantStatus, theme: ReturnType<typeof 
 
 function isTerminalLiveMiniStatus(status: LiveMiniParticipantStatus): boolean {
   return status === "completed" || status === "missed" || status === "cancelled" || status === "declined" || status === "expired";
+}
+
+/** The synced `status` column only flips to "missed" via the mission owner's own device
+ * pushing that update at the exact moment their timer runs out — if their app is
+ * backgrounded/killed then, the row stays "in_progress" forever from every other
+ * participant's point of view. Derive the true state locally from `deadline_at` so a
+ * peer's screen never shows someone as still on-mission indefinitely after time's up. */
+function effectiveParticipantStatus(row: LiveMiniParticipantRow, nowMs: number): LiveMiniParticipantStatus {
+  if (row.status === "in_progress" && row.deadline_at && new Date(row.deadline_at).getTime() <= nowMs) {
+    return "missed";
+  }
+  return row.status;
 }
 
 function participantSortValue(row: LiveMiniParticipantRow): number {
@@ -925,6 +938,12 @@ export default function LiveMiniSquadScreen() {
       loadInFlightRef.current = true;
       if (!silent && !snapshotRef.current) setLoading(true);
       try {
+        // Best-effort server-side reconciliation: any participant whose deadline has
+        // passed while still "in_progress" gets flipped to "missed" in the DB so every
+        // device (not just this one's locally-derived display) sees it correctly. Fired
+        // in parallel, not awaited — the client already derives the correct status for
+        // display regardless of whether this lands before the fetch below resolves.
+        void refreshLiveMiniMissed(squadId).catch(() => {});
         const next = await traceAsync("liveMini.board.load", () => fetchLiveMiniSquad(squadId), {
           slowMs: silent ? 1_200 : 800,
           meta: { silent },
@@ -1034,7 +1053,13 @@ export default function LiveMiniSquadScreen() {
   const squad = snapshot?.squad ?? null;
   /** Lets an invitee see what they're committing to before accepting, not just after tapping Mark Complete. */
   const invitedTaskChecklist = useMemo(() => parseTaskChecklist(squad?.task_checklist), [squad?.task_checklist]);
-  const participants = snapshot?.participants ?? [];
+  const participants = useMemo(() => {
+    const rows = snapshot?.participants ?? [];
+    return rows.map((p) => {
+      const effectiveStatus = effectiveParticipantStatus(p, liveNowMs);
+      return effectiveStatus === p.status ? p : { ...p, status: effectiveStatus };
+    });
+  }, [snapshot?.participants, liveNowMs]);
   const myParticipant = participants.find((p) => p.user_id === userId);
   const hasRunningParticipants = useMemo(
     () => participants.some((p) => p.status === "in_progress" && Boolean(p.started_at)),
@@ -1486,7 +1511,7 @@ export default function LiveMiniSquadScreen() {
       {snapshot ? (
         <LiveSquadDetailsSheet
           visible={detailsOpen}
-          snapshot={snapshot}
+          snapshot={{ ...snapshot, participants }}
           onClose={() => setDetailsOpen(false)}
         />
       ) : null}
