@@ -21,7 +21,21 @@ import {
 import { useRouter } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ArrowLeft, Bell } from "lucide-react-native";
+import {
+  ArrowLeft,
+  Bell,
+  Check,
+  Clock3,
+  Flame,
+  Heart,
+  MessageSquare,
+  Trophy,
+  UserPlus,
+  Users,
+  Wrench,
+  X,
+  type LucideIcon,
+} from "lucide-react-native";
 import { Screen } from "../src/components/Screen";
 import { useTheme } from "../src/context/ThemeContext";
 import { useAuth } from "../src/context/AuthContext";
@@ -41,6 +55,7 @@ import { ShimmerBlock } from "../src/components/ShimmerBlock";
 import { GlassTopHighlight } from "../src/components/GlassTopHighlight";
 import { useListCardEntrance } from "../src/hooks/useListCardEntrance";
 import type { AppTheme } from "../src/styles/theme";
+import { withAlpha } from "../src/styles/theme";
 import { formatDateDisplay, formatDateTimeDisplay } from "../src/utils/dateDisplay";
 
 const NOTIFICATION_PAGE_SIZE = 20;
@@ -190,7 +205,7 @@ function notificationTitle(type: string, payload?: Record<string, unknown>): str
     case "streak_repair_request":
       return "Streak repair request";
     case "streak_repair_result":
-      return payload?.status === "applied" ? "Streak repaired! 🔥" : "Repair request declined";
+      return payload?.status === "applied" ? "Streak repaired" : "Repair request declined";
     default:
       return type;
   }
@@ -277,20 +292,90 @@ function notificationSubtitle(n: NotificationRow): string | null {
   }
 }
 
+/** Quiet, limited palette so the list reads calm at a glance: green only for a
+ * resolved/positive outcome, amber only for something genuinely time-sensitive,
+ * indigo for everyday social/informational rows, and plain muted gray for a
+ * declined/closed one. Color lives only in the small icon badge, never the text. */
+type NotificationTone = "positive" | "urgent" | "social" | "muted";
+
+function notificationVisual(n: NotificationRow): { Icon: LucideIcon; tone: NotificationTone } {
+  const p = n.payload ?? {};
+  switch (n.type) {
+    case "challenge_invite":
+    case "live_mini_invite":
+      return { Icon: UserPlus, tone: "social" };
+    case "live_mini_accepted":
+    case "challenge_invite_accepted":
+      return { Icon: Check, tone: "positive" };
+    case "live_mini_declined":
+    case "challenge_invite_declined":
+      return { Icon: X, tone: "muted" };
+    case "live_mini_completed":
+      return { Icon: Trophy, tone: "positive" };
+    case "challenge_nudge": {
+      const kind = p.kind;
+      if (kind === "fire") return { Icon: Flame, tone: "urgent" };
+      if (kind === "cheer") return { Icon: Heart, tone: "positive" };
+      if (kind === "congrats") return { Icon: Check, tone: "positive" };
+      return { Icon: MessageSquare, tone: "social" };
+    }
+    case "challenge_squad_checkin":
+      return { Icon: Users, tone: "social" };
+    case "community_win_cheer":
+      return { Icon: Heart, tone: "positive" };
+    case "streak_repair_request":
+      return { Icon: Wrench, tone: "social" };
+    case "streak_repair_result":
+      return p.status === "applied" ? { Icon: Flame, tone: "positive" } : { Icon: X, tone: "muted" };
+    case "streak_window_reminder": {
+      const phase = p.reminder_phase;
+      return phase === "closing" ? { Icon: Clock3, tone: "urgent" } : { Icon: Clock3, tone: "social" };
+    }
+    default:
+      return { Icon: Bell, tone: "social" };
+  }
+}
+
+function notificationToneColors(tone: NotificationTone, theme: AppTheme, isDark: boolean): { fg: string; bg: string } {
+  switch (tone) {
+    case "positive":
+      return {
+        fg: theme.colors.green[500],
+        bg: isDark ? withAlpha(theme.colors.green[500], 18) : withAlpha(theme.colors.green[600], 12),
+      };
+    case "urgent":
+      return {
+        fg: theme.colors.amber[500],
+        bg: isDark ? withAlpha(theme.colors.amber[500], 18) : withAlpha(theme.colors.amber[500], 12),
+      };
+    case "social":
+      return {
+        fg: theme.colors.indigo[400],
+        bg: isDark ? withAlpha(theme.colors.indigo[400], 16) : withAlpha(theme.colors.indigo[500], 10),
+      };
+    case "muted":
+      return { fg: theme.colors.textMuted, bg: theme.colors.surfaceElevated };
+  }
+}
+
 const NotificationListItem = memo(function NotificationListItem({
   item,
   index,
   theme,
+  isDark,
   onPress,
 }: {
   item: NotificationRow;
   index: number;
   theme: AppTheme;
+  isDark: boolean;
   onPress: (item: NotificationRow) => void;
 }) {
   const title = useMemo(() => notificationTitle(item.type, item.payload), [item.payload, item.type]);
   const subtitle = useMemo(() => notificationSubtitle(item), [item.payload, item.type]);
   const createdAt = useMemo(() => formatDateTimeDisplay(item.created_at, item.created_at), [item.created_at]);
+  const { Icon, tone } = useMemo(() => notificationVisual(item), [item]);
+  const toneColors = useMemo(() => notificationToneColors(tone, theme, isDark), [tone, theme, isDark]);
   const entranceStyle = useListCardEntrance(index);
 
   return (
@@ -308,17 +393,18 @@ const NotificationListItem = memo(function NotificationListItem({
       >
         <GlassTopHighlight radius={12} />
         <View style={styles.rowInner}>
-          {!item.read_at ? (
-            <View style={[styles.unreadDot, { backgroundColor: theme.colors.indigo[500] }]} />
-          ) : (
-            <View style={styles.unreadSpacer} />
-          )}
+          <View style={[styles.notifIconBadge, { backgroundColor: toneColors.bg }]}>
+            <Icon size={14} color={toneColors.fg} strokeWidth={2.2} />
+            {!item.read_at ? (
+              <View style={[styles.unreadDot, { backgroundColor: theme.colors.indigo[500], borderColor: theme.colors.surface }]} />
+            ) : null}
+          </View>
           <View style={styles.rowTextCol}>
             <Text style={[styles.rowTitle, { color: theme.colors.textPrimary }]}>{title}</Text>
             {subtitle ? (
-              <Text style={[styles.rowSubtitle, { color: theme.colors.cyan[400] }]}>{subtitle}</Text>
+              <Text style={[styles.rowSubtitle, { color: theme.colors.textSecondary }]}>{subtitle}</Text>
             ) : null}
-            <Text style={[styles.rowTime, { color: theme.colors.textSecondary }]}>{createdAt}</Text>
+            <Text style={[styles.rowTime, { color: theme.colors.textMuted }]}>{createdAt}</Text>
           </View>
         </View>
       </TouchableOpacity>
@@ -645,9 +731,9 @@ export default function NotificationsScreen() {
 
   const renderNotificationItem = useCallback(
     ({ item, index }: { item: NotificationRow; index: number }) => (
-      <NotificationListItem item={item} index={index} theme={theme} onPress={onPressRow} />
+      <NotificationListItem item={item} index={index} theme={theme} isDark={isDark} onPress={onPressRow} />
     ),
-    [onPressRow, theme],
+    [onPressRow, theme, isDark],
   );
 
   const emptyList = useMemo(
@@ -752,7 +838,7 @@ export default function NotificationsScreen() {
             >
               <GlassTopHighlight radius={12} />
               <View style={styles.rowInner}>
-                <View style={styles.unreadSpacer} />
+                <ShimmerBlock isDark={isDark} height={28} radius={10} style={{ width: 28 }} />
                 <View style={{ flex: 1, gap: 8 }}>
                   <ShimmerBlock
                     isDark={isDark}
@@ -809,14 +895,29 @@ const styles = StyleSheet.create({
   markAllGlow: { ...StyleSheet.absoluteFillObject, borderRadius: 9999, borderWidth: 1 },
   markAllText: { fontWeight: "800", fontSize: 11, letterSpacing: 0.2 },
   listContent: { paddingBottom: 32, flexGrow: 1 },
-  row: { borderRadius: 12, borderWidth: 1, padding: 14, marginBottom: 10 },
-  rowInner: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
+  row: { borderRadius: 12, borderWidth: 1, paddingVertical: 13, paddingHorizontal: 12, marginBottom: 10 },
+  rowInner: { flexDirection: "row", alignItems: "center", gap: 8 },
+  notifIconBadge: {
+    width: 28,
+    height: 28,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    position: "relative",
+  },
   rowTextCol: { flex: 1 },
   rowTitle: { fontWeight: "700" },
-  rowSubtitle: { fontSize: 13, marginTop: 4, fontWeight: "600" },
-  rowTime: { fontSize: 13, marginTop: 4 },
-  unreadDot: { width: 10, height: 10, borderRadius: 9999, marginTop: 5 },
-  unreadSpacer: { width: 10, marginTop: 5 },
+  rowSubtitle: { fontSize: 13, marginTop: 4, fontWeight: "500" },
+  rowTime: { fontSize: 12, marginTop: 4 },
+  unreadDot: {
+    position: "absolute",
+    top: -2,
+    right: -2,
+    width: 9,
+    height: 9,
+    borderRadius: 9999,
+    borderWidth: 1.5,
+  },
   footerLoader: { paddingVertical: 18, alignItems: "center", justifyContent: "center" },
   emptyCard: { borderRadius: 16, borderWidth: 1, padding: 20, alignItems: "center", marginTop: 8 },
   emptyTitle: { fontSize: 17, lineHeight: 22, fontWeight: "900", marginTop: 12, textAlign: "center" },
