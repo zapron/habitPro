@@ -2,6 +2,86 @@
 
 This is a concise chronological log for future sessions. Keep secrets out of this file.
 
+## 2026-08-14
+
+### Cross-device photo sync, mini-task photo editing, Live Squad missed-status fix, minimalist visual pass, Wrench icon standardization, Android keyboard-jitter fix
+
+Ten commits on `main` (`308a3a6`..`35ff52b`), shipped as three OTA updates.
+
+**OTA 1 — update group `5e9b0adb-751b-4667-848a-366ce8780b72` (commit `5277ad5`):**
+
+1. `f5837f4` — Fixed memory/task photos not visible across devices on the
+   same account. `memoryForRemote()`'s deferred-upload path had a
+   premature `return` that skipped stripping local `file://` paths before
+   push; checklist task photos additionally had zero background-upload
+   infrastructure (classic per-day photos did). Fixed both; extended the
+   upload/retry pattern to task photos for habits and mini missions.
+2. `799c5d4` — Mini-mission task photos are now editable until Mark
+   Complete, matching main-mission behavior (`app/mini/[id].tsx`).
+3. `5277ad5` — Fixed mini-mission draft task logs randomly disappearing
+   mid-run (found via real-device testing — iPhone/Android showed
+   different tasks checked on the same mission). `MiniMission.draftTasks`
+   is local-only but was still being dropped by the generic dirty-flag-
+   gated remote-merge logic on both `mergeDirtyLocalIntoRemote()` and
+   `preserveLocalMiniProgress()`. See `app-architecture.md`'s Sync
+   Architecture section for the reusable gotcha. Full cross-device sync
+   explicitly deferred by the user ("same device persistence is fine for
+   now").
+
+**OTA 2 — update group `40cf8603-08a7-4ce1-bf31-e1c997d2af11` (commit `87c4784`):**
+
+4. `866a26b` — Fixed Live Squad peer status stuck "on mission" forever
+   after their deadline passes (user-reported: elapsed time read "16h 44m
+   of 45m"). `app/live-mini/[id].tsx` now derives status locally from
+   `deadline_at` instead of trusting the possibly-stale synced `status`
+   column, and triggers the previously-unused `rpc_refresh_live_mini_missed`
+   on board load. See `app-architecture.md`'s Live Mini Squads section.
+5. `a85418d` — Mini Missions Done tab: "· Moment" inline text replaced
+   with a camera glyph in the Live-pill's badge slot.
+6. `4f57afb` — Profile hero card minimized: two status pills merged into
+   one plain-text line, XP progress bar dropped (ring already shows it),
+   gradient CTA → flat indigo outline button.
+7. `e6f2baf` — Same gradient→outline CTA treatment applied to the two
+   notification-launch screens (`challenge-memory.tsx`, `journey-moment/
+   [id].tsx`); Squad Actions tiles shrunk from full-tile color tint to a
+   small translucent icon badge on a neutral tile.
+8. `4a9491a` — Notifications list redesign: per-type tone-tinted icon
+   badge (`notificationVisual()`/`notificationToneColors()`) replaces the
+   uniform bright-cyan subtitle on every row; two rounds of live-simulator
+   feedback moved the badge from a wasted reserved left column to
+   centered against the full text block with the unread dot overlaid on
+   the badge itself.
+9. `87c4784` — Standardized on `Wrench` for every repair icon in the app
+   (was a `Hammer`/`Wrench` mix); no `Hammer` references remain.
+
+**OTA 3 — update group `e88ebfdb-b170-4edf-af9a-bbaa15e389cc` (commit `35ff52b`):**
+
+10. `35ff52b` — Fixed Android keyboard-dismiss jitter on the invite search
+    sheets (`GroupChallengeSheet.tsx`, `LiveMiniInviteSheet.tsx`) — a real
+    regression introduced by the Aug-12 session's own Android keyboard
+    fix (`baf216b` switched Android to `behavior="height"`, which covers
+    the input correctly but re-layouts on every frame of Android's
+    multi-step keyboard-dismiss animation, causing visible jitter).
+    Switched both to `behavior="padding"` on both platforms with
+    `keyboardVerticalOffset={12}` on Android, matching
+    `CustomNudgeModal.tsx`'s already-stable identical pattern. See
+    `app-architecture.md`'s Known Caution Points for the full writeup.
+    **Not visually confirmed** — no way to drive an Android keyboard
+    show/dismiss in this sandbox.
+
+`npx tsc --noEmit` clean after every commit. No `package.json`/lockfile/
+`app.json`/`eas.json` changes in any range — confirmed OTA-safe. All three
+updates published successfully (the second OTA's first publish attempt hit
+a transient `Asset processing timed out` upload error from EAS's servers,
+not a code issue — succeeded on immediate retry; the first and third each
+published cleanly on the first try). Visually confirmed live via a booted
+iOS simulator + dev server for commits 5-9 (Mini Missions, Profile,
+Notifications, including the user's own side-by-side iPhone/Android
+screenshots that caught a Live-pill/camera-badge collision). **Not**
+visually confirmed: the two notification-launch screens (#7, deep-link-
+only, no real push notification available to trigger one) and commit #10
+(no Android input-driving tool available this session).
+
 ## 2026-08-12
 
 ### Minimalist-only theme pack, "@" prefix removal, 3 bug fixes, Mini Missions + Live Squad redesigns

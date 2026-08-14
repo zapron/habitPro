@@ -346,6 +346,23 @@ row, so it does *not* need a matching update, but don't assume every RPC behaves
 same way; verify each one. See `supabase/migrations/20260723090000_sync_dirty_state_task_checklist.sql`
 for the real fix and `docs/CATALOG_ARCHITECTURE.md` §2.5/Phase 2 for the full story.
 
+**Gotcha (found 2026-08-14): a "local-only, never synced" field is still vulnerable
+to being silently dropped.** `MiniMission.draftTasks` (in-progress checklist logging,
+deliberately never pushed to or pulled from Supabase — see Mini Missions section) was
+being lost mid-run on the *same* device intermittently. Root cause: the generic
+remote-snapshot-apply logic in `hydrateStoreAfterAuth()`'s `mergeDirtyLocalIntoRemote()`
+and `useRemoteStoreRefreshOnFocus.ts`'s `preserveLocalMiniProgress()` both decide
+whether to keep a local record's data by checking that record's **dirty flag** —
+the same flag used for every synced field on that record. Pushing any *other* field
+on the same mini mission (a timer tick, a fuel extend, anything) clears the dirty
+flag even though `draftTasks` itself was never included in what got pushed, so the
+next remote-snapshot merge silently overwrote it with nothing. Fixed by adding a
+dedicated carry-forward check in both functions that preserves `draftTasks`
+independent of dirty status whenever the mission is still `in_progress`. **The
+general lesson: any future local-only field needs its own explicit
+preserve-on-merge check — it cannot piggyback on the dirty-flag mechanism just
+because it lives on a synced record.**
+
 ## Auth
 
 Auth context:
@@ -508,6 +525,16 @@ Purpose:
 - Local mini mission state is synced to the live board through `syncLiveMiniFromLocalMission()`.
 - `LiveMiniInviteSheet` uses a keyboard-aware scroll container so iPhone username search/results stay above the keyboard.
 - Live Mini board cards use Supabase render thumbnails for inline memory images while preserving full-size tap-to-view.
+- **A peer's `in_progress` status is not trustworthy on its own (fixed 2026-08-14).**
+  The DB row only flips to `"missed"` when the mission owner's own device pushes
+  that update via a one-shot `setTimeout` scheduled for the exact deadline moment
+  (`app/mini/[id].tsx`) — if that device is backgrounded/killed right then, the row
+  stays `"in_progress"` forever from every other participant's point of view, with
+  elapsed time counting up unbounded on their screens. `app/live-mini/[id].tsx` now
+  derives the effective status locally via `effectiveParticipantStatus()` (compares
+  `deadline_at` against a live-ticking `now`) instead of trusting the raw `status`
+  column for display, and calls the previously-unused `refreshLiveMiniMissed()` →
+  `rpc_refresh_live_mini_missed` on every board load so the DB row self-heals too.
 
 Backend:
 
@@ -781,6 +808,15 @@ Unread count:
 - Mark-all-read sets cached count to zero and rolls back on failure.
 
 Keep in-app notification routing and remote push routing aligned.
+
+**Visual design (as of 2026-08-14):** each row shows a small tone-tinted icon badge
+instead of coloring the whole subtitle. `notificationVisual(n)` maps `type` (and
+`challenge_nudge`'s `kind`/`streak_window_reminder`'s `reminder_phase`) to an
+`{ Icon, tone }` pair; `notificationToneColors(tone, theme, isDark)` resolves the
+tone (`"positive" | "urgent" | "social" | "muted"`) to a fixed, deliberately small
+palette (green/amber/indigo/gray). Subtitle text itself is plain `textSecondary` —
+color lives only in the badge. When adding a new notification `type`, add a case to
+`notificationVisual()` or it silently falls back to a generic `Bell`/`"social"`.
 
 ## Streak Repairs
 
@@ -1223,6 +1259,7 @@ original palette, unchanged) or `minimalistDarkTheme`/`minimalistLightTheme`
 - Treat Supabase migrations and RPCs as part of the app contract.
 - `rpc_sync_dirty_state` (the habit/mini push RPC) parses an explicit column list via `jsonb_to_recordset` — a new synced field needs a migration to add it there too, or it's silently dropped with no error. See the Sync Architecture section above.
 - Notification routes exist in two places and must stay aligned.
+- **On Android, `KeyboardAvoidingView behavior="height"` inside a `<Modal>` can visibly jitter/flicker as the keyboard dismisses.** Android reports the keyboard's frame in several rapid steps during the dismiss animation; `"height"` mode resizes the component's actual `height` style on every one of those steps, forcing a full re-layout each time. `behavior="padding"` (animating `paddingBottom` instead) is far cheaper and doesn't thrash layout the same way. Found 2026-08-14 in `GroupChallengeSheet.tsx`/`LiveMiniInviteSheet.tsx` (both `<Modal>`-based invite-search sheets that had switched Android from no `behavior` at all to `"height"` on 2026-08-12 to fix the keyboard covering the search input — that fix was correct in principle but picked the wrong mode). Fixed by switching both to `behavior="padding"` on both platforms with `keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 12}`, matching `CustomNudgeModal.tsx`'s already-shipped, stable pattern for the same `<Modal>` + `KeyboardAvoidingView` structure. Default to `"padding"` over `"height"` for any new Modal-hosted keyboard-avoiding view in this app.
 - Cohort dot markers are intentionally lightweight; do not reintroduce full memory payload loading into member list rows.
 - Repairs can show declined even with enough approvals if backend `status` is declined; display must follow backend state.
 - Auth/sign-out cleanup is security-sensitive.

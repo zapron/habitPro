@@ -23,7 +23,45 @@ Then inspect the files relevant to the user request.
 
 ## Current User Priorities
 
-- **Most current, as of 2026-08-12**: 7 commits on `main`
+- **Most current, as of 2026-08-14**: 10 commits on `main` (`308a3a6`..`35ff52b`),
+  pushed and shipped as **three separate production OTA updates** (update groups
+  `5e9b0adb`, `40cf8603`, and `e88ebfdb` — all already live, not pending). Real
+  bugs fixed: memory/task photos not syncing across a user's own devices
+  (checklist task photos had zero upload/retry infrastructure before this);
+  mini-mission task photos now editable until Mark Complete, matching main
+  missions; mini-mission draft task logs randomly disappearing mid-run even on
+  the *same* device (a local-only field being silently dropped by the generic
+  dirty-flag-gated remote-merge logic — **read `app-architecture.md`'s Sync
+  Architecture section before adding any new local-only field to a synced
+  record, this exact bug class will recur otherwise**); a Live Squad
+  participant showing as stuck "on mission" forever on every other
+  participant's screen after their deadline passed (peer status previously
+  trusted a synced column that only a one-shot timer on the *other* device
+  ever updated — see `app-architecture.md`'s Live Mini Squads section); and
+  **an Android keyboard-dismiss jitter on the invite search sheets that was
+  itself a regression from the Aug-12 session's own Android keyboard fix**
+  (`behavior="height"` covers the input correctly but re-layouts on every
+  frame of Android's multi-step dismiss animation — switched to
+  `behavior="padding"` on both platforms, see `app-architecture.md`'s Known
+  Caution Points; **default to `"padding"` over `"height"` for any new
+  Modal-hosted `KeyboardAvoidingView` in this app**). Then a minimalist
+  visual pass, all iterated live against a booted iOS simulator per real
+  user feedback: the Profile hero card (merged pills, dropped the redundant
+  XP bar, gradient CTA → flat outline), the two notification-launch screens'
+  gradient CTAs + Squad Actions tiles (full-tile color tint → small icon
+  badge), and a full Notifications list redesign (per-type tone-tinted icon
+  badges instead of a uniform bright-cyan subtitle on every row, regardless
+  of what the notification meant). Also standardized every repair-related
+  icon in the app on `Wrench` (was a mixed `Hammer`/`Wrench` — no `Hammer`
+  references remain). Full detail in `docs/CURRENT_WORK.md`'s 2026-08-14
+  entry and `docs/WORK_HISTORY.md`. **Explicitly deferred, not forgotten**:
+  full cross-device sync of `draftTasks` (a task logged on one device
+  becoming visible on another) — user said "same device persistence is fine
+  for now," only the same-device race was fixed. **Not visually confirmed**:
+  the two notification-launch screens (deep-link-only, no real push
+  notification available to trigger one) and the Android keyboard-jitter fix
+  (no way to drive an Android keyboard show/dismiss in this sandbox).
+- **As of 2026-08-12**: 7 commits on `main`
   (`5c37bad`..`fae0a49`) — Minimalist is now the app's **only** theme pack
   (Classic's code still exists, just unreachable — do not build a new
   picker back in without checking with the user first); the "@" prefix was
@@ -37,11 +75,11 @@ Then inspect the files relevant to the user request.
   explicitly built to mirror `CohortLeaderHero`'s rank-circle/square-grid
   language. Full detail in `docs/CURRENT_WORK.md`'s 2026-08-12 entry.
   `npx tsc --noEmit` clean, no `package.json`/lockfile/`app.json`/
-  `eas.json` changes — OTA-safe. **Not pushed as OTA yet.** None of this
-  was confirmed live on-device (same sandbox limitation as every prior
-  session) — Live Squad's newly-flattened participant rows are probably
-  the single spot most worth a real look, given how dense that screen's
-  content is.
+  `eas.json` changes — OTA-safe. **Update: pushed and OTA'd in the
+  2026-08-14 session** (bundled as part of update group `5e9b0adb`, see
+  the bullet above), not in this Aug-12 session itself. Live Squad's
+  flattened participant rows did get a real look in the 2026-08-14
+  session (that's how the peer missed-status bug above was found/fixed).
 - **As of 2026-08-09**: `experiment/glass-redesign-v2`
   (everything below — the 2026-08-08, 2026-08-06, and 2026-08-04 sessions)
   was **merged into `main` via PR #1, merge commit `0a52ef7`**. Local

@@ -1,6 +1,144 @@
 # HabitPro Current Work
 
-Last updated: 2026-08-12 (Minimalist made the app's only theme pack, Classic picker removed; "@" prefix dropped from every displayed username app-wide; three real bugs fixed — streak-repair firing for days before a user joined a group challenge mid-way (+ Supabase migration adding `habits.joined_challenge_at`, already applied), Android keyboard covering invite-search sheets, mini-mission task logs lost on app close/backgrounding; Mini Missions screen (list + detail) and Live Squad screen both got a minimalist redesign pass, the latter explicitly mirroring the cohort screen's rank-circle/square-grid language. Seven commits, `npx tsc --noEmit` clean throughout, no `package.json`/lockfile/`app.json`/`eas.json` changes — OTA-safe. **Not yet pushed as OTA — see the handoff section below for the full readiness check.**).
+Last updated: 2026-08-14 (cross-device photo sync fix, mini-mission task photo editing before Mark Complete, a mini-mission draft-task race-condition fix, a Live Squad peer-status-stuck-forever fix, a minimalist visual pass across the Profile hero/Mini Missions/notification-launch screens/Notifications list, standardizing on the Wrench icon for repair everywhere, and an Android keyboard-dismiss jitter fix on the invite search sheets. Ten commits across three OTA pushes (update groups `5e9b0adb`, `40cf8603`, `e88ebfdb`), all JS/TS/TSX only, all already live in production. Full detail in the session handoff section immediately below.).
+
+## Session Handoff (2026-08-14, end of session)
+
+**State: clean, on `main`, pushed and OTA'd.** Nine commits ahead of the
+2026-08-12 session's tip (`308a3a6`..`87c4784`), all pushed to
+`origin/main` and shipped via two separate production OTA updates.
+Nothing mid-flight, nothing uncommitted except the pre-existing untracked
+`.mcp.json`/`.claude/`. `npx tsc --noEmit` clean after every commit below.
+
+**First OTA (update group `5e9b0adb-751b-4667-848a-366ce8780b72`, commit
+`5277ad5`) — three commits, cross-device photo sync + mini-task editing:**
+
+1. `f5837f4` — **Fixed memory/task photos not visible across devices on
+   the same account.** Two bugs stacked: (a) `memoryForRemote()` in
+   `sync.ts` had a premature `return next` in the deferred-upload path
+   that skipped the local-path cleanup at the end of the function, so a
+   device-local `file://` path could leak into the pushed Supabase row
+   instead of being stripped/replaced by the upload; (b) checklist task
+   photos had **no** background-upload/retry infrastructure at all (only
+   classic per-day memory photos did) — task photos just stayed local
+   forever. Fixed the premature return, and extended the full
+   schedule/commit/retry pattern to task photos for both habits and mini
+   missions (`scheduleHabitTaskMemoryUpload`/`scheduleMiniTaskMemoryUpload`,
+   new `patchStreakMemoryTaskProof`/`patchMiniCompletionMemory`/
+   `patchMiniCompletionMemoryTaskProof` store actions,
+   `retryPendingMemoryUploads()` called from `AuthContext` after sign-in
+   hydration). Also added `sanitizeRemoteMemory`/`sanitizeRemoteStreakMemories`
+   to strip any already-corrupted local paths pulled from rows written
+   before this fix.
+2. `799c5d4` — **Mini-mission task photo editing before Mark Complete.**
+   `app/mini/[id].tsx`'s `onSelectTask` now prefills the capture sheet
+   from the task's existing draft entry (matching the main-mission
+   behavior already in `habit/[id].tsx`) instead of only supporting
+   view-after-complete.
+3. `5277ad5` — **Fixed mini-mission draft task logs randomly disappearing
+   mid-run**, found live via real-device testing (user reported the same
+   mission showing different tasks checked on iPhone vs. Android, and
+   intermittent same-device loss). Root cause and fix documented in
+   `app-architecture.md`'s Sync Architecture section (new 2026-08-14
+   gotcha) — short version: `draftTasks` is local-only but was still being
+   dropped by the generic dirty-flag-gated remote-merge logic. **User
+   explicitly deferred full cross-device `draftTasks` sync** ("same
+   device persistence is fine for now") — only the same-device race was
+   fixed this round.
+
+**Second OTA (update group `40cf8603-08a7-4ce1-bf31-e1c997d2af11`, commit
+`87c4784`) — six commits, one real bug fix + a minimalist visual pass
+driven by live screenshots/simulator checks across this session:**
+
+4. `866a26b` — **Fixed Live Squad peer status stuck "on mission" forever
+   after their deadline passes** (user-reported via screenshot: a
+   participant's elapsed time read "16h 44m of 45m"). Full root-cause and
+   fix in `app-architecture.md`'s Live Mini Squads section (new
+   2026-08-14 note) — short version: peer status only flipped server-side
+   via a one-shot timer on the *other* device that had to be alive at the
+   exact expiry moment; `app/live-mini/[id].tsx` now derives the correct
+   status locally from `deadline_at` and also triggers the previously-
+   unused `rpc_refresh_live_mini_missed` server reconciliation on board
+   load.
+5. `a85418d` — Mini Missions Done tab: replaced the inline "· Moment" text
+   with a small camera glyph in the same top-right badge slot the Live
+   pill uses (`app/mini/index.tsx`).
+6. `4f57afb` — **Profile hero card minimized**, per explicit "if we had to
+   minimise this what shall we do?" → "do it": collapsed the "Level N"
+   pill + Community/Premium pill into one plain-text status line, dropped
+   the XP progress bar (the ring already shows it) folding "Total XP"
+   inline instead, and replaced the 3-color rainbow-gradient "View My
+   Journey" CTA with a flat indigo outline button.
+7. `e6f2baf` — Quieted the two notification-launch screens
+   (`app/challenge-memory.tsx`'s "Open squad" screen,
+   `app/journey-moment/[id].tsx`'s liked-moment screen): same
+   gradient→flat-outline CTA treatment as #6, Squad Actions tiles shrunk
+   from fully color-tinted cards to a neutral tile + a small translucent
+   icon badge, and the redundant group icon dropped from the "Squad
+   actions" section header.
+8. `4a9491a` — **Notifications list redesign** (`app/notifications.tsx`):
+   replaced the uniform bright-cyan subtitle on every row (regardless of
+   what the notification actually meant) with a small per-type tone-
+   tinted icon badge — `notificationVisual()`/`notificationToneColors()`,
+   new note in `app-architecture.md`'s Notifications section. Dropped the
+   "🔥" emoji from "Streak repaired!" now that the icon carries it. Went
+   through two rounds of live-simulator feedback: badge repositioned from
+   a reserved left dot-column (too much left gutter, badge pinned to the
+   top of a multi-line row) to overlaying the unread dot on the badge
+   itself and vertically centering the badge against the full text block.
+9. `87c4784` — **Standardized on the Wrench icon for repair, everywhere.**
+   User's first ask (notification "Streak repair request" row) used
+   `Hammer`; user then asked to use `Wrench` there instead and replace
+   every other `Hammer` repair icon in the app to match — Home
+   `HabitCard.tsx`'s day-grid repair dot, `app/habit/[id].tsx`'s day-grid
+   dot + Repair button, and `StreakMemoryGallery.tsx`'s repaired-day hex
+   overlay. No `Hammer` references remain anywhere in the app.
+
+**Third OTA (update group `e88ebfdb-b170-4edf-af9a-bbaa15e389cc`, commit
+`35ff52b`) — one commit, a real regression from the Aug-12 session's own
+Android keyboard fix:**
+
+10. `35ff52b` — **Fixed Android keyboard-dismiss jitter on the invite
+    search sheets**, user-reported: "after the user is able to find the
+    person and the keyboard is removed, the invite screen literally
+    jitters... only on Android." Root cause and fix documented in
+    `app-architecture.md`'s Known Caution Points (new 2026-08-14 entry) —
+    short version: the Aug-12 fix for the keyboard *covering* the search
+    input (`baf216b`) switched Android's `KeyboardAvoidingView` from no
+    `behavior` at all to `"height"`, which is correct in principle but the
+    wrong mode — `"height"` forces a full re-layout on every one of the
+    several rapid frame-size reports Android sends during the dismiss
+    animation. Switched `GroupChallengeSheet.tsx`/`LiveMiniInviteSheet.tsx`
+    to `behavior="padding"` on both platforms (mirroring
+    `CustomNudgeModal.tsx`'s already-stable identical `<Modal>` +
+    `KeyboardAvoidingView` structure) with `keyboardVerticalOffset={12}` on
+    Android. **Not visually confirmed** — no way to drive an Android
+    keyboard show/dismiss in this sandbox; diagnosis is root-caused from
+    the known Android `behavior="height"` re-layout-thrash pattern plus an
+    identical, already-working pattern elsewhere in this exact codebase,
+    not from reproducing and re-testing the jitter directly. Worth a real
+    check on a physical Android device before considering this fully
+    closed.
+
+**All three OTAs verified OTA-safe** the same way as every prior session:
+`git diff <base>..HEAD --stat -- package.json package-lock.json app.json
+eas.json` empty for all three ranges. `npx eas update` failed once on the
+first attempt of the second OTA (`Asset processing timed out` — a
+transient upload-timeout to EAS's servers, not a code/build problem; the
+bundle itself had already exported cleanly) and succeeded on immediate
+retry; the first and third OTAs each published cleanly on the first try.
+
+**Visually confirmed live, unlike most prior sessions**: this session had
+a booted iOS simulator with the dev server attached, so the Mini Missions
+camera glyph fix, the Profile hero minimization, and all three rounds of
+the Notifications redesign were screenshotted and iterated on live
+in-session (including the user's own side-by-side iPhone+Android
+screenshots that caught the Live/camera badge collision and drove the
+centering fix). **Still not confirmed live**: the notification-launch
+screens (`challenge-memory.tsx`/`journey-moment/[id].tsx`) are deep-link-
+only (reachable by tapping a real push notification), and this session had
+no way to fire one or drive taps — those two are code-reviewed and
+`tsc`-clean but not eyeballed on-device this round.
 
 ## Session Handoff (2026-08-12)
 
@@ -80,8 +218,11 @@ non-JS change (the Supabase migration) is a backend schema change already
 applied directly to the database, independent of the app bundle/OTA
 mechanism entirely. Per `app-architecture.md`'s OTA-safe criteria, this
 batch is eligible to ship as a normal production OTA update, no
-force-update/version bump needed. **Not pushed yet — that step hasn't been
-requested this session.**
+force-update/version bump needed. **Update (2026-08-14): this batch was
+pushed and OTA'd in the 2026-08-14 session** (bundled together with that
+session's own first three commits, as update group `5e9b0adb` — see the
+handoff section at the top of this file), not in this Aug-12 session
+itself.
 
 ## Session Handoff (2026-08-09, post-merge)
 
