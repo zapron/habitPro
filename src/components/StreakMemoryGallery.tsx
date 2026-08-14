@@ -16,7 +16,7 @@ import {
   type ViewStyle,
 } from "react-native";
 import { FlashList } from "@shopify/flash-list";
-import { Bookmark, Hammer, X } from "lucide-react-native";
+import { Bookmark, Wrench, X } from "lucide-react-native";
 import Svg, { ClipPath, Defs, Image as SvgImage, Path } from "react-native-svg";
 import { useTheme } from "../context/ThemeContext";
 import { useReducedMotion } from "../hooks/useReducedMotion";
@@ -402,7 +402,7 @@ export function StreakMemoryGallery({
 
                     {isSquadRepair ? (
                       <View style={styles.hexOverlay} pointerEvents="none">
-                        <Hammer size={18} color={theme.colors.textMuted} strokeWidth={2.2} />
+                        <Wrench size={18} color={theme.colors.textMuted} strokeWidth={2.2} />
                       </View>
                     ) : textOnlyThumb || hasLocalOnlyPhoto || !showImage ? (
                       <View

@@ -12,7 +12,7 @@ import {
 } from "react-native";
 import { useRouter } from 'expo-router';
 import { GlassTopHighlight } from './GlassTopHighlight';
-import { Check, CircleX, Users, Plane, Gamepad2, Swords, Hammer, Flame } from 'lucide-react-native';
+import { Check, CircleX, Users, Plane, Gamepad2, Swords, Wrench, Flame } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
 import { withAlpha } from '../styles/theme';
 import { Habit } from '../types/habit';
@@ -195,7 +195,7 @@ const MiniDayGrid = memo(function MiniDayGrid({
           accessibilityLabel="Repair streak"
           style={{ width: cell, height: cell, alignItems: "center", justifyContent: "center" }}
         >
-          <Hammer size={Math.max(cell, 6)} color={repairColor} strokeWidth={2.2} />
+          <Wrench size={Math.max(cell, 6)} color={repairColor} strokeWidth={2.2} />
         </TouchableOpacity>
       ) : isActive ? (
         <Animated.View

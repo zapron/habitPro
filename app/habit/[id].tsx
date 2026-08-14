@@ -26,7 +26,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { GlassTopHighlight } from '../../src/components/GlassTopHighlight';
 import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ArrowLeft, Trash2, Lock, RotateCcw, Plane, Gamepad2, Globe, User, Users, Info, Bell, Hammer, Camera, MessageSquare } from 'lucide-react-native';
+import { ArrowLeft, Trash2, Lock, RotateCcw, Plane, Gamepad2, Globe, User, Users, Info, Bell, Wrench, Camera, MessageSquare } from 'lucide-react-native';
 import Svg, { Path } from 'react-native-svg';
 import { useHabitStore } from '../../src/store/habitStore';
 import { useShallow } from 'zustand/react/shallow';
@@ -223,7 +223,7 @@ const CompletedDayDot = React.memo(function CompletedDayDot({
             {hasPhoto ? (
                 <Camera size={10} color={iconColor} strokeWidth={2.4} />
             ) : isRepaired ? (
-                <Hammer size={10} color={iconColor} strokeWidth={2.4} />
+                <Wrench size={10} color={iconColor} strokeWidth={2.4} />
             ) : hasNoteOnly ? (
                 <MessageSquare size={10} color={iconColor} strokeWidth={2.4} />
             ) : null}
@@ -2162,7 +2162,7 @@ export default function HabitDetail() {
                         accessibilityRole="button"
                         accessibilityLabel="Repair streak"
                       >
-                        <Hammer size={13} color={theme.colors.amber[900]} strokeWidth={2.4} />
+                        <Wrench size={13} color={theme.colors.amber[900]} strokeWidth={2.4} />
                         <Text style={[styles.repairBtnText, { color: theme.colors.amber[900] }]}>Repair</Text>
                       </TouchableOpacity>
                     </View>
