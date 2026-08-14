@@ -17,6 +17,7 @@ import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { FlashList } from "@shopify/flash-list";
 import {
+  Camera,
   Clock3,
   CircleCheck,
   ArrowLeft,
@@ -145,13 +146,17 @@ const MiniMissionCard = memo(function MiniMissionCard({ item, index }: { item: M
             {item.title}
           </Text>
         </View>
-        {item.liveSquadId || (!isWaiting && !isCompleted && !isTimerUp) ? (
+        {item.liveSquadId || (!isWaiting && !isCompleted && !isTimerUp) || (isCompleted && hasMoment) ? (
           <View style={styles.cardBadgeStack}>
             {/* Live now shows top-right on every tab, including Failed, same spot as Done */}
             {item.liveSquadId ? (
               <View style={[styles.liveBadge, { borderColor: theme.colors.border }]}>
                 <Text style={[styles.liveBadgeText, { color: theme.colors.textSecondary }]}>Live</Text>
               </View>
+            ) : null}
+            {/* Done tab: a dull camera glyph marks a captured moment instead of an inline "· Moment" text */}
+            {isCompleted && hasMoment ? (
+              <Camera size={14} color={theme.colors.textMuted} />
             ) : null}
             {/* "Waiting"/"Completed"/"Failed" are redundant with the tab they're already filtered into — skip the pill there */}
             {!isWaiting && !isCompleted && !isTimerUp ? (
@@ -221,7 +226,6 @@ const MiniMissionCard = memo(function MiniMissionCard({ item, index }: { item: M
       {isCompleted && item.startedAt && item.completedAt && (
         <Text style={[styles.completedMetaText, { color: theme.colors.green[500] }]}>
           Done in {Math.ceil((new Date(item.completedAt).getTime() - new Date(item.startedAt).getTime()) / 60000)} of {totalMinutes} min
-          {hasMoment ? " · Moment" : ""}
         </Text>
       )}
       </TouchableOpacity>
@@ -689,7 +693,7 @@ const styles = StyleSheet.create({
   cardTitleRow: { flex: 1, flexDirection: "row", alignItems: "center", marginRight: 8, minWidth: 0 },
   publicTitleIcon: { marginRight: 6 },
   cardTitle: { fontWeight: "700", flex: 1, minWidth: 0 },
-  cardBadgeStack: { alignItems: "flex-end", gap: 5, maxWidth: 118 },
+  cardBadgeStack: { flexDirection: "row", alignItems: "center", gap: 8, maxWidth: 118 },
   failedMetaInlineRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 10, flexWrap: "wrap" },
   liveBadge: {
     flexDirection: "row",
