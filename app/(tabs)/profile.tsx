@@ -1551,63 +1551,28 @@ export default function ProfileScreen() {
           </View>
           <View style={styles.heroText}>
             <View style={styles.heroStatusRow}>
-              <View
-                style={[
-                  styles.heroLevelPill,
-                  {
-                    backgroundColor: isDark ? withAlpha(theme.colors.indigo[500], 14) : withAlpha(theme.colors.indigo[600], 8),
-                    borderColor: isDark ? withAlpha(theme.colors.indigo[400], 35) : withAlpha(theme.colors.indigo[500], 24),
-                  },
-                ]}
-              >
-                <Text style={[styles.heroLevelPillText, { color: theme.colors.indigo[400] }]}>Level {level}</Text>
-              </View>
-              {accountHydrating ? null : profileIsPremium ? (
-                <View
-                  style={[
-                    styles.heroActivePill,
-                    {
-                      backgroundColor: isDark ? withAlpha(theme.colors.green[500], 12) : withAlpha(theme.colors.green[600], 8),
-                      borderColor: isDark ? withAlpha(theme.colors.green[500], 28) : withAlpha(theme.colors.green[600], 20),
-                    },
-                  ]}
-                >
-                  <PlusBadge withFlame label="Community" />
-                  <Text style={[styles.heroActiveText, { color: theme.colors.green[500] }]}>Premium</Text>
-                </View>
-              ) : (
-                <View
-                  style={[
-                    styles.heroActivePill,
-                    {
-                      backgroundColor: isDark ? withAlpha(theme.colors.indigo[500], 12) : withAlpha(theme.colors.indigo[600], 8),
-                      borderColor: isDark ? withAlpha(theme.colors.indigo[400], 28) : withAlpha(theme.colors.indigo[500], 20),
-                    },
-                  ]}
-                >
-                  <User size={13} color={theme.colors.indigo[400]} strokeWidth={2.4} />
-                  <Text style={[styles.heroActiveText, { color: theme.colors.textSecondary }]}>Solo analytics</Text>
-                </View>
+              <Text style={[styles.heroStatusText, { color: theme.colors.textPrimary }]}>Level {level}</Text>
+              {accountHydrating ? null : (
+                <>
+                  <Text style={[styles.heroStatusDivider, { color: theme.colors.textMuted }]}>·</Text>
+                  {profileIsPremium ? (
+                    <View style={styles.heroStatusInline}>
+                      <PlusBadge withFlame label="Community" />
+                      <Text style={[styles.heroStatusText, { color: theme.colors.green[500] }]}>Premium</Text>
+                    </View>
+                  ) : (
+                    <Text style={[styles.heroStatusText, { color: theme.colors.textMuted }]}>Solo analytics</Text>
+                  )}
+                </>
               )}
             </View>
             <View style={styles.xpLine}>
               <Zap size={16} color={theme.colors.yellow[400]} fill={theme.colors.yellow[400]} />
               <Text style={[styles.xpBig, { color: theme.colors.textPrimary }]}>
-                {xpInLevel} / {XP_PER_LEVEL} <Text style={{ color: theme.colors.textMuted, fontWeight: "600" }}>XP this level</Text>
+                {xpInLevel} / {XP_PER_LEVEL} <Text style={{ color: theme.colors.textMuted, fontWeight: "600" }}>XP</Text>
               </Text>
+              <Text style={[styles.totalXpInline, { color: theme.colors.textMuted }]}>· {xp} total</Text>
             </View>
-            <View style={[styles.heroXpTrack, { backgroundColor: isDark ? withAlpha(theme.colors.sheen, 9) : withAlpha(theme.colors.sheen, 8) }]}>
-              <View
-                style={[
-                  styles.heroXpFill,
-                  {
-                    width: `${Math.max(3, Math.min(100, Math.round((xpInLevel / XP_PER_LEVEL) * 100)))}%`,
-                    backgroundColor: theme.colors.green[500],
-                  },
-                ]}
-              />
-            </View>
-            <Text style={[styles.totalXp, { color: theme.colors.textSecondary }]}>Total XP: {xp}</Text>
             {showAccount && username ? (
               <Text style={[styles.handle, { color: theme.colors.cyan[400] }]} numberOfLines={1}>
                 {username}
@@ -1621,20 +1586,16 @@ export default function ProfileScreen() {
               accessibilityLabel="View my journey"
               style={({ pressed }) => [styles.journeyCtaPressable, pressed ? styles.journeyCtaPressed : null]}
             >
-              <LinearGradient
-                colors={
-                  isDark
-                    ? ["#4F46E5", "#0891B2", "#F59E0B"]
-                    : ["#4F46E5", "#06B6D4", "#F59E0B"]
-                }
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.journeyCta}
+              <View
+                style={[
+                  styles.journeyCta,
+                  { borderWidth: 1, borderColor: theme.colors.indigo[500] },
+                ]}
               >
-                <BarChart3 size={15} color="#FFFFFF" strokeWidth={2.4} />
-                <Text style={styles.journeyCtaText}>View My Journey</Text>
-                <ChevronRight size={15} color="#FFFFFF" strokeWidth={2.6} />
-              </LinearGradient>
+                <BarChart3 size={15} color={theme.colors.indigo[400]} strokeWidth={2.4} />
+                <Text style={[styles.journeyCtaText, { color: theme.colors.indigo[400] }]}>View My Journey</Text>
+                <ChevronRight size={15} color={theme.colors.indigo[400]} strokeWidth={2.6} />
+              </View>
             </Pressable>
           </View>
         </LinearGradient>
@@ -2143,26 +2104,9 @@ const styles = StyleSheet.create({
     marginBottom: 1,
     marginLeft: -2,
   },
-  heroLevelPill: {
-    minHeight: 25,
-    borderRadius: 999,
-    borderWidth: 1,
-    paddingHorizontal: 10,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  heroLevelPillText: { fontSize: 11.5, lineHeight: 14, fontWeight: "900", letterSpacing: 0.25 },
-  heroActivePill: {
-    minHeight: 25,
-    borderRadius: 999,
-    borderWidth: 1,
-    paddingHorizontal: 8,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    flexShrink: 1,
-  },
-  heroActiveText: { fontSize: 10.5, lineHeight: 13, fontWeight: "900" },
+  heroStatusText: { fontSize: 13, lineHeight: 16, fontWeight: "800" },
+  heroStatusDivider: { fontSize: 13, lineHeight: 16, fontWeight: "700" },
+  heroStatusInline: { flexDirection: "row", alignItems: "center", gap: 5 },
   levelBadge: {
     position: "absolute",
     left: "50%",
@@ -2177,16 +2121,9 @@ const styles = StyleSheet.create({
     transform: [{ translateX: -17 }, { translateY: -17 }],
   },
   levelBadgeText: { fontSize: 13, fontWeight: "900", fontVariant: ["tabular-nums"] },
-  xpLine: { flexDirection: "row", alignItems: "center", gap: 8, minWidth: 0 },
+  xpLine: { flexDirection: "row", alignItems: "center", gap: 8, minWidth: 0, flexWrap: "wrap" },
   xpBig: { fontSize: 16, lineHeight: 20, fontWeight: "800" },
-  heroXpTrack: {
-    height: 7,
-    borderRadius: 999,
-    overflow: "hidden",
-    width: "100%",
-  },
-  heroXpFill: { height: "100%", borderRadius: 999 },
-  totalXp: { fontSize: 12.5, lineHeight: 16, fontWeight: "700" },
+  totalXpInline: { fontSize: 12.5, lineHeight: 16, fontWeight: "700" },
   handle: { fontSize: 15, lineHeight: 19, fontWeight: "900", marginTop: 0 },
   plusActiveRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 2 },
   plusActiveText: { fontSize: 12, fontWeight: "800", letterSpacing: 0.1 },
