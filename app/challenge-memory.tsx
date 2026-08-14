@@ -14,7 +14,6 @@ import {
   useWindowDimensions,
 } from "react-native";
 import type { NativeScrollEvent, NativeSyntheticEvent } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
@@ -808,7 +807,6 @@ export default function ChallengeMemoryScreen() {
             {detail?.canSendSquadNudge ? (
               <View style={[styles.actionsPanel, { borderColor: theme.colors.border, backgroundColor: theme.colors.surface }]}>
                 <View style={styles.actionsHeader}>
-                  <Users size={16} color={theme.colors.cyan[400]} />
                   <Text style={[styles.actionsTitle, { color: theme.colors.textPrimary }]}>Squad actions</Text>
                 </View>
                 <View style={styles.actionGrid}>
@@ -830,14 +828,14 @@ export default function ChallengeMemoryScreen() {
                               : "#7c3aed";
                     const bg =
                       kind === "cheer"
-                        ? isDark ? withAlpha(theme.colors.indigo[400], 10) : withAlpha(theme.colors.indigo[500], 7)
+                        ? isDark ? withAlpha(theme.colors.indigo[400], 18) : withAlpha(theme.colors.indigo[500], 12)
                         : kind === "ping"
-                          ? isDark ? withAlpha(theme.colors.cyan[400], 9) : withAlpha(theme.colors.cyan[500], 6)
+                          ? isDark ? withAlpha(theme.colors.cyan[400], 16) : withAlpha(theme.colors.cyan[500], 11)
                           : kind === "fire"
-                            ? isDark ? withAlpha(theme.colors.yellow[400], 10) : withAlpha(theme.colors.amber[500], 7)
+                            ? isDark ? withAlpha(theme.colors.yellow[400], 18) : withAlpha(theme.colors.amber[500], 12)
                             : isDark
-                              ? "rgba(167, 139, 250, 0.10)"
-                              : "rgba(124, 58, 237, 0.06)";
+                              ? "rgba(167, 139, 250, 0.18)"
+                              : "rgba(124, 58, 237, 0.11)";
 
                     return (
                       <Pressable
@@ -857,8 +855,8 @@ export default function ChallengeMemoryScreen() {
                         style={({ pressed }) => [
                           styles.actionTile,
                           {
-                            backgroundColor: bg,
-                            borderColor: isDark ? withAlpha(theme.colors.sheen, 8) : withAlpha(theme.colors.sheen, 8),
+                            backgroundColor: theme.colors.surface,
+                            borderColor: theme.colors.border,
                             opacity: disabled || socialLocked ? 0.58 : pressed ? 0.9 : 1,
                             transform: [{ scale: pressed && !disabled ? 0.98 : 1 }],
                           },
@@ -871,11 +869,13 @@ export default function ChallengeMemoryScreen() {
                         ) : (
                           <>
                             <View style={styles.actionTileTop}>
-                              {glyph ? (
-                                <Text style={[styles.actionGlyph, { color: accent }]}>{glyph}</Text>
-                              ) : Icon ? (
-                                <Icon size={17} color={accent} strokeWidth={2.2} />
-                              ) : null}
+                              <View style={[styles.actionIconBadge, { backgroundColor: bg }]}>
+                                {glyph ? (
+                                  <Text style={[styles.actionGlyph, { color: accent }]}>{glyph}</Text>
+                                ) : Icon ? (
+                                  <Icon size={13} color={accent} strokeWidth={2.2} />
+                                ) : null}
+                              </View>
                               <Text style={[styles.actionLabel, { color: theme.colors.textPrimary }]} numberOfLines={1}>
                                 {customSentToday ? "Note sent" : label}
                               </Text>
@@ -901,15 +901,15 @@ export default function ChallengeMemoryScreen() {
               accessibilityRole="button"
               accessibilityLabel="Open squad"
             >
-              <LinearGradient
-                colors={isDark ? ["#6144E0", "#0FB8CE", "#F0940A"] : ["#4C2FC9", "#106E8C", "#D1720A"]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={[styles.openSquadButton, theme.shadow.card]}
+              <View
+                style={[
+                  styles.openSquadButton,
+                  { borderWidth: 1, borderColor: theme.colors.indigo[500] },
+                ]}
               >
-                <Users size={18} color="#fff" />
-                <Text style={styles.openSquadText}>Open squad</Text>
-              </LinearGradient>
+                <Users size={18} color={theme.colors.indigo[400]} />
+                <Text style={[styles.openSquadText, { color: theme.colors.indigo[400] }]}>Open squad</Text>
+              </View>
             </Pressable>
           </>
         )}
@@ -1181,21 +1181,28 @@ const styles = StyleSheet.create({
   actionTileTop: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 7,
     minWidth: 0,
   },
+  actionIconBadge: {
+    width: 22,
+    height: 22,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   actionGlyph: {
-    fontSize: 13,
-    lineHeight: 17,
+    fontSize: 11,
+    lineHeight: 14,
     fontWeight: "900",
     letterSpacing: 0,
   },
   actionLabel: {
     flexShrink: 1,
     minWidth: 0,
-    fontSize: 13,
-    lineHeight: 17,
-    fontWeight: "900",
+    fontSize: 12.5,
+    lineHeight: 16,
+    fontWeight: "800",
     letterSpacing: 0,
   },
   actionSubtitle: {

@@ -9,7 +9,6 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { LinearGradient } from "expo-linear-gradient";
 import { ArrowLeft, Camera, ChevronRight, Clock3, Globe, Image as ImageIcon, Radio, RefreshCw, ThumbsUp, User } from "lucide-react-native";
 import { Text } from "../../src/components/AppText";
 import { CommunityWinCheerersModal } from "../../src/components/CommunityWinCheerersModal";
@@ -373,18 +372,22 @@ export default function JourneyMomentScreen() {
           onPress={openJourney}
           accessibilityRole="button"
         >
-          <LinearGradient
-            colors={isDark ? ["#6144E0", "#0FB8CE", "#F0940A"] : ["#4C2FC9", "#106E8C", "#D1720A"]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.journeyButton}
+          <View
+            style={[
+              styles.journeyButton,
+              { borderWidth: 1, borderColor: theme.colors.indigo[500] },
+            ]}
           >
             <View style={styles.journeyCopy}>
-              <Text style={styles.journeyTitle}>{isOwnMoment ? "Open My Journey" : "Open player journey"}</Text>
-              <Text style={styles.journeySubtitle}>See the full mission thread</Text>
+              <Text style={[styles.journeyTitle, { color: theme.colors.indigo[400] }]}>
+                {isOwnMoment ? "Open My Journey" : "Open player journey"}
+              </Text>
+              <Text style={[styles.journeySubtitle, { color: theme.colors.textMuted }]}>
+                See the full mission thread
+              </Text>
             </View>
-            <ChevronRight size={22} color="#fff" />
-          </LinearGradient>
+            <ChevronRight size={22} color={theme.colors.indigo[400]} />
+          </View>
         </Pressable>
       </ScrollView>
 
@@ -636,13 +639,11 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   journeyTitle: {
-    color: "#fff",
     fontSize: 18,
     fontWeight: "900",
   },
   journeySubtitle: {
     marginTop: 2,
-    color: "rgba(255, 255, 255, 0.82)",
     fontSize: 13,
     fontWeight: "700",
   },
