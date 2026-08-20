@@ -1,6 +1,8 @@
 import Constants from "expo-constants";
 import { Platform } from "react-native";
 import { useHabitStore } from "../store/habitStore";
+import { getFocusedMiniMissionId } from "../lib/miniMissionFocusTracker";
+import { isMiniMissionSoundEnabled } from "../lib/completionSound";
 
 /** Used for remote pushes (Expo/FCM) + matches manifest `default_notification_channel_id`. */
 const DEFAULT_REMOTE_CHANNEL_ID = "default";
@@ -74,6 +76,16 @@ function shouldSuppressForegroundNotification(data: Record<string, unknown> | un
   if (expectedEndMs !== notificationEndMs) return true;
   if (kind === "mini_warn" && expectedEndMs <= Date.now()) return true;
   if (kind === "mini_fail" && expectedEndMs + 5 * 60_000 < Date.now()) return true;
+
+  // The user is already looking at this exact mission's countdown — the OS "2 minutes
+  // left" banner/sound would be pure redundancy. The mission-detail screen plays its
+  // own in-app reminder chime in this case instead (see playMiniMissionReminderSound).
+  // Only suppress if that chime would actually play — if the user has muted mini
+  // mission sounds in Settings, suppressing this too would silently drop the
+  // reminder entirely (no chime, no banner).
+  if (kind === "mini_warn" && missionId === getFocusedMiniMissionId() && isMiniMissionSoundEnabled()) {
+    return true;
+  }
 
   return false;
 }

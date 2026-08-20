@@ -7,8 +7,11 @@ import {
 } from "./notifications";
 import { getMiniMissionCompletionMode } from "./miniMissionTime";
 
-/** Timer heads-up rules for mini missions. */
-const WARN_LEAD_SECONDS = 120;
+/** Timer heads-up rules for mini missions. Exported so the mission-detail screen's
+ * in-app reminder chime (played instead of the OS notification while that screen is
+ * focused — see `playMiniMissionReminderSound`) fires under the exact same conditions
+ * this module would otherwise have scheduled the OS warning for. */
+export const WARN_LEAD_SECONDS = 120;
 const WARN_MIN_BUFFER_SECONDS = 15;
 const MIN_TOTAL_MINUTES_FOR_WARN = 3;
 
@@ -56,7 +59,7 @@ function getWarnCopy(mission: MiniMission): { title: string; body: string } {
   };
 }
 
-function shouldScheduleWarn(mission: MiniMission, secondsUntilEnd: number): boolean {
+export function shouldScheduleWarn(mission: MiniMission, secondsUntilEnd: number): boolean {
   const totalMinutes = mission.estimatedMinutes + (mission.extendedMinutes ?? 0);
   return (
     totalMinutes >= MIN_TOTAL_MINUTES_FOR_WARN &&

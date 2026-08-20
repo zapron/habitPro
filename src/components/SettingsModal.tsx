@@ -12,6 +12,7 @@ import {
   ScrollView,
   InteractionManager,
   Linking,
+  Switch,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Bell, ExternalLink, X, Monitor, Sun, Moon, type LucideIcon } from 'lucide-react-native';
@@ -27,6 +28,11 @@ import { useEffect, useMemo, useState } from "react";
 import { ShimmerBlock } from "./ShimmerBlock";
 import { GlassTopHighlight } from "./GlassTopHighlight";
 import { useListCardEntrance } from "../hooks/useListCardEntrance";
+import {
+  isMiniMissionSoundEnabled,
+  loadMiniMissionSoundEnabled,
+  setMiniMissionSoundEnabled,
+} from "../lib/completionSound";
 
 const THEME_OPTIONS: { key: ThemePreference; label: string; Icon: LucideIcon }[] = [
     { key: 'system', label: 'System', Icon: Monitor },
@@ -49,6 +55,7 @@ export function SettingsModal({ visible, onClose }: SettingsModalProps) {
     const publicLinks = useMemo(() => getPublicLinks(), []);
     const uid = session?.user?.id ?? null;
     const [notifStatus, setNotifStatus] = useState<"loading" | "on" | "off" | "unavailable">("loading");
+    const [missionSoundsEnabled, setMissionSoundsEnabled] = useState(isMiniMissionSoundEnabled);
 
     const canShowNotifRow = Boolean(showAccount && uid);
 
@@ -84,6 +91,16 @@ export function SettingsModal({ visible, onClose }: SettingsModalProps) {
             task.cancel?.();
         };
     }, [visible, uid]);
+
+    useEffect(() => {
+        if (!visible) return;
+        void loadMiniMissionSoundEnabled().then(setMissionSoundsEnabled);
+    }, [visible]);
+
+    const onToggleMissionSounds = (value: boolean) => {
+        setMissionSoundsEnabled(value);
+        setMiniMissionSoundEnabled(value);
+    };
 
     const notifHint = useMemo(() => {
         if (notifStatus === "on") return "On";
@@ -239,6 +256,34 @@ export function SettingsModal({ visible, onClose }: SettingsModalProps) {
                                 </TouchableOpacity>
                             );
                         })}
+                    </View>
+
+                    <Text style={[styles.sectionLabel, { color: theme.colors.textMuted, marginTop: 14 }]}>MINI MISSIONS</Text>
+                    <View
+                        style={[
+                            styles.rowBtn,
+                            styles.switchRow,
+                            {
+                                borderColor: theme.colors.border,
+                                backgroundColor: theme.colors.surfaceElevated,
+                            },
+                        ]}
+                    >
+                        <GlassTopHighlight radius={14} />
+                        <View style={styles.switchRowTextCol}>
+                            <Text style={[styles.rowBtnText, { color: theme.colors.textPrimary }]}>Reminder sounds</Text>
+                            <Text style={[styles.rowBtnHint, { color: theme.colors.textMuted }]}>
+                                Chime for the 2 minute reminder, timer ending, and mission completion.
+                            </Text>
+                        </View>
+                        <Switch
+                            value={missionSoundsEnabled}
+                            onValueChange={onToggleMissionSounds}
+                            trackColor={{ false: theme.colors.border, true: theme.colors.indigo[600] }}
+                            thumbColor={theme.colors.white}
+                            ios_backgroundColor={theme.colors.border}
+                            accessibilityLabel="Reminder sounds"
+                        />
                     </View>
 
                     {canShowNotifRow ? (
@@ -457,6 +502,17 @@ const styles = StyleSheet.create({
         borderRadius: 14,
         paddingVertical: 12,
         paddingHorizontal: 14,
+        gap: 2,
+    },
+    switchRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: 12,
+    },
+    switchRowTextCol: {
+        flex: 1,
+        minWidth: 0,
         gap: 2,
     },
     rowBtnTop: {

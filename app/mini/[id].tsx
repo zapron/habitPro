@@ -13,6 +13,7 @@ import {
   StatusBar,
   Vibration,
   Animated,
+  AppState,
   Easing,
   Image,
   Modal,
@@ -47,8 +48,11 @@ import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import {
   clearMiniMissionWarningNotification,
+  shouldScheduleWarn,
   syncMiniMissionNotifications,
+  WARN_LEAD_SECONDS,
 } from "../../src/utils/miniMissionNotifications";
+import { setFocusedMiniMissionId } from "../../src/lib/miniMissionFocusTracker";
 import { Screen } from "../../src/components/Screen";
 import { ConfirmDialog } from "../../src/components/ConfirmDialog";
 import {
@@ -105,6 +109,11 @@ import { showAppAlert } from "../../src/context/AppDialogContext";
 import { startJsStallProbe, traceSync } from "../../src/lib/jsThreadProbe";
 import { waitForHabitPersistIdle } from "../../src/lib/chunkedHabitPersistStorage";
 import { isMiniMissionAwaitingCheckIn } from "../../src/utils/miniMissionTime";
+import {
+  playMiniMissionCompletedSound,
+  playMiniMissionReminderSound,
+  playMiniMissionTimerEndSound,
+} from "../../src/lib/completionSound";
 import { withAlpha } from "../../src/styles/theme";
 
 // Notification handler is configured globally in _layout.tsx via setupNotifications()
@@ -1304,6 +1313,46 @@ export default function MiniMissionDetail() {
     setIsTimerUpState(getIsTimerExpired());
   }, [getIsTimerExpired, isFocused]);
 
+  // Lets the notification foreground handler (src/utils/notifications.ts) know this
+  // mission's OS "2 minutes left" warning would be redundant right now — read at fire
+  // time, not effect-schedule time, via miniMissionFocusTracker. Navigation focus alone
+  // isn't enough: Expo Router keeps this screen "focused" even while the whole app is
+  // backgrounded (screen off / user switched apps), so without also checking AppState
+  // we'd suppress the OS notification for a mission nobody is actually looking at —
+  // silently dropping the only warning the user would get.
+  const isActivelyViewingRef = useRef(false);
+  useEffect(() => {
+    const missionId = mission?.id ?? null;
+    const updateTracking = () => {
+      const activelyViewing = isFocused && AppState.currentState === "active";
+      isActivelyViewingRef.current = activelyViewing;
+      setFocusedMiniMissionId(activelyViewing ? missionId : null);
+    };
+    updateTracking();
+    const sub = AppState.addEventListener("change", updateTracking);
+    return () => {
+      sub.remove();
+      setFocusedMiniMissionId(null);
+    };
+  }, [isFocused, mission?.id]);
+
+  // One-shot timeout for the 2-minutes-remaining in-app chime — same threshold the OS
+  // "mini_warn" notification uses (shouldScheduleWarn/WARN_LEAD_SECONDS), so this fires
+  // exactly when that notification would have, but only plays if the screen is still
+  // focused at that moment (otherwise the OS notification is the one that should show).
+  useEffect(() => {
+    if (!mission || mission.status !== "in_progress" || !mission.startedAt) return;
+    const plannedEndMs = new Date(mission.startedAt).getTime() + totalMinutes * 60 * 1000;
+    const secondsUntilEnd = Math.floor((plannedEndMs - Date.now()) / 1000);
+    if (!shouldScheduleWarn(mission, secondsUntilEnd)) return;
+    const delay = plannedEndMs - WARN_LEAD_SECONDS * 1000 - Date.now();
+    if (delay <= 0) return;
+    const timeout = setTimeout(() => {
+      if (isActivelyViewingRef.current) playMiniMissionReminderSound();
+    }, delay);
+    return () => clearTimeout(timeout);
+  }, [mission?.id, mission?.status, mission?.startedAt, totalMinutes]);
+
   // Single one-shot timeout to handle timer expiry in parent:
   useEffect(() => {
     if (!mission || mission.status !== "in_progress" || !mission.startedAt) return;
@@ -1320,6 +1369,7 @@ export default function MiniMissionDetail() {
       // Play haptics, vibration, warning notifications, sync:
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
       Vibration.vibrate([0, 400, 200, 400, 200, 400]);
+      playMiniMissionTimerEndSound();
       void (async () => {
         await clearMiniMissionWarningNotification(mission.id);
         await syncLiveMiniFromLocalMission(mission, { now: plannedEndMs });
@@ -1648,6 +1698,7 @@ export default function MiniMissionDetail() {
       communityFeedRevoked: lockCommunity,
       completedAt,
     });
+    playMiniMissionCompletedSound();
     const completedMission = useHabitStore.getState().getMiniMission(mission.id);
     void syncLiveMiniFromLocalMission(completedMission, {
       completedAt,
@@ -1806,6 +1857,7 @@ export default function MiniMissionDetail() {
         communityFeedRevoked: lockCommunity,
         completedAt,
       });
+      playMiniMissionCompletedSound();
       const completedMission = useHabitStore.getState().getMiniMission(mission.id);
       void syncLiveMiniFromLocalMission(completedMission, {
         completedAt,
