@@ -418,6 +418,14 @@ export default function MiniMissionsScreen() {
   ).length;
   const queuedCount = miniMissions.filter((m) => m.status === "pending" || m.status === "scheduled").length;
   const completedCount = miniMissions.filter((m) => m.status === "completed").length;
+  // The FAB and the empty state's own "Create a Mini Mission" button would otherwise
+  // stack redundantly on an empty Active/Waiting tab; and with nothing in any tab at
+  // all, the empty state's button is the only create entry point that should show.
+  const totalMiniMissionCount = activeCount + queuedCount + completedCount + failedCount;
+  const hideFab =
+    totalMiniMissionCount === 0 ||
+    (tab === "active" && activeCount === 0) ||
+    (tab === "queued" && queuedCount === 0);
   const renderMiniMission = useCallback(
     ({ item, index }: { item: MiniMission; index: number }) => <MiniMissionCard item={item} index={index} />,
     [],
@@ -607,7 +615,7 @@ export default function MiniMissionsScreen() {
         )}
       </View>
 
-      {tab === "active" && filtered.length === 0 ? null : (
+      {hideFab ? null : (
         <View
           style={[
             styles.fabWrap,
