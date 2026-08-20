@@ -15,6 +15,7 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
+import { useTheme } from "../context/ThemeContext";
 
 const ROLL_MS = 280;
 
@@ -31,6 +32,7 @@ type SplitFlapDigitProps = {
     TextStyle,
     "textShadowColor" | "textShadowOffset" | "textShadowRadius"
   >;
+  isDark: boolean;
 };
 
 function SplitFlapDigit({
@@ -40,6 +42,7 @@ function SplitFlapDigit({
   digitWidth,
   color,
   textShadowStyle,
+  isDark,
 }: SplitFlapDigitProps) {
   const prev = useRef(digit);
   const [top, setTop] = useState(digit);
@@ -77,8 +80,12 @@ function SplitFlapDigit({
     };
   }, [digit, lineHeight, translateY]);
 
+  // iOS's text-shadow rendering turns a blurred glow into a visible halo around
+  // the digits — reads fine against a dark background but looks like heavy/bold
+  // text against a light one, where Android (no shadow at all, ever) stays crisp.
+  // Only render it on iOS in dark mode, where it was actually designed to read as a glow.
   const shadowForDigit =
-    Platform.OS === "android" ? undefined : textShadowStyle;
+    Platform.OS === "android" || !isDark ? undefined : textShadowStyle;
 
   return (
     <View
@@ -172,6 +179,7 @@ export function SplitFlapTimeDisplay({
   unitColor,
   digitTextShadow,
 }: SplitFlapTimeDisplayProps) {
+  const { isDark } = useTheme();
   const { width: windowW } = useWindowDimensions();
   const pairs = useMemo(() => parseDisplayToPairs(display), [display]);
 
@@ -225,7 +233,8 @@ export function SplitFlapTimeDisplay({
     digitWidth,
     color: timeColor,
     textShadowStyle: digitTextShadow,
-  }), [fontSize, lineHeight, digitWidth, timeColor, digitTextShadow]);
+    isDark,
+  }), [fontSize, lineHeight, digitWidth, timeColor, digitTextShadow, isDark]);
 
   const compact = pairs.length === 1;
 
