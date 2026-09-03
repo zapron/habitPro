@@ -1067,7 +1067,7 @@ const MiniPostCard = memo(function MiniPostCard({
 }: {
   post: CommunityPlayerStoryPost;
   width: number;
-  /** Masonry spacing — applied as right/bottom margin so packed cards don't touch their neighbors. */
+  /** Masonry spacing — split evenly as left/right margin (so the grid's outer edges land symmetric) plus bottom margin so packed cards don't touch their neighbors. */
   gap: number;
   theme: AppTheme;
   isDark: boolean;
@@ -1099,7 +1099,8 @@ const MiniPostCard = memo(function MiniPostCard({
         styles.miniCard,
         {
           width,
-          marginRight: gap,
+          marginLeft: gap / 2,
+          marginRight: gap / 2,
           marginBottom: gap,
           borderColor: isSquadSave ? theme.colors.cyan[500] : theme.colors.border,
           backgroundColor: theme.colors.surface,
