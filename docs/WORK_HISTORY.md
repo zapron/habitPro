@@ -2,6 +2,121 @@
 
 This is a concise chronological log for future sessions. Keep secrets out of this file.
 
+## 2026-09-04
+
+### Android RevenueCat paywall fix (corrective OTA, no code change), symmetric My Journey grid spacing, edge-to-edge cohort streak dots
+
+Two commits on `main` (`2f953ad`..`1db64b8`), shipped as a phased OTA
+(preview then production, groups `c8357b8f` and `d2dde12b`). A third,
+separate corrective production OTA (group `1a6f1f07`, no new commit —
+same code as `2f953ad`) fixed a live bug earlier in the session.
+
+1. **Android paywall buttons stuck disabled in production** —
+   user-reported, iOS unaffected. Not a hardcoded-key bug:
+   `BillingContext.tsx`'s `isUnsafeAndroidTestStoreKey()` intentionally
+   zeroes the Android RevenueCat key in release builds if it's a Test
+   Store (`test_...`) key, which then leaves `configured`/`ready` stuck
+   `false` forever. This exact failure mode already happened once before
+   (see the `97cb22c0` entry earlier in this file); the durable fix is
+   always publishing OTAs via `npm run update:preview`/`update:production`
+   (`--environment ...`) so EAS pulls its own hosted key instead of the
+   local dev `.env`'s Test Store key. Republished a corrective production
+   OTA through the correct environment — confirmed via the publish log
+   that both `EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY` and
+   `..._IOS_API_KEY` loaded from EAS's hosted "production" environment
+   this time. **Flagged, not fixed**: EAS's "preview" environment has no
+   iOS RevenueCat key configured at all (Android-only) — preview builds'
+   iOS paywall may have the same class of bug; user's call whether to add
+   it.
+2. `841e25c` — My Journey's Minis-tab masonry grid: cards only ever got
+   `marginRight: gap`, no `marginLeft`, so the right-most column always
+   showed a trailing gap the left-most column never had. Split evenly
+   (`gap / 2` each side).
+3. `1db64b8` — Cohort screen's per-participant streak-dots row: it
+   inherited the participant card's own 16px padding, so the scroll
+   clip boundary sat inside the card's real edge (a dot would appear to
+   truncate into empty padding, not at the card boundary). New
+   `edgeToEdgeInset` prop on `CohortPeerStreakDots` bleeds the dots row
+   past that padding via a matching negative margin, re-adding the same
+   amount as the `ScrollView`'s own content padding so the first dot
+   stays visually aligned with the name row above it.
+
+Also this session, pure research/no code: a detailed feasibility pass on
+two large proposed features — per-mission Easy/Medium/Hard difficulty
+tiers gating what's required to mark complete, and a group-challenge
+kickout/auto-kick/ownership-succession system. Both are architecturally
+feasible but genuinely greenfield (no existing gating logic for the
+first; no kick/succession concept, no "last activity" tracking, and only
+hard-delete precedent for member removal for the second). Full findings
+only in that conversation's history — not yet in a standalone doc.
+
+`npx tsc --noEmit` clean after both commits. No `package.json`/lockfile/
+`app.json`/`eas.json` changes — OTA-safe.
+
+**Not verified**: no way to tap through the Android paywall fix or either
+UI fix on a real device/simulator this session; the paywall fix was
+additionally cross-checked against live `eas env:list`/`eas update:list`
+output, which the prior two sessions' fixes did not have available.
+
+## 2026-08-21
+
+### Mini mission FAB visibility fix, iOS light-mode timer bold-text fix, mini mission sound system + mute toggle
+
+Three commits on `main` (`5f44d8d`..`2f953ad`), shipped as one OTA update
+(group `56c8e871-91d2-42a1-91cd-4d8c7b85f9b1`).
+
+1. `5d5fb72` — Mini missions FAB now hides on an empty Active *or*
+   Waiting tab (previously only Active), and hides outright when the
+   account has zero missions in every tab — fixes a duplicate-CTA bug
+   where the FAB and the empty state's own create button could show at
+   once.
+2. `e6d4656` — Fixed iOS-only bold-looking countdown digits in light
+   mode. `SplitFlapDigit` applied a blurred text-shadow glow on iOS only,
+   never Android; in light mode that glow read as thick/blurry text
+   against near-black digits on white. Gated the shadow on dark mode too.
+3. `2f953ad` — Mini mission sound system: three synthesized chimes
+   (timer-end, mission-completed, 2-minute reminder) via a new
+   `src/lib/completionSound.ts` (expo-av, already a dependency), plus a
+   "Reminder sounds" mute toggle in Settings. The reminder chime plays
+   in-app in place of the OS notification's own sound while that
+   mission's screen is actively focused — tracked via a new
+   `src/lib/miniMissionFocusTracker.ts` and, critically, `AppState`
+   combined with navigation focus (navigation focus alone stays "true"
+   even when the whole app is backgrounded, which would've silently
+   dropped the OS warning for a mission nobody's looking at). The mute
+   toggle also had to be threaded into the notification-suppression
+   check itself — otherwise muting while on-screen would drop the
+   reminder entirely (no chime, no banner, both suppressed at once).
+
+Full design/discussion arc behind commit 3 (multiple back-and-forth
+rounds, all in one continuous conversation, no separate planning docs):
+user asked for sound feasibility → chose "in-app only, foreground timer
+expiry + completion" scope and a "soft ascending bell chime" style via
+`AskUserQuestion` → timer-end chime shipped and confirmed good by ear →
+completed-mission chime requested as "something better/distinct" →
+user asked whether these sounds respect silent mode (answered: yes,
+by platform default) → asked whether the existing 2-min OS reminder
+notification fires while the screen is open (answered: yes, no focus
+check existed) → discussed suppression options without touching the
+scheduling engine → user chose "play our chime instead, suppress the
+OS one" for the reminder specifically → reminder chime built, then
+revised once for a richer/warmer voicing on request → mute toggle
+requested and added, surfacing the "suppression assumes the chime
+played" edge case above → toggle label/copy adjusted per final review
+("Reminder sounds", hyphen dropped from "2-minute").
+
+`npx tsc --noEmit` clean after every commit. No `package.json`/lockfile/
+`app.json`/`eas.json` changes — confirmed OTA-safe. Published on the
+first attempt (unlike the 2026-08-14 session's second OTA, which needed
+a retry after a transient EAS upload timeout).
+
+**Not verified**: the agent cannot hear audio or drive a real device's
+touch/keyboard in this sandbox. All three chimes' character was tuned
+purely from synthesis parameters and the user's own live listening
+feedback across iterations — never independently confirmed by the
+agent. The FAB and timer-text fixes were reasoned from code + `tsc`,
+not tapped through on-device.
+
 ## 2026-08-14
 
 ### Cross-device photo sync, mini-task photo editing, Live Squad missed-status fix, minimalist visual pass, Wrench icon standardization, Android keyboard-jitter fix

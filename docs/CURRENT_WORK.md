@@ -1,6 +1,239 @@
 # HabitPro Current Work
 
-Last updated: 2026-08-14 (cross-device photo sync fix, mini-mission task photo editing before Mark Complete, a mini-mission draft-task race-condition fix, a Live Squad peer-status-stuck-forever fix, a minimalist visual pass across the Profile hero/Mini Missions/notification-launch screens/Notifications list, standardizing on the Wrench icon for repair everywhere, and an Android keyboard-dismiss jitter fix on the invite search sheets. Ten commits across three OTA pushes (update groups `5e9b0adb`, `40cf8603`, `e88ebfdb`), all JS/TS/TSX only, all already live in production. Full detail in the session handoff section immediately below.).
+Last updated: 2026-09-04 (fixed a real Android-only production bug — RevenueCat paywall buttons stuck disabled — root-caused to an OTA published without the `--environment` flag, embedding a local Test Store key; corrective OTA already live. Also two small UI fixes: symmetric card spacing in My Journey's Minis grid, and cohort streak-dots scrolling edge-to-edge instead of clipping inside the card's own padding. Two commits, phased OTA (preview then production, update groups `c8357b8f`/`d2dde12b`), already live. Full detail in the session handoff section immediately below.).
+
+## Session Handoff (2026-09-04, end of session)
+
+**State: clean, on `main`, pushed and OTA'd.** Two commits ahead of the
+2026-08-21 session's tip (`2f953ad`..`1db64b8`), both JS/TSX only, shipped
+to `preview` then `production` as one phased OTA push (same code, two
+channels). Nothing mid-flight, nothing uncommitted except the pre-existing
+untracked `.mcp.json`/`.claude/`. `npx tsc --noEmit` clean after both
+commits.
+
+1. **Fixed a live production bug: Android RevenueCat paywall buttons
+   permanently disabled** (user-reported: "जब कोई उसमें दबा रहे हैं, जैसे
+   कि paywall को जब वो दबा रहे हैं, तो वह response ही नहीं कर रहा है" —
+   iOS unaffected). Root cause was **not** a hardcoded key — the code was
+   already correct — but a real production-config gap:
+   - `src/context/BillingContext.tsx`'s `isUnsafeAndroidTestStoreKey()`
+     (lines ~309-314) deliberately zeroes out the Android RevenueCat key
+     in non-dev builds if it starts with `test_` (RevenueCat Test Store
+     key) — this is an intentional safety net, not the bug. When it
+     fires, `configured` becomes `false`, `ready` never flips `true`, and
+     every paywall button (`app/membership.tsx`,
+     `src/context/PlusUpsellContext.tsx`) stays permanently `disabled`.
+   - This exact failure mode already happened once before and is
+     documented in this file's history (see the `97cb22c0` corrective OTA
+     entry further below) — the fix at the time was **operational, not
+     just code**: always publish OTAs via `npm run update:preview` /
+     `update:production` (`eas update --environment ...`), which forces
+     EAS to use its own **hosted** environment secrets instead of
+     whatever's in the local dev machine's `.env` (which has a Test Store
+     key for local development, by design).
+   - Live-verified via `eas env:list`/`eas update:list` this session:
+     production's hosted RevenueCat keys were correct
+     (`goog_...`/`appl_...`), but the risk is any OTA published without
+     an explicit `--environment` flag falls back to the local `.env`,
+     silently re-embedding the stale `test_` key — most likely explanation
+     for the live symptom.
+   - **Fix applied**: republished a corrective production OTA
+     (`npm run update:production`-equivalent, update group
+     `1a6f1f07-b9f2-43c3-9ec3-5b8ae403642a`, no code change — same commit
+     `2f953ad`, just re-bundled through the correct environment). Log
+     output confirmed the fix: `Environment variables ... loaded from the
+     "production" environment on EAS: EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY,
+     EXPO_PUBLIC_REVENUECAT_IOS_API_KEY, ...`.
+   - **Known remaining gap, not yet fixed**: EAS's **preview** environment
+     has no `EXPO_PUBLIC_REVENUECAT_IOS_API_KEY` entry at all (only
+     Android is set there) — confirmed again live during this session's
+     own preview OTA push, whose log shows only
+     `EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY` loading from the preview
+     environment. Preview-channel builds' iOS paywall may be affected the
+     same way; production is unaffected. Flagged to the user, not yet
+     actioned (their call whether to fix).
+2. `841e25c` — **Symmetric card spacing in My Journey's "Minis" masonry
+   grid** (`app/my-journey.tsx`, user-reported via screenshot: right-side
+   card padding visibly wider than left, only in the Minis tab, both
+   Public and Private). Root cause: `MiniPostCard` only ever got
+   `marginRight: gap` with no compensating `marginLeft` — masonry packs
+   cards into whichever column is currently shortest (not a strict row
+   grid), so there's no "skip the right margin on the last column" logic;
+   every right-most-column card carried a trailing gap the left-most
+   column never had. Split the gap evenly (`marginLeft: gap / 2,
+   marginRight: gap / 2`) instead — same total per-card footprint, so no
+   change to the existing `masonrySlotWidth`/`miniTileWidth` math, just
+   symmetric placement. The Missions tab (single-column list, no masonry)
+   was never affected.
+3. `1db64b8` — **Cohort screen's per-participant streak-dots row now
+   scrolls edge-to-edge** (`src/components/CohortPeerStreakDots.tsx` +
+   `app/challenge/[id].tsx`, user-reported via screenshot + detailed
+   description: dots "cutting off" well inside the card rather than at
+   its actual edge). Root cause: the dots `ScrollView` was a direct child
+   of the same `participantCard` `padding: 16` box as the name/level
+   header row above it, so the scroll viewport's clip boundary sat 16px
+   inside the card's true edge on both sides — a dot would visibly
+   truncate into empty padding space rather than at the card boundary.
+   Added a new optional `edgeToEdgeInset` prop to `CohortPeerStreakDots`:
+   when set, the embedded-mode wrapper gets a matching negative
+   `marginHorizontal` (bleeding past the parent's padding), and the same
+   amount is re-added as the `ScrollView`'s own `contentContainerStyle`
+   padding so the first dot still starts visually aligned with the name
+   row above it — only the scroll/clip boundary moved, not the resting
+   position. Call site passes `edgeToEdgeInset={16}`, matching
+   `participantCard`'s own `padding: 16` (single source of truth stays in
+   the screen's own stylesheet, not duplicated as a magic number in the
+   shared component). The component's `showIdentityRow={true}` branch
+   (unused by any current call site) is untouched.
+
+**Also this session, no code produced**: a detailed feasibility/
+architecture-mapping pass for two large features the user is considering
+(explicitly deferred, not started, no decision requested yet):
+- **Per-mission difficulty tiers** (Easy/Medium/Hard gating what's
+  required to mark a day/task complete — no memory required, text
+  required, or photo required). Finding: no gating exists at any layer
+  today (store actions like `toggleCompletion`/`markChecklistDayComplete`/
+  `completeMiniMission` all trust the caller unconditionally); the only
+  content check anywhere is `StreakMemorySheet.handleSave`'s "note OR
+  photo" rule, which doesn't distinguish which. `Habit.mode` and
+  `MiniMission.completionMode` are both already taken by unrelated
+  concepts — a difficulty field needs a different name. Adding a new
+  synced `habits` column touches 5-6 spots (`sync.ts`'s pull/push
+  functions plus three separate places inside `rpc_sync_dirty_state`) —
+  this exact bug class (a field silently dropped because one of those
+  spots was missed) has already bitten `task_checklist` twice, per that
+  migration's own comments.
+- **Kickout system for group challenges** (creator-initiated or
+  auto-kick after N days inactive; ownership succession when a creator
+  leaves, WhatsApp-admin-style). Finding: `challenge_groups.creator_id`
+  and `challenge_members.role` exist in the schema but are never read
+  anywhere in the client UI today; the existing "leave challenge" RPC
+  (`rpc_leave_challenge`) **hard-deletes** the leaver's habit/memories/
+  social rows, with no succession logic at all if the creator is the one
+  leaving. `challenge_members` has no UPDATE/DELETE RLS policy, so kick
+  and succession both require a new `SECURITY DEFINER` RPC (mirroring the
+  existing leave RPC's pattern). No "last activity" column exists
+  anywhere for an auto-kick threshold to check against — the closest
+  precedent for a lazy (no-cron) staleness check is Live Mini Squads'
+  `effectiveParticipantStatus()` + `rpc_refresh_live_mini_missed`
+  self-heal-on-read pattern, which has not been ported to Group
+  Challenges. Full breakdown of both features' current-state findings
+  exists only in this conversation's history, not yet written to a
+  standalone doc — worth capturing properly if either is greenlit.
+
+**OTA**: phased — `npm run update:preview`-equivalent first (update group
+`c8357b8f-2f3b-4157-895a-32364f7a839f`), then `npm run
+update:production`-equivalent (update group
+`d2dde12b-1230-4616-a40d-016f715ad257`), both runtime `1.1.35`, commit
+`1db64b8`. Both JS/TSX-only changes — OTA-safe by the usual criteria (no
+`package.json`/lockfile/`app.json`/`eas.json` diff).
+
+**Not visually confirmed**: same sandbox limitation as every prior
+session — no way to tap through the Android paywall fix, the My Journey
+grid, or the cohort dots row on a real device/simulator. All three were
+reasoned from code + `tsc`, and the paywall fix was additionally
+cross-checked against live `eas env:list`/`eas update:list` output (not
+just static code reading) — but none were tapped through.
+
+## Session Handoff (2026-08-21, end of session)
+
+**State: clean, on `main`, pushed and OTA'd.** Three commits ahead of the
+2026-08-14 session's tip (`5f44d8d`..`2f953ad`), pushed to `origin/main`
+and shipped as one production OTA update. Nothing mid-flight, nothing
+uncommitted except the pre-existing untracked `.mcp.json`/`.claude/`.
+`npx tsc --noEmit` clean after every commit below.
+
+1. `5d5fb72` — **Mini missions FAB visibility fix.** The floating "+"
+   button previously only hid itself on an empty Active tab; the Waiting/
+   Queued tab could show both the FAB *and* the empty state's own
+   "Create a Mini Mission" button at once — a real duplicate-CTA bug.
+   Now: `hideFab = totalMiniMissionCount === 0 || (tab === "active" &&
+   activeCount === 0) || (tab === "queued" && queuedCount === 0)`. The
+   FAB also now hides outright for a brand-new account with zero missions
+   anywhere (previously it still showed on the Completed/Failed tabs even
+   then).
+2. `e6d4656` — **Fixed iOS-only bold-looking timer digits in light mode**
+   (user-reported: "the clock timer text looks very bold in case of iOS,
+   make it look better like it does in Android"). Root cause:
+   `SplitFlapDigit` (shared by `Timer.tsx` and
+   `MiniMissionFlightCountdown.tsx`) applied a blurred colored text-shadow
+   glow behind the digits on iOS only (`Platform.OS === "android" ?
+   undefined : textShadowStyle` — Android never got one). In dark mode
+   that reads as a glow; in light mode the same halo around near-black
+   digits on white read as thick/blurry. Gated the shadow on `isDark` too
+   (now `Platform.OS === "android" || !isDark ? undefined :
+   textShadowStyle`), so iOS matches Android's crisp look in light mode
+   and keeps the glow only in dark mode, where it was actually designed
+   to read as one.
+3. `2f953ad` — **Mini mission sound system + a "Reminder sounds" mute
+   toggle**, built over several rounds of live back-and-forth (user
+   confirmed the timer-end sound "is good" before the other two were
+   built to match/complement it; three separate feasibility/design
+   discussions preceded implementation — see `docs/WORK_HISTORY.md`'s
+   2026-08-21 entry for the full discussion arc). Three synthesized
+   (not licensed/stock — generated from scratch, sine-partial bell
+   synthesis, no audio-licensing question) chimes in `assets/sounds/`:
+   - `mini-mission-timer-end.wav` — plays when the countdown hits 0:00
+     while the mission-detail screen is open (a calm two-note bell).
+   - `mini-mission-completed.wav` — plays when a mission is actually
+     marked complete, both classic and checklist paths (a brighter
+     3-note ascending arpeggio + sparkle, deliberately more "rewarded"
+     than the timer-end notice).
+   - `mini-mission-reminder.wav` — plays in-app at the 2-minutes-
+     remaining mark **in place of** the OS `mini_warn` notification's
+     own sound, but only while that exact mission's detail screen is
+     actively focused (a "ting-ting" double-strike, reads as a heads-up
+     rather than a reward — deliberately not melodic like the other two).
+   New files: `src/lib/completionSound.ts` (loads/caches/plays all
+   three via `expo-av`, already a dependency — no native module change,
+   no new build needed) and `src/lib/miniMissionFocusTracker.ts` (a tiny
+   shared "which mission's screen is on-screen right now" flag — the
+   bridge between the screen, which has navigation context, and the
+   notification module, which doesn't).
+   **Real correctness fix required by the reminder's on-screen
+   suppression**: navigation focus (`useIsFocused`) alone isn't enough —
+   Expo Router keeps a screen "focused" even while the whole app is
+   backgrounded (phone locked, user switched apps), so suppressing the
+   OS notification on navigation-focus alone would drop the warning
+   entirely for a mission nobody's actually looking at. Combined
+   `isFocused` with `AppState.currentState === "active"`, checked at
+   the moment the reminder timer actually fires, not when it was
+   scheduled. `shouldScheduleWarn`/`WARN_LEAD_SECONDS` were exported from
+   `src/utils/miniMissionNotifications.ts` (previously module-private) so
+   the screen's in-app reminder timer fires under the exact same
+   threshold the OS notification would have, instead of a duplicated
+   magic number.
+   **Settings toggle**: "Reminder sounds" in `SettingsModal.tsx`
+   (`AsyncStorage`-persisted, defaults on). Required one more correctness
+   fix: the on-screen OS-notification suppression only makes sense
+   *because* the in-app chime replaces it — so suppression now also
+   checks `isMiniMissionSoundEnabled()`. Without that check, muting the
+   toggle while on-screen would have silently dropped the reminder
+   entirely (no chime *and* no banner, since both paths would've been
+   gated off at once).
+   **Scope note, asked explicitly and confirmed not needed**: the OS
+   notifications' *own* sound (the "time's up"/"mission failed" system
+   alerts when delivered off-screen or backgrounded) is untouched — the
+   mute toggle only covers the three custom in-app chimes.
+
+**OTA**: update group `56c8e871-91d2-42a1-91cd-4d8c7b85f9b1`, runtime
+`1.1.35` (unchanged), commit `2f953ad`. Verified OTA-safe via `git diff
+5f44d8d..HEAD --stat -- package.json package-lock.json app.json
+eas.json` (empty) — the three new `.wav` files are ordinary bundled
+assets, not a native module change, so this shipped as a normal OTA
+with no new build.
+
+**Not visually/audibly confirmed**: same sandbox limitation as ever —
+no way to drive a real device's touch/keyboard/audio output from this
+environment. The FAB and timer-text fixes were reasoned from code +
+`tsc`, not tapped through; **the three chimes were never actually heard
+by the agent** — their character (bell voicing, "ting-ting" vs. melodic
+distinction, sparkle layer) was designed from the synthesis parameters
+and the user's own live listening feedback across iterations, not
+independently verified. If the user reports any of the three sounding
+off, re-check `src/lib/completionSound.ts`'s volume (`0.85`) and the
+three `.wav` files' synthesis scripts (kept only in this conversation's
+history, not committed to the repo) before assuming a wiring bug.
 
 ## Session Handoff (2026-08-14, end of session)
 

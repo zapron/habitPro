@@ -499,9 +499,13 @@ Important helpers:
 - `src/constants/miniMission.ts`
 - `src/constants/miniMissionKeepAwake.ts`
 - `src/utils/miniMissionNotifications.ts`
+- `src/lib/completionSound.ts`
+- `src/lib/miniMissionFocusTracker.ts`
 - `src/components/SplitFlapTimeDisplay.tsx`
 - `src/components/MiniMissionFlightCountdown.tsx`
 - `src/components/MiniMissionFireProgressBar.tsx`
+
+**Sound (added 2026-08-21)**: three synthesized chimes (`assets/sounds/mini-mission-*.wav`), played via `src/lib/completionSound.ts` (`expo-av`) — timer-hits-0:00, mission-completed, and a 2-minute reminder. The reminder plays *instead of* the OS `mini_warn` notification's own sound while `app/mini/[id].tsx` is actively focused for that exact mission (tracked by `src/lib/miniMissionFocusTracker.ts`, consumed by `shouldSuppressForegroundNotification` in `src/utils/notifications.ts`). A "Reminder sounds" toggle in `SettingsModal.tsx` mutes all three (`isMiniMissionSoundEnabled()`/`setMiniMissionSoundEnabled()`, `AsyncStorage`-persisted). See Known Caution Points for two gotchas already found in this system.
 
 Local notification reconciliation:
 
@@ -891,7 +895,8 @@ Important constraints:
 
 - RevenueCat keys must be present for real purchases in builds.
 - EAS build must include correct Play Store SDK key, not a test key.
-- Production OTA must use EAS `--environment production` so the same correct RevenueCat key is embedded in updates.
+- Production OTA must use EAS `--environment production` so the same correct RevenueCat key is embedded in updates. A push made without an explicit `--environment` falls back to the local dev machine's `.env` (a Test Store key by design) — `BillingContext.tsx`'s `isUnsafeAndroidTestStoreKey()` then strips the Android key in release builds, leaving every paywall button permanently disabled on Android only (iOS has no equivalent guard). Hit in production once already (2026-09-04 fix, `docs/CURRENT_WORK.md`); always use `npm run update:preview`/`update:production`, never a bare `eas update`.
+- As of 2026-09-04, EAS's `preview` environment has no `EXPO_PUBLIC_REVENUECAT_IOS_API_KEY` configured (Android-only) — preview-channel iOS paywall may be affected; not yet fixed.
 - Supabase migrations include premium sync and premium social RLS.
 - Backend trial config changes are database-only; plan pricing comes from RevenueCat/Play/App Store configuration.
 
@@ -944,6 +949,14 @@ Important notes:
 - FCM requires `google-services.json` for Android EAS builds.
 - Push token registration uses Supabase RPC.
 - Streak reminders depend on timezone and reminder settings.
+- `shouldSuppressForegroundNotification` in `notifications.ts` (2026-08-21) also
+  silences the mini-mission `mini_warn` notification when
+  `src/lib/miniMissionFocusTracker.ts` says the user is actively viewing that
+  exact mission (navigation focus + `AppState`, not just one or the other) *and*
+  `isMiniMissionSoundEnabled()` — the in-app reminder chime
+  (`src/lib/completionSound.ts`) plays in its place. Both conditions matter: drop
+  either one and the reminder silently disappears with nothing replacing it.
+  See Known Caution Points.
 
 ## Backend / Supabase
 
@@ -1260,6 +1273,8 @@ original palette, unchanged) or `minimalistDarkTheme`/`minimalistLightTheme`
 - `rpc_sync_dirty_state` (the habit/mini push RPC) parses an explicit column list via `jsonb_to_recordset` — a new synced field needs a migration to add it there too, or it's silently dropped with no error. See the Sync Architecture section above.
 - Notification routes exist in two places and must stay aligned.
 - **On Android, `KeyboardAvoidingView behavior="height"` inside a `<Modal>` can visibly jitter/flicker as the keyboard dismisses.** Android reports the keyboard's frame in several rapid steps during the dismiss animation; `"height"` mode resizes the component's actual `height` style on every one of those steps, forcing a full re-layout each time. `behavior="padding"` (animating `paddingBottom` instead) is far cheaper and doesn't thrash layout the same way. Found 2026-08-14 in `GroupChallengeSheet.tsx`/`LiveMiniInviteSheet.tsx` (both `<Modal>`-based invite-search sheets that had switched Android from no `behavior` at all to `"height"` on 2026-08-12 to fix the keyboard covering the search input — that fix was correct in principle but picked the wrong mode). Fixed by switching both to `behavior="padding"` on both platforms with `keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 12}`, matching `CustomNudgeModal.tsx`'s already-shipped, stable pattern for the same `<Modal>` + `KeyboardAvoidingView` structure. Default to `"padding"` over `"height"` for any new Modal-hosted keyboard-avoiding view in this app.
+- **Navigation focus (`useIsFocused`) is not the same as "the user is actually looking at the app."** Expo Router keeps a screen marked "focused" even while the whole app is backgrounded (phone locked, user switched apps) — a screen-focus check alone cannot tell foregrounded-and-visible apart from backgrounded-but-still-the-active-route. Found 2026-08-21 building the mini-mission reminder chime: suppressing the OS `mini_warn` notification on navigation-focus alone would have silently dropped the warning for a mission nobody was actually looking at. Fixed by combining `isFocused` with `AppState.currentState === "active"` (see `app/mini/[id].tsx`'s focus-tracking effect and `src/lib/miniMissionFocusTracker.ts`), re-checked at the moment a scheduled action actually fires, not when it was scheduled. Any future "is the user looking at this screen right now" gate should combine both, not just navigation focus.
+- **A feature that suppresses a fallback (like an OS notification) because an in-app replacement will handle it must re-check that the replacement is actually enabled/available before suppressing.** The mini-mission reminder chime's on-screen OS-notification suppression (`shouldSuppressForegroundNotification` in `src/utils/notifications.ts`) initially didn't check the "Reminder sounds" mute toggle — muting the toggle while on-screen would have silently dropped the reminder entirely (no chime, since muted; no banner, since suppressed for the unrelated "in-app chime will handle it" reason). Fixed by adding `isMiniMissionSoundEnabled()` to the suppression condition. Generalizes: never suppress a fallback path solely on "something else will show this" without also checking that the something-else is actually going to run.
 - Cohort dot markers are intentionally lightweight; do not reintroduce full memory payload loading into member list rows.
 - Repairs can show declined even with enough approvals if backend `status` is declined; display must follow backend state.
 - Auth/sign-out cleanup is security-sensitive.

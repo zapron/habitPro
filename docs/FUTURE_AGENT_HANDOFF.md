@@ -23,7 +23,66 @@ Then inspect the files relevant to the user request.
 
 ## Current User Priorities
 
-- **Most current, as of 2026-08-14**: 10 commits on `main` (`308a3a6`..`35ff52b`),
+- **Most current, as of 2026-09-04**: 2 commits on `main` (`2f953ad`..`1db64b8`),
+  pushed and shipped as a phased OTA (preview then production, groups
+  `c8357b8f`/`d2dde12b`, both already live). Fixed a real live production bug
+  first: **Android paywall buttons stuck permanently disabled** (iOS
+  unaffected) — not a hardcoded key, but `BillingContext.tsx`'s intentional
+  `isUnsafeAndroidTestStoreKey()` safety net firing because an OTA had likely
+  been published without EAS's `--environment` flag, embedding the local dev
+  `.env`'s Test Store key instead of EAS's hosted production key. Fixed by
+  republishing a corrective production OTA (group `1a6f1f07`, no code
+  change — same commit `2f953ad`) through the correct environment. **This
+  exact failure class can recur** — always use `npm run update:preview` /
+  `update:production`, never a bare `eas update`, when publishing OTAs;
+  see `app-architecture.md`'s Premium/Billing section. **Known gap, not yet
+  fixed**: EAS's `preview` environment has no iOS RevenueCat key configured
+  at all (Android-only) — flagged to the user, not actioned. Then two small
+  UI fixes: My Journey's Minis-tab masonry grid had asymmetric card spacing
+  (right side wider than left — cards only got `marginRight`, never
+  `marginLeft`), and the cohort screen's per-participant streak-dots row
+  scrolled inside the participant card's own padding instead of bleeding to
+  the card's real edge (new `edgeToEdgeInset` prop on
+  `CohortPeerStreakDots`). Full detail in `docs/CURRENT_WORK.md` and
+  `docs/WORK_HISTORY.md`'s 2026-09-04 entries. **Also this session, no code**:
+  a detailed feasibility/architecture-mapping pass for two large features the
+  user is considering — per-mission Easy/Medium/Hard difficulty tiers (gating
+  what's required to mark complete: none/text/photo) and a group-challenge
+  kickout system (creator-initiated + auto-kick after N days inactive, with
+  WhatsApp-admin-style ownership succession). Both are feasible but
+  genuinely greenfield — no existing gating logic for the first; no kick/
+  succession/last-activity-tracking concept at all for the second, only
+  hard-delete precedent for removing a member. Neither has been started;
+  full findings exist only in that conversation's history, not a doc, as of
+  this handoff. Revisit only if the user raises either again.
+- **As of 2026-08-21**: 3 commits on `main` (`5f44d8d`..`2f953ad`),
+  pushed and shipped as one production OTA update (group `56c8e871`, already live).
+  A mini mission **sound system**: three synthesized (not licensed) chimes —
+  timer-hits-0:00, mission-completed, and a 2-minute reminder that plays in-app
+  *instead of* the OS `mini_warn` notification's own sound while that mission's
+  detail screen is actively focused. New files `src/lib/completionSound.ts`
+  (playback, `expo-av`) and `src/lib/miniMissionFocusTracker.ts` (the "which
+  mission's screen is on-screen" bridge between the screen and the notification
+  module). **Two non-obvious correctness fixes baked into this, both worth
+  reading before touching this area again**: (1) "is this mission's screen
+  focused" must combine navigation focus (`useIsFocused`) with `AppState` —
+  Expo Router keeps a screen "focused" even while the whole app is backgrounded,
+  so navigation-focus alone would silently drop the OS reminder for a mission
+  nobody's actually looking at; (2) the new "Reminder sounds" mute toggle
+  (Settings, `AsyncStorage`-persisted) had to be threaded into the same
+  suppression check — muting the toggle without that check would silently drop
+  the reminder entirely (no chime *and* no banner, both gated off at once).
+  Full detail, including the multi-round design discussion that shaped the three
+  sounds and the suppression behavior, in `docs/CURRENT_WORK.md`'s 2026-08-21
+  entry and `docs/WORK_HISTORY.md`. Also this session: the mini missions FAB no
+  longer duplicates the empty state's own create button on the Waiting tab (only
+  Active was fixed before), and an iOS-only bug where light-mode countdown
+  digits looked overly bold (a text-shadow glow that only ever applied on iOS,
+  never gated on light/dark) is fixed. **Not verified**: the agent cannot hear
+  audio or drive a real device in this sandbox — the three chimes' character was
+  tuned entirely from the user's own live listening feedback, never confirmed
+  independently.
+- **As of 2026-08-14**: 10 commits on `main` (`308a3a6`..`35ff52b`),
   pushed and shipped as **three separate production OTA updates** (update groups
   `5e9b0adb`, `40cf8603`, and `e88ebfdb` — all already live, not pending). Real
   bugs fixed: memory/task photos not syncing across a user's own devices
