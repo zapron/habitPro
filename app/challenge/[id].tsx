@@ -441,6 +441,7 @@ const ParticipantCard = memo(function ParticipantCard({
           peerUsername={label?.username ?? null}
           isSelf={myUserId === memberId}
           showIdentityRow={false}
+          edgeToEdgeInset={16}
           nowMs={nowMs}
         />
       ) : (

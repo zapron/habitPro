@@ -91,6 +91,13 @@ type Props = {
   isSelf?: boolean;
   /** When false, only mission-day dots + memory modal (header lives in parent card). */
   showIdentityRow?: boolean;
+  /**
+   * Only meaningful when `showIdentityRow` is false. The parent card's own
+   * horizontal padding — when set, the dot row bleeds past it via a matching
+   * negative margin so dots scroll edge-to-edge and clip at the card's real
+   * boundary instead of stopping short inside an inner padding gap.
+   */
+  edgeToEdgeInset?: number;
   /** Stable render clock from the parent screen; avoids Date.now() churn per row. */
   nowMs?: number;
 };
@@ -198,6 +205,7 @@ export const CohortPeerStreakDots = memo(function CohortPeerStreakDots({
   remotePeer = true,
   isSelf = false,
   showIdentityRow = true,
+  edgeToEdgeInset,
   nowMs: nowMsProp,
 }: Props) {
   const { theme, isDark } = useTheme();
@@ -465,7 +473,11 @@ export const CohortPeerStreakDots = memo(function CohortPeerStreakDots({
         directionalLockEnabled
         canCancelContentTouches
         style={styles.dotsList}
-        contentContainerStyle={styles.dotsRow}
+        contentContainerStyle={
+          edgeToEdgeInset
+            ? [styles.dotsRow, { paddingLeft: edgeToEdgeInset, paddingRight: edgeToEdgeInset }]
+            : styles.dotsRow
+        }
         scrollEventThrottle={16}
       >
         {days.map((item, index) => (
@@ -609,7 +621,11 @@ export const CohortPeerStreakDots = memo(function CohortPeerStreakDots({
   );
 
   if (!showIdentityRow) {
-    return <View style={styles.wrapEmbedded}>{dots}</View>;
+    return (
+      <View style={[styles.wrapEmbedded, edgeToEdgeInset ? { marginHorizontal: -edgeToEdgeInset } : null]}>
+        {dots}
+      </View>
+    );
   }
 
   return (
