@@ -244,6 +244,8 @@ export const useHabitStore = create<HabitStore>()(
         },
         username: null,
         setUsername: (username) => set({ username }),
+        avatarUrl: null,
+        setAvatarUrl: (avatarUrl) => set({ avatarUrl }),
         cohortPeerHabits: [],
         setCohortPeerHabits: (cohortPeerHabits) => {
           rawSet((state) =>
@@ -294,6 +296,7 @@ export const useHabitStore = create<HabitStore>()(
           miniMissions: [],
           xp: 0,
           username: null,
+          avatarUrl: null,
           cohortPeerHabits: [],
           dirtyHabitIds: [],
           dirtyMiniMissionIds: [],
@@ -1020,6 +1023,7 @@ export const useHabitStore = create<HabitStore>()(
         pendingDeleteMiniMissionIds: state.pendingDeleteMiniMissionIds,
         pendingResetHabitIds: state.pendingResetHabitIds,
         username: state.username,
+        avatarUrl: state.avatarUrl,
       }),
       // Migrate legacy habits on rehydration
       onRehydrateStorage: () => (state) => {
@@ -1094,6 +1098,7 @@ export const useHabitStore = create<HabitStore>()(
           // Migrate: ensure xp exists
           if (state.xp == null) state.xp = 0;
           if (state.username === undefined) state.username = null;
+          if (state.avatarUrl === undefined) state.avatarUrl = null;
           if (!Array.isArray(state.dirtyHabitIds)) state.dirtyHabitIds = [];
           if (!Array.isArray(state.dirtyMiniMissionIds)) state.dirtyMiniMissionIds = [];
           if (!Array.isArray(state.pendingDeleteHabitIds)) state.pendingDeleteHabitIds = [];

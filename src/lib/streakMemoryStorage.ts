@@ -170,6 +170,43 @@ export type UploadHabitStreakImageParams = {
   localUri: string;
 };
 
+export type UploadProfileAvatarImageParams = {
+  localUri: string;
+};
+
+/**
+ * Uploads a local image as the signed-in user's profile picture and returns
+ * the public URL. Path: `{uid}/avatar.jpg` — `upsert: true` means re-uploading
+ * simply overwrites the previous avatar at the same path.
+ */
+export async function uploadProfileAvatarImage(
+  params: UploadProfileAvatarImageParams,
+): Promise<string> {
+  const supabase = getSupabase();
+  if (!supabase) throw new Error("Supabase not configured");
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not signed in");
+
+  const uid = user.id.toLowerCase();
+  const compressedUri = await maybeCompressImageForUpload(params.localUri);
+  const ext = "jpg";
+  const path = `${uid}/avatar.${ext}`;
+  const ct = contentTypeForExt(ext);
+  const { body, contentType } = await readImageBytesForUpload(compressedUri, ct);
+
+  const { error: upErr } = await supabase.storage.from(BUCKET).upload(path, body, {
+    upsert: true,
+    contentType,
+  });
+  if (upErr) throw new Error(upErr.message);
+
+  const { data: pub } = supabase.storage.from(BUCKET).getPublicUrl(path);
+  if (!pub?.publicUrl) throw new Error("No public URL");
+  return pub.publicUrl;
+}
+
 /**
  * Uploads a local image to Supabase Storage and returns the public URL.
  * Path: `{uid}/habits/{habitId}/{date}.{ext}`
@@ -201,7 +238,9 @@ export async function uploadHabitStreakMemoryImage(
 
   const { data: pub } = supabase.storage.from(BUCKET).getPublicUrl(path);
   if (!pub?.publicUrl) throw new Error("No public URL");
-  return pub.publicUrl;
+  // Same path every upload (`upsert: true`) — append a cache-buster so the
+  // CDN/client don't keep showing the previous avatar at this URL.
+  return `${pub.publicUrl}?t=${Date.now()}`;
 }
 
 export type UploadHabitStreakTaskImageParams = {
