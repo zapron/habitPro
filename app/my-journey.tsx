@@ -1776,6 +1776,7 @@ export default function MyJourneyScreen() {
     userId,
     username,
     displayName: username,
+    avatarUrl,
     xp,
     publicWins: publicMissions.reduce((total, story) => total + story.postCount, 0) + publicMinis.length,
     miniWins: publicMinis.length,

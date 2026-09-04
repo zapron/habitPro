@@ -1383,6 +1383,7 @@ export default function CommunityPlayerStoryScreen() {
       userId,
       username: username && username.length > 0 ? username : null,
       displayName: displayName && displayName.length > 0 ? displayName : null,
+      avatarUrl: null,
       xp,
       publicWins: 0,
       miniWins: 0,
@@ -1711,9 +1712,18 @@ export default function CommunityPlayerStoryScreen() {
         <View style={styles.hero}>
           <LevelXpRing level={level} xpInLevel={xpInLevel} size={94} strokeWidth={5}>
             <View style={[styles.avatar, { backgroundColor: identity.background, borderColor: identity.border }]}>
-              <Text style={[styles.avatarText, { color: identity.foreground }]}>
-                {initialsFromName(primaryName)}
-              </Text>
+              {shown?.avatarUrl ? (
+                <Image
+                  source={{ uri: shown.avatarUrl }}
+                  style={styles.avatarPhoto}
+                  resizeMode="cover"
+                  accessibilityLabel={`${primaryName}'s profile picture`}
+                />
+              ) : (
+                <Text style={[styles.avatarText, { color: identity.foreground }]}>
+                  {initialsFromName(primaryName)}
+                </Text>
+              )}
             </View>
           </LevelXpRing>
           <View style={styles.heroText}>
@@ -2115,8 +2125,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
+    overflow: "hidden",
   },
   avatarText: { fontSize: 21, lineHeight: 26, fontWeight: "900" },
+  avatarPhoto: { width: 70, height: 70 },
   heroText: { flex: 1, minWidth: 0 },
   name: { fontSize: 26, lineHeight: 32, fontWeight: "900" },
   handle: { fontSize: 14, lineHeight: 19, fontWeight: "800", marginTop: 2 },

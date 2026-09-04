@@ -47,6 +47,7 @@ export type CommunityWinRow = {
 export type CommunityWinFeedItem = CommunityWinRow & {
   username: string | null;
   displayName: string | null;
+  avatarUrl: string | null;
   xp: number;
   cheerCount: number;
   viewerHasCheered: boolean;
@@ -66,6 +67,7 @@ export type CommunityPlayerProfile = {
   userId: string;
   username: string | null;
   displayName: string | null;
+  avatarUrl: string | null;
   xp: number;
   publicWins: number;
   miniWins: number;
@@ -147,6 +149,7 @@ export type CommunityPlayerStoryPage = {
 export type CommunityWinCheerer = {
   userId: string;
   username: string | null;
+  avatarUrl: string | null;
   /** Total XP from profile; used for level display. */
   xp: number;
   cheeredAt: string | null;
@@ -317,6 +320,7 @@ type CommunityFeedRpcItem = {
     username?: string | null;
     displayName?: string | null;
     display_name?: string | null;
+    avatarUrl?: string | null;
     xp?: number | null;
   } | null;
   cheerCount?: number | null;
@@ -354,6 +358,7 @@ function normalizeRpcCommunityWinItem(item: CommunityFeedRpcItem): CommunityWinF
     live_squad_id: typeof win.live_squad_id === "string" ? win.live_squad_id : null,
     username,
     displayName: typeof displayRaw === "string" && displayRaw.trim().length > 0 ? displayRaw.trim() : null,
+    avatarUrl: typeof author.avatarUrl === "string" && author.avatarUrl.trim().length > 0 ? author.avatarUrl : null,
     xp: typeof author.xp === "number" && Number.isFinite(author.xp) ? Math.max(0, author.xp) : 0,
     cheerCount:
       typeof item.cheerCount === "number" && Number.isFinite(item.cheerCount)
@@ -405,19 +410,24 @@ async function enrichWinsWithProfilesAndCheers(
   const userIds = [...new Set(wins.map((w) => w.user_id))];
 
   const [{ data: profiles }, { data: allCheers }] = await Promise.all([
-    supabase.from("profiles").select("id, username, display_name, xp").in("id", userIds),
+    supabase.from("profiles").select("id, username, display_name, avatar_url, xp").in("id", userIds),
     supabase.from("community_win_cheers").select("win_id, user_id").in("win_id", winIds),
   ]);
 
-  const profileByUserId = new Map<string, { username: string | null; displayName: string | null; xp: number }>();
+  const profileByUserId = new Map<
+    string,
+    { username: string | null; displayName: string | null; avatarUrl: string | null; xp: number }
+  >();
   for (const p of profiles ?? []) {
     const id = p.id as string;
     const u = p.username;
     const dn = p.display_name;
+    const av = p.avatar_url;
     const xpRaw = p.xp;
     profileByUserId.set(id, {
       username: typeof u === "string" && u.trim().length > 0 ? u.trim().toLowerCase() : null,
       displayName: typeof dn === "string" && dn.trim().length > 0 ? dn.trim() : null,
+      avatarUrl: typeof av === "string" && av.trim().length > 0 ? av : null,
       xp: typeof xpRaw === "number" && Number.isFinite(xpRaw) ? Math.max(0, xpRaw) : 0,
     });
   }
@@ -442,6 +452,7 @@ async function enrichWinsWithProfilesAndCheers(
       live_squad_id: r.live_squad_id ?? null,
       username: prof?.username ?? null,
       displayName: prof?.displayName ?? null,
+      avatarUrl: prof?.avatarUrl ?? null,
       xp: prof?.xp ?? 0,
       cheerCount: countByWin.get(row.id) ?? 0,
       viewerHasCheered: viewerCheered.has(row.id),
@@ -1058,7 +1069,7 @@ export async function fetchCommunityPlayerProfile(
   ] = await Promise.all([
     supabase
       .from("profiles")
-      .select("id, username, display_name, xp")
+      .select("id, username, display_name, avatar_url, xp")
       .eq("id", userId)
       .maybeSingle(),
     supabase
@@ -1104,6 +1115,7 @@ export async function fetchCommunityPlayerProfile(
 
   const u = profile.username;
   const dn = profile.display_name;
+  const av = profile.avatar_url;
   const xpRaw = profile.xp;
   const publicWins = publicWinsRes.count ?? 0;
   const habitStreakWins = habitStreakWinsRes.count ?? 0;
@@ -1115,6 +1127,7 @@ export async function fetchCommunityPlayerProfile(
       userId,
       username: typeof u === "string" && u.trim().length > 0 ? u.trim().toLowerCase() : null,
       displayName: typeof dn === "string" && dn.trim().length > 0 ? dn.trim() : null,
+      avatarUrl: typeof av === "string" && av.trim().length > 0 ? av : null,
       xp: typeof xpRaw === "number" && Number.isFinite(xpRaw) ? Math.max(0, xpRaw) : 0,
       publicWins,
       miniWins,
@@ -1196,19 +1209,21 @@ export async function listCommunityWinCheerers(
 
   const { data: profiles, error: profilesErr } = await supabase
     .from("profiles")
-    .select("id, username, xp")
+    .select("id, username, avatar_url, xp")
     .in("id", userIds);
 
   if (profilesErr) return { ok: false, error: profilesErr.message };
 
-  const profileById = new Map<string, { username: string | null; xp: number }>();
+  const profileById = new Map<string, { username: string | null; avatarUrl: string | null; xp: number }>();
   for (const p of profiles ?? []) {
     const id = p.id as string;
     const u = p.username;
+    const av = p.avatar_url;
     const xpRaw = p.xp;
     const xp = typeof xpRaw === "number" && Number.isFinite(xpRaw) ? xpRaw : 0;
     profileById.set(id, {
       username: typeof u === "string" && u.trim().length > 0 ? u.trim().toLowerCase() : null,
+      avatarUrl: typeof av === "string" && av.trim().length > 0 ? av : null,
       xp,
     });
   }
@@ -1219,6 +1234,7 @@ export async function listCommunityWinCheerers(
     return {
       userId: uid,
       username: prof?.username ?? null,
+      avatarUrl: prof?.avatarUrl ?? null,
       xp: prof?.xp ?? 0,
       cheeredAt: (c.created_at as string | null) ?? null,
     };

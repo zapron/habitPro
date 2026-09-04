@@ -1,6 +1,7 @@
 import { Text } from "./AppText";
 import {
   ActivityIndicator,
+  Image,
   KeyboardAvoidingView,
   InteractionManager,
   Modal,
@@ -295,9 +296,18 @@ export function CommunityWinCheerersModal({ visible, winId, totalLikes, onClose 
                             },
                           ]}
                         >
-                          <Text style={[styles.rowAvatarInitials, { color: theme.colors.textSecondary }]}>
-                            {initialsFromUsername(c.username)}
-                          </Text>
+                          {c.avatarUrl ? (
+                            <Image
+                              source={{ uri: c.avatarUrl }}
+                              style={styles.rowAvatarPhoto}
+                              resizeMode="cover"
+                              accessibilityLabel={c.username ? `${c.username}'s profile picture` : "Profile picture"}
+                            />
+                          ) : (
+                            <Text style={[styles.rowAvatarInitials, { color: theme.colors.textSecondary }]}>
+                              {initialsFromUsername(c.username)}
+                            </Text>
+                          )}
                         </View>
                         <View style={styles.rowTextCol}>
                           <Text
@@ -465,7 +475,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
+    overflow: "hidden",
   },
+  rowAvatarPhoto: { width: 44, height: 44 },
   rowAvatarInitials: {
     fontSize: 14,
     fontWeight: "800",
