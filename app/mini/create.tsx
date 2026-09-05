@@ -212,7 +212,7 @@ export default function CreateMiniMission() {
             },
             focused === "title" && { borderColor: theme.colors.indigo[500] },
           ]}
-          placeholder="e.g., Take bath now"
+          placeholder="Start a 15-minute workout"
           placeholderTextColor={theme.colors.textMuted}
           value={title}
           onChangeText={setTitle}
