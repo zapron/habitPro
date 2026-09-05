@@ -2,6 +2,59 @@
 
 This is a concise chronological log for future sessions. Keep secrets out of this file.
 
+## 2026-09-05 (mid-session)
+
+### Profile pictures (in progress, `experiment/profile-media`, mostly uncommitted) + a verified Supabase Storage cleanup
+
+**Feature branch, not wrapped up yet** — logged mid-session because the
+storage cleanup is a real, finished, independently-verified change worth
+capturing now regardless of the branch's state.
+
+- Own profile-picture upload (Profile screen level ring), then real
+  avatars wired into every "show another user's identity" surface that
+  already existed: My Journey (own), Community feed posts, Community
+  Player profile, "who cheered" list, Live Mini race leader, and the
+  Leaderboard (custom treatment — see below). Key backend finding: a
+  shared RPC helper, `_hp_profile_label_json`, already powers most of
+  these; adding `avatarUrl` there once (migration on `main`) propagated
+  to several screens for free. Three other RPCs build their own inline
+  profile JSON and needed separate migrations: Live Mini snapshot,
+  the three weekly-leaderboard RPCs (needed `drop function` + recreate,
+  not `create or replace`, since the `RETURNS TABLE` shape changed), and
+  the streak-repair pending-voters RPC.
+- Leaderboard specifically: its circle shows the entrant's *level
+  number* (real info), so a plain photo swap would've deleted that.
+  Landed on: photo fills the circle, level moves to a small opaque pill
+  protruding outside the circle's edge, colored with the same per-user
+  identity hue — went through two follow-up rounds (translucent → opaque
+  solid, then sized down) on live feedback.
+- **Process note**: hit the git-branch-affects-the-user's-own-terminal
+  footgun (same checkout) which led to a confusing `supabase db push`
+  error suggesting a migration-history "repair" that would have been
+  wrong to run — see `docs/CURRENT_WORK.md`'s 2026-09-05 entry for the
+  full mechanics if this comes up again. Also: stopped auto-committing
+  mid-round after an explicit correction ("we're already on a branch,
+  that's not permission to commit") — everything after the first 3
+  commits on this branch is uncommitted by design right now.
+- **Supabase Storage cleanup — completed and verified independently**:
+  found via live query (not estimate) that the `streak-memories` bucket
+  was at 730MB/1GB (73%) on the free tier, and that 161 of 1646 files
+  (275MB) were oversized originals that had slipped past
+  `streakMemoryStorage.ts`'s compression pipeline on its documented
+  Android-fallback path. Wrote a one-off, non-app Node script
+  (`scripts/compact-streak-memories.mjs`, uses `sharp` as a throwaway
+  dependency, needs `SUPABASE_SERVICE_ROLE_KEY` — deliberately never in
+  the app's own `.env`) that re-compresses exactly those 161 paths and
+  overwrites them in place (same path, so no DB/URL changes anywhere).
+  User ran it (dry-run first, then `--apply`); agent independently
+  re-queried `storage.objects` afterward rather than trusting the
+  script's own log. Result: 730MB → 485MB, ~245MB reclaimed, 0 files
+  skipped/failed, 0 content deleted. The underlying compression-fallback
+  bug itself is **not** fixed — this treated the symptom, not the cause.
+- Video-memory feature (discussed earlier this session) intentionally
+  not started yet — the storage cleanup was agreed as the prerequisite
+  step, done first.
+
 ## 2026-09-04
 
 ### Android RevenueCat paywall fix (corrective OTA, no code change), symmetric My Journey grid spacing, edge-to-edge cohort streak dots

@@ -1,6 +1,163 @@
 # HabitPro Current Work
 
-Last updated: 2026-09-04 (fixed a real Android-only production bug — RevenueCat paywall buttons stuck disabled — root-caused to an OTA published without the `--environment` flag, embedding a local Test Store key; corrective OTA already live. Also two small UI fixes: symmetric card spacing in My Journey's Minis grid, and cohort streak-dots scrolling edge-to-edge instead of clipping inside the card's own padding. Two commits, phased OTA (preview then production, update groups `c8357b8f`/`d2dde12b`), already live. Full detail in the session handoff section immediately below.).
+Last updated: 2026-09-05 (mid-session — a new profile-picture feature (own upload + real avatars shown across Community/Leaderboard/Live Mini) in progress on `experiment/profile-media`, mostly uncommitted per explicit "don't auto-commit" instruction this round; plus a completed, verified Supabase Storage cleanup that reclaimed ~245MB on the free tier by recompressing 161 files a compression-pipeline bug had left oversized. Full detail in the session handoff section immediately below.).
+
+## Session Handoff (2026-09-05, mid-session)
+
+**State: on `experiment/profile-media`, mostly uncommitted.** This is a
+mid-session snapshot, not an end-of-session wrap — logged now because the
+storage cleanup below is a real, completed, verified change worth
+capturing immediately, even though the feature branch itself is still
+in flight.
+
+**Branch/commit state** (important for whoever picks this up):
+- `main`: 2 commits ahead of the previous session's tip — both migrations
+  (`2000108` adds `profiles.avatar_url`, `2edf8de` adds `avatarUrl` to the
+  shared `_hp_profile_label_json` RPC helper). Already pushed by the user.
+- `experiment/profile-media`: branched from `main` at `2000108`, 3 commits
+  (`afbe3e0`, `6ecd027`, `d719b65` — profile picture upload + My Journey +
+  Community avatar wiring). Everything **after** those 3 commits (Live Mini
+  leader avatar, Leaderboard avatar+level-pill, `streakRepairApi.ts`/
+  `groupChallengesApi.ts`/`liveMiniMissionsApi.ts` plumbing) is
+  **uncommitted in the working tree** — the user explicitly said not to
+  auto-commit mid-work this round (see `docs/WORK_HISTORY.md` for the
+  exact correction). `npx tsc --noEmit` is clean as of the last edit.
+- **3 more migrations applied to the live DB but not yet committed to
+  `main`**: `20260904140000_weekly_leaderboard_avatar_url.sql`,
+  `20260904150000_live_mini_snapshot_avatar_url.sql`,
+  `20260904160000_challenge_pending_repairs_avatar_url.sql` — all
+  confirmed live via `list_migrations`, all applied by the user via
+  `supabase db push` (not via the MCP `apply_migration` tool, per their
+  explicit preference this round). Files exist on disk on
+  `experiment/profile-media` right now; still need a `main`-branch commit
+  like the earlier two.
+- **A real footgun hit twice this round, worth remembering**: this repo's
+  git checkout is the *same filesystem* the user's own terminal uses —
+  every `git checkout <branch>` the agent runs also moves the user's
+  terminal. Switching to `main` to add a migration, then back to the
+  feature branch, left the user's terminal on the feature branch when
+  they ran `supabase db push` — the CLI couldn't find the just-renamed/
+  just-added migration files there (they only existed on `main`) and
+  suggested `supabase migration repair --status reverted ...`, which
+  would have been **actively wrong** (marks live, correctly-applied
+  migrations as reverted). Always tell the user which branch you just
+  left them on before they run a Supabase CLI command.
+
+**Feature in progress — profile pictures, own + others' (not yet fully
+committed, see above)**:
+1. `profiles.avatar_url` (text, nullable) — own-upload flow on the
+   Profile screen's level ring (tap to pick from library, square crop,
+   compress via existing `streakMemoryStorage.ts` primitives, upload to
+   `{uid}/avatar.jpg` in the existing `streak-memories` bucket, cache-
+   busted with `?t=<timestamp>` since the path is reused on every
+   re-upload). Synced as a plain direct `upsert` to `profiles` (not
+   through the habits/mini-missions dirty-flag + `rpc_focus_delta_v1`
+   sync machinery — deliberately simpler, fetched once on hydrate in
+   `AuthContext.tsx`).
+2. Ring redesign per explicit request: the center level-number badge
+   was removed (level already shown beside the ring, redundant); center
+   shows the photo once uploaded, or a bare camera icon as an empty-state
+   prompt before that; a small camera badge protrudes just outside the
+   ring's edge once a photo exists (rendered as a sibling inside
+   `LevelXpRing`'s unclipped container, not inside the photo's own
+   `overflow: hidden` box — that distinction matters, see the
+   corresponding conversation turn if this needs revisiting).
+3. **Real architectural find**: a shared Postgres helper,
+   `public._hp_profile_label_json(uuid)`, already builds the
+   username/displayName/xp payload for a large fraction of this app's
+   "show another user's identity" RPCs (community feed, challenge
+   snapshot, etc.). Adding `avatarUrl` to that **one** function
+   (migration `2edf8de` on `main`) automatically propagated real avatars
+   into: Community feed post authors (`CommunityWinFeedPost.tsx`),
+   Community Player profile hero (`community-player/[id].tsx`), and the
+   Group Challenge/Cohort member snapshot (data-ready now, no UI consumer
+   yet — Cohort screens still show no avatar at all, confirmed absent).
+   Three *other* RPCs build their own profile-label JSON inline instead
+   of using the shared helper and needed their own migrations:
+   `_hp_live_mini_snapshot_json` (Live Mini), `get_weekly_leaderboard_v2`/
+   `get_weekly_leaderboard`/`search_weekly_leaderboard_v1` (Leaderboard —
+   these three needed `drop function` + recreate, not `create or
+   replace`, since `RETURNS TABLE`'s column list changed), and
+   `rpc_challenge_pending_repairs_v1` (streak-repair voter list). A
+   fourth inline builder, `get_community_player_profile`, was found and
+   deliberately left alone — confirmed dead code, no client call site.
+4. Live Mini race-leader hero avatar wired (`app/live-mini/[id].tsx`) —
+   plain initials-circle swap, same pattern as everywhere else.
+5. **Leaderboard got a custom treatment, not a plain swap** — its circle
+   shows the entrant's *level number*, which is real information, not a
+   decorative placeholder, so replacing it outright would have deleted
+   that. Per explicit user direction: photo fills the circle when one
+   exists, and the level number moves to a small opaque pill that
+   protrudes just outside the circle's bottom-right edge, colored with
+   the same per-user identity hue the plain circle used to be tinted
+   with (`avatarIdentityFor`, `identity.foreground` as a *solid* fill —
+   first pass used the existing translucent `identity.background`/
+   `.border`, which read as "faded" against a photo; corrected to opaque
+   solid + white text/border on explicit feedback, then shrunk again on
+   a follow-up "make it a bit smaller"). No photo → orb looks exactly as
+   before (level number + "LVL" caption, tinted background).
+6. `ProfileLabel`/`LiveMiniProfileLabel`/`CommunityWinFeedItem`/
+   `CommunityPlayerProfile`/`CommunityWinCheerer`/`WeeklyLeaderboardEntry`
+   all gained a required `avatarUrl: string | null` field — every local
+   fallback-object construction site that builds one of these shapes
+   inline (own-user placeholder in `my-journey.tsx`, seed profile in
+   `community-player/[id].tsx`, `CommunityPlayerDrawer.tsx`'s currently-
+   unused seed mapper) was updated to match: own-user fallback uses the
+   real `avatarUrl` already in the store; arbitrary-other-user fallbacks
+   use `null` until their real profile loads.
+7. **Not yet done, explicitly deferred**: the video-memory feature
+   (5-second clips) the user asked about earlier this session — agreed
+   plan was capture-time duration/quality capping via the already-
+   installed `expo-image-picker`/`expo-av` (no new native dependency,
+   stays OTA-shippable), own-mission-only for v1, Community feed video
+   display deliberately deferred pending real usage data given the
+   Storage headroom concern below. Not started — the storage cleanup
+   below was done first, as agreed.
+
+**Completed and verified this session — Supabase Storage cleanup (free
+tier headroom)**:
+- Live-queried actual usage (not estimated): before cleanup, `public`
+  schema DB was 102MB/500MB (fine), but the `streak-memories` Storage
+  bucket was **730MB/1GB — 73% of the free-tier cap**, with only ~270MB
+  of headroom left. This was the direct trigger for pausing the video
+  feature: a 5s video (~1-2MB even compressed) would have burned through
+  that fast.
+- Root cause of the bloat: `streakMemoryStorage.ts`'s documented fallback
+  behavior (`maybeCompressImageForUpload`) — on certain Android
+  `content://` sources, resize and even bare compression can fail, and
+  the code falls back to uploading the **original, uncompressed** file
+  rather than dropping the memory entirely. A size-bucketed query showed
+  the failure mode clearly: 1485 of 1646 files sat in the expected
+  100KB–1MB range (working as designed), but **161 files were 1-4.5MB
+  each, totaling 275MB (38% of all storage) — a real bug's footprint, not
+  legitimate content**.
+- Built a one-off, non-app maintenance script (`scripts/
+  compact-streak-memories.mjs` + a companion `.manifest.json` listing the
+  exact 161 paths, both currently untracked on `experiment/profile-media`
+  — not part of the app, never bundled, uses `sharp` as a throwaway
+  `--no-save` dependency since `sharp` is Node-only and can't run in
+  React Native). For each manifest entry: download → resize to max
+  1280px width → re-encode JPEG quality 78 → upload back to the **same
+  path** (`upsert: true`, so no DB/URL changes needed anywhere) → skip if
+  the recompressed version isn't actually smaller. Needs
+  `SUPABASE_SERVICE_ROLE_KEY` (deliberately never read from the app's own
+  `.env` — that key must never be anywhere near the bundled app) and was
+  run by the user directly from their terminal, not by the agent (no
+  service-role credential available in this environment).
+- **Result, independently verified by the agent via a direct SQL query
+  against `storage.objects` after the user ran `--apply`** (not just
+  trusting the script's own log): 161/161 processed, 0 skipped, 0 failed.
+  Bucket total dropped from 730MB to **485MB** — a ~245MB reclaim,
+  bringing free-tier storage usage from 73% down to **~47%**, with zero
+  content deleted (object count unchanged at 1646; only the bytes behind
+  each of those 161 paths got smaller).
+- **Not fixed**: the underlying `streakMemoryStorage.ts` fallback bug
+  itself is untouched — this cleanup treated the symptom (already-bloated
+  files), not the cause. New uploads that hit the same
+  resize/compress-failure path will still upload at original size going
+  forward. Worth a proper fix (e.g. a lower-quality last-resort
+  compression attempt before giving up entirely, or at least an upload
+  size cap) before this recurs and erodes today's headroom again.
 
 ## Session Handoff (2026-09-04, end of session)
 

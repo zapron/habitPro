@@ -20,10 +20,46 @@ Then inspect the files relevant to the user request.
 - Do not include unrelated workspace files in commits.
 - Do not push.
 - Do not treat Live Squad Timer Check-In as a small UI-only change.
+- Do not forget: the agent's git checkout is the same filesystem the user's
+  own terminal uses. `git checkout <branch>` moves the user's terminal too —
+  always say which branch you just left them on before they run a Supabase
+  CLI command (`db push` failures from this are confusing and the CLI's
+  suggested fix, `migration repair --status reverted`, is actively wrong
+  when the real cause is just being on the wrong branch).
 
 ## Current User Priorities
 
-- **Most current, as of 2026-09-04**: 2 commits on `main` (`2f953ad`..`1db64b8`),
+- **Most current, as of 2026-09-05 (mid-session, not wrapped up)**: on
+  `experiment/profile-media`, mostly uncommitted (only `afbe3e0`/`6ecd027`/
+  `d719b65` are committed; everything since is intentionally left
+  uncommitted after an explicit "don't auto-commit just because we're on a
+  branch" correction). Two threads in flight:
+  1. **Profile pictures** — own upload (Profile screen ring) done and
+     working; real avatars now wired into Community feed, Community
+     Player, cheerers list, Live Mini leader, and a custom pill treatment
+     on the Leaderboard (its circle shows level number, a real stat, so it
+     couldn't just be swapped for a photo). Backend: a shared RPC helper
+     `_hp_profile_label_json` got `avatarUrl` added once and it propagated
+     to several screens; three other RPCs build profile JSON inline and
+     needed their own migrations (Live Mini snapshot, all three weekly-
+     leaderboard RPCs, streak-repair pending-voters). **3 of those
+     migrations are applied live but not yet committed to `main`** — see
+     `docs/CURRENT_WORK.md`'s 2026-09-05 entry for exact filenames.
+  2. **Supabase Storage cleanup — done and verified**: free-tier bucket
+     was at 73% (730MB/1GB) because of a real bug in
+     `streakMemoryStorage.ts`'s compression fallback (uploads original
+     uncompressed on certain Android failure paths). Ran a one-off script
+     (`scripts/compact-streak-memories.mjs`, untracked, not part of the
+     app) that recompressed the 161 affected files in place; independently
+     verified via direct SQL query: 730MB → 485MB, ~245MB reclaimed, zero
+     content lost. **The underlying bug is not fixed** — only the existing
+     bloat was cleaned up; new uploads can still hit the same fallback and
+     re-bloat storage over time.
+  Video-memory feature (5s clips) was discussed and scoped but explicitly
+  **not started** — the storage cleanup was agreed as the prerequisite,
+  done first. Full detail: `docs/CURRENT_WORK.md` and
+  `docs/WORK_HISTORY.md`'s 2026-09-05 entries.
+- **As of 2026-09-04**: 2 commits on `main` (`2f953ad`..`1db64b8`),
   pushed and shipped as a phased OTA (preview then production, groups
   `c8357b8f`/`d2dde12b`, both already live). Fixed a real live production bug
   first: **Android paywall buttons stuck permanently disabled** (iOS
