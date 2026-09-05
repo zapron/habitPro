@@ -7,6 +7,30 @@ const BUCKET = "streak-memories";
 
 const MAX_UPLOAD_WIDTH = 1280;
 const UPLOAD_JPEG_QUALITY = 0.82;
+/**
+ * Hard ceiling for the last-resort (uncompressed) upload path below. Before this existed,
+ * a file that failed both resize and plain compress silently uploaded at whatever size it
+ * happened to be — confirmed via a live Storage audit (2026-09-05) to be the source of 161
+ * files (275MB) bloating the free-tier bucket. Comfortably under the bucket's own 5MB cap.
+ */
+const MAX_LAST_RESORT_BYTES = 3 * 1024 * 1024;
+
+/**
+ * Android `content://` URIs (gallery/cloud-backed photos) are the actual root cause of most
+ * resize/compress failures below — copying to a real file:// cache path first sidesteps the
+ * majority of them instead of just reacting after the fact. No-op (returns null) for
+ * anything that isn't a content:// URI, or if the copy itself fails for any reason.
+ */
+async function copyContentUriToCache(localUri: string): Promise<string | null> {
+  if (!localUri.startsWith("content:")) return null;
+  try {
+    const dest = `${FileSystem.cacheDirectory}streak-memory-${Date.now()}-${Math.round(Math.random() * 1e6)}.tmp`;
+    await FileSystem.copyAsync({ from: localUri, to: dest });
+    return dest;
+  } catch {
+    return null;
+  }
+}
 
 async function maybeCompressImageForUpload(localUri: string): Promise<string> {
   // Only attempt manipulations for local URIs (Picker usually returns file://).
@@ -17,37 +41,53 @@ async function maybeCompressImageForUpload(localUri: string): Promise<string> {
     (localUri.startsWith("/") && !localUri.startsWith("//"));
   if (!isLocal) return localUri;
 
+  const cacheCopy = await copyContentUriToCache(localUri);
+  const sourceUri = cacheCopy ?? localUri;
+
   try {
     const res = await ImageManipulator.manipulateAsync(
-      localUri,
+      sourceUri,
       [{ resize: { width: MAX_UPLOAD_WIDTH } }],
       {
         compress: UPLOAD_JPEG_QUALITY,
         format: ImageManipulator.SaveFormat.JPEG,
       },
     );
-    return res.uri || localUri;
+    if (cacheCopy) void FileSystem.deleteAsync(cacheCopy, { idempotent: true });
+    return res.uri || sourceUri;
   } catch (resizeErr) {
     // Resize sometimes fails on certain Android content:// sources (some HEIC/scoped-storage
-    // cases). Try compressing without resizing before giving up entirely — still shrinks
-    // bytes meaningfully even at full resolution, and is more tolerant of odd URI schemes.
+    // cases) even after the cache-copy above. Try compressing without resizing before giving
+    // up entirely — still shrinks bytes meaningfully even at full resolution.
     try {
-      const res = await ImageManipulator.manipulateAsync(localUri, [], {
+      const res = await ImageManipulator.manipulateAsync(sourceUri, [], {
         compress: UPLOAD_JPEG_QUALITY,
         format: ImageManipulator.SaveFormat.JPEG,
       });
       if (__DEV__) {
         console.warn("[streakMemoryStorage] resize failed, compressed without resize", resizeErr);
       }
-      return res.uri || localUri;
+      if (cacheCopy) void FileSystem.deleteAsync(cacheCopy, { idempotent: true });
+      return res.uri || sourceUri;
     } catch (compressErr) {
-      // Last resort: upload the original, uncompressed file rather than fail the memory
-      // entirely. Logged because this is exactly the failure mode that lets a multi-MB
-      // camera-original slip into Storage instead of the intended ~1280px/q0.82 target.
+      // Last resort: both resize and plain compress failed. Refuse rather than silently
+      // uploading a huge original — see MAX_LAST_RESORT_BYTES above for why.
+      const info = await FileSystem.getInfoAsync(sourceUri);
+      const size = info.exists ? ((info as { size?: number }).size ?? 0) : 0;
       if (__DEV__) {
-        console.warn("[streakMemoryStorage] compression fully failed, uploading original", compressErr);
+        console.warn(
+          "[streakMemoryStorage] compression fully failed",
+          compressErr,
+          `raw size: ${size} bytes`,
+        );
       }
-      return localUri;
+      if (size === 0 || size > MAX_LAST_RESORT_BYTES) {
+        if (cacheCopy) void FileSystem.deleteAsync(cacheCopy, { idempotent: true });
+        throw new Error("Could not process this photo — try picking a different one.");
+      }
+      // Under the cap: upload as-is. The caller reads bytes from this URI next, so the
+      // cache copy (if any) is deliberately left in place until then.
+      return sourceUri;
     }
   }
 }
