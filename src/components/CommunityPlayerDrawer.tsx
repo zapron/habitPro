@@ -111,6 +111,7 @@ export function CommunityPlayerDrawer({ visible, player, onClose }: Props) {
       userId: player.userId,
       username: player.username,
       displayName: player.displayName,
+      avatarUrl: null,
       xp: player.xp,
       publicWins: 0,
       miniWins: 0,

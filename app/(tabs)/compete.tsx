@@ -14,6 +14,7 @@ import {
   StyleSheet,
   StatusBar,
   ActivityIndicator,
+  Image,
   Platform,
   Animated,
   Easing,
@@ -603,9 +604,38 @@ const LeagueRow = memo(function LeagueRow({
         </Text>
       </View>
 
-      <View style={[styles.leagueLevelOrb, { backgroundColor: identity.background, borderColor: identity.border }]}>
-        <Text style={[styles.leagueLevelNum, { color: identity.foreground }]}>{entry.level}</Text>
-        <Text style={[styles.leagueLevelLabel, { color: rp ? rp.textMuted : theme.colors.textMuted }]}>LVL</Text>
+      <View style={styles.leagueLevelOrbWrap}>
+        <View
+          style={[
+            styles.leagueLevelOrb,
+            { backgroundColor: identity.background, borderColor: identity.border, overflow: "hidden" },
+          ]}
+        >
+          {entry.avatarUrl ? (
+            <Image
+              source={{ uri: entry.avatarUrl }}
+              style={styles.leagueLevelPhoto}
+              resizeMode="cover"
+              accessibilityLabel={`${displayName}'s profile picture`}
+            />
+          ) : (
+            <>
+              <Text style={[styles.leagueLevelNum, { color: identity.foreground }]}>{entry.level}</Text>
+              <Text style={[styles.leagueLevelLabel, { color: rp ? rp.textMuted : theme.colors.textMuted }]}>LVL</Text>
+            </>
+          )}
+        </View>
+        {entry.avatarUrl ? (
+          <View
+            pointerEvents="none"
+            style={[
+              styles.leagueLevelPill,
+              { backgroundColor: identity.foreground, borderColor: theme.colors.surface },
+            ]}
+          >
+            <Text style={styles.leagueLevelPillText}>{entry.level}</Text>
+          </View>
+        ) : null}
       </View>
 
       <View style={styles.leaguePerson}>
@@ -2863,6 +2893,7 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     fontVariant: ["tabular-nums"],
   },
+  leagueLevelOrbWrap: { width: 36, height: 36 },
   leagueLevelOrb: {
     width: 36,
     height: 36,
@@ -2870,6 +2901,26 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
+  },
+  leagueLevelPhoto: { width: 36, height: 36 },
+  leagueLevelPill: {
+    position: "absolute",
+    right: -3,
+    bottom: -3,
+    minWidth: 14,
+    height: 11,
+    borderRadius: 5.5,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 3,
+  },
+  leagueLevelPillText: {
+    fontSize: 6.5,
+    lineHeight: 8,
+    fontWeight: "900",
+    fontVariant: ["tabular-nums"],
+    color: "#FFFFFF",
   },
   leagueLevelNum: { fontSize: 14, lineHeight: 16, fontWeight: "900", fontVariant: ["tabular-nums"] },
   leagueLevelLabel: { fontSize: 6, lineHeight: 8, fontWeight: "900", letterSpacing: 0.7 },

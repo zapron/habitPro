@@ -208,6 +208,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           // retryPendingMemoryUploads for why this can't just rely on the opportunistic
           // per-push scheduling in sync.ts.
           retryPendingMemoryUploads();
+          // Profile picture: a single simple value, not worth routing through the
+          // habits/mini-missions dirty-flag + rpc_focus_delta_v1 sync machinery
+          // hydrateStoreAfterAuth above already ran — just fetch it directly.
+          const supabase = getSupabase();
+          if (supabase) {
+            void supabase
+              .from("profiles")
+              .select("avatar_url")
+              .eq("id", uid)
+              .maybeSingle()
+              .then(({ data }) => {
+                if (!cancelled && activeAuthUserIdRef.current === uid) {
+                  useHabitStore.getState().setAvatarUrl(data?.avatar_url ?? null);
+                }
+              });
+          }
         }
       })
       .catch((e) => {

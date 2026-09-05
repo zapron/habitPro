@@ -479,7 +479,16 @@ export const CommunityWinFeedPost = memo(function CommunityWinFeedPost({
             { backgroundColor: identity.background, borderColor: identity.border },
           ]}
         >
-          <Text style={[styles.postAvatarText, { color: identity.foreground }]}>{initials}</Text>
+          {win.avatarUrl ? (
+            <Image
+              source={{ uri: win.avatarUrl }}
+              style={styles.postAvatarPhoto}
+              resizeMode="cover"
+              accessibilityLabel={`${primaryName}'s profile picture`}
+            />
+          ) : (
+            <Text style={[styles.postAvatarText, { color: identity.foreground }]}>{initials}</Text>
+          )}
         </View>
         <View style={styles.playerTextCol}>
           <View style={styles.playerNameLeagueRow}>
@@ -939,8 +948,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
+    overflow: "hidden",
   },
   postAvatarText: { fontSize: 12, fontWeight: "900", letterSpacing: -0.3 },
+  postAvatarPhoto: { width: 34, height: 34 },
   playerTextCol: { flex: 1, minWidth: 0 },
   playerNameLeagueRow: { flexDirection: "row", alignItems: "center", gap: 6, minWidth: 0 },
   playerName: { fontSize: 15, lineHeight: 19, fontWeight: "900" },

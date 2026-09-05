@@ -208,6 +208,14 @@ export type HabitStore = {
   /** Lowercase public handle for challenges; synced to `profiles.username`. */
   username: string | null;
   setUsername: (username: string | null) => void;
+  /**
+   * Public URL of the user's uploaded profile picture; synced to
+   * `profiles.avatar_url` via a direct upsert (not the dirty-flag/RPC sync
+   * machinery habits and mini missions use — this is a single simple value,
+   * fetched once on hydrate, same write pattern as `username`).
+   */
+  avatarUrl: string | null;
+  setAvatarUrl: (avatarUrl: string | null) => void;
   /** Clears mission data (e.g. on sign-out). */
   resetStore: () => void;
   addHabit: (input: AddHabitInput) => string;

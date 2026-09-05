@@ -1650,10 +1650,11 @@ export default function MyJourneyScreen() {
     }
   }, []);
   const [listWidth, setListWidth] = useState(0);
-  const { xp, username, habits, miniMissions } = useHabitStore(
+  const { xp, username, avatarUrl, habits, miniMissions } = useHabitStore(
     useShallow((s) => ({
       xp: s.xp,
       username: s.username,
+      avatarUrl: s.avatarUrl,
       habits: s.habits,
       miniMissions: s.miniMissions,
     })),
@@ -1775,6 +1776,7 @@ export default function MyJourneyScreen() {
     userId,
     username,
     displayName: username,
+    avatarUrl,
     xp,
     publicWins: publicMissions.reduce((total, story) => total + story.postCount, 0) + publicMinis.length,
     miniWins: publicMinis.length,
@@ -1918,8 +1920,17 @@ export default function MyJourneyScreen() {
       </View>
 
       <View style={styles.profileHero}>
-        <View style={[styles.avatarRing, { borderColor: theme.colors.border }]}>
-          <Text style={[styles.avatarInitials, { color: theme.colors.textPrimary }]}>{initialsFromName(primaryName)}</Text>
+        <View style={[styles.avatarRing, { borderColor: theme.colors.border, overflow: "hidden" }]}>
+          {avatarUrl ? (
+            <Image
+              source={{ uri: avatarUrl }}
+              style={styles.avatarPhoto}
+              resizeMode="cover"
+              accessibilityLabel="Profile picture"
+            />
+          ) : (
+            <Text style={[styles.avatarInitials, { color: theme.colors.textPrimary }]}>{initialsFromName(primaryName)}</Text>
+          )}
           <LevelXpRing level={level} xpInLevel={xpInLevel} size={104}>
             <View style={styles.levelRingInner} />
           </LevelXpRing>
@@ -2279,6 +2290,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   avatarInitials: { position: "absolute", fontSize: 25, lineHeight: 30, fontWeight: "900" },
+  avatarPhoto: { position: "absolute", width: 98, height: 98 },
   levelRingInner: { width: 84, height: 84, borderRadius: 42 },
   profileTextBlock: { flex: 1, minWidth: 0, gap: 7 },
   handle: { fontSize: 27, lineHeight: 33, fontWeight: "900" },

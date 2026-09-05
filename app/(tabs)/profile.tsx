@@ -18,6 +18,7 @@ import {
   StyleSheet,
   StatusBar,
   Image,
+  ActivityIndicator,
   InteractionManager,
 } from "react-native";
 import type { ImageStyle } from "react-native";
@@ -27,6 +28,7 @@ import { useFocusEffect, useIsFocused } from "@react-navigation/native";
 import {
   Activity,
   BarChart3,
+  Camera,
   ChevronRight,
   Flame,
   Gauge,
@@ -42,6 +44,7 @@ import {
   Zap,
   Crown,
 } from "lucide-react-native";
+import * as ImagePicker from "expo-image-picker";
 import { Screen } from "../../src/components/Screen";
 import { GlassTopHighlight } from "../../src/components/GlassTopHighlight";
 import { useListCardEntrance } from "../../src/hooks/useListCardEntrance";
@@ -70,6 +73,8 @@ import { LazyMount } from "../../src/components/LazyMount";
 import { LevelXpRing } from "../../src/components/LevelXpRing";
 import type { AppTheme } from "../../src/styles/theme";
 import type { Habit, MissionVisibility, MiniMission, StreakMemory } from "../../src/types/habit";
+import { getSupabase } from "../../src/lib/supabase";
+import { uploadProfileAvatarImage } from "../../src/lib/streakMemoryStorage";
 import { getDerivedState } from "../../src/utils/habitDerived";
 import { mergeRepairIntoStreakMemory } from "../../src/utils/repairStreakMemoryMerge";
 import {
@@ -893,10 +898,11 @@ export default function ProfileScreen() {
     miniMissionIds: [],
   });
   const [restoringBackupAt, setRestoringBackupAt] = useState<string | null>(null);
-  const { rawXp, rawUsername, rawHabits, rawMiniMissions } = useHabitStore(
+  const { rawXp, rawUsername, rawAvatarUrl, rawHabits, rawMiniMissions } = useHabitStore(
     useShallow((s) => ({
       rawXp: isFocused ? s.xp : 0,
       rawUsername: isFocused ? s.username : null,
+      rawAvatarUrl: isFocused ? s.avatarUrl : null,
       rawHabits: isFocused ? s.habits : EMPTY_HABITS,
       rawMiniMissions: isFocused ? s.miniMissions : EMPTY_MINI_MISSIONS,
     })),
@@ -906,12 +912,47 @@ export default function ProfileScreen() {
   const cloudSyncBlocked = Boolean(showAccount && session?.user && syncError);
   const xp = accountHydrating ? 0 : rawXp;
   const username = accountHydrating ? null : rawUsername;
+  const avatarUrl = accountHydrating ? null : rawAvatarUrl;
+  const [avatarUploading, setAvatarUploading] = useState(false);
   const habits = useMemo(() => (accountHydrating ? [] : rawHabits), [accountHydrating, rawHabits]);
   const miniMissions = useMemo(
     () => (accountHydrating ? [] : rawMiniMissions),
     [accountHydrating, rawMiniMissions],
   );
   const profileIsPremium = !accountHydrating && isPremium;
+
+  const handlePickAvatar = useCallback(async () => {
+    const userId = session?.user?.id;
+    if (!userId || avatarUploading) return;
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) {
+      showAppAlert("Photos permission needed", "Allow photo access from Settings to set a profile picture.");
+      return;
+    }
+    const res = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"] satisfies ImagePicker.MediaType[],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.88,
+    });
+    if (res.canceled || !res.assets[0]) return;
+
+    setAvatarUploading(true);
+    try {
+      const publicUrl = await uploadProfileAvatarImage({ localUri: res.assets[0].uri });
+      const supabase = getSupabase();
+      if (!supabase) throw new Error("Supabase not configured");
+      const { error } = await supabase
+        .from("profiles")
+        .upsert({ id: userId, avatar_url: publicUrl }, { onConflict: "id" });
+      if (error) throw new Error(error.message);
+      useHabitStore.getState().setAvatarUrl(publicUrl);
+    } catch (e) {
+      showAppAlert("Could not update photo", e instanceof Error ? e.message : "Please try again.");
+    } finally {
+      setAvatarUploading(false);
+    }
+  }, [avatarUploading, session?.user?.id]);
 
   const loadBackups = useCallback(async () => {
     const userId = session?.user?.id ?? null;
@@ -1518,7 +1559,11 @@ export default function ProfileScreen() {
           <GlassTopHighlight radius={20} />
           <View style={styles.heroRingColumn}>
             <LevelXpRing level={level} xpInLevel={xpInLevel} size={94} strokeWidth={3}>
-              <View
+              <Pressable
+                onPress={handlePickAvatar}
+                disabled={!showAccount || !session?.user || avatarUploading}
+                accessibilityRole="button"
+                accessibilityLabel={avatarUrl ? "Change profile picture" : "Add a profile picture"}
                 style={[
                   styles.levelOrb,
                   {
@@ -1527,26 +1572,30 @@ export default function ProfileScreen() {
                   },
                 ]}
               >
-                <Image
-                  source={require("../../assets/habitpro-logo-transparent-v3.png")}
-                  style={styles.heroLogo as ImageStyle}
-                  resizeMode="contain"
-                  accessibilityLabel="HabitPro logo"
-                />
+                {avatarUploading ? (
+                  <ActivityIndicator size="small" color={theme.colors.textMuted} />
+                ) : avatarUrl ? (
+                  <Image
+                    source={{ uri: avatarUrl }}
+                    style={styles.heroLogo as ImageStyle}
+                    resizeMode="cover"
+                    accessibilityLabel="Profile picture"
+                  />
+                ) : (
+                  <Camera size={28} color={theme.colors.textMuted} strokeWidth={1.8} />
+                )}
+              </Pressable>
+              {showAccount && session?.user && avatarUrl && !avatarUploading ? (
                 <View
+                  pointerEvents="none"
                   style={[
-                    styles.levelBadge,
-                    {
-                      backgroundColor: theme.colors.surface,
-                      borderColor: theme.colors.border,
-                    },
+                    styles.avatarUploadBadge,
+                    { backgroundColor: "rgba(0,0,0,0.55)", borderColor: theme.colors.surface },
                   ]}
                 >
-                  <Text style={[styles.levelBadgeText, { color: theme.colors.textPrimary }]}>
-                    {level}
-                  </Text>
+                  <Camera size={13} color="#fff" strokeWidth={2.4} />
                 </View>
-              </View>
+              ) : null}
             </LevelXpRing>
           </View>
           <View style={styles.heroText}>
@@ -2091,8 +2140,20 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     alignItems: "center",
     justifyContent: "center",
+    overflow: "hidden",
   },
   heroLogo: { width: 88, height: 88 },
+  avatarUploadBadge: {
+    position: "absolute",
+    right: -2,
+    bottom: -2,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   levelHuge: { fontSize: 32, fontWeight: "900" },
   levelTag: { fontSize: 9, fontWeight: "800", letterSpacing: 1 },
   heroText: { flex: 1, gap: 6, minWidth: 0, paddingTop: 2 },
@@ -2107,20 +2168,6 @@ const styles = StyleSheet.create({
   heroStatusText: { fontSize: 13, lineHeight: 16, fontWeight: "800" },
   heroStatusDivider: { fontSize: 13, lineHeight: 16, fontWeight: "700" },
   heroStatusInline: { flexDirection: "row", alignItems: "center", gap: 5 },
-  levelBadge: {
-    position: "absolute",
-    left: "50%",
-    top: "50%",
-    minWidth: 34,
-    height: 34,
-    borderRadius: 999,
-    borderWidth: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 9,
-    transform: [{ translateX: -17 }, { translateY: -17 }],
-  },
-  levelBadgeText: { fontSize: 13, fontWeight: "900", fontVariant: ["tabular-nums"] },
   xpLine: { flexDirection: "row", alignItems: "center", gap: 8, minWidth: 0, flexWrap: "wrap" },
   xpBig: { fontSize: 16, lineHeight: 20, fontWeight: "800" },
   totalXpInline: { fontSize: 12.5, lineHeight: 16, fontWeight: "700" },
