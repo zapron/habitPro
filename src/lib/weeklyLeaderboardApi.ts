@@ -6,6 +6,7 @@ export type WeeklyLeaderboardEntry = {
   userId: string;
   username: string;
   displayName: string | null;
+  avatarUrl: string | null;
   xp: number;
   level: number;
   points: number;
@@ -24,6 +25,7 @@ type WeeklyLeaderboardRow = {
   user_id?: string | null;
   username?: string | null;
   display_name?: string | null;
+  avatar_url?: string | null;
   xp?: number | null;
   level?: number | null;
   points?: number | null;
@@ -61,6 +63,8 @@ function normalizeWeeklyLeaderboardRows(
           typeof row.display_name === "string" && row.display_name.trim().length > 0
             ? row.display_name.trim()
             : null,
+        avatarUrl:
+          typeof row.avatar_url === "string" && row.avatar_url.trim().length > 0 ? row.avatar_url : null,
         xp,
         level:
           typeof row.level === "number" && Number.isFinite(row.level)

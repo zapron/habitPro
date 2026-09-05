@@ -228,7 +228,7 @@ export async function getProfileUsernamesForIds(userIds: string[]): Promise<Reco
   return out;
 }
 
-export type ProfileLabel = { username: string; displayName: string | null; xp: number | null };
+export type ProfileLabel = { username: string; displayName: string | null; avatarUrl: string | null; xp: number | null };
 
 /** Usernames + optional display names for challenge participant cards. */
 /** Effective Community access: paid subscription/admin grant OR active backend trial. */
@@ -258,16 +258,26 @@ export async function getProfileLabelsForIds(userIds: string[]): Promise<Record<
   if (uniq.length === 0) return {};
   const supabase = getSupabase();
   if (!supabase) return {};
-  const { data, error } = await supabase.from("profiles").select("id, username, display_name, xp").in("id", uniq);
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("id, username, display_name, avatar_url, xp")
+    .in("id", uniq);
   if (error) throw error;
   const out: Record<string, ProfileLabel> = {};
   for (const r of data ?? []) {
-    const row = r as { id: string; username: string | null; display_name: string | null; xp?: number | null };
+    const row = r as {
+      id: string;
+      username: string | null;
+      display_name: string | null;
+      avatar_url: string | null;
+      xp?: number | null;
+    };
     const u = typeof row.username === "string" ? row.username.trim().toLowerCase() : "";
     if (!u) continue;
     const dn = typeof row.display_name === "string" ? row.display_name.trim() : "";
+    const av = typeof row.avatar_url === "string" && row.avatar_url.trim().length > 0 ? row.avatar_url : null;
     const xp = typeof row.xp === "number" && Number.isFinite(row.xp) ? row.xp : null;
-    out[row.id] = { username: u, displayName: dn.length > 0 ? dn : null, xp };
+    out[row.id] = { username: u, displayName: dn.length > 0 ? dn : null, avatarUrl: av, xp };
   }
   return out;
 }
@@ -425,9 +435,10 @@ function profileLabelFromRpc(raw: unknown): ProfileLabel | null {
   const o = raw as Record<string, unknown>;
   const u = typeof o.username === "string" ? o.username.trim().toLowerCase() : "";
   const dn = typeof o.displayName === "string" ? o.displayName.trim() : "";
+  const av = typeof o.avatarUrl === "string" && o.avatarUrl.trim().length > 0 ? o.avatarUrl : null;
   const xp = typeof o.xp === "number" && Number.isFinite(o.xp) ? o.xp : null;
   if (!u && !dn) return null;
-  return { username: u || "member", displayName: dn.length > 0 ? dn : null, xp };
+  return { username: u || "member", displayName: dn.length > 0 ? dn : null, avatarUrl: av, xp };
 }
 
 async function fetchChallengePrimarySnapshotViaRpc(

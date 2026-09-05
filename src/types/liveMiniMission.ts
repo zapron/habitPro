@@ -61,6 +61,7 @@ export type LiveMiniParticipantRow = {
 export type LiveMiniProfileLabel = {
   username: string;
   displayName: string | null;
+  avatarUrl: string | null;
   xp: number | null;
 };
 

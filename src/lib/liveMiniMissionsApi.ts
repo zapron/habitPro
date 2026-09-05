@@ -2,6 +2,7 @@ import type {
   LiveMiniMemoryGalleryItem,
   LiveMiniParticipantRow,
   LiveMiniParticipantStatus,
+  LiveMiniProfileLabel,
   LiveMiniSquadRow,
   LiveMiniSquadSnapshot,
 } from "../types/liveMiniMission";
@@ -21,7 +22,7 @@ type LiveMiniSnapshotActionResult =
 export type LiveMiniInviteForMe = {
   participant: LiveMiniParticipantRow;
   squad: LiveMiniSquadRow;
-  creator: { username: string; displayName: string | null; xp: number | null } | undefined;
+  creator: LiveMiniProfileLabel | undefined;
 };
 
 function errorMessage(error: unknown): string {
@@ -46,15 +47,22 @@ function actionError(error: unknown): Extract<LiveMiniActionResult, { ok: false 
   };
 }
 
-function normalizeProfileLabel(raw: unknown): { username: string; displayName: string | null; xp: number | null } | null {
+function normalizeProfileLabel(raw: unknown): LiveMiniProfileLabel | null {
   if (!raw || typeof raw !== "object") return null;
-  const row = raw as { username?: unknown; displayName?: unknown; display_name?: unknown; xp?: unknown };
+  const row = raw as {
+    username?: unknown;
+    displayName?: unknown;
+    display_name?: unknown;
+    avatarUrl?: unknown;
+    xp?: unknown;
+  };
   const username = typeof row.username === "string" ? row.username.trim().toLowerCase() : "";
   if (!username) return null;
   const dnRaw = row.displayName ?? row.display_name;
   return {
     username,
     displayName: typeof dnRaw === "string" && dnRaw.trim().length > 0 ? dnRaw.trim() : null,
+    avatarUrl: typeof row.avatarUrl === "string" && row.avatarUrl.trim().length > 0 ? row.avatarUrl : null,
     xp: typeof row.xp === "number" && Number.isFinite(row.xp) ? row.xp : null,
   };
 }

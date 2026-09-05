@@ -24,7 +24,7 @@ export type StreakRepairVoteRow = {
 };
 
 type StreakRepairActionFailure = { ok: false; error: string; reason?: "premium_required" };
-type ProfileLabel = { username: string; displayName: string | null; xp: number | null };
+type ProfileLabel = { username: string; displayName: string | null; avatarUrl: string | null; xp: number | null };
 type StreakRepairPageResult = {
   ok: true;
   page: PageResult<StreakRepairRow>;
@@ -49,8 +49,9 @@ function normalizeProfileLabels(raw: unknown): Record<string, ProfileLabel> | un
     const row = value as Record<string, unknown>;
     const username = typeof row.username === "string" && row.username.trim() ? row.username.trim().toLowerCase() : "member";
     const displayName = typeof row.displayName === "string" && row.displayName.trim() ? row.displayName.trim() : null;
+    const avatarUrl = typeof row.avatarUrl === "string" && row.avatarUrl.trim().length > 0 ? row.avatarUrl : null;
     const xp = typeof row.xp === "number" && Number.isFinite(row.xp) ? row.xp : null;
-    out[userId] = { username, displayName, xp };
+    out[userId] = { username, displayName, avatarUrl, xp };
   }
   return Object.keys(out).length > 0 ? out : undefined;
 }

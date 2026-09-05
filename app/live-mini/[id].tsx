@@ -437,9 +437,18 @@ const LiveSquadHero = memo(function LiveSquadHero({
                 },
               ]}
             >
-              <Text style={[styles.heroAvatarText, { color: theme.colors.indigo[400] }]}>
-                {initialsFromLabel(leaderProfile)}
-              </Text>
+              {leaderProfile?.avatarUrl ? (
+                <Image
+                  source={{ uri: leaderProfile.avatarUrl }}
+                  style={styles.heroAvatarPhoto}
+                  resizeMode="cover"
+                  accessibilityLabel={`${leaderName}'s profile picture`}
+                />
+              ) : (
+                <Text style={[styles.heroAvatarText, { color: theme.colors.indigo[400] }]}>
+                  {initialsFromLabel(leaderProfile)}
+                </Text>
+              )}
             </View>
             <View style={styles.heroLeaderText}>
               <View style={styles.heroNameRow}>
@@ -1610,8 +1619,10 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     alignItems: "center",
     justifyContent: "center",
+    overflow: "hidden",
   },
   heroAvatarText: { fontSize: 21, fontWeight: "900", letterSpacing: 0.2 },
+  heroAvatarPhoto: { width: 62, height: 62 },
   heroLeaderText: { flex: 1, minWidth: 0 },
   heroNameRow: { flexDirection: "row", alignItems: "center", gap: 8, minWidth: 0 },
   heroLeaderName: { fontSize: 18, lineHeight: 23, fontWeight: "900", flexShrink: 1 },
