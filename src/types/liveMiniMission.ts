@@ -21,6 +21,8 @@ export type LiveMiniSquadRow = {
   status: LiveMiniSquadStatus;
   /** Snapshot of the creator mission's task checklist at squad-creation time. Raw jsonb — parse with parseTaskChecklist. */
   task_checklist: unknown;
+  /** Snapshot of the creator mission's captureMode at squad-creation time. "freeform" or null (classic/checklist). */
+  capture_mode: string | null;
   created_at: string;
   updated_at: string;
 };

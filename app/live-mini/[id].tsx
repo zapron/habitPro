@@ -1197,6 +1197,9 @@ export default function LiveMiniSquadScreen() {
         // tasks, not just a flat photo/note completion. See
         // docs/MINI_MISSION_CATALOG_ARCHITECTURE.md's Live Squad follow-up.
         taskChecklist: parseTaskChecklist(squad.task_checklist),
+        // Same inheritance, for freeform capture — see
+        // 20260908130000_live_mini_squad_capture_mode.sql.
+        captureMode: squad.capture_mode === "freeform" ? "freeform" : undefined,
       });
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       showToast("Joined Live Squad. Timer started.", "success");

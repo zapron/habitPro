@@ -102,6 +102,8 @@ export async function createLiveMiniSquad(input: {
   startedAt?: string | null;
   /** Snapshot onto the squad so joiners' local mini missions can adopt the same checklist on accept. */
   taskChecklist?: TaskChecklistItem[] | null;
+  /** Snapshot onto the squad so joiners' local mini missions can adopt freeform capture on accept. */
+  captureMode?: "checklist" | "freeform" | null;
 }): Promise<{ ok: true; squadId: string; snapshot?: LiveMiniSquadSnapshot | null } | Extract<LiveMiniActionResult, { ok: false }>> {
   const supabase = getSupabase();
   if (!supabase) return { ok: false, error: "Supabase not configured" };
@@ -121,6 +123,7 @@ export async function createLiveMiniSquad(input: {
       p_started_at: input.startedAt ?? null,
       p_return_snapshot: true,
       p_task_checklist: input.taskChecklist ?? null,
+      p_capture_mode: input.captureMode ?? null,
     });
     v2Data = data;
     v2Error = error;
@@ -140,6 +143,7 @@ export async function createLiveMiniSquad(input: {
     p_planned_minutes: input.plannedMinutes,
     p_started_at: input.startedAt ?? null,
     p_task_checklist: input.taskChecklist ?? null,
+    p_capture_mode: input.captureMode ?? null,
   });
   if (error) return actionError(error);
   return { ok: true, squadId: String(data) };
