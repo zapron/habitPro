@@ -132,6 +132,15 @@ export type MiniMissionStatus =
 
 export type MiniMissionLiveRole = "creator" | "member";
 export type MiniMissionCompletionMode = "manual" | "timer_check_in";
+/**
+ * Orthogonal to completionMode (which governs completion *timing*, not capture).
+ * Absent = today's classic single note+photo flow. "checklist" = predefined
+ * taskChecklist, logged against those specific items. "freeform" = no predefined
+ * list — lock as many self-declared moments as the run produces (no upper limit),
+ * then keep/drop each individually when the mission completes. Mutually exclusive
+ * with taskChecklist by design — a mission is one or the other, never both.
+ */
+export type MiniMissionCaptureMode = "checklist" | "freeform";
 
 export interface MiniMission {
   /** Supabase auth user id who owns this mini mission (set on create / hydrate). */
@@ -169,6 +178,15 @@ export interface MiniMission {
    * synced to Supabase); cleared once the mission completes/fails/is cancelled.
    */
   draftTasks?: Record<string, StreakMemoryTaskEntry>;
+  /** See MiniMissionCaptureMode. Absent = classic flow (default, unchanged). */
+  captureMode?: MiniMissionCaptureMode;
+  /**
+   * In-progress self-declared moments for a `captureMode: "freeform"` mission — an
+   * array rather than draftTasks' keyed record, since entries aren't predefined.
+   * `StreakMemoryTaskEntry.taskId` here is just a generated entry id, not a real
+   * checklist item reference. Local-only, same lifecycle as draftTasks.
+   */
+  draftMemories?: StreakMemoryTaskEntry[];
 }
 
 export type AddHabitInput = {
@@ -269,6 +287,8 @@ export type HabitStore = {
     liveSquadRole?: MiniMissionLiveRole | null;
     /** Optional task checklist — see docs/MINI_MISSION_CATALOG_ARCHITECTURE.md. Empty/absent = classic mini mission. */
     taskChecklist?: TaskChecklistItem[];
+    /** Mutually exclusive with taskChecklist. See MiniMissionCaptureMode. */
+    captureMode?: MiniMissionCaptureMode;
   }) => string;
   setMiniMissionLiveSquad: (id: string, squadId: string | null, role: MiniMissionLiveRole | null) => void;
   setHabitVisibility: (id: string, visibility: MissionVisibility) => void;
@@ -293,6 +313,15 @@ export type HabitStore = {
   setMiniMissionDraftTask: (id: string, taskId: string, entry: StreakMemoryTaskEntry) => void;
   removeMiniMissionDraftTask: (id: string, taskId: string) => void;
   clearMiniMissionDraftTasks: (id: string) => void;
+  /**
+   * Freeform capture (`captureMode: "freeform"`) counterpart to the draftTask trio
+   * above — upserts/removes one self-declared moment in `draftMemories` by its
+   * generated entry id (`StreakMemoryTaskEntry.taskId`). Unlike draftTasks, removal
+   * is a real, wired-up user action here (freeform entries can be discarded outright,
+   * not just re-edited — there's no predefined slot to fall back to).
+   */
+  setMiniMissionFreeformMemory: (id: string, entryId: string, entry: StreakMemoryTaskEntry) => void;
+  removeMiniMissionFreeformMemory: (id: string, entryId: string) => void;
   /** User explicitly decided an expired timer check-in was not completed. */
   failMiniMission: (id: string) => void;
   cancelMiniMission: (id: string) => void;

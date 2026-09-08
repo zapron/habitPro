@@ -777,6 +777,7 @@ export const useHabitStore = create<HabitStore>()(
         liveSquadId,
         liveSquadRole,
         taskChecklist,
+        captureMode,
       }) => {
         const now = createdAt ?? new Date().toISOString();
         const id = idOverride ??
@@ -800,6 +801,7 @@ export const useHabitStore = create<HabitStore>()(
           liveSquadId: liveSquadId ?? null,
           liveSquadRole: liveSquadRole ?? null,
           ...(taskChecklist && taskChecklist.length > 0 ? { taskChecklist } : {}),
+          ...(captureMode === "freeform" ? { captureMode: "freeform" as const } : {}),
         };
 
         set((state) => ({
@@ -875,6 +877,7 @@ export const useHabitStore = create<HabitStore>()(
                 : {}),
               ...(completionMemory ? { completionMemory } : {}),
               draftTasks: undefined,
+              draftMemories: undefined,
             };
           }),
         }));
@@ -890,6 +893,7 @@ export const useHabitStore = create<HabitStore>()(
               ...mission,
               status: "cancelled",
               draftTasks: undefined,
+              draftMemories: undefined,
             };
           }),
         }));
@@ -906,6 +910,7 @@ export const useHabitStore = create<HabitStore>()(
               ...m,
               status: "missed",
               draftTasks: undefined,
+              draftMemories: undefined,
             };
           }),
         }));
@@ -934,6 +939,7 @@ export const useHabitStore = create<HabitStore>()(
               extendedMinutes: 0,
               scheduledStartAt: undefined,
               draftTasks: undefined,
+              draftMemories: undefined,
             };
           }),
         }));
@@ -961,6 +967,28 @@ export const useHabitStore = create<HabitStore>()(
           miniMissions: state.miniMissions.map((m) => {
             if (m.id !== id || !m.draftTasks) return m;
             return { ...m, draftTasks: undefined };
+          }),
+        }));
+      },
+      setMiniMissionFreeformMemory: (id, entryId, entry) => {
+        set((state) => ({
+          miniMissions: state.miniMissions.map((m) => {
+            if (m.id !== id) return m;
+            const existing = m.draftMemories ?? [];
+            const index = existing.findIndex((e) => e.taskId === entryId);
+            const next =
+              index === -1
+                ? [...existing, entry]
+                : existing.map((e, i) => (i === index ? entry : e));
+            return { ...m, draftMemories: next };
+          }),
+        }));
+      },
+      removeMiniMissionFreeformMemory: (id, entryId) => {
+        set((state) => ({
+          miniMissions: state.miniMissions.map((m) => {
+            if (m.id !== id || !m.draftMemories) return m;
+            return { ...m, draftMemories: m.draftMemories.filter((e) => e.taskId !== entryId) };
           }),
         }));
       },

@@ -610,6 +610,7 @@ function miniFromRow(row: Record<string, unknown>): MiniMission {
   const communityFeedRevokedRaw = miniRowBoolean(row, "community_feed_revoked", "communityFeedRevoked");
   const completionMemoryRaw = miniRowValue(row, "completion_memory", "completionMemory");
   const liveRoleRaw = miniRowString(row, "live_squad_role", "liveSquadRole");
+  const captureModeRaw = miniRowString(row, "capture_mode", "captureMode");
   const vis: MissionVisibility =
     visibilityRaw === "public" || visibilityRaw === "solo"
       ? visibilityRaw
@@ -655,6 +656,7 @@ function miniFromRow(row: Record<string, unknown>): MiniMission {
         ? liveRoleRaw
         : null,
     taskChecklist: parseTaskChecklist(miniRowValue(row, "task_checklist", "taskChecklist")),
+    captureMode: captureModeRaw === "freeform" ? "freeform" : undefined,
   };
 }
 
@@ -741,6 +743,7 @@ function miniToRow(sessionUserId: string, m: MiniMission) {
     live_squad_id: m.liveSquadId ?? null,
     live_squad_role: m.liveSquadRole ?? null,
     task_checklist: m.taskChecklist ?? null,
+    capture_mode: m.captureMode === "freeform" ? "freeform" : null,
   };
 }
 
@@ -1160,7 +1163,7 @@ export async function pullFromSupabase(
       supabase
         .from("mini_missions")
         .select(
-          "user_id, id, title, objective, visibility, community_feed_revoked, estimated_minutes, extended_minutes, completion_mode, status, created_at, scheduled_start_at, started_at, completed_at, completion_memory, live_squad_id, live_squad_role, task_checklist",
+          "user_id, id, title, objective, visibility, community_feed_revoked, estimated_minutes, extended_minutes, completion_mode, status, created_at, scheduled_start_at, started_at, completed_at, completion_memory, live_squad_id, live_squad_role, task_checklist, capture_mode",
         )
         .eq("user_id", userId),
       supabase.from("profiles").select("xp, username").eq("id", userId).maybeSingle(),
@@ -1482,6 +1485,18 @@ function mergeDirtyLocalIntoRemote(
     if (!merged || merged.status !== "in_progress" || merged.draftTasks) continue;
     preservedLocalChange = true;
     miniMissionsById.set(mission.id, { ...merged, draftTasks: mission.draftTasks });
+  }
+
+  // draftMemories (freeform capture) — same local-only, not-gated-by-dirty-status
+  // preservation as draftTasks above. Applying this from the start, not after a bug
+  // report: see app-architecture.md's Sync Architecture section for the exact failure
+  // shape this pattern exists to prevent.
+  for (const mission of local.miniMissions) {
+    if (!mission.draftMemories || !belongsToUser(mission, userId)) continue;
+    const merged = miniMissionsById.get(mission.id);
+    if (!merged || merged.status !== "in_progress" || merged.draftMemories) continue;
+    preservedLocalChange = true;
+    miniMissionsById.set(mission.id, { ...merged, draftMemories: mission.draftMemories });
   }
 
   if (!preservedLocalChange) return remote;

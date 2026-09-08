@@ -102,6 +102,7 @@ import {
   uploadMiniStreakTaskMemoryImage,
 } from "../../src/lib/streakMemoryStorage";
 import { MiniChecklistSheet } from "../../src/components/MiniChecklistSheet";
+import { MiniFreeformSheet } from "../../src/components/MiniFreeformSheet";
 import { MiniMomentCarousel } from "../../src/components/MiniMomentCarousel";
 import { syncLiveMiniFromLocalMission } from "../../src/lib/liveMiniMissionProgress";
 import { backOrReplace } from "../../src/lib/navigation";
@@ -200,6 +201,8 @@ const foregroundExpiryNotifiedEndMsByMissionId = new Map<string, number>();
 
 /** Stable empty object so `mission?.draftTasks ?? EMPTY_DRAFT_TASKS` doesn't create a new reference every render. */
 const EMPTY_DRAFT_TASKS: Record<string, StreakMemoryTaskEntry> = {};
+/** Same stability reasoning as EMPTY_DRAFT_TASKS, for freeform's array shape. */
+const EMPTY_DRAFT_MEMORIES: StreakMemoryTaskEntry[] = [];
 
 function getPlannedEndMs(m: {
   startedAt?: string;
@@ -1210,6 +1213,21 @@ export default function MiniMissionDetail() {
     | null
   >(null);
   const [checklistCompleting, setChecklistCompleting] = useState(false);
+  /**
+   * Freeform capture only — self-declared moments for the current run, mirrors
+   * draftTaskEntries above but as an array (no predefined slots to key by).
+   */
+  const draftMemoryEntries = mission?.draftMemories ?? EMPTY_DRAFT_MEMORIES;
+  const [freeformMemoryUi, setFreeformMemoryUi] = useState<
+    | { kind: "create"; label: string }
+    | { kind: "edit"; entry: StreakMemoryTaskEntry }
+    | null
+  >(null);
+  const [freeformCompleting, setFreeformCompleting] = useState(false);
+  /** Generated once per "Add a moment" tap, read by handleFreeformMemoryCommit — keeps
+   * the id stable across the capture sheet's open/commit round trip without needing
+   * to stuff it into freeformMemoryUi's "create" variant. */
+  const freeformEntryIdRef = useRef<string>("");
 
   useEffect(() => {
     setTaskMemoryUi(null);
@@ -1906,6 +1924,163 @@ export default function MiniMissionDetail() {
     }
   };
 
+  /**
+   * Freeform capture only. Mirrors handleTaskMemoryCommit, but there's no predefined
+   * task to attach a photo to — the entry id is generated once at "Add a moment" time
+   * (see the freeformMemoryUi "create" branch below) and reused for both the storage
+   * path and the draftMemories entry, so editing an in-progress entry overwrites the
+   * same photo instead of orphaning the old one.
+   */
+  const handleFreeformMemoryCommit = async (memory: StreakMemory | null) => {
+    const ctx = freeformMemoryUi;
+    if (!ctx || !mission) return;
+    const entryId = ctx.kind === "create" ? freeformEntryIdRef.current : ctx.entry.taskId;
+    const label = ctx.kind === "create" ? ctx.label : ctx.entry.label;
+
+    let proofUrl = memory?.imageUrl?.trim() || undefined;
+    if (memory && !proofUrl && memory.imageUri) {
+      if (canUseStreakMemoryUpload() && shouldUploadLocalStreakImage(memory.imageUri)) {
+        try {
+          proofUrl = await uploadMiniStreakTaskMemoryImage({
+            miniMissionId: mission.id,
+            taskId: entryId,
+            localUri: memory.imageUri,
+          });
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          showAppAlert("Photo upload failed", msg, [{ text: "OK" }]);
+          proofUrl = memory.imageUri;
+        }
+      } else {
+        proofUrl = memory.imageUri;
+      }
+    }
+
+    const priorEntry = ctx.kind === "edit" ? ctx.entry : draftMemoryEntries.find((e) => e.taskId === entryId);
+    const entry: StreakMemoryTaskEntry = {
+      taskId: entryId,
+      label,
+      note: memory?.note,
+      proofUrls: proofUrl ? [proofUrl] : [],
+      loggedAt: new Date().toISOString(),
+      includedInShare: priorEntry?.includedInShare,
+    };
+    useHabitStore.getState().setMiniMissionFreeformMemory(mission.id, entryId, entry);
+  };
+
+  const handleAddFreeformMoment = () => {
+    freeformEntryIdRef.current = `freeform-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+    setFreeformMemoryUi({ kind: "create", label: `Moment ${draftMemoryEntries.length + 1}` });
+  };
+
+  const handleRemoveFreeformMemory = (entryId: string) => {
+    if (!mission) return;
+    useHabitStore.getState().removeMiniMissionFreeformMemory(mission.id, entryId);
+  };
+
+  const handleToggleFreeformMemoryInclusion = (entryId: string) => {
+    if (!mission) return;
+    const entry = draftMemoryEntries.find((e) => e.taskId === entryId);
+    if (!entry) return;
+    useHabitStore.getState().setMiniMissionFreeformMemory(mission.id, entryId, {
+      ...entry,
+      includedInShare: entry.includedInShare === false,
+    });
+  };
+
+  /** Finalizes a freeform mission. Structurally identical to handleChecklistCompleteCommit
+   * — the only difference is draftMemoryEntries is already an array, no Object.values()
+   * needed — everything downstream (completionMemory shape, Community gallery filter,
+   * publish flow) is the exact same machinery checklist missions already use. */
+  const handleFreeformCompleteCommit = async (opts?: { publishToCommunity?: boolean }) => {
+    if (!mission) return;
+    setFreeformCompleting(true);
+    try {
+      const tasks = draftMemoryEntries;
+      const cover = tasks.find((t) => /^https?:\/\//.test(t.proofUrls[0] ?? "")) ?? tasks[0];
+      const completedAt = new Date(timerFrozenAtMs ?? Date.now()).toISOString();
+      const completionMemory: StreakMemory | null =
+        tasks.length > 0
+          ? {
+              createdAt: new Date().toISOString(),
+              tasks,
+              ...(cover?.proofUrls[0] ? { imageUrl: cover.proofUrls[0] } : {}),
+              ...(cover?.note ? { note: cover.note } : {}),
+            }
+          : null;
+
+      const wantsPublish = opts?.publishToCommunity === true;
+      const gallery = tasks
+        .filter((t) => t.includedInShare !== false && t.proofUrls[0] && /^https?:\/\//.test(t.proofUrls[0]))
+        .map((t) => ({ taskId: t.taskId, label: t.label, note: t.note ?? null, imageUrl: t.proofUrls[0] }));
+      const publishCloudReady =
+        wantsPublish && isSupabaseConfigured() && session?.user != null && gallery.length > 0;
+      const freshPremium = publishCloudReady
+        ? await refreshPremiumAccess({ serverOnly: true, cachedAccessOk: true })
+        : null;
+      let canPublish = publishCloudReady && freshPremium === true;
+      if (publishCloudReady && freshPremium !== true) {
+        setCompleteSheetOpen(false);
+        setTimerFrozenAtMs(null);
+        openUpsell("community_publish");
+      }
+
+      const lockCommunity = !canPublish;
+
+      useHabitStore.getState().completeMiniMission(mission.id, completionMemory, {
+        visibility: "solo",
+        communityFeedRevoked: lockCommunity,
+        completedAt,
+      });
+      playMiniMissionCompletedSound();
+      const completedMission = useHabitStore.getState().getMiniMission(mission.id);
+      void syncLiveMiniFromLocalMission(completedMission, {
+        completedAt,
+        memoryNote: completionMemory?.note ?? null,
+        memoryImageUrl: completionMemory?.imageUrl ?? null,
+      });
+
+      if (canPublish) {
+        const ok = await requireUsername("community_post");
+        if (!ok) {
+          setCompleteSheetOpen(false);
+          setTimerFrozenAtMs(null);
+          showAppAlert("Username required", "Choose a username to publish to Community.", [{ text: "OK" }]);
+        } else {
+          const res = await postCommunityWin({
+            miniMissionId: mission.id,
+            title: mission.title,
+            completedAt,
+            memoryNote: gallery[0]?.note ?? null,
+            memoryImageUrl: gallery[0]?.imageUrl ?? null,
+            memoryGallery: gallery,
+            liveSquadId: mission.liveSquadId ?? null,
+          });
+          if (res.ok === true) {
+            useHabitStore.getState().setMiniMissionVisibility(mission.id, "public");
+            useHabitStore.getState().setMiniMissionCommunityFeedRevoked(mission.id, false);
+          } else if (res.reason === "premium_required") {
+            await refreshPremiumAccess({ force: true, serverOnly: true });
+            setCompleteSheetOpen(false);
+            setTimerFrozenAtMs(null);
+            openUpsell("community_publish");
+          } else {
+            setCompleteSheetOpen(false);
+            setTimerFrozenAtMs(null);
+            showAppAlert("Couldn’t publish", res.error, [{ text: "OK" }]);
+          }
+        }
+      }
+
+      // completeMiniMission() already clears mission.draftMemories — nothing to reset locally.
+      setCompleteSheetOpen(false);
+      setTimerFrozenAtMs(null);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } finally {
+      setFreeformCompleting(false);
+    }
+  };
+
   const handleVisibilityChange = (next: MissionVisibility) => {
     if (!mission) return;
     const prev = mission.visibility ?? "solo";
@@ -2186,6 +2361,44 @@ export default function MiniMissionDetail() {
               prefill={taskMemoryUi?.kind === "create" ? taskMemoryUi.prefill : undefined}
               onClose={() => setTaskMemoryUi(null)}
               onCommit={taskMemoryUi?.kind !== "view" ? handleTaskMemoryCommit : undefined}
+            />
+          </LazyMount>
+        </>
+      ) : mission.captureMode === "freeform" ? (
+        <>
+          <LazyMount visible={completeSheetOpen} unmountOnExit>
+            <MiniFreeformSheet
+              visible={completeSheetOpen && freeformMemoryUi === null}
+              missionTitle={mission.title}
+              entries={draftMemoryEntries}
+              completing={freeformCompleting}
+              canPublishCommunity={isSupabaseConfigured() && !!session?.user && !socialLocked}
+              onAddMoment={handleAddFreeformMoment}
+              onSelectEntry={(entry) => setFreeformMemoryUi({ kind: "edit", entry })}
+              onRemoveEntry={handleRemoveFreeformMemory}
+              onToggleEntryInclusion={handleToggleFreeformMemoryInclusion}
+              onComplete={(opts) => void handleFreeformCompleteCommit(opts)}
+              onClose={() => {
+                setCompleteSheetOpen(false);
+                setTimerFrozenAtMs(null);
+              }}
+            />
+          </LazyMount>
+          <LazyMount visible={freeformMemoryUi !== null} unmountOnExit>
+            <StreakMemorySheet
+              visible={freeformMemoryUi !== null}
+              variant="mini"
+              mode="create"
+              hideCommunityPublish
+              missionTitle={freeformMemoryUi?.kind === "edit" ? freeformMemoryUi.entry.label : freeformMemoryUi?.label ?? mission.title}
+              dayLabel="1"
+              prefill={
+                freeformMemoryUi?.kind === "edit"
+                  ? { note: freeformMemoryUi.entry.note, imageUri: freeformMemoryUi.entry.proofUrls[0] }
+                  : undefined
+              }
+              onClose={() => setFreeformMemoryUi(null)}
+              onCommit={handleFreeformMemoryCommit}
             />
           </LazyMount>
         </>

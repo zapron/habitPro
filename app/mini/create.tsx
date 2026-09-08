@@ -2,7 +2,7 @@ import { Text } from "../../src/components/AppText";
 import { useEffect, useRef, useState } from "react";
 import { View, TextInput, TouchableOpacity, ScrollView, StyleSheet, StatusBar, Platform, InteractionManager } from "react-native";
 import { useRouter } from "expo-router";
-import { ArrowLeft, Check, Clock3, ListChecks, Plane, Plus, X } from "lucide-react-native";
+import { ArrowLeft, Camera, Check, Clock3, ListChecks, Plane, Plus, X } from "lucide-react-native";
 import { Screen } from "../../src/components/Screen";
 import { GlassTopHighlight } from "../../src/components/GlassTopHighlight";
 import { useHabitStore } from "../../src/store/habitStore";
@@ -54,6 +54,8 @@ export default function CreateMiniMission() {
   const [focused, setFocused] = useState<"title" | "objective" | "minutes" | null>(null);
   const [creatingMode, setCreatingMode] = useState<StartMode | null>(null);
   const [checklistItems, setChecklistItems] = useState<{ id: string; label: string }[]>([]);
+  /** Mutually exclusive with a non-empty checklist — see the toggle row below. */
+  const [freeformEnabled, setFreeformEnabled] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
   const titleInputRef = useRef<TextInput>(null);
   const objectiveInputYRef = useRef(0);
@@ -121,10 +123,12 @@ export default function CreateMiniMission() {
       showAppAlert("Error", "Set at least one minute for this mission.");
       return;
     }
-    const taskChecklist: TaskChecklistItem[] = checklistItems
-      .map((item) => ({ id: item.id, label: item.label.trim() }))
-      .filter((item) => item.label.length > 0)
-      .map((item, index) => ({ id: item.id, label: item.label, order: index + 1 }));
+    const taskChecklist: TaskChecklistItem[] = freeformEnabled
+      ? []
+      : checklistItems
+          .map((item) => ({ id: item.id, label: item.label.trim() }))
+          .filter((item) => item.label.length > 0)
+          .map((item, index) => ({ id: item.id, label: item.label, order: index + 1 }));
 
     setCreatingMode(mode);
     void (async () => {
@@ -141,6 +145,7 @@ export default function CreateMiniMission() {
           completionMode,
           startMode: mode,
           taskChecklist,
+          captureMode: freeformEnabled ? "freeform" : undefined,
         });
 
         if (mode === "now") {
@@ -252,80 +257,160 @@ export default function CreateMiniMission() {
           textAlignVertical="top"
         />
 
-        <View style={styles.checklistHeaderRow}>
-          <ListChecks size={16} color={theme.colors.textSecondary} />
-          <Text
-            style={[
-              styles.label,
-              { color: theme.colors.textSecondary, fontSize: theme.typography.caption, marginBottom: 0 },
-            ]}
-          >
-            Task checklist (optional)
-          </Text>
-        </View>
-        <Text style={[styles.fieldHint, { color: theme.colors.textSecondary }]}>
-          Split into steps you log separately. Leave empty for a single check-in.
+        <Text style={[styles.label, { color: theme.colors.textSecondary, fontSize: theme.typography.caption }]}>
+          Capture mode
         </Text>
-        {checklistItems.length > 0 ? (
-          <View
+        <Text style={[styles.fieldHint, { color: theme.colors.textSecondary }]}>
+          Choose one — plan fixed steps ahead, or capture moments freely as you go.
+        </Text>
+
+        <View style={styles.captureModeRow}>
+          <TouchableOpacity
+            onPress={() => setFreeformEnabled(false)}
+            activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityState={{ selected: !freeformEnabled }}
             style={[
-              styles.checklistCard,
+              styles.captureModeCard,
               {
-                backgroundColor: theme.colors.surface,
-                borderColor: theme.colors.border,
-                borderRadius: theme.radius.lg,
-                ...theme.shadow.card,
+                borderColor: !freeformEnabled ? theme.colors.indigo[500] : theme.colors.border,
+                backgroundColor: !freeformEnabled ? `${theme.colors.indigo[500]}14` : theme.colors.surface,
               },
             ]}
           >
-            <GlassTopHighlight radius={theme.radius.lg} />
-            {checklistItems.map((item, index) => (
-              <View key={item.id} style={styles.checklistRow}>
-                <Text style={[styles.checklistIndex, { color: theme.colors.textMuted }]}>
-                  {index + 1}
-                </Text>
-                <TextInput
-                  style={[
-                    styles.checklistInput,
-                    {
-                      backgroundColor: theme.colors.surfaceElevated,
-                      borderColor: theme.colors.border,
-                      color: theme.colors.textPrimary,
-                    },
-                  ]}
-                  placeholder="e.g., Warm up"
-                  placeholderTextColor={theme.colors.textMuted}
-                  value={item.label}
-                  onChangeText={(text) => updateChecklistItem(item.id, text)}
-                />
-                <TouchableOpacity
-                  onPress={() => removeChecklistItem(item.id)}
-                  hitSlop={10}
-                  accessibilityRole="button"
-                  accessibilityLabel="Remove task"
-                  style={[styles.checklistRemoveBtn, { borderColor: theme.colors.border }]}
-                >
-                  <X size={14} color={theme.colors.textMuted} />
-                </TouchableOpacity>
+            {!freeformEnabled ? (
+              <View style={[styles.captureModeCheck, { backgroundColor: theme.colors.indigo[500] }]}>
+                <Check size={11} color={theme.colors.white} strokeWidth={3} />
               </View>
-            ))}
-          </View>
-        ) : null}
-        <TouchableOpacity
-          onPress={addChecklistItem}
-          activeOpacity={0.85}
-          style={[
-            styles.checklistAddBtn,
-            { borderColor: theme.colors.indigo[500], backgroundColor: `${theme.colors.indigo[500]}14` },
-          ]}
-        >
-          <Plus size={16} color={theme.colors.indigo[400]} />
-          <Text style={[styles.checklistAddText, { color: theme.colors.indigo[400] }]}>
-            Add task
-          </Text>
-        </TouchableOpacity>
+            ) : null}
+            <View
+              style={[
+                styles.captureModeIcon,
+                { backgroundColor: !freeformEnabled ? `${theme.colors.indigo[500]}1F` : theme.colors.surfaceElevated },
+              ]}
+            >
+              <ListChecks size={16} color={!freeformEnabled ? theme.colors.indigo[400] : theme.colors.textMuted} />
+            </View>
+            <Text
+              style={[
+                styles.captureModeTitle,
+                { color: !freeformEnabled ? theme.colors.textPrimary : theme.colors.textSecondary },
+              ]}
+            >
+              Checklist
+            </Text>
+            <Text style={[styles.captureModeHint, { color: theme.colors.textMuted }]}>
+              Plan steps ahead, check them off as you go.
+            </Text>
+          </TouchableOpacity>
 
-        <Text style={[styles.label, { color: theme.colors.textSecondary, fontSize: theme.typography.caption }]}>Duration</Text>
+          <TouchableOpacity
+            onPress={() => {
+              setFreeformEnabled(true);
+              setChecklistItems([]);
+            }}
+            activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityState={{ selected: freeformEnabled }}
+            style={[
+              styles.captureModeCard,
+              {
+                borderColor: freeformEnabled ? theme.colors.indigo[500] : theme.colors.border,
+                backgroundColor: freeformEnabled ? `${theme.colors.indigo[500]}14` : theme.colors.surface,
+              },
+            ]}
+          >
+            {freeformEnabled ? (
+              <View style={[styles.captureModeCheck, { backgroundColor: theme.colors.indigo[500] }]}>
+                <Check size={11} color={theme.colors.white} strokeWidth={3} />
+              </View>
+            ) : null}
+            <View
+              style={[
+                styles.captureModeIcon,
+                { backgroundColor: freeformEnabled ? `${theme.colors.indigo[500]}1F` : theme.colors.surfaceElevated },
+              ]}
+            >
+              <Camera size={16} color={freeformEnabled ? theme.colors.indigo[400] : theme.colors.textMuted} />
+            </View>
+            <Text
+              style={[
+                styles.captureModeTitle,
+                { color: freeformEnabled ? theme.colors.textPrimary : theme.colors.textSecondary },
+              ]}
+            >
+              Freeform
+            </Text>
+            <Text style={[styles.captureModeHint, { color: theme.colors.textMuted }]}>
+              No fixed steps — lock moments as you go, keep what matters.
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {!freeformEnabled ? (
+          <>
+            {checklistItems.length > 0 ? (
+              <View
+                style={[
+                  styles.checklistCard,
+                  {
+                    backgroundColor: theme.colors.surface,
+                    borderColor: theme.colors.border,
+                    borderRadius: theme.radius.lg,
+                    ...theme.shadow.card,
+                  },
+                ]}
+              >
+                <GlassTopHighlight radius={theme.radius.lg} />
+                {checklistItems.map((item, index) => (
+                  <View key={item.id} style={styles.checklistRow}>
+                    <Text style={[styles.checklistIndex, { color: theme.colors.textMuted }]}>
+                      {index + 1}
+                    </Text>
+                    <TextInput
+                      style={[
+                        styles.checklistInput,
+                        {
+                          backgroundColor: theme.colors.surfaceElevated,
+                          borderColor: theme.colors.border,
+                          color: theme.colors.textPrimary,
+                        },
+                      ]}
+                      placeholder="e.g., Warm up"
+                      placeholderTextColor={theme.colors.textMuted}
+                      value={item.label}
+                      onChangeText={(text) => updateChecklistItem(item.id, text)}
+                    />
+                    <TouchableOpacity
+                      onPress={() => removeChecklistItem(item.id)}
+                      hitSlop={10}
+                      accessibilityRole="button"
+                      accessibilityLabel="Remove task"
+                      style={[styles.checklistRemoveBtn, { borderColor: theme.colors.border }]}
+                    >
+                      <X size={14} color={theme.colors.textMuted} />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </View>
+            ) : null}
+            <TouchableOpacity
+              onPress={addChecklistItem}
+              activeOpacity={0.85}
+              style={[
+                styles.checklistAddBtn,
+                { borderColor: theme.colors.indigo[500], backgroundColor: `${theme.colors.indigo[500]}14` },
+              ]}
+            >
+              <Plus size={16} color={theme.colors.indigo[400]} />
+              <Text style={[styles.checklistAddText, { color: theme.colors.indigo[400] }]}>
+                Add task
+              </Text>
+            </TouchableOpacity>
+          </>
+        ) : null}
+
+        <Text style={[styles.label, { color: theme.colors.textSecondary, fontSize: theme.typography.caption, marginTop: 4 }]}>Duration</Text>
         <Text style={[styles.fieldHint, { color: theme.colors.textSecondary }]}>
           Pick a preset or type any number of minutes (1–480).
         </Text>
@@ -630,7 +715,34 @@ const styles = StyleSheet.create({
   modeButtonDisabled: { opacity: 0.68 },
   modeText: { fontWeight: "800", fontSize: 14 },
   modeTextPrimary: { color: "#ffffff" },
-  checklistHeaderRow: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 6 },
+  captureModeRow: { flexDirection: "row", gap: 10, marginBottom: 14 },
+  captureModeCard: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: 12,
+    gap: 6,
+    position: "relative",
+  },
+  captureModeCheck: {
+    position: "absolute",
+    top: 10,
+    right: 10,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  captureModeIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  captureModeTitle: { fontSize: 14, fontWeight: "800" },
+  captureModeHint: { fontSize: 11, lineHeight: 15, fontWeight: "600" },
   checklistCard: { borderWidth: 1, padding: 10, gap: 8, marginBottom: 10 },
   checklistRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   checklistIndex: { width: 16, fontSize: 12, fontWeight: "700", textAlign: "center" },
