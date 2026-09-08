@@ -746,11 +746,11 @@ export const HabitCard = memo(({ item, nowMs, index, redesignPalette }: HabitCar
                 doneColor={
                   missionFailed
                     ? theme.colors.red[900]
-                    : missionWon
-                      ? theme.colors.green[900]
-                      : needsReport
-                        ? theme.colors.amber[500]
-                        : rp ? rp.accent : theme.colors.green[900]
+                    : needsReport
+                      ? theme.colors.amber[500]
+                      : isDark
+                        ? theme.colors.green[900]
+                        : theme.colors.green[500]
                 }
                 emptyColor={
                   rp

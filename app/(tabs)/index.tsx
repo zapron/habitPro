@@ -902,7 +902,7 @@ export default function Home() {
                 style={[
                   styles.headerBadge,
                   {
-                    backgroundColor: rp ? rp.accentTint : theme.colors.surface,
+                    backgroundColor: rp ? withAlpha(theme.colors.amber[500], isDark ? 20 : 14) : theme.colors.surface,
                     borderColor: rp ? "transparent" : theme.colors.border,
                   },
                 ]}
@@ -910,7 +910,7 @@ export default function Home() {
                 <Text
                   style={[
                     styles.levelNumber,
-                    { color: rp ? rp.accentDark : theme.colors.yellow[400] },
+                    { color: rp ? theme.colors.amber[500] : theme.colors.yellow[400] },
                     rp ? { fontFamily: fontFamily.manropeExtraBold } : null,
                   ]}
                 >
@@ -919,7 +919,7 @@ export default function Home() {
                 <Text
                   style={[
                     styles.levelLabel,
-                    { color: rp ? rp.accentDark : theme.colors.textMuted },
+                    { color: rp ? theme.colors.amber[500] : theme.colors.textMuted },
                     rp ? { fontFamily: fontFamily.dmSansSemibold } : null,
                   ]}
                 >
@@ -1002,7 +1002,12 @@ export default function Home() {
               ]}
             >
               {rp ? (
-                <View style={{ flex: 1, borderRadius: 3, backgroundColor: rp.accent }} />
+                <LinearGradient
+                  colors={[theme.colors.red[900], theme.colors.amber[500]]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={{ flex: 1, borderRadius: 3 }}
+                />
               ) : (
                 <LinearGradient
                   colors={["#f97316", "#fde047"]}
