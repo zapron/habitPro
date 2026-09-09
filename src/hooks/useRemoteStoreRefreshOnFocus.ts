@@ -95,6 +95,15 @@ function preserveLocalMiniProgress(
       preserved = true;
       return { ...remoteMini, draftTasks: localMini.draftTasks };
     }
+    // draftMemories (freeform capture) — same local-only preservation as draftTasks
+    // above. Missing this was the actual cause of freeform moments vanishing mid-run:
+    // sync.ts's mergeDirtyLocalIntoRemote only runs at sign-in hydrate, but this
+    // focus-refresh path runs on every mission-screen visit and was overwriting
+    // draftMemories with nothing every time the remote mini otherwise won the merge.
+    if (localMini?.draftMemories && remoteMini.status === "in_progress" && !remoteMini.draftMemories) {
+      preserved = true;
+      return { ...remoteMini, draftMemories: localMini.draftMemories };
+    }
     return remoteMini;
   });
 
