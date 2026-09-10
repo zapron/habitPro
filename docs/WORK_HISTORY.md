@@ -2,7 +2,73 @@
 
 This is a concise chronological log for future sessions. Keep secrets out of this file.
 
+## 2026-09-10
+
+### Freeform Mini Missions (solo + Live Squad), Home accent color swap, two live bug fixes, one perf fix pending test
+
+Four commits shipped and OTA'd to production this session
+(`330b2b2`..`0834e62`), plus a fifth fix done but uncommitted pending the
+user's live test.
+
+- **New feature: Freeform capture mode for Mini Missions.** No
+  predefined task list — during the run the user locks as many
+  self-declared photo/note "moments" as they want
+  (`src/components/MiniFreeformSheet.tsx`), reviewed and kept/dropped at
+  completion. Scoped from a detailed audit artifact (solo + Live/shared
+  flows, no video, no moment cap, mini-missions-only) confirmed across
+  several rounds before building. Reuses the checklist's `StreakMemory
+  .tasks` shape at completion, so display/Community/gallery code needed
+  no changes. Shipped in two parts: solo (`330b2b2`), then Live Squad
+  invite propagation (`a798866`) after the user caught that an accepting
+  participant still got the classic flow.
+- **Two real bugs found via live user testing, both the same root
+  cause class**: a new synced field (`capture_mode`) or a new local-only
+  field (`draftMemories`) silently dropped by one of the several distinct
+  merge/sync code paths this app has, each of which needs its own
+  explicit handling. First: `capture_mode` missing from `sync.ts`'s pull
+  select-string/row parsers, so a background pull reverted a fresh
+  freeform mission back to classic. Second (found *after* the first
+  fix, on a live 8-hour mission — separate OTA, `0834e62`): the
+  sign-in-hydrate preserve-on-merge fix didn't cover the *other*
+  preserve-on-merge function (`useRemoteStoreRefreshOnFocus.ts`, runs on
+  every screen focus), so moments kept vanishing mid-run. Both are now
+  documented as a recurring gotcha in `app-architecture.md`.
+- **UI feedback round**: the create screen's single "Freeform capture"
+  toggle read as an add-on, not a real either/or vs. Checklist — redone
+  as two selectable cards. Also: standing instruction, no `Sparkles`
+  icon anywhere in the app ("looks too AI") unless a real AI feature is
+  added later; it was the icon on that toggle, confirmed the only use in
+  the codebase, swapped for `Camera`.
+- **Home screen accent swap (`56f813f`)**: Minimalist theme's indigo
+  accent was used for the mission-card day-grid "done" color and the
+  level XP bar/pill, while Classic already used green/orange — read as
+  "everything indigo." Grid now always green (light/dark split matching
+  habit detail's day dots); level bar/pill now a dull red→amber
+  gradient/tint instead of flat indigo.
+- **Live Mini board perf + note-loss fix — done, uncommitted, pending
+  user test** (user is mid live-mission testing it in place): the
+  per-participant memory strip was un-virtualized (`ScrollView` +
+  `.map()`), causing severe frame drops dragging with ~10 photos —
+  switched to `FlatList` + `getItemLayout`, and memoized the previously-
+  unmemoized `ParticipantCard`. Separately, tapping a photo tile to
+  enlarge it never showed its note (tap handler routed photo tiles
+  through a noteless state) — unified into one state that always
+  carries the note.
+- **Checked and reported, not fixed**: whether Mini Missions' four tabs
+  are paginated. Rendering is fine (`FlashList`), but the underlying
+  fetch (`pullFromSupabase()`) has no `.limit()` at all — downloads the
+  entire habits/mini-missions history every cold start. An offset/limit
+  pattern already exists elsewhere in the codebase but isn't applied
+  here. Flagged in `app-architecture.md`, not actioned this session.
+
 ## 2026-09-05 (mid-session)
+
+**Update: this branch was later completed, merged to `main`, and OTA'd to
+production in this same multi-day session** (merge commit `f840756`,
+docs never got a follow-up "end of session" entry — see the 2026-09-10
+entry above for what shipped afterward). The "in progress, mostly
+uncommitted" framing below is a mid-session snapshot, not the final
+state.
 
 ### Profile pictures (in progress, `experiment/profile-media`, mostly uncommitted) + a verified Supabase Storage cleanup
 

@@ -1,8 +1,151 @@
 # HabitPro Current Work
 
-Last updated: 2026-09-05 (mid-session — a new profile-picture feature (own upload + real avatars shown across Community/Leaderboard/Live Mini) in progress on `experiment/profile-media`, mostly uncommitted per explicit "don't auto-commit" instruction this round; plus a completed, verified Supabase Storage cleanup that reclaimed ~245MB on the free tier by recompressing 161 files a compression-pipeline bug had left oversized. Full detail in the session handoff section immediately below.).
+Last updated: 2026-09-10 (end of session — shipped a new Freeform Mini Mission capture mode (solo + Live Squad), a Home-screen indigo→green/amber accent swap, and a same-session focus-refresh bug fix, all committed/pushed/OTA'd to production; plus a Live Mini gallery perf + note-loss fix still uncommitted pending user test, and a reported-but-not-actioned finding that personal habit/mini-mission sync has no fetch-level pagination. Full detail in the session handoff section immediately below.).
+
+## Session Handoff (2026-09-10, end of session)
+
+**State: `main` is 4 commits ahead of the previous session's tip
+(`c7a2503`..`0834e62`), all pushed and OTA'd to production. One more fix
+(`app/live-mini/[id].tsx`, perf + note-loss) is done and `tsc`-clean but
+**uncommitted** — user is mid-live-mission and testing it in place before
+it ships. `app-architecture.md` doc updates (this session, describing all
+of the below) are also uncommitted alongside it.** `npx tsc --noEmit`
+clean throughout.
+
+**1. Freeform Mini Mission capture mode — solo (`330b2b2`).** New
+`MiniMission.captureMode: "checklist" | "freeform"`, mutually exclusive
+with `taskChecklist`, mini missions only (not Habits) — scoped from a
+detailed audit artifact the user asked for first (solo + Live/shared
+scenarios, no video, no cap on moment count, confirmed over several
+rounds of Hinglish back-and-forth). No predefined task list: during the
+run the user locks as many self-declared "moments" (photo/note) as they
+want via the new `src/components/MiniFreeformSheet.tsx`, held in
+`MiniMission.draftMemories` (local-only, array — same treatment as
+checklist's `draftTasks`). At completion, kept entries populate the same
+`StreakMemory.tasks` shape checklist uses, so every downstream display/
+Community/gallery consumer needed zero new code. Migration:
+`20260908120000_mini_missions_capture_mode.sql` (column +
+`rpc_sync_dirty_state` column-list fix). Create screen got a two-card
+"Capture mode" picker (Checklist vs Freeform) per a later request — see
+#4.
+
+**2. Real bug found and fixed before shipping Phase 1**: a fresh
+freeform mission showed the classic single-photo sheet instead of the
+freeform multi-capture sheet on "Mark Complete." Root cause: exactly the
+silent-drop trap `app-architecture.md` already warns about for
+`task_checklist` — `capture_mode` was missing from `sync.ts`'s pull
+select-string/`miniFromRow`/`miniToRow`, so a background focus-refresh
+pull silently reverted the field to `undefined` right after creation.
+Fixed as part of the same migration/commit above.
+
+**3. Freeform propagation to Live Squad invites (`a798866`).** User
+tested the solo fix, confirmed it, then reported the *accepting*
+participant in a Live Squad still got the classic flow, not freeform.
+Root cause: `createLiveMiniSquad`/`rpc_create_live_mini_squad(_v2)` had a
+`task_checklist` snapshot mechanism but nothing for `captureMode` at all.
+Added `live_mini_squads.capture_mode` (migration
+`20260908130000_live_mini_squad_capture_mode.sql`), threaded through both
+RPCs (drop-then-recreate, same overload-ambiguity reasoning as the
+existing `task_checklist` param), and `app/live-mini/[id].tsx`'s
+`handleAccept` now reads `squad.capture_mode` off the snapshot alongside
+`squad.task_checklist` — no accept-RPC change needed, since
+`_hp_live_mini_snapshot_json` already returns the whole squad row via
+`to_jsonb()`.
+
+**4. Capture-mode picker redesign + no more Sparkles anywhere
+(`330b2b2`, same commit as #1 since nothing had shipped yet).** User
+feedback on the create screen: the original single "Freeform capture"
+toggle-below-checklist read as an add-on, not a real either/or choice —
+wanted a clearer visual distinction. Replaced with two side-by-side
+selectable cards (Checklist / Freeform) with a check-badge on the
+selected one; selecting Freeform now also clears any in-progress
+checklist items. Separately, explicit standing instruction: **never use
+the `Sparkles` icon anywhere in this app** ("बिल्कुल AI जैसा दिखता है")
+unless a real AI feature is added later — it was the icon on the original
+Freeform toggle (now `Camera`) and was confirmed to be the only use
+anywhere in the codebase.
+
+**5. Home screen indigo→green/amber accent swap (`56f813f`).** User
+feedback: the Minimalist theme pack's `rp.accent` (indigo, `#5B5BD6`,
+from `src/styles/redesignPalette.ts`) was used for the mission-card day
+grid's "done" color and the level XP bar/LVL pill, while Classic already
+used green for the grid and an orange/yellow gradient for the bar —
+reading as "everything indigo" once Minimalist became the only active
+pack. Grid now always uses `theme.colors.green[500]`/`green[900]` (light/
+dark split, matching habit detail's day-dot pattern exactly, corrected
+after an initial pass that flattened it to `green[900]` for both modes).
+Level bar fill and LVL pill switched from flat indigo to a
+`theme.colors.red[900]`→`amber[500]` gradient/tint — "dull amberish," per
+explicit request, not the vivid Classic orange/yellow.
+
+**6. Real bug found and fixed after shipping (`0834e62`, separate OTA).**
+User reported freeform memories vanishing mid-run, including same-device
+(not just the expected "not on this device yet" cross-device case) — on
+an 8-hour Live Squad mission, captured photos disappeared "after some
+time" repeatedly, on both iOS and Android. Root cause: the general
+lesson from the 2026-08-14 `draftTasks` gotcha has *two* separate call
+sites (sign-in hydrate's `mergeDirtyLocalIntoRemote` and every-focus's
+`preserveLocalMiniProgress` in `useRemoteStoreRefreshOnFocus.ts`) and
+Phase 1 only patched the first one. The second already had a `draftTasks`
+branch but no `draftMemories` branch, so every background focus-refresh
+pull during an active freeform run wiped locked-but-not-yet-completed
+moments. Fixed by adding the matching branch; see
+`app-architecture.md`'s Sync Architecture section for the full writeup
+(this is now documented as a recurring gotcha, not just a one-off).
+
+**7. Live Mini gallery perf + note-loss fix — done, `tsc`-clean,
+uncommitted (user mid-mission, testing before it ships).** User reported
+two issues in the shared Live Squad board screen after two participants
+(11 and 9 freeform moments respectively) both completed: (a) the
+per-participant memory strip froze the whole screen while dragging — it
+was a plain `ScrollView` + `.map()`, no virtualization, nested inside the
+outer vertical `ScrollView`; switched to a horizontal `FlatList` with
+`getItemLayout` + `nestedScrollEnabled`, and wrapped the previously-
+unmemoized `ParticipantCard` in `memo` so the once-a-second live timer
+tick doesn't force every card's full photo strip to re-render; (b)
+tapping a gallery tile with a photo to enlarge it never showed the
+attached note — the tap handler routed photo tiles through a bare
+`openImageUri` state with no note field at all, silently discarding it.
+Unified into one `openGalleryTile` state carrying `{label, note, uri}`
+always; the enlarged view now shows the note as a caption under the
+photo when one exists. Both in `app/live-mini/[id].tsx` only.
+
+**8. Checked, reported, not actioned: mini-mission list pagination.**
+User asked whether the Active/Waiting/Done/Failed tabs
+(`app/mini/index.tsx`) are paginated/optimized for long lists. Finding:
+rendering is fine (`FlashList`, already virtualized), but the underlying
+*fetch* is not — `sync.ts`'s `pullFromSupabase()` fetches the user's
+entire `habits`/`mini_missions` table with no `.limit()` at all, every
+cold-start/full-refresh. An offset/limit paging pattern already exists
+elsewhere in this codebase (`src/types/paging.ts`, used for streak-repair
+voters/group challenges/live-squad listings) but isn't applied to the
+user's own personal sync. Flagged in `app-architecture.md`'s Sync
+Architecture section as a known scalability gap; no fix requested or
+started this session.
+
+**OTA**: three separate production pushes this session (all
+`npm run update:production`, runtime `1.1.35`, no native/config diff —
+verified via `git diff <base>..HEAD --stat -- package.json
+package-lock.json app.json eas.json` empty each time):
+- Update group `a66e46c9-a263-446f-a096-e55c84041e8b` — commit `56f813f`
+  (items #1-5 above, bundled as one push once the color-scheme fix
+  landed on top).
+- Update group `81c881a7-0249-4f58-ab10-3227045e9848` — commit `0834e62`
+  (item #6, the focus-refresh fix, pushed alone once found).
+- (Item #7 not yet OTA'd — pending user's live-mission test.)
+
+**Not visually confirmed by the agent** — same sandbox limitation as
+every prior session. Items #1-6 were user-tested live on real devices
+across this session (that's how #2 and #6 were found in the first
+place); item #7 is user-testing in progress as of this doc update.
 
 ## Session Handoff (2026-09-05, mid-session)
+
+**Update: this branch was completed, merged to `main`, and OTA'd to
+production later in this same multi-day session** (see the 2026-09-10
+entry above and `docs/WORK_HISTORY.md` for the merge commit) — the
+"mid-session, mostly uncommitted" framing below is a snapshot from partway
+through, not the final state.
 
 **State: on `experiment/profile-media`, mostly uncommitted.** This is a
 mid-session snapshot, not an end-of-session wrap — logged now because the

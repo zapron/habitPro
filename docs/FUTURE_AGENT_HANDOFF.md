@@ -29,11 +29,29 @@ Then inspect the files relevant to the user request.
 
 ## Current User Priorities
 
-- **Most current, as of 2026-09-05 (mid-session, not wrapped up)**: on
-  `experiment/profile-media`, mostly uncommitted (only `afbe3e0`/`6ecd027`/
-  `d719b65` are committed; everything since is intentionally left
-  uncommitted after an explicit "don't auto-commit just because we're on a
-  branch" correction). Two threads in flight:
+- **Most current, as of 2026-09-10 (end of session)**: on `main`, 4
+  commits ahead of the previous session's tip (`c7a2503`..`0834e62`), all
+  pushed and OTA'd to production. Shipped **Freeform Mini Missions**
+  (`MiniMission.captureMode: "checklist" | "freeform"`, self-declared
+  photo/note "moments" during a run instead of a predefined checklist,
+  scoped for both solo and Live Squad) plus a Home-screen indigo→green/
+  amber accent swap, and found+fixed two real bugs live during user
+  testing (a synced field silently dropped on pull, then a local-only
+  field missing from a *second* preserve-on-merge function — see
+  `app-architecture.md`'s Sync Architecture gotchas). **One more fix is
+  done and `tsc`-clean but uncommitted**: Live Mini board gallery perf
+  (un-virtualized photo strip → `FlatList`) + a note-loss bug on tap-to-
+  enlarge, both in `app/live-mini/[id].tsx` — the user is mid-live-mission
+  testing it in place before it ships. Also checked (not fixed): Mini
+  Missions' tabs render virtualized (`FlashList`) but the underlying
+  fetch has no pagination — flagged in `app-architecture.md`. Full detail:
+  `docs/CURRENT_WORK.md` and `docs/WORK_HISTORY.md`'s 2026-09-10 entries.
+- **As of 2026-09-05**: the profile-media branch mentioned below was
+  completed, merged to `main` (`f840756`), and OTA'd to production later
+  in that same session — superseded by the entry above. Kept for context
+  on the backend findings (shared `_hp_profile_label_json` helper, etc.),
+  which are still accurate.
+  - Two threads in flight (historical, now both done):
   1. **Profile pictures** — own upload (Profile screen ring) done and
      working; real avatars now wired into Community feed, Community
      Player, cheerers list, Live Mini leader, and a custom pill treatment
@@ -42,9 +60,9 @@ Then inspect the files relevant to the user request.
      `_hp_profile_label_json` got `avatarUrl` added once and it propagated
      to several screens; three other RPCs build profile JSON inline and
      needed their own migrations (Live Mini snapshot, all three weekly-
-     leaderboard RPCs, streak-repair pending-voters). **3 of those
-     migrations are applied live but not yet committed to `main`** — see
-     `docs/CURRENT_WORK.md`'s 2026-09-05 entry for exact filenames.
+     leaderboard RPCs, streak-repair pending-voters) — all now committed
+     to `main` as part of the merge, see `docs/CURRENT_WORK.md`'s
+     2026-09-05 entry for exact filenames.
   2. **Supabase Storage cleanup — done and verified**: free-tier bucket
      was at 73% (730MB/1GB) because of a real bug in
      `streakMemoryStorage.ts`'s compression fallback (uploads original
