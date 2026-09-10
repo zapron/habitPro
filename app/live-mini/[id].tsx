@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Animated,
   Easing,
+  FlatList,
   Image,
   Modal,
   Pressable,
@@ -74,6 +75,12 @@ const LONG_PRESETS = [
 
 const LIVE_MINI_BOARD_RELOAD_TTL_MS = 12_000;
 const LIVE_MINI_REALTIME_DEBOUNCE_MS = 350;
+
+/** Fixed tile size for the freeform memory gallery strip — lets FlatList use
+ * getItemLayout (no measurement pass) so a long freeform run's moments don't
+ * jank the whole screen while dragging, since only the visible window mounts. */
+const MEMORY_TILE_WIDTH = 88;
+const MEMORY_TILE_GAP = 8;
 
 /** Same square-grid language and rank palette as `CohortLeaderHero` — one
  * consistent "ranking" visual across both screens instead of two different
@@ -605,7 +612,7 @@ const PulsingOnMissionDot = memo(function PulsingOnMissionDot({ color }: { color
   );
 });
 
-function ParticipantCard({
+const ParticipantCard = memo(function ParticipantCard({
   row,
   rank,
   profile,
@@ -788,18 +795,24 @@ function ParticipantCard({
       ) : null}
 
       {row.memory_gallery && row.memory_gallery.length > 0 ? (
-        <ScrollView
+        <FlatList
+          data={row.memory_gallery}
+          keyExtractor={(item) => item.taskId}
           horizontal
+          nestedScrollEnabled
           showsHorizontalScrollIndicator={false}
           style={styles.memoryGalleryStrip}
           contentContainerStyle={styles.memoryGalleryStripContent}
-        >
-          {row.memory_gallery.map((item) => {
+          getItemLayout={(_data, index) => ({
+            length: MEMORY_TILE_WIDTH,
+            offset: index * (MEMORY_TILE_WIDTH + MEMORY_TILE_GAP),
+            index,
+          })}
+          renderItem={({ item }) => {
             const uri = item.imageUrl ? withImageVersion(item.imageUrl, row.updated_at) : null;
             const thumb = uri ? storageThumbnailUri(uri, 200, 200, 64) : null;
             return (
               <Pressable
-                key={item.taskId}
                 onPress={() => onOpenGalleryTile({ label: item.label, note: item.note, uri })}
                 accessibilityRole="button"
                 accessibilityLabel={`View ${item.label}`}
@@ -825,8 +838,8 @@ function ParticipantCard({
                 </Text>
               </Pressable>
             );
-          })}
-        </ScrollView>
+          }}
+        />
       ) : memoryImage ? (
         <Pressable
           onPress={() => onOpenImage(memoryImage)}
@@ -855,7 +868,7 @@ function ParticipantCard({
       ) : null}
     </View>
   );
-}
+});
 
 export default function LiveMiniSquadScreen() {
   const router = useRouter();
@@ -880,8 +893,11 @@ export default function LiveMiniSquadScreen() {
   const [selectedMinutes, setSelectedMinutes] = useState(15);
   const [manualMinutes, setManualMinutes] = useState("15");
   const [openImageUri, setOpenImageUri] = useState<string | null>(null);
-  /** Checklist mini missions only — a tapped gallery tile with no photo enlarges as a text card instead. */
-  const [openGalleryTile, setOpenGalleryTile] = useState<{ label: string; note: string | null } | null>(null);
+  /** A tapped gallery tile (checklist or freeform). uri null = no photo, enlarges as a text
+   * card instead. uri set = photo enlarges with its note shown as a caption underneath,
+   * instead of the note being dropped entirely (former behavior routed photo taps through
+   * plain openImageUri, which has no note field at all). */
+  const [openGalleryTile, setOpenGalleryTile] = useState<{ label: string; note: string | null; uri: string | null } | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [finishHighlightIds, setFinishHighlightIds] = useState<Set<string>>(() => new Set());
@@ -1506,13 +1522,8 @@ export default function LiveMiniSquadScreen() {
                 setOpenImageUri(uri);
               }}
               onOpenGalleryTile={(item) => {
-                if (item.uri) {
-                  setOpenGalleryTile(null);
-                  setOpenImageUri(item.uri);
-                } else {
-                  setOpenImageUri(null);
-                  setOpenGalleryTile({ label: item.label, note: item.note });
-                }
+                setOpenImageUri(null);
+                setOpenGalleryTile(item);
               }}
               onOpenPlayerJourney={onOpenPlayerJourney}
             />
@@ -1560,6 +1571,20 @@ export default function LiveMiniSquadScreen() {
           <Pressable style={styles.imageViewerInner} onPress={(e) => e.stopPropagation()}>
             {openImageUri ? (
               <Image source={{ uri: openImageUri }} style={styles.imageViewerPhoto} resizeMode="contain" />
+            ) : openGalleryTile?.uri ? (
+              <>
+                <Image source={{ uri: openGalleryTile.uri }} style={styles.imageViewerPhoto} resizeMode="contain" />
+                <View style={[styles.galleryPhotoCaption, { backgroundColor: theme.colors.surface }]}>
+                  <Text style={[styles.galleryTextCardLabel, { color: theme.colors.textPrimary }]} numberOfLines={1}>
+                    {openGalleryTile.label}
+                  </Text>
+                  {openGalleryTile.note ? (
+                    <Text style={[styles.galleryTextCardNote, { color: theme.colors.textSecondary }]}>
+                      {openGalleryTile.note}
+                    </Text>
+                  ) : null}
+                </View>
+              </>
             ) : openGalleryTile ? (
               <View style={[styles.galleryTextCard, { backgroundColor: theme.colors.surface }]}>
                 <Text style={[styles.galleryTextCardLabel, { color: theme.colors.textPrimary }]}>
@@ -1752,6 +1777,7 @@ const styles = StyleSheet.create({
   galleryTextCard: { width: "100%", minHeight: 200, padding: 24, justifyContent: "center", gap: 10 },
   galleryTextCardLabel: { fontSize: 15, fontWeight: "800" },
   galleryTextCardNote: { fontSize: 15, lineHeight: 22, fontWeight: "600" },
+  galleryPhotoCaption: { width: "100%", padding: 16, gap: 6 },
   imageViewerClose: {
     position: "absolute",
     top: 12,
