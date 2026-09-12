@@ -2,6 +2,10 @@
 .branches
 .temp
 
+# Full production data snapshot (npm run db:snapshot) — contains other
+# real users' habit/mission content, must never be committed.
+seed.sql
+
 # dotenvx
 .env.keys
 .env.local
