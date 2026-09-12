@@ -26,10 +26,38 @@ Then inspect the files relevant to the user request.
   CLI command (`db push` failures from this are confusing and the CLI's
   suggested fix, `migration repair --status reverted`, is actively wrong
   when the real cause is just being on the wrong branch).
+- **As of 2026-09-13: a local Supabase dev environment now exists** —
+  `npm run db:start`/`db:reset`/`db:snapshot` (Docker required). Any new
+  migration should be tested with `npm run db:reset` (replays every
+  migration from empty) **before** `npm run db:push` — this is now the
+  standing practice, not optional. It's the only thing that catches a
+  migration whose timestamp doesn't reflect its true dependency order,
+  which `db push` structurally cannot detect (it only checks "has this
+  version been applied," never "does replaying from empty work"). See
+  `app-architecture.md`'s Local Development section and its new Known
+  Caution Points entry for the three real drift cases this already
+  caught. `supabase/seed.sql` is gitignored and holds real production
+  data (all users) when present locally — never suggest committing it.
 
 ## Current User Priorities
 
-- **Most current, as of 2026-09-10 (end of session)**: on `main`, 4
+- **Most current, as of 2026-09-13 (end of session)**: built the local
+  dev environment described above, and in the process found + fixed
+  three genuine, pre-existing production schema-drift issues (two
+  `challenge_nudges` indexes and one `streak_reminder_log` check
+  constraint that migration files disagree with production's actual
+  live state on) — all captured in
+  `supabase/migrations/20260913120000_drop_custom_note_once_ever_index.sql`,
+  already pushed to production by the user, confirmed no-op. Local-dev
+  files (`package.json` scripts, `.gitignore`, two guarded migrations,
+  `seed.sql` untracking) are **uncommitted** — not asked for yet. Also
+  still pending from earlier in the same session: an **approved-but-
+  not-started** perf plan for Mini Missions (`/Users/raktimmacbook/.claude/plans/reflective-baking-sparkle.md`
+  — Phase 0 instrumentation + Phase 1 cheap fixes, no backend changes)
+  and a broader, still-just-a-report pagination/search audit across the
+  app's tabs. Full detail: `docs/CURRENT_WORK.md`/`docs/WORK_HISTORY.md`'s
+  2026-09-13 entries.
+- **As of 2026-09-10 (end of session)**: on `main`, 4
   commits ahead of the previous session's tip (`c7a2503`..`0834e62`), all
   pushed and OTA'd to production. Shipped **Freeform Mini Missions**
   (`MiniMission.captureMode: "checklist" | "freeform"`, self-declared

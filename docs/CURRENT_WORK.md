@@ -1,6 +1,146 @@
 # HabitPro Current Work
 
-Last updated: 2026-09-10 (end of session — shipped a new Freeform Mini Mission capture mode (solo + Live Squad), a Home-screen indigo→green/amber accent swap, and a same-session focus-refresh bug fix, all committed/pushed/OTA'd to production; plus a Live Mini gallery perf + note-loss fix still uncommitted pending user test, and a reported-but-not-actioned finding that personal habit/mini-mission sync has no fetch-level pagination. Full detail in the session handoff section immediately below.).
+Last updated: 2026-09-13 (end of session — built a full local-only Supabase dev environment (Docker + CLI, no paid cloud branching), and in the process found and fixed real, pre-existing production schema drift across three separate issues that a from-scratch migration replay uniquely exposed. Also: an approved-but-not-yet-started perf plan for Mini Missions from earlier this session (instrumentation + cheap fixes, no backend changes) is still pending. Full detail in the session handoff section immediately below.).
+
+## Session Handoff (2026-09-13, end of session)
+
+**State: `main` is clean going into this session's work; the local-dev
+changes below are uncommitted** (`package.json`, `supabase/.gitignore`, two
+edited migrations, one new migration, `supabase/seed.sql` untracked from
+git) — not committed since the user didn't ask for a commit this round.
+The one new migration (`20260913120000_drop_custom_note_once_ever_index.sql`)
+**has already been pushed to production** by the user directly (`npm run
+db:push`), independent of the local commit — confirmed by re-querying
+production afterward that it changed nothing observable (all three
+statements were no-ops against production's actual live state, as
+designed).
+
+**1. Built a local-only Supabase dev environment — no paid cloud
+branching.** User explicitly ruled out Supabase's Branching feature
+(Pro plan, $25/mo+ — org confirmed on Free plan) after a research pass
+comparing it against local Docker-based dev. Landed on: Docker Desktop
+(installed via `brew install --cask docker` after a false start with
+`docker/tap/sbx`, an unrelated "Docker Sandboxes" cask) + the Supabase
+CLI (already logged in and already linked to `habitPro` in this
+environment, no setup needed there) + four new `package.json` scripts
+mirroring the existing `db:*` naming:
+   - `db:start` / `db:stop` — the local stack (Postgres/Auth/Storage/
+     Studio/etc. in Docker, applies all local migrations fresh).
+   - `db:reset` — wipes local, replays every migration + `seed.sql` from
+     scratch. This is the new safety net for every future migration:
+     test here before `db:push`.
+   - `db:snapshot` — `supabase db dump --data-only --linked --schema
+     public --exclude public.app_version_policy --exclude
+     public.community_access_config -f supabase/seed.sql`. Pulls a full
+     copy of production's `public` schema data (all 61 users, on user's
+     explicit instruction — "जो server data है वो locally sync होता रहे",
+     re-run this command anytime for a fresh pull) into the local seed
+     file. The two `--exclude`s are singleton config tables a migration
+     already seeds a default row into (see finding below).
+   - `supabase/seed.sql` **untracked from git** (was committed with a
+     placeholder `select 1;`) and gitignored — it now holds real
+     production data (all users' habits/mini missions/community posts/
+     streak repairs/etc.) and must never be committed. A short block is
+     manually prepended to it (not part of the dump) creating a local-
+     only `auth.users`/`auth.identities` row matching the user's real
+     production `user_id` (`f90d8ca4-ad7c-4ca8-9646-4633af4a53b3`) with a
+     fresh local-only password, so their real data is immediately visible
+     signing in locally. New test users can be created freely (just sign
+     up against local Supabase) with zero cost/setup.
+   - `.env.local` created (gitignored, already covered by the repo's
+     `.env*.local` pattern) pointing the app at
+     `http://127.0.0.1:54321` with the local stack's legacy-JWT-format
+     anon key (not the newer `sb_publishable_...` key this CLI version
+     also prints — used the JWT format instead to avoid any
+     `@supabase/supabase-js` version-compatibility risk). Verified
+     end-to-end: app signed in locally, showed the user's real 31
+     habits/201 mini missions, Level 18/93 notifications, matching
+     production exactly.
+   - **Real security incident caught and corrected mid-session**: the
+     first `db:snapshot` attempt (`--data-only --linked`, no `--schema`
+     flag) dumped the `auth` schema too, despite Supabase's own docs
+     claiming `--data-only` excludes it — including real Google OAuth
+     access/refresh tokens (`ya29....`) for real users, in plaintext, in
+     `supabase/seed.sql`. Caught by inspecting the dump's actual content
+     rather than trusting the docs/success message, before it was ever
+     used for anything. Fixed by adding `--schema public` to the
+     `db:snapshot` script and deleting/regenerating the file. Never
+     reached git (was gitignored from the start), but was a real
+     lesson: verify a dump's actual contents, don't trust a tool's own
+     "succeeded" signal, especially crossing a schema/security boundary.
+
+**2. Found and fixed three genuine, pre-existing production schema-drift
+issues** — none introduced this session, all surfaced for the first
+time by today's from-scratch migration replay (impossible to catch via
+`db push` alone, which only applies against an already-live database and
+never needs to verify replay-from-empty). All three are captured in one
+new migration, `supabase/migrations/20260913120000_drop_custom_note_once_ever_index.sql`
+(now pushed to production, confirmed no-op there):
+   - `challenge_nudges_custom_note_once_idx` exists in migration files
+     (`20260502120000_custom_nudge_premium.sql`) but not on production's
+     actual live schema — evidently dropped directly on production,
+     outside any migration, after that file ran. Production's real rule
+     is "once per day" (`custom_note_one_per_day_idx`,
+     `20260421120000_custom_note_daily_limit.sql`), not "once ever" —
+     confirmed by finding real production rows with up to 14 duplicate
+     custom notes for the same (challenge, sender, recipient) triple,
+     which would be impossible if the "once ever" index were truly live.
+   - `challenge_nudges_one_per_day_idx` — same drift shape: recreated by
+     `20260502120000` after `20260427194500_challenge_congrats_unique_per_milestone.sql`
+     had already correctly split it into
+     `_one_per_day_non_congrats_idx` + `_congrats_once_per_activity_idx`,
+     then evidently dropped again directly on production, untracked.
+   - `streak_reminder_log_reminder_kind_check` — the migration files
+     disagree with each other (`20260423131000` adds `'custom_time'`,
+     `20260426120000` and `20260617124000` both later redefine it
+     without `'custom_time'`), but production's actual live constraint
+     currently allows `'custom_time'` — confirmed via
+     `pg_get_constraintdef`. Reasserted production's real definition as
+     the final word in the new migration, applied after every other
+     migration touching this constraint.
+   - Also fixed (narrower, no drift involved): two migrations
+     (`20260416084341`, `20260423131000`) alter `streak_reminder_log`
+     before the migration that creates it/its `reminder_kind` column —
+     a real file-ordering bug (both are backfills of changes originally
+     applied directly on production, given timestamps that don't match
+     true dependency order). Guarded both with an `information_schema`
+     existence check instead of renaming their timestamps — renaming
+     would make `db push` think they're new, unapplied migrations
+     relative to production's already-recorded history.
+   - Also excluded two singleton config tables from `db:snapshot`
+     (`app_version_policy`, `community_access_config`) — each has a
+     migration-seeded default row (`id = 1`) that collided with the
+     same row already present in the production dump.
+   - **Why this couldn't have been caught earlier**: explained directly
+     to the user mid-session. `db push` only checks "has this migration
+     version been applied yet," never "does replaying everything from
+     empty produce this file's assumed state" — that check is only
+     possible with a full local teardown-and-replay, which didn't exist
+     before this session. Not a process failure on the user's part;
+     exactly the class of bug local dev exists to catch. See
+     `app-architecture.md`'s new Local Development section and Known
+     Caution Points entry for the durable writeup.
+
+**3. Still pending from earlier this session, approved but not started**:
+a phased perf-investigation plan for Mini Missions feeling "stuck" at
+~130 missions (`/Users/raktimmacbook/.claude/plans/reflective-baking-sparkle.md`
+— Phase 0 instrumentation for `perfTrace`/`jsThreadProbe`/`logSyncPerf`
+plus Phase 1 cheap fixes: memoize `app/mini/index.tsx`'s tab-count
+badges, add an O(1) fast path to `habitStore.ts`'s
+`mergeDirtyIdsByReference` for the append-only case. User approved the
+plan via `ExitPlanMode`, then redirected to committing already-done work
+before this got implemented — no code written for it yet. A separate,
+larger pagination/hot-window architecture discussion (fetch-level
+pagination for Mini Missions/Home/Profile) was explicitly deferred
+pending real numbers from that same Phase 0 instrumentation, and a
+tabs-wide pagination/search audit (`docs/CURRENT_WORK.md`'s prior entry
+already covers the initial findings) is still just a report, nothing
+implemented.
+
+**Not committed**: none of this session's local-dev files are committed
+— user didn't ask. The one production-facing migration was pushed
+directly by the user (`npm run db:push`), independent of any local git
+commit state.
 
 ## Session Handoff (2026-09-10, end of session)
 

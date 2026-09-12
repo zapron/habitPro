@@ -2,6 +2,52 @@
 
 This is a concise chronological log for future sessions. Keep secrets out of this file.
 
+## 2026-09-13
+
+### Local-only Supabase dev environment (Docker + CLI, no paid branching) + three real production schema-drift fixes
+
+User wanted to test migrations locally before `db:push`, without paying
+for Supabase's cloud Branching (Pro plan). Built: Docker Desktop + four
+new `package.json` scripts (`db:start`/`db:stop`/`db:reset`/`db:snapshot`),
+`supabase/seed.sql` untracked from git and gitignored (now holds a full
+production data snapshot, all 61 users, per explicit "keep it fully
+synced, re-pullable anytime" instruction), a manually-prepended local
+login row matching the user's real production `user_id` so their real
+data shows up signing in locally, and `.env.local` pointing the app at
+the local stack. Verified end-to-end in the iOS simulator — real habits/
+XP/notifications loading from local Postgres.
+
+- **Caught a real security near-miss mid-session**: the first snapshot
+  attempt dumped the `auth` schema too (real Google OAuth tokens, in
+  plaintext), contradicting Supabase's own docs about what `--data-only`
+  excludes. Found by inspecting the dump's actual contents rather than
+  trusting the "succeeded" message; fixed with `--schema public`. Never
+  reached git — was gitignored from the start — but a genuine reminder
+  to verify tool output content, not just its exit status, across any
+  security boundary.
+- **Found and fixed three genuine, pre-existing production schema-drift
+  issues** — none introduced this session, all invisible to `db push`
+  (which only applies against an already-live database, never replays
+  from empty) and only surfaced because this was the first-ever
+  from-scratch migration replay: two `challenge_nudges` unique indexes
+  exist in migration files but were dropped directly on production,
+  untracked (confirmed via `pg_indexes`/real duplicate-row counts, e.g.
+  14 duplicate custom notes for one sender/recipient pair — proof the
+  "once per day" rule is what's actually live, not "once ever"), and
+  `streak_reminder_log`'s `reminder_kind` check constraint disagrees
+  between migration files and production's real current definition. All
+  three captured in one new migration, confirmed no-op before AND after
+  pushing to production. Also fixed two unrelated file-ordering bugs
+  (migrations altering a table/column before the migration that creates
+  it) with an `information_schema` existence guard rather than
+  reordering timestamps (which would've made `db push` re-attempt
+  already-applied migrations on production).
+- Explained clearly to the user why none of this was catchable with
+  their existing workflow (always writing a migration file, always
+  `db push`) — `db push` structurally cannot detect this class of issue;
+  only a full local teardown-and-replay can, which didn't exist before
+  today. Not a process failure on their part.
+
 ## 2026-09-10
 
 ### Freeform Mini Missions (solo + Live Squad), Home accent color swap, two live bug fixes, one perf fix pending test

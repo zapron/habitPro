@@ -1028,6 +1028,53 @@ Important backend design points:
 - When changing payload shape, update both insertion RPC/client parsing and notification routing.
 - Destructive lifecycle operations should go through RPCs, not direct client deletes, so related community wins, repairs, challenge membership/activity, and social artifacts are cleaned consistently.
 
+## Local Development
+
+Added 2026-09-13. No paid Supabase cloud Branching (org is on the Free
+plan; user explicitly ruled it out) — local-only via Docker + the
+Supabase CLI instead.
+
+Scripts (`package.json`, mirror the existing `db:*` naming):
+
+- `npm run db:start` / `npm run db:stop` — boots/stops the full local
+  stack (Postgres/Auth/Storage/Studio, via Docker) at fixed local ports
+  already configured in `supabase/config.toml`; applies every migration
+  in `supabase/migrations/` fresh on each start.
+- `npm run db:reset` — wipes the local database, replays every migration
+  in order, then runs `supabase/seed.sql`. **Run this before every
+  `db:push`** — it's the only thing that can catch a migration whose
+  timestamp doesn't reflect its true dependency order, since `db push`
+  only checks "has this version been applied yet" against an
+  already-live database and never needs to replay from empty. See Known
+  Caution Points for three real cases this caught on its first run.
+- `npm run db:snapshot` — `supabase db dump --data-only --linked --schema
+  public --exclude public.app_version_policy --exclude
+  public.community_access_config -f supabase/seed.sql`. Pulls a full
+  copy of production's `public` schema data into the local seed file, on
+  demand, per explicit user preference ("keep it re-syncable whenever I
+  want" — there is no continuous/automatic sync, this is the manual
+  refresh). The two `--exclude`s are singleton config tables a migration
+  already seeds a default row into (`app_version_policy`,
+  `community_access_config`) — dumping them collides with that row's
+  primary key on `db:reset`.
+- **`--schema public` is required, not optional** — `--data-only`
+  without it dumps the `auth`/`storage` schemas too, including real
+  users' OAuth access/refresh tokens in plaintext (confirmed the hard
+  way; contradicts what Supabase's own docs claim `--data-only`
+  excludes). Never drop this flag from `db:snapshot`.
+- `supabase/seed.sql` is gitignored (`supabase/.gitignore`) — it holds a
+  full production data snapshot (all users) when present, must never be
+  committed. A short block is manually prepended to it (not part of the
+  dump) creating a local-only `auth.users`/`auth.identities` row with
+  the developer's real production `user_id` and a fresh local-only
+  password, so their real dumped data attaches to a working local login
+  by matching that same id. Fresh test users need no special setup —
+  just sign up against local Supabase normally.
+- `.env.local` (gitignored) points the app at the local stack
+  (`http://127.0.0.1:54321` + the local anon key `supabase start`
+  prints) — Expo loads it over `.env` automatically. Delete/rename it to
+  point back at production.
+
 ## Performance Patterns Already Used
 
 Several flows were optimized for older phones:
@@ -1298,6 +1345,7 @@ original palette, unchanged) or `minimalistDarkTheme`/`minimalistLightTheme`
 - Do not reset/revert unrelated local changes.
 - Treat Supabase migrations and RPCs as part of the app contract.
 - `rpc_sync_dirty_state` (the habit/mini push RPC) parses an explicit column list via `jsonb_to_recordset` — a new synced field needs a migration to add it there too, or it's silently dropped with no error. See the Sync Architecture section above.
+- **Migration files can silently disagree with what's actually live on production, and `supabase db push` cannot detect it.** Found 2026-09-13 setting up local dev (the first-ever from-scratch `supabase db reset` in this project's history): three real cases where a migration file's on-disk content didn't match production's actual live schema — two `challenge_nudges` unique indexes that migration files create but production doesn't actually have (dropped directly on production at some point, outside any migration — proven by finding real rows that violate the "still active" index, e.g. 14 duplicate custom notes for one sender/recipient pair, impossible if that index were truly enforced), and one `streak_reminder_log` check constraint where migration files disagree with each other about the final allowed values and production's real constraint matches neither the earliest nor the latest file, but an even-later untracked change. Root cause: `db push` only ever asks "has this migration version been applied yet" against a database that's already alive — it never needs to verify that replaying every file from empty produces the state it assumes, so a file with a timestamp that doesn't reflect its true dependency order, or a manual Dashboard/SQL-editor change that was never captured as a migration at all, is invisible to it. Only a full local teardown-and-replay surfaces this (see Local Development section above) — this is not a sign of a prior process failure, it is specifically the class of bug that workflow cannot catch. Fixed via a new migration that reasserts production's real, current, queried-directly state as the final word (confirmed no-op before pushing, and re-confirmed no-op after). When a from-scratch local replay fails on a constraint/index that "should" already be satisfied by real data, query production directly (`pg_indexes`, `pg_get_constraintdef`) to find out what's actually live before assuming the migration file's stated intent is still accurate — don't guess from the file history alone.
 - Notification routes exist in two places and must stay aligned.
 - **On Android, `KeyboardAvoidingView behavior="height"` inside a `<Modal>` can visibly jitter/flicker as the keyboard dismisses.** Android reports the keyboard's frame in several rapid steps during the dismiss animation; `"height"` mode resizes the component's actual `height` style on every one of those steps, forcing a full re-layout each time. `behavior="padding"` (animating `paddingBottom` instead) is far cheaper and doesn't thrash layout the same way. Found 2026-08-14 in `GroupChallengeSheet.tsx`/`LiveMiniInviteSheet.tsx` (both `<Modal>`-based invite-search sheets that had switched Android from no `behavior` at all to `"height"` on 2026-08-12 to fix the keyboard covering the search input — that fix was correct in principle but picked the wrong mode). Fixed by switching both to `behavior="padding"` on both platforms with `keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 12}`, matching `CustomNudgeModal.tsx`'s already-shipped, stable pattern for the same `<Modal>` + `KeyboardAvoidingView` structure. Default to `"padding"` over `"height"` for any new Modal-hosted keyboard-avoiding view in this app.
 - **Navigation focus (`useIsFocused`) is not the same as "the user is actually looking at the app."** Expo Router keeps a screen marked "focused" even while the whole app is backgrounded (phone locked, user switched apps) — a screen-focus check alone cannot tell foregrounded-and-visible apart from backgrounded-but-still-the-active-route. Found 2026-08-21 building the mini-mission reminder chime: suppressing the OS `mini_warn` notification on navigation-focus alone would have silently dropped the warning for a mission nobody was actually looking at. Fixed by combining `isFocused` with `AppState.currentState === "active"` (see `app/mini/[id].tsx`'s focus-tracking effect and `src/lib/miniMissionFocusTracker.ts`), re-checked at the moment a scheduled action actually fires, not when it was scheduled. Any future "is the user looking at this screen right now" gate should combine both, not just navigation focus.

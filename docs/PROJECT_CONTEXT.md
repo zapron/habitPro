@@ -345,7 +345,25 @@ Supabase:
 npm run db:login
 npm run db:link
 npm run db:push
+npm run db:start      # local dev stack (Docker), see below
+npm run db:reset      # wipe + replay all migrations + seed.sql locally
+npm run db:snapshot   # pull fresh production data into supabase/seed.sql
+npm run db:stop
 ```
+
+### Local Development (added 2026-09-13)
+
+No paid Supabase cloud Branching — local-only via Docker + the CLI
+instead (org is on the Free plan). Full detail in `app-architecture.md`'s
+Local Development section. The one thing to never forget: **run
+`npm run db:reset` before every `npm run db:push`** — it's the only way
+to catch a migration whose timestamp doesn't reflect its true dependency
+order, which `db push` alone cannot detect (confirmed the hard way —
+three real, pre-existing production schema-drift cases were found this
+way on the very first local reset, see `app-architecture.md`'s Known
+Caution Points). `supabase/seed.sql` is gitignored and holds a full
+production data snapshot (all users) when present locally — never
+commit it.
 
 ## How To Resume In A New Chat
 
