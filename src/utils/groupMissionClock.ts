@@ -102,6 +102,29 @@ function manualEndDateFromTemplate(
 }
 
 /**
+ * True only when `a` and `b` represent a genuinely different instant — not
+ * just a different string spelling of the same one. "2026-08-13T18:30:00+00:00"
+ * and "2026-08-13T18:30:00.000Z" are the same moment (one round-trips through
+ * `Date.toISOString()`, the other comes straight off a Postgres timestamp
+ * column); a plain `===` treats them as different every time. Found
+ * 2026-09-15: this was making `alignGroupHabitToChallengeStart` redo its full
+ * per-day remap on every single sync, for every group-challenge habit,
+ * because the "nothing changed" check never actually matched (~230ms wasted
+ * per sync on a real account). Nullish on both sides (habits with no end
+ * date at all) must short-circuit to "unchanged" before any `Date` parsing —
+ * `new Date(undefined).getTime()` is `NaN`, and `NaN !== NaN` is always
+ * `true` in JS, which would otherwise flip "both missing" into "changed."
+ */
+function dateValueChanged(a: string | null | undefined, b: string | null | undefined): boolean {
+  if (a == null && b == null) return false;
+  if (a == null || b == null) return true;
+  const ta = new Date(a).getTime();
+  const tb = new Date(b).getTime();
+  if (Number.isNaN(ta) || Number.isNaN(tb)) return a !== b;
+  return ta !== tb;
+}
+
+/**
  * Returns a new habit with canonical `startDate`, remapped dates/memories, and
  * manual `endDate` aligned to the group template when present.
  */
@@ -122,7 +145,7 @@ export function alignGroupHabitToChallengeStart(
     endDate = manualEndDateFromTemplate(canonical, td, habitTemplate);
   }
 
-  if (habit.startDate === canonical && habit.endDate === endDate) {
+  if (!dateValueChanged(habit.startDate, canonical) && !dateValueChanged(habit.endDate, endDate)) {
     return habit;
   }
 
