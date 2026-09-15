@@ -38,6 +38,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Path, Rect } from "react-native-svg";
 
 import { Screen } from "../../src/components/Screen";
+import { Button } from "../../src/components/Button";
 import { GlassTopHighlight } from "../../src/components/GlassTopHighlight";
 import { useListCardEntrance } from "../../src/hooks/useListCardEntrance";
 import { useCardMaterialize } from "../../src/hooks/useCardMaterialize";
@@ -45,7 +46,6 @@ import { useReducedMotion } from "../../src/hooks/useReducedMotion";
 import { useTheme } from "../../src/context/ThemeContext";
 import { useAuth } from "../../src/context/AuthContext";
 import { useToast } from "../../src/context/ToastContext";
-import { showAppAlert } from "../../src/context/AppDialogContext";
 import { usePlusUpsell } from "../../src/context/PlusUpsellContext";
 import { useUsernameGate } from "../../src/context/UsernameGateContext";
 import { CommunityWinImageLightbox, type CommunityLightboxSlide } from "../../src/components/CommunityWinImageLightbox";
@@ -845,9 +845,16 @@ function MissionGalleryModal({
   const [journeyError, setJourneyError] = useState<string | null>(null);
   const [cheeringIds, setCheeringIds] = useState<Set<string>>(() => new Set());
   const hasDescription = Boolean(mission?.description?.trim());
+  // Rendered as a local overlay inside this same Modal rather than via
+  // showAppAlert's own top-level Modal: on iOS, presenting a second native
+  // Modal while this fullScreen one is already visible stacks it behind the
+  // current one (only revealed once this Modal closes) — Android's Modal
+  // windowing doesn't have that restriction, which is why this only showed
+  // up as an iOS bug.
+  const [showDescription, setShowDescription] = useState(false);
   const handleShowDescription = useCallback(() => {
     if (!mission) return;
-    showAppAlert(mission.title, missionDescriptionText(mission));
+    setShowDescription(true);
   }, [mission]);
 
   useEffect(() => {
@@ -857,6 +864,7 @@ function MissionGalleryModal({
       setJourneyError(null);
       setJourneyLoading(false);
       setCheeringIds(new Set());
+      setShowDescription(false);
       return;
     }
 
@@ -1158,6 +1166,39 @@ function MissionGalleryModal({
             </Pressable>
           ) : null}
         </ScrollView>
+
+        {showDescription && mission ? (
+          <View style={styles.descriptionOverlayRoot}>
+            <Pressable
+              style={[
+                styles.descriptionBackdrop,
+                { backgroundColor: isDark ? withAlpha(theme.colors.scrim, 62) : withAlpha(theme.colors.scrim, 38) },
+              ]}
+              onPress={() => setShowDescription(false)}
+              accessibilityRole="button"
+              accessibilityLabel="Dismiss description"
+            />
+            <View
+              style={[
+                styles.descriptionSheet,
+                {
+                  backgroundColor: theme.colors.surface,
+                  borderColor: theme.colors.border,
+                  borderRadius: theme.radius.lg,
+                  ...theme.shadow.card,
+                },
+              ]}
+            >
+              <Text style={[styles.descriptionTitle, { color: theme.colors.textPrimary, fontSize: theme.typography.h3 }]}>
+                {mission.title}
+              </Text>
+              <Text style={[styles.descriptionBody, { color: theme.colors.textSecondary, fontSize: theme.typography.body }]}>
+                {missionDescriptionText(mission)}
+              </Text>
+              <Button title="OK" variant="primary" onPress={() => setShowDescription(false)} />
+            </View>
+          </View>
+        ) : null}
       </View>
     </Modal>
   );
@@ -2406,6 +2447,16 @@ const styles = StyleSheet.create({
   storyEmptyTitle: { fontSize: 14, lineHeight: 18, fontWeight: "900" },
   storyEmptyBody: { fontSize: 11, lineHeight: 15, fontWeight: "800", marginTop: 2 },
   galleryRoot: { flex: 1 },
+  descriptionOverlayRoot: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 16,
+  },
+  descriptionBackdrop: { ...StyleSheet.absoluteFillObject },
+  descriptionSheet: { width: "100%", maxWidth: 420, borderWidth: 1, padding: 22, zIndex: 1, gap: 12 },
+  descriptionTitle: { fontWeight: "900" },
+  descriptionBody: { lineHeight: 24, fontWeight: "500" },
   galleryHeader: {
     minHeight: 58,
     paddingHorizontal: 16,

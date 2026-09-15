@@ -43,6 +43,7 @@ import {
 import { useShallow } from "zustand/react/shallow";
 
 import { Screen } from "../src/components/Screen";
+import { Button } from "../src/components/Button";
 import { AnimatedCountText } from "../src/components/AnimatedCountText";
 import { LevelXpRing } from "../src/components/LevelXpRing";
 import { GlassTopHighlight } from "../src/components/GlassTopHighlight";
@@ -51,13 +52,14 @@ import { useCardMaterialize } from "../src/hooks/useCardMaterialize";
 import { useReducedMotion } from "../src/hooks/useReducedMotion";
 import { useAuth } from "../src/context/AuthContext";
 import { useTheme } from "../src/context/ThemeContext";
-import { showAppAlert } from "../src/context/AppDialogContext";
 import { useHabitStore } from "../src/store/habitStore";
 import type { AppTheme } from "../src/styles/theme";
 import type { Habit, MiniMission, StreakMemory } from "../src/types/habit";
 import {
+  fetchCommunityPlayerMissionJourneyPage,
   fetchCommunityPlayerStory,
   fetchCommunityPlayerStoryPage,
+  mergeCommunityPlayerStoryPosts,
   type CommunityMemoryGalleryItem,
   type CommunityPlayerMissionStory,
   type CommunityPlayerProfile,
@@ -88,6 +90,7 @@ const STORY_FETCH_LIMIT = 48;
 const HERO_PHOTO_LIMIT = 8;
 const MISSION_STORY_LIMIT = 8;
 const MINI_POST_LIMIT = 20;
+const GALLERY_PAGE_SIZE = 12;
 const DAY_PILL_BACKGROUND = "rgba(14, 116, 144, 0.86)";
 const COMMUNITY_BADGE_BACKGROUND = "rgba(79, 70, 229, 0.9)";
 const LIKE_BADGE_BACKGROUND = "rgba(15, 23, 42, 0.76)";
@@ -1261,6 +1264,7 @@ function GalleryMomentCard({
 
 function MissionGalleryModal({
   mission,
+  userId,
   visible,
   theme,
   imagesEnabled,
@@ -1269,6 +1273,7 @@ function MissionGalleryModal({
   journeyMode,
 }: {
   mission: CommunityPlayerMissionStory | null;
+  userId: string | null;
   visible: boolean;
   theme: AppTheme;
   imagesEnabled: boolean;
@@ -1277,19 +1282,117 @@ function MissionGalleryModal({
   journeyMode: JourneyMode;
 }) {
   const { width } = useWindowDimensions();
+  const { isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const horizontalPad = 12;
   const gap = 8;
   const columnCount = width >= 720 ? 3 : 2;
   const cardWidth = Math.floor((width - horizontalPad * 2 - gap * (columnCount - 1)) / columnCount);
+
+  const [journeyPosts, setJourneyPosts] = useState<CommunityPlayerStoryPost[]>([]);
+  const [journeyHasMore, setJourneyHasMore] = useState(false);
+  const [journeyPublicFetchedCount, setJourneyPublicFetchedCount] = useState(0);
+  const [journeyLoading, setJourneyLoading] = useState(false);
+  const [journeyLoadingMore, setJourneyLoadingMore] = useState(false);
+  const [journeyError, setJourneyError] = useState<string | null>(null);
+  const [showDescription, setShowDescription] = useState(false);
+
+  useEffect(() => {
+    if (!visible || !mission) {
+      setJourneyPosts([]);
+      setJourneyHasMore(false);
+      setJourneyPublicFetchedCount(0);
+      setJourneyError(null);
+      setJourneyLoading(false);
+      setShowDescription(false);
+      return;
+    }
+
+    // Seed with whatever's already known (from the story list's own fetch progress
+    // so far, plus every local-only private post) so the modal never opens empty,
+    // then fetch this one mission's complete, paginated public history underneath.
+    setJourneyPosts(mission.posts);
+    setJourneyHasMore(false);
+    setJourneyPublicFetchedCount(0);
+    setJourneyError(null);
+
+    if (!userId) return;
+
+    let cancelled = false;
+    setJourneyLoading(true);
+    fetchCommunityPlayerMissionJourneyPage({
+      userId,
+      missionKey: mission.key,
+      missionTitle: mission.title,
+      offset: 0,
+      limit: GALLERY_PAGE_SIZE,
+    })
+      .then((res) => {
+        if (cancelled) return;
+        if (res.ok === true) {
+          const privateOnly = journeyMode === "private" ? mission.posts.filter(isPrivateStoryPost) : [];
+          const merged = dedupeStoryPostsPreferPublic([...res.page.posts, ...privateOnly]).sort(
+            (a, b) => sortTime(b.createdAt) - sortTime(a.createdAt),
+          );
+          setJourneyPosts(merged);
+          setJourneyHasMore(res.page.hasMore);
+          setJourneyPublicFetchedCount(res.page.posts.length);
+        } else {
+          setJourneyError(res.error);
+        }
+      })
+      .catch((e: unknown) => {
+        if (cancelled) return;
+        setJourneyError(e instanceof Error ? e.message : "Could not load this mission's journey.");
+      })
+      .finally(() => {
+        if (!cancelled) setJourneyLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [journeyMode, mission, userId, visible]);
+
+  const loadMoreJourney = useCallback(async () => {
+    if (!mission || !userId || journeyLoadingMore || journeyLoading || !journeyHasMore) return;
+    setJourneyLoadingMore(true);
+    setJourneyError(null);
+    try {
+      const res = await fetchCommunityPlayerMissionJourneyPage({
+        userId,
+        missionKey: mission.key,
+        missionTitle: mission.title,
+        offset: journeyPublicFetchedCount,
+        limit: GALLERY_PAGE_SIZE,
+      });
+      if (res.ok === true) {
+        setJourneyPosts((current) => mergeCommunityPlayerStoryPosts(current, res.page.posts));
+        setJourneyHasMore(res.page.hasMore);
+        setJourneyPublicFetchedCount((count) => count + res.page.posts.length);
+      } else {
+        setJourneyError(res.error);
+      }
+    } catch (e) {
+      setJourneyError(e instanceof Error ? e.message : "Could not load more of this mission's journey.");
+    } finally {
+      setJourneyLoadingMore(false);
+    }
+  }, [journeyHasMore, journeyLoading, journeyLoadingMore, journeyPublicFetchedCount, mission, userId]);
+
   const columns = useMemo(() => {
-    const posts = mission?.posts ?? [];
-    return buildZigzagMasonryColumns(posts, columnCount, cardWidth, gap);
-  }, [cardWidth, columnCount, gap, mission?.posts]);
+    return buildZigzagMasonryColumns(journeyPosts, columnCount, cardWidth, gap);
+  }, [cardWidth, columnCount, gap, journeyPosts]);
   const hasDescription = Boolean(mission?.description?.trim());
+  // Rendered as a local overlay inside this same Modal rather than via
+  // showAppAlert's own top-level Modal: on iOS, presenting a second native
+  // Modal while this fullScreen one is already visible stacks it behind the
+  // current one (only revealed once this Modal closes) — Android's Modal
+  // windowing doesn't have that restriction, which is why this only showed
+  // up as an iOS bug.
   const handleShowDescription = useCallback(() => {
     if (!mission) return;
-    showAppAlert(mission.title, missionDescriptionText(mission));
+    setShowDescription(true);
   }, [mission]);
 
   if (!visible) return null;
@@ -1330,7 +1433,8 @@ function MissionGalleryModal({
                 ) : null}
               </View>
               <Text style={[styles.gallerySubtitle, { color: theme.colors.textMuted }]} numberOfLines={1}>
-                {mission?.postCount ?? 0} memories - {mission?.photoCount ?? 0} photos
+                {journeyPosts.length || mission?.postCount || 0} loaded -{" "}
+                {journeyPosts.filter((post) => post.memoryImageUrl).length || mission?.photoCount || 0} photos
               </Text>
             </View>
             <Pressable onPress={onClose} style={[styles.galleryClose, { borderColor: theme.colors.border, backgroundColor: theme.colors.surface }]}>
@@ -1363,8 +1467,88 @@ function MissionGalleryModal({
                 </View>
               ))}
             </View>
+
+            {journeyLoading ? (
+              <View style={styles.galleryStatusRow}>
+                <ActivityIndicator size="small" color={theme.colors.indigo[400]} />
+                <Text style={[styles.gallerySubtitle, { color: theme.colors.textMuted }]}>Loading journey...</Text>
+              </View>
+            ) : null}
+
+            {journeyError ? (
+              <Text style={[styles.gallerySubtitle, { color: theme.colors.red[500], paddingHorizontal: horizontalPad }]}>
+                {journeyError}
+              </Text>
+            ) : null}
+
+            {journeyHasMore ? (
+              <View style={styles.loadMoreWrap}>
+                <Pressable
+                  onPress={loadMoreJourney}
+                  disabled={journeyLoadingMore}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Load more ${mission?.title ?? "journey"} moments`}
+                  style={[
+                    styles.loadMoreButton,
+                    {
+                      borderColor: isDark ? withAlpha(theme.colors.indigo[400], 42) : withAlpha(theme.colors.indigo[600], 20),
+                      opacity: journeyLoadingMore ? 0.78 : 1,
+                    },
+                  ]}
+                >
+                  <LinearGradient
+                    colors={
+                      isDark
+                        ? (["rgba(79, 70, 229, 0.82)", "rgba(6, 182, 212, 0.62)"] as const)
+                        : ([theme.colors.indigo[500], theme.colors.cyan[500]] as const)
+                    }
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.loadMoreGradient}
+                  >
+                    {journeyLoadingMore ? <ActivityIndicator size="small" color={theme.colors.white} /> : null}
+                    <Text style={[styles.loadMoreText, { color: theme.colors.white }]}>
+                      {journeyLoadingMore ? "Loading..." : "Load more journey"}
+                    </Text>
+                  </LinearGradient>
+                </Pressable>
+              </View>
+            ) : null}
           </ScrollView>
         </View>
+
+        {showDescription && mission ? (
+          <View style={styles.descriptionOverlayRoot}>
+            <Pressable
+              style={[
+                styles.descriptionBackdrop,
+                { backgroundColor: isDark ? withAlpha(theme.colors.scrim, 62) : withAlpha(theme.colors.scrim, 38) },
+              ]}
+              onPress={() => setShowDescription(false)}
+              accessibilityRole="button"
+              accessibilityLabel="Dismiss description"
+            />
+            <View
+              style={[
+                styles.descriptionSheet,
+                {
+                  backgroundColor: theme.colors.surface,
+                  borderColor: theme.colors.border,
+                  borderRadius: theme.radius.lg,
+                  ...theme.shadow.card,
+                },
+              ]}
+            >
+              <Text style={[styles.descriptionTitle, { color: theme.colors.textPrimary, fontSize: theme.typography.h3 }]}>
+                {mission.title}
+              </Text>
+              <Text style={[styles.descriptionBody, { color: theme.colors.textSecondary, fontSize: theme.typography.body }]}>
+                {missionDescriptionText(mission)}
+              </Text>
+              <Button title="OK" variant="primary" onPress={() => setShowDescription(false)} />
+            </View>
+          </View>
+        ) : null}
       </View>
     </Modal>
   );
@@ -2238,6 +2422,7 @@ export default function MyJourneyScreen() {
       <MissionGalleryModal
         visible={selectedMission !== null}
         mission={selectedMission}
+        userId={userId}
         theme={theme}
         imagesEnabled={imagesEnabled}
         onClose={() => setSelectedMission(null)}
@@ -2531,6 +2716,17 @@ const styles = StyleSheet.create({
   galleryScrollContent: { paddingBottom: 28 },
   galleryMasonryRow: { flexDirection: "row", alignItems: "flex-start" },
   galleryMasonryColumn: {},
+  galleryStatusRow: { flexDirection: "row", alignItems: "center", gap: 8, justifyContent: "center", paddingVertical: 14 },
+  descriptionOverlayRoot: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 16,
+  },
+  descriptionBackdrop: { ...StyleSheet.absoluteFillObject },
+  descriptionSheet: { width: "100%", maxWidth: 420, borderWidth: 1, padding: 22, zIndex: 1, gap: 12 },
+  descriptionTitle: { fontWeight: "900" },
+  descriptionBody: { lineHeight: 24, fontWeight: "500" },
   galleryMomentCard: { position: "relative", borderRadius: 13, borderWidth: 1, overflow: "hidden" },
   galleryMomentImage: { overflow: "hidden" },
   galleryFloatingDayPill: { position: "absolute", left: 9, top: 9, zIndex: 2, minHeight: 20, borderRadius: 999, paddingHorizontal: 7, alignItems: "center", justifyContent: "center" },
