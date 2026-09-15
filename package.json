@@ -5,6 +5,7 @@
   "scripts": {
     "start": "expo start",
     "db:link": "npx supabase link",
+    "predb:push": "npm run db:reset",
     "db:push": "npx supabase db push",
     "db:migration:new": "npx supabase migration new",
     "db:migration:list": "npx supabase migration list",

@@ -1075,6 +1075,25 @@ Scripts (`package.json`, mirror the existing `db:*` naming):
   prints) — Expo loads it over `.env` automatically. Delete/rename it to
   point back at production.
 
+**Migration workflow — read `pre_migration.md` in full before touching
+any migration.** Short version: the agent never applies a migration to
+production itself (not `db:push`, not the `apply_migration` MCP tool,
+not `execute_sql` beyond a `select`) — only the user runs `db:push`,
+in their own terminal, after the agent has tested it locally. This is
+also technically enforced now: `db:push` has a `predb:push` npm hook
+that runs `db:reset` automatically first, so a migration that doesn't
+replay cleanly from empty can't be pushed at all, by anyone. The
+per-migration checklist:
+
+1. Write the migration with a correctly ordered timestamp (after
+   whatever it depends on).
+2. `npm run db:reset` locally — must succeed cleanly.
+3. If touching something possibly changed directly on production
+   historically, query production directly first (read-only `select`)
+   to confirm real current state — don't assume from file history.
+4. Tell the user what the migration does and that it's tested.
+5. The user runs `npm run db:push` — never the agent.
+
 ## Performance Patterns Already Used
 
 Several flows were optimized for older phones:

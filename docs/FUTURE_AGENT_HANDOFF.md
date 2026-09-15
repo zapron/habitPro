@@ -10,11 +10,17 @@ Read in order:
 2. `docs/PROJECT_CONTEXT.md`
 3. `docs/CURRENT_WORK.md`
 4. `app-architecture.md`
+5. `pre_migration.md` — required reading before touching any Supabase migration, not optional.
 
 Then inspect the files relevant to the user request.
 
 ## Do Not Do
 
+- **Do not apply a Supabase migration to production yourself, ever** —
+  not `npm run db:push`/`supabase db push`, not the `apply_migration`
+  MCP tool, not `execute_sql` for anything beyond a `select`. Write the
+  migration, test it locally, then tell the user to run `db:push`
+  themselves. Full rules in `pre_migration.md`.
 - Do not revert uncommitted changes without explicit user approval.
 - Do not create commits unless the user asks.
 - Do not include unrelated workspace files in commits.
@@ -30,10 +36,12 @@ Then inspect the files relevant to the user request.
   `npm run db:start`/`db:reset`/`db:snapshot` (Docker required). Any new
   migration should be tested with `npm run db:reset` (replays every
   migration from empty) **before** `npm run db:push` — this is now the
-  standing practice, not optional. It's the only thing that catches a
-  migration whose timestamp doesn't reflect its true dependency order,
-  which `db push` structurally cannot detect (it only checks "has this
-  version been applied," never "does replaying from empty work"). See
+  standing practice, not optional, and is also technically enforced: a
+  `predb:push` npm hook runs `db:reset` automatically before `db:push`
+  can execute. It's the only thing that catches a migration whose
+  timestamp doesn't reflect its true dependency order, which `db push`
+  structurally cannot detect (it only checks "has this version been
+  applied," never "does replaying from empty work"). See
   `app-architecture.md`'s Local Development section and its new Known
   Caution Points entry for the three real drift cases this already
   caught. `supabase/seed.sql` is gitignored and holds real production

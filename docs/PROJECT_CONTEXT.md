@@ -42,13 +42,15 @@ Read these in this order for future work:
 2. `docs/PROJECT_CONTEXT.md`
 3. `docs/CURRENT_WORK.md`
 4. `app-architecture.md`
-5. Feature-specific files from the request.
+5. `pre_migration.md` — before touching any Supabase migration.
+6. Feature-specific files from the request.
 
 ## Developer Preferences
 
 - Do not create git commits unless the user explicitly asks.
 - If the user asks for phased commits, show staged scope clearly.
 - Do not push unless explicitly asked.
+- Never apply a Supabase migration to production directly (`db:push`, `apply_migration`, or `execute_sql` beyond a `select`) — write it, test with `db:reset` locally, then tell the user to run `db:push` themselves. See `pre_migration.md`.
 - Keep UI polished and compact, especially on iPhone.
 - Avoid AI/magic styling and avoid the `Sparkles` / magic-wand style icon.
 - Avoid em dash in user-facing text when the user asks for concise copy.

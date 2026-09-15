@@ -2,6 +2,7 @@
 
 - On new sessions, read `docs/PROJECT_CONTEXT.md` and `docs/CURRENT_WORK.md` after this file.
 - For longer sessions, also scan `docs/WORK_HISTORY.md` for the latest dated handoff.
+- Before writing or applying any Supabase migration, read `pre_migration.md`. The short version: never run `npm run db:push`, the `apply_migration` MCP tool, or any writing/`execute_sql` call against production yourself — write the migration, test it locally (`npm run db:reset`), then tell the user to run `npm run db:push` themselves. Read-only `select` queries against production for diagnosis are fine.
 - Do **not** create git commits unless the user explicitly approves first.
 - When proposing a commit, show what will be included (staged diff/stat) and ask for approval.
 - Do **not** push to remote unless the user explicitly asks.
