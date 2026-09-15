@@ -383,7 +383,7 @@ function sanitizeRemoteStreakMemories(
   return changed ? next : memories;
 }
 
-function habitFromRow(row: {
+export function habitFromRow(row: {
   user_id: string;
   id: string;
   title: string;
