@@ -70,8 +70,10 @@ second native `Modal` — mirroring the close-then-reopen trick this same
 file already used for the photo lightbox. User confirmed fixed on device
 in both places.
 
-**4. OTA**: see the note appended below this entry once the production
-update finishes publishing.
+**4. OTA**: published to production. Update group
+`d7fae201-f27e-4a91-b2bd-934d6dd4e121`, runtime version `1.1.35`
+(unchanged), commit `715f609`. JS/TSX-only per `app-architecture.md`'s
+OTA-safe criteria — no native module/config changes, no version bump.
 
 **Not yet done, explicitly next**: Phase 2's RPC has no UI yet (Home's
 reports segment "Load more" would still be a no-op today, same reasoning

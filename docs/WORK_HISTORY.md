@@ -29,6 +29,9 @@ Commits `0ec4ae6`, `adc17ed`. Full detail in `docs/CURRENT_WORK.md`'s
   (nested-native-Modal stacking issue) — fixed in both `my-journey.tsx`
   and `community-player/[id].tsx` by rendering it as a local overlay
   inside the gallery's own Modal. Confirmed fixed on device.
+- OTA published to production: update group
+  `d7fae201-f27e-4a91-b2bd-934d6dd4e121`, runtime `1.1.35` (unchanged),
+  commit `715f609`.
 
 ## 2026-09-16 (proactive mid-session handoff)
 
