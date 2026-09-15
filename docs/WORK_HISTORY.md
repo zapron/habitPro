@@ -2,6 +2,46 @@
 
 This is a concise chronological log for future sessions. Keep secrets out of this file.
 
+## 2026-09-15
+
+### Migration-safety rule codified, real perf tracing implemented, and a real ~185ms/sync bug found + fixed
+
+Three commits (`5930dc8`, `dd85dcd`, `62c1053`).
+
+- **`pre_migration.md`**: explicit standing rule that the agent never
+  applies a migration to production itself — only the user runs
+  `db:push`. Wired into `agent.md`/`PROJECT_CONTEXT.md`/
+  `FUTURE_AGENT_HANDOFF.md`'s read order. Plus a `predb:push` npm hook
+  that auto-runs `db:reset` before `db:push`, so a broken migration
+  can't be pushed by anyone.
+- **`traceAsync`/`traceSync` had been no-op stubs the entire time**,
+  despite being called at dozens of existing sites across the app —
+  every one of those calls was silently measuring nothing. Implemented
+  both for real (shared 50-entry ring buffer, `__DEV__` logging), then
+  added new tracing at the specific suspects behind "Mini Missions/Home
+  feel stuck at 130+ missions": focus-refresh's pull/setState chain,
+  the per-mutation `mergeDirtyIdsByReference`, Mini Missions' tab-count
+  filters, account-backup's `JSON.stringify`, cold-start's read loop.
+- **Real numbers cleared two of the original suspects**: cold-start
+  hydrate and the tab-count filters are both already fast (sub-5ms) —
+  the "Phase 1" memoization fix planned earlier this session turned out
+  unnecessary, confirmed by measurement instead of guessing.
+- **Found the real bug**: `alignGroupHabitToChallengeStart` compared
+  dates with plain `===` — one side from `Date.toISOString()`, the
+  other straight off Postgres, same instant, different string. Confirmed
+  live via temporary diagnostic logging: 31/31 of the user's
+  group-challenge habits hit the expensive per-day remap branch, every
+  single sync, because the "nothing changed" check never actually
+  matched. Fixed with a proper instant-value comparison (with a nullish
+  short-circuit, since `new Date(undefined).getTime()` is `NaN` and
+  `NaN !== NaN`). Measured: `alignOwnHabitsTotal` 229ms → 51ms,
+  `sync.pull.total` 645ms → 460ms, on the user's real account.
+- Not investigated yet: `habitsFromRows` costs ~99ms for 31 habits vs.
+  ~8ms for 200+ minis in `minisFromRows` — ~80x slower per row, possibly
+  a similar-shaped issue.
+- Next up: Mini Missions pagination + search, picking up the audit from
+  the 2026-09-10 entry below.
+
 ## 2026-09-13
 
 ### Local-only Supabase dev environment (Docker + CLI, no paid branching) + three real production schema-drift fixes

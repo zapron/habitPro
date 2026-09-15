@@ -1,6 +1,97 @@
 # HabitPro Current Work
 
-Last updated: 2026-09-13 (end of session — built a full local-only Supabase dev environment (Docker + CLI, no paid cloud branching), and in the process found and fixed real, pre-existing production schema drift across three separate issues that a from-scratch migration replay uniquely exposed. Also: an approved-but-not-yet-started perf plan for Mini Missions from earlier this session (instrumentation + cheap fixes, no backend changes) is still pending. Full detail in the session handoff section immediately below.).
+Last updated: 2026-09-15 (end of session — codified a standing rule that the agent never applies a Supabase migration to production itself (`pre_migration.md`, plus a `predb:push` npm hook enforcing `db:reset` first); implemented real perf tracing (`traceAsync`/`traceSync` had been no-op stubs everywhere); and used it to find + fix a real bug (`alignGroupHabitToChallengeStart` comparing dates by raw string instead of instant, causing ~230ms of wasted work on every single sync). Mini Missions pagination/search work is starting next session. Full detail in the session handoff section immediately below.).
+
+## Session Handoff (2026-09-15, end of session)
+
+**State: `main` is 3 commits ahead of the previous session's tip
+(`069cf50`..`62c1053`), all committed. Not pushed to `origin` (not
+asked). Not OTA'd (no user-facing behavior changed — the fix is a pure
+perf improvement to existing sync logic, nothing new to ship visually).**
+`npx tsc --noEmit` clean after every commit.
+
+**1. Codified the never-apply-a-migration-yourself rule (`5930dc8`).**
+New `pre_migration.md` (repo root, alongside `agent.md`): the agent
+writes and locally tests migrations, but only the user ever runs
+`db:push` (or any write against production) — never the agent, even
+though it has Bash permission to run it directly. Wired into `agent.md`,
+`docs/PROJECT_CONTEXT.md`, and `docs/FUTURE_AGENT_HANDOFF.md`'s read
+order and "Do Not Do" lists so no future session misses it. Also added
+a `predb:push` npm hook that runs `db:reset` automatically before
+`db:push` can execute — technical enforcement on top of the written
+rule, so a migration that doesn't replay cleanly from empty structurally
+cannot be pushed, by anyone.
+
+**2. Implemented real perf tracing — `traceAsync`/`traceSync` had been
+no-op stubs the whole time (`dd85dcd`).** Despite being called at dozens
+of existing sites across the app (`CommunityWinsFeed.tsx`,
+`compete.tsx`, `habit/[id].tsx`, etc.), `perfTrace.ts`'s `traceAsync`
+and `jsThreadProbe.ts`'s `traceSync`/`startJsStallProbe` just called the
+wrapped function and returned — every prior call site had silently been
+measuring nothing since whenever it was added. Gave both a real body:
+time the call, log under `__DEV__`, record into a shared 50-entry ring
+buffer (`getRecentPerfTraces()`). `sync.ts`'s `logSyncPerf` (already
+called at every pull/hydrate stage) started logging for free once its
+body was implemented too.
+
+Added new tracing at the specific suspects behind the user's "Mini
+Missions/Home feel stuck at 130+ missions" report from earlier this
+session: the focus-refresh full-pull/delta-pull/`setState` chain
+(`useRemoteStoreRefreshOnFocus.ts`), `habitStore.ts`'s per-mutation
+`mergeDirtyIdsByReference`, Mini Missions' unmemoized tab-count filters
+(`app/mini/index.tsx`), the account-backup `JSON.stringify`
+(`accountBackup.ts`), and cold-start's per-item read loop
+(`chunkedHabitPersistStorage.ts`).
+
+**Real numbers this produced on the user's actual account (31 habits,
+200+ mini missions)**: cold-start hydrate (~35ms) and the Mini Missions
+tab-count filters (0-5ms) are both already fast — the originally-planned
+"Phase 1" fix (memoizing the tab counts) turned out to be unnecessary,
+confirmed by measurement rather than assumption. The real cost was
+`sync.mapDelta.alignOwnHabitsTotal` at **~230ms per sync** — wildly
+disproportionate for only 31 habits (mini missions, 6x more of them,
+parsed in 2-8ms), pointing at an algorithmic problem rather than data
+volume.
+
+**3. Found and fixed the actual bug (`62c1053`).**
+`alignGroupHabitToChallengeStart` (`src/utils/groupMissionClock.ts`)
+decides whether a group-challenge habit's dates need expensive per-day
+remapping by comparing `habit.startDate === canonical` — but one side
+is produced via `Date.toISOString()` (`"...T18:30:00.000Z"`) and the
+other comes straight off a Postgres timestamp column
+(`"...T18:30:00+00:00"`) — the *same instant*, spelled two different
+ways. Confirmed live via temporary diagnostic logging before writing
+any fix: **31/31 of the user's group-challenge habits hit the expensive
+remap branch, on every single sync**, unconditionally — the "nothing
+changed" fast path had never actually been reachable. Fixed with a new
+`dateValueChanged()` comparing by actual epoch value, with an explicit
+nullish short-circuit first (`new Date(undefined).getTime()` is `NaN`,
+and `NaN !== NaN` in JS, which would otherwise flip "both sides missing
+an end date" into a false "changed" — several of the user's real habits
+hit exactly this shape).
+
+**Measured impact, before/after, same account**:
+`sync.mapDelta.alignOwnHabitsTotal` 229ms → **51ms**;
+`sync.pull.total` 645ms → **460ms**. A genuine ~185ms-per-sync
+improvement from a two-line fix, zero architecture change, zero risk to
+the remap logic itself (untouched, still runs correctly on the rare
+genuine date change — confirmed a handful of legacy habits with a real
+~5.5h discrepancy, consistent with an old IST-offset handling
+inconsistency, still correctly trigger it).
+
+**Separate, smaller, not-yet-investigated finding surfaced by the same
+instrumentation**: `sync.mapDelta.habitsFromRows` costs ~99ms for 31
+habits, vs. ~8ms for 200+ mini missions in `minisFromRows` — habits are
+still ~80x slower per row than minis. Might be a similar-shaped
+inefficiency; not investigated this session.
+
+**Next planned**: pagination + search for Mini Missions (and
+potentially Home), explicitly picking back up from the audit earlier
+this session (`docs/CURRENT_WORK.md`'s 2026-09-10 entry) that found
+Mini Missions/Home/My Journey/Profile all share one fully-loaded local
+array with no server-side pagination, while Compete's Leaderboard,
+Community feed, Notifications, and Cohort detail already have the real
+pattern to copy. Not started yet.
 
 ## Session Handoff (2026-09-13, end of session)
 
