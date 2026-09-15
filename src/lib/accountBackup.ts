@@ -1,6 +1,8 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { InteractionManager } from "react-native";
 import type { HabitStore } from "../types/habit";
+import { traceAsync } from "./perfTrace";
+import { traceSync } from "./jsThreadProbe";
 
 export type AccountBackupSnapshot = Pick<HabitStore, "habits" | "miniMissions" | "xp" | "username"> & {
   savedAt: string;
@@ -156,7 +158,8 @@ async function writeAccountSnapshotBackup(
       return;
     }
     const backups = [next, ...previous].slice(0, MAX_BACKUPS_PER_USER);
-    await AsyncStorage.setItem(key, JSON.stringify(backups));
+    const serialized = traceSync("accountBackup.stringify", () => JSON.stringify(backups), 8);
+    await traceAsync("accountBackup.setItem", () => AsyncStorage.setItem(key, serialized));
     // Update the in-memory cache
     cachedBackups[userId] = backups.filter(isBackupSnapshot);
   } catch (e) {

@@ -1,5 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { PersistStorage, StorageValue } from "zustand/middleware";
+import { traceAsync } from "./perfTrace";
+import { traceSync } from "./jsThreadProbe";
 
 type PersistedHabitState = {
   habits?: Array<{ id: string }>;
@@ -189,46 +191,71 @@ export function createChunkedHabitPersistStorage<S extends PersistedHabitState>(
       return dates.map((date) => habitMemoryKey(name, id, date));
     });
     const miniKeys = manifest.miniMissionIds.map((id) => miniKey(name, id));
-    const pairs = await AsyncStorage.multiGet([...habitKeys, ...habitMemoryKeys, ...miniKeys]);
+    const pairs = await traceAsync(
+      "chunkedPersist.read.multiGet",
+      () => AsyncStorage.multiGet([...habitKeys, ...habitMemoryKeys, ...miniKeys]),
+      { meta: { habitCount: manifest.habitIds.length, miniCount: manifest.miniMissionIds.length } },
+    );
     const byKey = new Map(pairs);
     const habits: unknown[] = [];
     const miniMissions: unknown[] = [];
     const knownMemoryDates = new Map<string, Set<string>>();
 
-    for (const id of manifest.habitIds) {
-      const key = habitKey(name, id);
-      const raw = byKey.get(key) ?? null;
-      const item = parseJson<unknown>(raw);
-      if (!item) return null;
-      const dates = Array.isArray(habitMemoryDates[id]) ? habitMemoryDates[id] : [];
-      if (dates.length > 0 && isRecord(item)) {
-        const memories: Record<string, unknown> = {};
-        for (const date of dates) {
-          const memoryKey = habitMemoryKey(name, id, date);
-          const rawMemory = byKey.get(memoryKey) ?? null;
-          const memory = parseJson<unknown>(rawMemory);
-          if (!memory) return null;
-          memories[date] = memory;
-          serializedByKey.set(memoryKey, rawMemory as string);
-          objectRefByKey.set(memoryKey, memory);
-        }
-        (item as Record<string, unknown>).streakMemories = memories;
-        knownMemoryDates.set(id, new Set(dates));
-      }
-      serializedByKey.set(key, raw as string);
-      objectRefByKey.set(key, item);
-      habits.push(item);
-    }
+    // traceSync callbacks return null as an "abort readChunked" sentinel on a
+    // parse failure — checked and re-propagated below, since a `return null`
+    // inside the callback only exits the callback, not readChunked itself.
+    const habitsAborted =
+      traceSync(
+        "chunkedPersist.read.habitsLoop",
+        () => {
+          for (const id of manifest.habitIds) {
+            const key = habitKey(name, id);
+            const raw = byKey.get(key) ?? null;
+            const item = parseJson<unknown>(raw);
+            if (!item) return true;
+            const dates = Array.isArray(habitMemoryDates[id]) ? habitMemoryDates[id] : [];
+            if (dates.length > 0 && isRecord(item)) {
+              const memories: Record<string, unknown> = {};
+              for (const date of dates) {
+                const memoryKey = habitMemoryKey(name, id, date);
+                const rawMemory = byKey.get(memoryKey) ?? null;
+                const memory = parseJson<unknown>(rawMemory);
+                if (!memory) return true;
+                memories[date] = memory;
+                serializedByKey.set(memoryKey, rawMemory as string);
+                objectRefByKey.set(memoryKey, memory);
+              }
+              (item as Record<string, unknown>).streakMemories = memories;
+              knownMemoryDates.set(id, new Set(dates));
+            }
+            serializedByKey.set(key, raw as string);
+            objectRefByKey.set(key, item);
+            habits.push(item);
+          }
+          return false;
+        },
+        8,
+      ) ?? false;
+    if (habitsAborted) return null;
 
-    for (const id of manifest.miniMissionIds) {
-      const key = miniKey(name, id);
-      const raw = byKey.get(key) ?? null;
-      const item = parseJson<unknown>(raw);
-      if (!item) return null;
-      serializedByKey.set(key, raw as string);
-      objectRefByKey.set(key, item);
-      miniMissions.push(item);
-    }
+    const minisAborted =
+      traceSync(
+        "chunkedPersist.read.minisLoop",
+        () => {
+          for (const id of manifest.miniMissionIds) {
+            const key = miniKey(name, id);
+            const raw = byKey.get(key) ?? null;
+            const item = parseJson<unknown>(raw);
+            if (!item) return true;
+            serializedByKey.set(key, raw as string);
+            objectRefByKey.set(key, item);
+            miniMissions.push(item);
+          }
+          return false;
+        },
+        8,
+      ) ?? false;
+    if (minisAborted) return null;
 
     knownHabitIdsByName.set(name, new Set(manifest.habitIds));
     knownMiniIdsByName.set(name, new Set(manifest.miniMissionIds));

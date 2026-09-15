@@ -45,6 +45,7 @@ import { alignGroupHabitToChallengeStart } from "../utils/groupMissionClock";
 import { getMissionCalendarTimeZone } from "../utils/missionCalendarKeys";
 import type { ChallengeGroupRow } from "../types/groupChallenge";
 import { createChunkedHabitPersistStorage } from "../lib/chunkedHabitPersistStorage";
+import { traceSync } from "../lib/jsThreadProbe";
 /** Calculate endDate by adding `totalDays` to a start ISO string. */
 const calculateEndDate = (startIso: string, totalDays: number): string => {
   const d = new Date(startIso);
@@ -182,18 +183,18 @@ export const useHabitStore = create<HabitStore>()(
           const updates = { ...next };
 
           if (next.habits && next.habits !== state.habits) {
-            updates.dirtyHabitIds = mergeDirtyIdsByReference(
-              state.habits,
-              next.habits,
-              state.dirtyHabitIds,
+            updates.dirtyHabitIds = traceSync(
+              "habitStore.mergeDirtyIds.habits",
+              () => mergeDirtyIdsByReference(state.habits, next.habits, state.dirtyHabitIds),
+              4,
             );
           }
 
           if (next.miniMissions && next.miniMissions !== state.miniMissions) {
-            updates.dirtyMiniMissionIds = mergeDirtyIdsByReference(
-              state.miniMissions,
-              next.miniMissions,
-              state.dirtyMiniMissionIds,
+            updates.dirtyMiniMissionIds = traceSync(
+              "habitStore.mergeDirtyIds.minis",
+              () => mergeDirtyIdsByReference(state.miniMissions, next.miniMissions, state.dirtyMiniMissionIds),
+              4,
             );
           }
 

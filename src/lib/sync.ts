@@ -14,6 +14,7 @@ import {
 } from "../utils/missionCalendarKeys";
 import { alignGroupHabitToChallengeStart } from "../utils/groupMissionClock";
 import { getSupabase } from "./supabase";
+import { recordPerfTrace } from "./perfTrace";
 import {
   shouldUploadLocalStreakImage,
   uploadHabitStreakMemoryImage,
@@ -67,9 +68,7 @@ type RepairRow = {
 };
 
 function logSyncPerf(label: string, startedAt: number, meta?: Record<string, unknown>) {
-  void label;
-  void startedAt;
-  void meta;
+  recordPerfTrace(label, Date.now() - startedAt, { meta });
 }
 
 function approximateJsonBytes(value: unknown): number | null {

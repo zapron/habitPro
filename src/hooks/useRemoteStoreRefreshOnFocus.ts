@@ -24,6 +24,8 @@ import {
 } from "../lib/remoteFocusRefreshCache";
 import { useHabitStore } from "../store/habitStore";
 import type { HabitStore, MiniMission } from "../types/habit";
+import { traceAsync } from "../lib/perfTrace";
+import { traceSync } from "../lib/jsThreadProbe";
 
 const REMOTE_FOCUS_REFRESH_TTL_MS = 60_000;
 const REMOTE_FOCUS_REFRESH_DELAY_MS = 1200;
@@ -158,15 +160,29 @@ export function useRemoteStoreRefreshOnFocus(enabled = true) {
       const startedMutationGeneration = getLocalStoreMutationGeneration();
       let remoteWithLocalPeers: RemoteStoreSnapshot;
       if (!options?.force && lastRefreshAt > 0) {
-        const delta = await pullFocusDeltaFromSupabase(userId, lastRefreshAt);
+        const delta = await traceAsync(
+          "focusRefresh.pullDelta",
+          () => pullFocusDeltaFromSupabase(userId, lastRefreshAt),
+          { meta: { habits: local.habits.length, minis: local.miniMissions.length } },
+        );
         if (delta) {
-          remoteWithLocalPeers = applyFocusDeltaToStore(local, delta.partial, delta.deleted);
+          remoteWithLocalPeers = traceSync("focusRefresh.applyDelta", () =>
+            applyFocusDeltaToStore(local, delta.partial, delta.deleted),
+          );
         } else {
-          const remote = await pullFromSupabase(userId, { includeCohortPeerHabits: false });
+          const remote = await traceAsync(
+            "focusRefresh.pullFull",
+            () => pullFromSupabase(userId, { includeCohortPeerHabits: false }),
+            { meta: { reason: "delta-unavailable" } },
+          );
           remoteWithLocalPeers = { ...remote, cohortPeerHabits: local.cohortPeerHabits };
         }
       } else {
-        const remote = await pullFromSupabase(userId, { includeCohortPeerHabits: false });
+        const remote = await traceAsync(
+          "focusRefresh.pullFull",
+          () => pullFromSupabase(userId, { includeCohortPeerHabits: false }),
+          { meta: { reason: lastRefreshAt > 0 ? "forced" : "first-refresh" } },
+        );
         remoteWithLocalPeers = { ...remote, cohortPeerHabits: local.cohortPeerHabits };
       }
       const latestLocal = useHabitStore.getState();
@@ -183,7 +199,9 @@ export function useRemoteStoreRefreshOnFocus(enabled = true) {
         return;
       }
       const { snapshot, preserved } = preserveLocalMiniProgress(remoteWithLocalPeers, latestLocal);
-      useHabitStore.setState(snapshot);
+      traceSync("focusRefresh.setState", () => {
+        useHabitStore.setState(snapshot);
+      });
       void saveAccountSnapshotBackup(userId, snapshot, "focus-refresh");
       markRemoteFocusRefreshFresh(userId);
       if (preserved) {

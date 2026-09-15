@@ -37,6 +37,7 @@ import { MiniMission } from "../../src/types/habit";
 import { useRemoteStoreRefreshOnFocus } from "../../src/hooks/useRemoteStoreRefreshOnFocus";
 import { useReducedMotion } from "../../src/hooks/useReducedMotion";
 import { backOrReplace } from "../../src/lib/navigation";
+import { traceSync } from "../../src/lib/jsThreadProbe";
 import {
   getMiniMissionDisplayStatus,
   getMiniRemainingMs,
@@ -408,16 +409,26 @@ export default function MiniMissionsScreen() {
     return [];
   }, [miniMissions, tab, view, listNow]);
 
-  const activeCount = miniMissions.filter(
-    (m) =>
-      m.status === "in_progress" &&
-      (getMiniRemainingMs(m, listNow) > 0 || isMiniMissionAwaitingCheckIn(m, listNow)),
-  ).length;
-  const failedCount = miniMissions.filter(
-    (m) => m.status === "cancelled" || isMiniMissionMissed(m, listNow),
-  ).length;
-  const queuedCount = miniMissions.filter((m) => m.status === "pending" || m.status === "scheduled").length;
-  const completedCount = miniMissions.filter((m) => m.status === "completed").length;
+  // PERF INSTRUMENTATION (2026-09-14, temporary): not memoized, recomputes on
+  // every render including the 5s listNow tick — traced to measure real cost
+  // at real mission counts before deciding whether Phase 1's memoization fix
+  // is worth doing. Remove this wrapper once that decision is made.
+  const { activeCount, failedCount, queuedCount, completedCount } = traceSync(
+    "miniIndex.tabCounts",
+    () => ({
+      activeCount: miniMissions.filter(
+        (m) =>
+          m.status === "in_progress" &&
+          (getMiniRemainingMs(m, listNow) > 0 || isMiniMissionAwaitingCheckIn(m, listNow)),
+      ).length,
+      failedCount: miniMissions.filter(
+        (m) => m.status === "cancelled" || isMiniMissionMissed(m, listNow),
+      ).length,
+      queuedCount: miniMissions.filter((m) => m.status === "pending" || m.status === "scheduled").length,
+      completedCount: miniMissions.filter((m) => m.status === "completed").length,
+    }),
+    2,
+  );
   // The FAB and the empty state's own "Create a Mini Mission" button would otherwise
   // stack redundantly on an empty Active/Waiting tab; and with nothing in any tab at
   // all, the empty state's button is the only create entry point that should show.
