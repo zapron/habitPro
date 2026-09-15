@@ -601,7 +601,7 @@ function miniRowBoolean(row: Record<string, unknown>, snakeKey: string, camelKey
   return typeof value === "boolean" ? value : null;
 }
 
-function miniFromRow(row: Record<string, unknown>): MiniMission {
+export function miniFromRow(row: Record<string, unknown>): MiniMission {
   const ownerUserId = miniRowString(row, "user_id", "userId") ?? "";
   const visibilityRaw = miniRowString(row, "visibility", "visibility");
   const statusRaw = miniRowString(row, "status", "status");
@@ -1367,6 +1367,28 @@ export async function upsertRemoteHabit(sessionUserId: string, habit: Habit): Pr
   if (!(await hasMatchingAuthSession(supabase, sessionUserId))) return;
   const row = habitToRow(sessionUserId, normalized);
   const { error } = await supabase.from("habits").upsert(row, {
+    onConflict: "user_id,id",
+  });
+  if (error) throw error;
+}
+
+/**
+ * Direct-by-id upsert for a single mini mission, bypassing the generic
+ * dirtyMiniMissionIds/pushFullState pipeline entirely. Needed for editing a
+ * mission reached through a paginated/search fetch (rpc_mini_missions_history_page_v1)
+ * rather than one already sitting in useHabitStore's miniMissions array — the
+ * generic push path only ever looks at that local array, so an edit to
+ * something outside it would be silently dropped on the next sync. Mirrors
+ * upsertRemoteHabit exactly; no photo-upload deferral here since this is for
+ * light field edits (e.g. revoking Community visibility), not completing a
+ * mission with new photos.
+ */
+export async function upsertRemoteMiniMission(sessionUserId: string, mission: MiniMission): Promise<void> {
+  const supabase = getSupabase();
+  if (!supabase || !sessionUserId) return;
+  if (!(await hasMatchingAuthSession(supabase, sessionUserId))) return;
+  const row = miniToRow(sessionUserId, mission);
+  const { error } = await supabase.from("mini_missions").upsert(row, {
     onConflict: "user_id,id",
   });
   if (error) throw error;

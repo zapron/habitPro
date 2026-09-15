@@ -8,6 +8,8 @@ import {
   TouchableOpacity,
   StatusBar,
   Switch,
+  TextInput,
+  ActivityIndicator,
 } from "react-native";
 import * as Haptics from "expo-haptics";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -26,6 +28,8 @@ import {
   Radio,
   Plus,
   CircleX,
+  Search,
+  X,
 } from "lucide-react-native";
 import { Screen } from "../../src/components/Screen";
 import { Button } from "../../src/components/Button";
@@ -38,6 +42,7 @@ import { useRemoteStoreRefreshOnFocus } from "../../src/hooks/useRemoteStoreRefr
 import { useReducedMotion } from "../../src/hooks/useReducedMotion";
 import { backOrReplace } from "../../src/lib/navigation";
 import { traceSync } from "../../src/lib/jsThreadProbe";
+import { searchMiniMissions } from "../../src/lib/miniMissionsHistoryApi";
 import {
   getMiniMissionDisplayStatus,
   getMiniRemainingMs,
@@ -429,6 +434,44 @@ export default function MiniMissionsScreen() {
     }),
     2,
   );
+  // Search — server-side (rpc_mini_missions_history_page_v1), matches title,
+  // objective, and anything inside completion_memory (notes, checklist/freeform
+  // moment text). Results are local component state, never merged into
+  // useHabitStore — purely additive, cannot regress the existing tabs/list.
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<MiniMission[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const searchGenerationRef = useRef(0);
+  const isSearching = searchQuery.trim().length > 0;
+
+  useEffect(() => {
+    const trimmed = searchQuery.trim();
+    if (!trimmed) {
+      setSearchResults([]);
+      setSearchLoading(false);
+      return;
+    }
+    const generation = ++searchGenerationRef.current;
+    setSearchLoading(true);
+    const timer = setTimeout(() => {
+      void searchMiniMissions(trimmed)
+        .then((results) => {
+          if (searchGenerationRef.current !== generation) return;
+          setSearchResults(results);
+        })
+        .catch((e: unknown) => {
+          if (__DEV__) console.warn("[habitPro] searchMiniMissions failed", e);
+          if (searchGenerationRef.current !== generation) return;
+          setSearchResults([]);
+        })
+        .finally(() => {
+          if (searchGenerationRef.current !== generation) return;
+          setSearchLoading(false);
+        });
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
   // The FAB and the empty state's own "Create a Mini Mission" button would otherwise
   // stack redundantly on an empty Active/Waiting tab; and with nothing in any tab at
   // all, the empty state's button is the only create entry point that should show.
@@ -483,6 +526,39 @@ export default function MiniMissionsScreen() {
         />
       </View>
 
+      <View
+        style={[
+          styles.searchBox,
+          { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, ...theme.shadow.card },
+        ]}
+      >
+        <Search size={15} color={theme.colors.textMuted} />
+        <TextInput
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          placeholder="Search missions by name, note, or memory"
+          placeholderTextColor={theme.colors.textMuted}
+          autoCapitalize="none"
+          autoCorrect={false}
+          returnKeyType="search"
+          style={[styles.searchInput, { color: theme.colors.textPrimary }]}
+        />
+        {searchLoading ? (
+          <ActivityIndicator size="small" color={theme.colors.textMuted} />
+        ) : searchQuery.length > 0 ? (
+          <TouchableOpacity
+            onPress={() => setSearchQuery("")}
+            activeOpacity={0.75}
+            accessibilityRole="button"
+            accessibilityLabel="Clear search"
+            style={[styles.searchClear, { backgroundColor: theme.colors.background }]}
+          >
+            <X size={13} color={theme.colors.textSecondary} />
+          </TouchableOpacity>
+        ) : null}
+      </View>
+
+      {isSearching ? null : (
       <View
         style={[
           styles.tabContainer,
@@ -566,9 +642,40 @@ export default function MiniMissionsScreen() {
           );
         })}
       </View>
+      )}
 
       <View style={styles.listWrap}>
-        {filtered.length === 0 ? (
+        {isSearching ? (
+          searchResults.length === 0 && !searchLoading ? (
+            <View style={styles.empty}>
+              <View
+                style={[
+                  styles.emptyIconContainer,
+                  { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
+                ]}
+              >
+                <Search size={36} color={theme.colors.slate[500]} />
+              </View>
+              <Text style={[styles.emptyTitle, { color: theme.colors.textPrimary, fontSize: theme.typography.h3 }]}>
+                No missions found
+              </Text>
+              <Text style={[styles.emptyText, { color: theme.colors.textSecondary }]}>
+                Nothing matches "{searchQuery.trim()}" in a mission's name, note, or memory.
+              </Text>
+            </View>
+          ) : (
+            <FlashList
+              data={searchResults}
+              renderItem={renderMiniMission}
+              keyExtractor={(item) => item.id}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.listContent}
+              ItemSeparatorComponent={() => (
+                <View style={[styles.rowDivider, { backgroundColor: theme.colors.border }]} />
+              )}
+            />
+          )
+        ) : filtered.length === 0 ? (
           <View style={styles.empty}>
             <Animated.View
               style={[
@@ -682,6 +789,18 @@ const styles = StyleSheet.create({
   statsCard: { flex: 1, alignItems: "center", justifyContent: "center", paddingVertical: 10, borderWidth: 1 },
   statsValue: { fontSize: 22, fontWeight: "800" },
   statsLabel: { fontSize: 11 },
+  searchBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    minHeight: 42,
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    marginBottom: 12,
+  },
+  searchInput: { flex: 1, minWidth: 0, paddingVertical: 8, fontSize: 13, lineHeight: 18, fontWeight: "700" },
+  searchClear: { width: 22, height: 22, borderRadius: 11, alignItems: "center", justifyContent: "center" },
   tabContainer: { flexDirection: "row", borderRadius: 14, padding: 4, marginBottom: 10, borderWidth: 1 },
   tab: { flex: 1, flexDirection: "row", paddingVertical: 10, alignItems: "center", justifyContent: "center", gap: 6, borderRadius: 10, minHeight: 42 },
   tabIndicator: { position: "absolute", top: 4, bottom: 4, left: 4, borderRadius: 10 },
