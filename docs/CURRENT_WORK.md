@@ -1,6 +1,175 @@
 # HabitPro Current Work
 
-Last updated: 2026-09-15 (end of session — codified a standing rule that the agent never applies a Supabase migration to production itself (`pre_migration.md`, plus a `predb:push` npm hook enforcing `db:reset` first); implemented real perf tracing (`traceAsync`/`traceSync` had been no-op stubs everywhere); and used it to find + fix a real bug (`alignGroupHabitToChallengeStart` comparing dates by raw string instead of instant, causing ~230ms of wasted work on every single sync). Mini Missions pagination/search work is starting next session. Full detail in the session handoff section immediately below.).
+Last updated: 2026-09-16 (end of session — Phases 0-3 of the pagination/search roadmap all shipped: Mini Missions search, a paginated habits-history RPC for Home's reports segment (backend only, not wired to UI yet), and real per-mission photo-gallery pagination in My Journey. Also fixed an iOS-only bug where a mission's description popover rendered hidden behind the fullscreen gallery. Full detail immediately below; the 2026-09-16 mid-session handoff entry right after this one covers Phase 0+1 in more depth and is kept for history.).
+
+## Session Handoff (2026-09-16, end of session — Phases 2 + 3 shipped)
+
+**State: `main` is 2 commits ahead of the Phase 0+1 tip (`03c63a7`..`adc17ed`), pushed to `origin/main`.** `npx tsc --noEmit` clean after each commit.
+
+**1. Phase 2 backend foundation (`0ec4ae6`) — habits history RPC, not wired to any UI yet.**
+New migration `supabase/migrations/20260916120000_habits_history_page.sql`:
+`rpc_habits_history_page_v1(p_offset, p_limit, p_status)`, mirroring Mini
+Missions' history RPC shape, for Home's accomplished/failed reports
+segment. No search param (explicit decision — main missions are far fewer
+per user than mini missions, not judged worth building here).
+
+Important nuance, decided explicitly with the user before writing this:
+unlike `mini_missions.status`, a habit's effective accomplished/failed
+report is *derived client-side* in `sync.ts`'s `habitFromRow()` (timezone
+canonicalization, grid-completion math, streak-memory-marker evidence,
+legacy repaired dates) — not a plain stored column. Reimplementing that
+derivation in SQL was rejected as too risky/duplicative. The RPC instead
+filters on the stored `mission_report`/`is_completed`/`status` columns
+directly, accepting rare theoretical drift on old edge-case rows as a
+deferred, documented limitation — nothing is actually lost today since
+Home still loads every habit locally in parallel with this RPC.
+
+**Tested locally** against the user's real ~176-habit snapshot before
+being called "ready": accomplished count (18, including 2 edge-case rows
+with `mission_report = null` but `is_completed = true`) and failed count
+(9) matched the real data exactly; a 4-page pagination sweep returned all
+31 of one user's habits with zero duplicates or drops; the unauthenticated
+guard correctly rejected a call with no `auth.uid()`.
+
+New `src/lib/habitsHistoryApi.ts` (mirrors `miniMissionsHistoryApi.ts`).
+`habitFromRow` exported from `sync.ts` (was private) so the wrapper can
+reuse it. **Not pushed to production yet — the user runs `npm run db:push`
+themselves per `pre_migration.md`; the agent never runs it.**
+
+**2. Phase 3 — My Journey's per-mission photo gallery, now really
+paginated (`adc17ed`).** `MissionGalleryModal` (in `my-journey.tsx`)
+previously dumped every post for a mission into an un-paginated
+`ScrollView`. Investigation found the actual fetch-on-scroll pattern the
+roadmap wanted **already existed and was already live** —
+`fetchCommunityPlayerMissionJourneyPage` in `communityWinsApi.ts`, used by
+`community-player/[id].tsx`'s own mission gallery for viewing *other*
+players. No new migration needed; it queries the existing `community_wins`
+table via plain PostgREST calls.
+
+My Journey's gallery now calls that same function on open and via a
+"Load more journey" button — confirmed with the user to match the
+manual-button pattern already used everywhere else in this app (the
+outer story list, and community-player's own gallery) rather than true
+auto-scroll-to-bottom fetching, which would have been the only screen in
+the app behaving that way. Private-only posts (never shared to Community,
+always fully local already) are merged in via the existing
+`dedupeStoryPostsPreferPublic` so nothing already known disappears while
+the public portion paginates underneath.
+
+**3. Bug found and fixed during manual testing: description popover
+hidden behind the gallery on iOS (bundled into `adc17ed`).** Both
+`MissionGalleryModal` implementations (My Journey and community-player)
+showed a mission's description via `showAppAlert`, which renders its own
+top-level native `Modal`. On iOS, presenting a second `Modal` while a
+`presentationStyle="fullScreen"` one is already open stacks the new one
+*behind* the current one — only revealed once the gallery closes.
+Android's Modal windowing doesn't have this restriction, which is why it
+only showed up on iOS. Fixed in both files by rendering the description
+as a local overlay `View` inside the gallery's own `Modal` instead of a
+second native `Modal` — mirroring the close-then-reopen trick this same
+file already used for the photo lightbox. User confirmed fixed on device
+in both places.
+
+**4. OTA**: see the note appended below this entry once the production
+update finishes publishing.
+
+**Not yet done, explicitly next**: Phase 2's RPC has no UI yet (Home's
+reports segment "Load more" would still be a no-op today, same reasoning
+as Mini Missions' deferred Load More — nothing is trimmed from
+`pullFromSupabase()` yet). Phase 4 (Profile's Hub modal) and the "hot
+window" cutoff are still fully unstarted. Plan file:
+`/Users/raktimmacbook/.claude/plans/reflective-baking-sparkle.md`.
+
+## Session Handoff (2026-09-16, proactive mid-session handoff — long conversation, compaction likely near)
+
+**Note on why this entry exists**: written proactively because this session has run very long (local Supabase dev setup, a full migration-drift investigation, a perf-tracing investigation + real bug fix, and now the pagination/search feature) — not because all planned work is done. There is no precise way to measure remaining context; this is a best-effort judgment call, not a guaranteed trigger. If picking this up in a **new chat**, paste: *"Read `docs/CURRENT_WORK.md`'s 2026-09-16 entry and `/Users/raktimmacbook/.claude/plans/reflective-baking-sparkle.md`, then continue the Mini Missions/Home pagination-and-search roadmap from where Phase 1 left off."*
+
+**State: `main` is clean, at `03c63a7`, pushed. Nothing uncommitted** except the usual untracked `.claude/`/`.mcp.json`. `npx tsc --noEmit` clean.
+
+**1. Shipped Mini Missions search (Phase 0 + Phase 1 of the pagination/search plan).**
+New migration `supabase/migrations/20260915120000_mini_missions_history_page.sql`
+— `rpc_mini_missions_history_page_v1(p_offset, p_limit, p_status, p_query)`,
+mirrors `rpc_challenge_streak_members_page_v1`'s shape (security definer,
+`auth.uid()` guard, `limit+1`/`count(*) > limit` for `hasMore`, `to_jsonb(m)`
+whole-row shaping to avoid the `jsonb_to_recordset` explicit-column-list
+trap). **Tested locally first** (`npm run db:reset`, then direct
+`docker exec ... psql` calls verifying pagination, title search, and — the
+part the user specifically asked for — full **content** search via
+`completion_memory::text ilike`, confirmed by finding a real mission
+("Focus timer") matched by searching "cool", a word that only exists in its
+memory note, not the title. Status filter and the auth-rejection guard also
+verified. Only after all of that passed did the user run `npm run db:push`
+themselves (per `pre_migration.md`); verified live on production afterward
+via a read-only query.
+
+New `src/lib/miniMissionsHistoryApi.ts` (mirrors `groupChallengesApi.ts`'s
+paged-RPC client pattern, graceful fallback on a schema-cache miss). New
+`upsertRemoteMiniMission` in `sync.ts` (mirrors `upsertRemoteHabit`) —
+forward-looking infrastructure for editing a mission reached outside the
+local store's array, not wired to any UI yet. Search box added to
+`app/mini/index.tsx`, debounced, results kept in local component state
+(never merged into `useHabitStore`) — purely additive, existing tabs/list
+behavior unchanged when not searching. Commit `03c63a7`.
+
+**Scope decision made and confirmed with the user mid-build**: the
+Done/Failed tabs' "Load More" pagination UI was *not* built this round —
+since `pullFromSupabase()` isn't trimmed yet, the local array already holds
+100% of the user's mini-mission history, so a Load More button would be a
+no-op today. Explicitly deferred to combine with the future "hot window"
+phase, when it will actually do something. The RPC itself already accepts
+`p_offset`/`p_limit` so no rework is needed when that phase lands.
+
+**2. The full roadmap this is Phase 0+1 of** — approved plan lives at
+`/Users/raktimmacbook/.claude/plans/reflective-baking-sparkle.md` (the
+per-conversation plan-mode file; read it directly for the full writeup, not
+just this summary):
+- Phase 2 (not started): same RPC family for Home/main missions
+  (`rpc_habits_history_page_v1`), applied to `app/(tabs)/index.tsx`.
+- Phase 3 (not started): My Journey's `MissionGalleryModal` — currently
+  reads `mission.posts` from the fully-loaded local array with zero
+  pagination. User explicitly wants this converted to a real fetch-on-scroll
+  pattern ("when reaching the end, trigger a second API fetch"), not just
+  render-virtualization.
+- Phase 4 (not started): Profile's "view all" Hub modal — reuses Phase 1/2's
+  RPCs once they exist.
+- The bigger "hot window" cutoff (actually shrinking what
+  `pullFromSupabase()` loads by default, not just adding paginated *reach*
+  beyond it) is a deliberate, separate decision point — revisit once
+  Phases 1-4 are live. This is also what would finally make the deferred
+  Load More UI meaningful.
+- User's explicit standing scope: pagination belongs on every real list
+  (main missions, mini missions, photo galleries) — a must-have, not a
+  nice-to-have, specifically *because* local Supabase dev now exists to
+  de-risk testing each step before it touches production. Search is not
+  required everywhere, just where searching by name/content makes sense
+  (Mini Missions was the motivating case).
+
+**3. Earlier in this same session (already logged in the 2026-09-15 entry
+below, still valid, not re-summarized here)**: `pre_migration.md`'s
+never-apply-a-migration-yourself rule + `predb:push` hook, real `perfTrace`/
+`jsThreadProbe` implementation (were no-op stubs), and the
+`alignGroupHabitToChallengeStart` date-comparison bug fix (~185ms/sync).
+
+**4. New this session, process/tooling (not app code)**:
+- **`.claude/skills/habitpro-session-logger/SKILL.md`** — Claude Code
+  equivalent of the existing `.codex/skills/habitpro-session-logger/
+  SKILL.md`. Same target docs, same workflow, explicitly instructs
+  proactively *offering* to log at natural checkpoints rather than waiting
+  to be asked.
+- **Two new persistent memories** (`/Users/raktimmacbook/.claude/projects/
+  -Users-raktimmacbook-Desktop-personal-developemnt-habitPro/memory/`):
+  `feedback_local_first_migration_testing.md` (always `db:reset` locally
+  before ever saying a migration is ready for `db:push` — explicitly
+  requested to never be missed) and `feedback_proactive_session_logging.md`
+  (offer to log progress at checkpoints, mirroring the Codex habit). Both
+  indexed in that directory's `MEMORY.md`.
+- Discussed but not set up: `/loop`-based true timer automation for
+  logging — user was told this needs them to explicitly start it; not
+  configured this session.
+
+**Not yet done, explicitly next**: nothing else was started for Phase 2-4 —
+this handoff is the stopping point. If resuming fresh, start by re-reading
+the plan file above before writing any code.
 
 ## Session Handoff (2026-09-15, end of session)
 

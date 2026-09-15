@@ -2,6 +2,61 @@
 
 This is a concise chronological log for future sessions. Keep secrets out of this file.
 
+## 2026-09-16 (Phases 2 + 3 shipped)
+
+### Habits history RPC (backend only) + My Journey gallery pagination + iOS modal fix
+
+Commits `0ec4ae6`, `adc17ed`. Full detail in `docs/CURRENT_WORK.md`'s
+"Phases 2 + 3 shipped" entry.
+
+- New `rpc_habits_history_page_v1` (Phase 2 backend foundation for Home's
+  accomplished/failed reports segment) — filters on stored
+  `mission_report`/`is_completed`/`status` columns rather than
+  reimplementing `habitFromRow`'s client-side derivation logic in SQL
+  (explicit, documented tradeoff). Tested locally against real ~176-habit
+  snapshot data, counts matched exactly, zero pagination duplicates/drops.
+  **Not pushed to production yet — user runs `db:push` themselves.** Not
+  wired into any UI yet (same "would be a no-op today" reasoning as Mini
+  Missions' deferred Load More).
+- Phase 3: My Journey's `MissionGalleryModal` now really paginates via
+  `fetchCommunityPlayerMissionJourneyPage` (already existed, already live
+  via `community-player/[id].tsx` — no new migration needed) plus a
+  "Load more journey" button, matching this app's existing manual-button
+  pagination convention rather than auto-scroll. Private-only posts merged
+  in via the existing `dedupeStoryPostsPreferPublic`.
+- Bug found via manual device testing and fixed: a mission's description
+  popover rendered hidden behind the fullscreen gallery on iOS only
+  (nested-native-Modal stacking issue) — fixed in both `my-journey.tsx`
+  and `community-player/[id].tsx` by rendering it as a local overlay
+  inside the gallery's own Modal. Confirmed fixed on device.
+
+## 2026-09-16 (proactive mid-session handoff)
+
+### Mini Missions search shipped (Phase 0+1 of the pagination/search plan); session-logger skill + two memories added
+
+Commit `03c63a7`. Written proactively — conversation running long, not
+because the roadmap is finished. Full detail in `docs/CURRENT_WORK.md`'s
+2026-09-16 entry and the plan file
+`/Users/raktimmacbook/.claude/plans/reflective-baking-sparkle.md`.
+
+- New `rpc_mini_missions_history_page_v1` (paginated + full-text search,
+  including inside `completion_memory` — not just title/objective).
+  Tested locally first (real pagination/search/status/auth checks against
+  the user's own ~200-mission local snapshot), pushed by the user, verified
+  live on production. New `miniMissionsHistoryApi.ts` client wrapper, new
+  search box on the Mini Missions screen (local state only, additive).
+- Done/Failed "Load More" UI deliberately **not** built yet — nothing is
+  trimmed from the local array so there's nothing to page toward until the
+  "hot window" phase lands; the RPC already supports it for when that
+  happens.
+- Roadmap ahead, not started: Phase 2 (Home, same RPC family), Phase 3 (My
+  Journey's photo gallery — user wants a real fetch-on-scroll, not just
+  virtualization), Phase 4 (Profile), then the actual hot-window cutoff.
+- New `.claude/skills/habitpro-session-logger/SKILL.md` (mirrors the
+  existing Codex one) and two new persistent memories: always test a
+  migration locally before saying it's ready for `db:push`; proactively
+  offer to log progress at natural checkpoints.
+
 ## 2026-09-15
 
 ### Migration-safety rule codified, real perf tracing implemented, and a real ~185ms/sync bug found + fixed
