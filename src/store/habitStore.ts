@@ -917,11 +917,13 @@ export const useHabitStore = create<HabitStore>()(
           miniMissions: state.miniMissions.map((m) => {
             if (m.id !== id) return m;
             if (m.status === "completed" || m.status === "cancelled") return m;
+            // draftTasks/draftMemories deliberately preserved (not cleared) —
+            // whatever moments/tasks were captured before the miss shouldn't be
+            // silently deleted just because the mission didn't finish in time. A
+            // later Retry can still pick them back up.
             return {
               ...m,
               status: "missed",
-              draftTasks: undefined,
-              draftMemories: undefined,
             };
           }),
         }));
@@ -943,14 +945,16 @@ export const useHabitStore = create<HabitStore>()(
         set((state) => ({
           miniMissions: state.miniMissions.map((m) => {
             if (m.id !== id) return m;
+            // draftTasks/draftMemories deliberately carry forward into the new
+            // attempt (not cleared) — retrying means another shot at the same
+            // mission, not discarding what was already captured. Explicit request:
+            // a user shouldn't lose freeform moments just for missing a deadline.
             return {
               ...m,
               status: "in_progress",
               startedAt: now,
               extendedMinutes: 0,
               scheduledStartAt: undefined,
-              draftTasks: undefined,
-              draftMemories: undefined,
             };
           }),
         }));

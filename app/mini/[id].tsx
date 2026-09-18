@@ -1355,6 +1355,19 @@ export default function MiniMissionDetail() {
     setIsTimerUpState(getIsTimerExpired());
   }, [getIsTimerExpired, isFocused]);
 
+  // Without this, isTimerUpState only ever gets re-checked on mount/focus-change —
+  // sitting on this screen watching the countdown reach zero would never actually
+  // flip it (or show the Check In / Mission Failed state) until you navigated away
+  // and back. Ticks only while a run is actually in progress and not already known
+  // to be up, so it's a no-op once it's mission-critical, pun intended.
+  useEffect(() => {
+    if (!isFocused || mission?.status !== "in_progress" || isTimerUpState) return;
+    const interval = setInterval(() => {
+      if (getIsTimerExpired()) setIsTimerUpState(true);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [getIsTimerExpired, isFocused, isTimerUpState, mission?.status]);
+
   // Lets the notification foreground handler (src/utils/notifications.ts) know this
   // mission's OS "2 minutes left" warning would be redundant right now — read at fire
   // time, not effect-schedule time, via miniMissionFocusTracker. Navigation focus alone
@@ -1464,8 +1477,18 @@ export default function MiniMissionDetail() {
       : null;
   const isTimerCheckInSoloMode =
     Boolean(mission && mission.completionMode === "timer_check_in" && !mission.liveSquadId);
-  const isTimerCheckInReview =
-    Boolean(mission && isTimerUpState && isMiniMissionAwaitingCheckIn(mission, Date.now()));
+  // A timed-out freeform mission gets the same "did you complete this?" review as
+  // Timer Check-In mode, instead of failing automatically — a fixed timer doesn't fit
+  // freeform capture well (you're logging moments as they happen, not racing a single
+  // deadline), so the user gets a chance to mark it complete with whatever was
+  // captured. Live Squad missions are excluded — those use the shared squad board's
+  // own missed/retry semantics, not this local single-player flow.
+  const isTimerCheckInReview = Boolean(
+    mission &&
+      isTimerUpState &&
+      (isMiniMissionAwaitingCheckIn(mission, Date.now()) ||
+        (mission.captureMode === "freeform" && !mission.liveSquadId)),
+  );
   const isMiniMissionFailed = Boolean(mission && (mission.status === "missed" || (isTimerUpState && !isTimerCheckInReview)));
   const timerCheckInPromptKey =
     isTimerCheckInReview && mission?.startedAt ? `${mission.id}:${mission.startedAt}` : null;
