@@ -95,9 +95,18 @@ testing, not part of the original plan:
 `4fe50022-4c71-48cc-b3bc-b96e3e20ce80`, runtime `1.1.35` (unchanged),
 commit `18c9e68`. JS/TS/TSX-only batch, no native/version changes.
 
-**Not yet done**: the three new migrations are tested locally but **not
-pushed to production** — that's the user's call to make, per
-`pre_migration.md`. Profile's Hub modal load-more and Home/Mini Missions
+**7. Migrations pushed to production by the user and verified live.** All
+four new functions (`rpc_profile_lifetime_stats_v1`,
+`rpc_habit_by_id_v1`, `rpc_mini_mission_by_id_v1`,
+`rpc_habit_by_challenge_group_id_v1`) confirmed present via
+`information_schema.routines`, then exercised with real read-only calls
+against the user's own account: lifetime stats returned sane real numbers,
+both by-id lookups returned the correct row (and correctly `null` for a
+nonexistent id), and the challenge-group-id fallback resolved to the right
+habit. Hot-window plan is now fully shipped end to end — code, OTA, and
+database all live.
+
+**Not yet done**: Profile's Hub modal load-more and Home/Mini Missions
 load-more are UI-tested via the simulator but not yet exercised at true
 scale (no account currently has enough history to trigger a second real
 page beyond what's already cached).
