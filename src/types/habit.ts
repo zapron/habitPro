@@ -274,6 +274,10 @@ export type HabitStore = {
   resetHabit: (id: string) => boolean;
   setMissionReport: (id: string, report: MissionReport) => void;
   getHabit: (id: string) => Habit | undefined;
+  /** Adds or updates one habit fetched directly by id (e.g. rpc_habit_by_id_v1) — never removes anything. */
+  mergeFetchedHabit: (habit: Habit) => void;
+  /** Adds or updates one mini mission fetched directly by id (e.g. rpc_mini_mission_by_id_v1) — never removes anything. */
+  mergeFetchedMiniMission: (mission: MiniMission) => void;
   addMiniMission: (input: {
     id?: string;
     title: string;

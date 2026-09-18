@@ -734,6 +734,16 @@ export const useHabitStore = create<HabitStore>()(
       getHabit: (id) => {
         return get().habits.find((h) => h.id === id);
       },
+      mergeFetchedHabit: (habit) => {
+        set((state) => {
+          const exists = state.habits.some((h) => h.id === habit.id);
+          return {
+            habits: exists
+              ? state.habits.map((h) => (h.id === habit.id ? habit : h))
+              : [...state.habits, habit],
+          };
+        });
+      },
       setHabitVisibility: (id, visibility) => {
         set((state) => ({
           habits: state.habits.map((h) =>
@@ -1031,6 +1041,16 @@ export const useHabitStore = create<HabitStore>()(
       },
       getMiniMission: (id) => {
         return get().miniMissions.find((mission) => mission.id === id);
+      },
+      mergeFetchedMiniMission: (mission) => {
+        set((state) => {
+          const exists = state.miniMissions.some((m) => m.id === mission.id);
+          return {
+            miniMissions: exists
+              ? state.miniMissions.map((m) => (m.id === mission.id ? mission : m))
+              : [...state.miniMissions, mission],
+          };
+        });
       },
       addXp: (amount) => {
         set((state) => ({ xp: state.xp + amount }));

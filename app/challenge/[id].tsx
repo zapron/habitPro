@@ -52,6 +52,7 @@ import { useAuth } from "../../src/context/AuthContext";
 import { usePremium } from "../../src/context/PremiumContext";
 import { usePlusUpsell } from "../../src/context/PlusUpsellContext";
 import { useHabitStore } from "../../src/store/habitStore";
+import { fetchHabitByChallengeGroupId } from "../../src/lib/habitsHistoryApi";
 import {
   challengeNudgeSentTodayKey,
   listSentCustomNoteUserIdsToday,
@@ -495,6 +496,23 @@ export default function ChallengeDetailScreen() {
   );
   const myXp = useHabitStore((s) => s.xp);
   const deleteHabit = useHabitStore((s) => s.deleteHabit);
+  const mergeFetchedHabit = useHabitStore((s) => s.mergeFetchedHabit);
+
+  // An old, already-completed challenge's habit can fall outside the hot window —
+  // the local store lookup above would then wrongly come back empty even though the
+  // user was genuinely part of this challenge. Try a direct fetch before treating it
+  // as "no habit for this challenge."
+  useEffect(() => {
+    if (myHabit || !challengeId) return;
+    let cancelled = false;
+    void fetchHabitByChallengeGroupId(challengeId).then((fetched) => {
+      if (cancelled || !fetched) return;
+      mergeFetchedHabit(fetched);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [challengeId, mergeFetchedHabit, myHabit]);
 
   // Seed from the in-memory snapshot cache so revisits paint instantly instead of
   // blocking on a network round trip behind a spinner. Refresh still runs on focus.

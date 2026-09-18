@@ -82,6 +82,10 @@ import {
   buildActivityChartA11ySummary,
 } from "../../src/utils/profileStats";
 import { buildProfileIntelligence } from "../../src/utils/profileIntelligence";
+import { fetchProfileLifetimeStats, type ProfileLifetimeStats } from "../../src/lib/profileStatsApi";
+import { fetchHabitsHistoryPage } from "../../src/lib/habitsHistoryApi";
+import { fetchMiniMissionsHistoryPage } from "../../src/lib/miniMissionsHistoryApi";
+import { HOT_WINDOW_HISTORY_PAGE_SIZE } from "../../src/lib/sync";
 import { isMiniMissionOpen, isMiniMissionRunning } from "../../src/utils/miniMissionTime";
 import { PlusBadge } from "../../src/components/PlusBadge";
 import { useRefreshPremiumAccess } from "../../src/hooks/useRefreshPremiumAccess";
@@ -898,15 +902,18 @@ export default function ProfileScreen() {
     miniMissionIds: [],
   });
   const [restoringBackupAt, setRestoringBackupAt] = useState<string | null>(null);
-  const { rawXp, rawUsername, rawAvatarUrl, rawHabits, rawMiniMissions } = useHabitStore(
-    useShallow((s) => ({
-      rawXp: isFocused ? s.xp : 0,
-      rawUsername: isFocused ? s.username : null,
-      rawAvatarUrl: isFocused ? s.avatarUrl : null,
-      rawHabits: isFocused ? s.habits : EMPTY_HABITS,
-      rawMiniMissions: isFocused ? s.miniMissions : EMPTY_MINI_MISSIONS,
-    })),
-  );
+  const { rawXp, rawUsername, rawAvatarUrl, rawHabits, rawMiniMissions, mergeFetchedHabit, mergeFetchedMiniMission } =
+    useHabitStore(
+      useShallow((s) => ({
+        rawXp: isFocused ? s.xp : 0,
+        rawUsername: isFocused ? s.username : null,
+        rawAvatarUrl: isFocused ? s.avatarUrl : null,
+        rawHabits: isFocused ? s.habits : EMPTY_HABITS,
+        rawMiniMissions: isFocused ? s.miniMissions : EMPTY_MINI_MISSIONS,
+        mergeFetchedHabit: s.mergeFetchedHabit,
+        mergeFetchedMiniMission: s.mergeFetchedMiniMission,
+      })),
+    );
   const showAccount = isSupabaseConfigured();
   const accountHydrating = Boolean(showAccount && session?.user && !syncReady && !syncError);
   const cloudSyncBlocked = Boolean(showAccount && session?.user && syncError);
@@ -969,6 +976,16 @@ export default function ProfileScreen() {
     setDeletedMissionIds(nextDeletedIds);
   }, [session?.user?.id]);
 
+  const [lifetimeStats, setLifetimeStats] = useState<ProfileLifetimeStats | null>(null);
+  const loadLifetimeStats = useCallback(async () => {
+    if (!session?.user?.id) {
+      setLifetimeStats(null);
+      return;
+    }
+    const stats = await fetchProfileLifetimeStats();
+    if (stats) setLifetimeStats(stats);
+  }, [session?.user?.id]);
+
   useFocusEffect(
     useCallback(() => {
       setMiniClockNow(Date.now());
@@ -981,12 +998,16 @@ export default function ProfileScreen() {
       const backupTask = InteractionManager.runAfterInteractions(() => {
         void loadBackups();
       });
+      const lifetimeStatsTask = InteractionManager.runAfterInteractions(() => {
+        void loadLifetimeStats();
+      });
       return () => {
         if (premiumTimer) clearTimeout(premiumTimer);
         premiumTask.cancel?.();
         backupTask.cancel?.();
+        lifetimeStatsTask.cancel?.();
       };
-    }, [loadBackups, refreshPremiumAccess]),
+    }, [loadBackups, loadLifetimeStats, refreshPremiumAccess]),
   );
 
   useEffect(() => {
@@ -1101,25 +1122,29 @@ export default function ProfileScreen() {
       }
     }
 
+    // "Done"/total counts prefer the server-computed lifetime totals when available —
+    // an active/live mission is always part of the hot window by definition, so those
+    // stay computed from the local array unconditionally, but done/total counts would
+    // silently under-report once the local array stops holding full history.
     return {
-      habitsTotal: habits.length,
-      minisTotal: miniMissions.length,
+      habitsTotal: lifetimeStats?.habitsTotal ?? habits.length,
+      minisTotal: lifetimeStats?.minisTotal ?? miniMissions.length,
       pub: {
-        habitsDone: pubHabitsDone,
+        habitsDone: lifetimeStats?.pub.habitsDone ?? pubHabitsDone,
         habitsActive: pubHabitsActive,
-        miniDone: pubMiniDone,
+        miniDone: lifetimeStats?.pub.miniDone ?? pubMiniDone,
         miniLive: pubMiniLive,
-        miniTotal: pubMiniTotal,
+        miniTotal: lifetimeStats?.pub.miniTotal ?? pubMiniTotal,
       },
       solo: {
-        habitsDone: soloHabitsDone,
+        habitsDone: lifetimeStats?.solo.habitsDone ?? soloHabitsDone,
         habitsActive: soloHabitsActive,
-        miniDone: soloMiniDone,
+        miniDone: lifetimeStats?.solo.miniDone ?? soloMiniDone,
         miniLive: soloMiniLive,
-        miniTotal: soloMiniTotal,
+        miniTotal: lifetimeStats?.solo.miniTotal ?? soloMiniTotal,
       },
     };
-  }, [habits, miniClockNow, miniMissions]);
+  }, [habits, lifetimeStats, miniClockNow, miniMissions]);
 
   const insights = useMemo(() => {
     const activityPoints = lastNDaysHabitCheckInsPerDay(habits, 7);
@@ -1137,8 +1162,17 @@ export default function ProfileScreen() {
       level,
       missionStats,
       communityEnabled: profileIsPremium,
+      lifetimeStats: lifetimeStats
+        ? {
+            lifetimeCheckIns: lifetimeStats.lifetimeCheckIns,
+            maxStreak: lifetimeStats.maxStreak,
+            memoryProofs: lifetimeStats.memoryProofs,
+            publicMoments: lifetimeStats.publicMoments,
+            repairs: lifetimeStats.repairs,
+          }
+        : null,
     });
-  }, [habits, level, miniMissions, missionStats, profileIsPremium, xpInLevel]);
+  }, [habits, level, lifetimeStats, miniMissions, missionStats, profileIsPremium, xpInLevel]);
 
   const modelCards = useMemo(() => {
     const weights = profileMath.socialIncluded
@@ -1311,6 +1345,111 @@ export default function ProfileScreen() {
     ],
     [profileMath, theme.colors.amber, theme.colors.cyan, theme.colors.green],
   );
+
+  // Load More for the Hub list modal — inert until now (Phase D's hot window is the
+  // first phase where the local store doesn't already hold full history by default).
+  // Habits-variant views need both accomplished and failed pages together (a habit's
+  // "done" status here doesn't distinguish the two); minis-variant views need
+  // completed, cancelled, and missed together — simpler than tracking which exact
+  // page a given filtered view needs, and Load More is an infrequent manual action so
+  // the modest over-fetch is a fine tradeoff. The modal's own client-side visibility
+  // filter (in hubModalContent below) naturally reflects whatever's merged in.
+  // fetchedCount/hasMore use an "override" pattern rather than seeding a plain
+  // useState at mount: the store hasn't necessarily hydrated/synced yet on first
+  // render, so a one-time initializer can freeze at an empty-array snapshot and never
+  // update again. Before any explicit Load More tap, these stay null and the values
+  // below are derived live from habits/miniMissions (so they track real data as it
+  // streams in); after the first tap, the override holds the server's authoritative
+  // answer.
+  const [hubHabitsAccOverride, setHubHabitsAccOverride] = useState<number | null>(null);
+  const [hubHabitsFailOverride, setHubHabitsFailOverride] = useState<number | null>(null);
+  const [hubHabitsHasMoreOverride, setHubHabitsHasMoreOverride] = useState<boolean | null>(null);
+  const [hubMinisCompletedOverride, setHubMinisCompletedOverride] = useState<number | null>(null);
+  const [hubMinisCancelledOverride, setHubMinisCancelledOverride] = useState<number | null>(null);
+  const [hubMinisMissedOverride, setHubMinisMissedOverride] = useState<number | null>(null);
+  const [hubMinisHasMoreOverride, setHubMinisHasMoreOverride] = useState<boolean | null>(null);
+  const [loadingMoreHub, setLoadingMoreHub] = useState(false);
+
+  const hubHabitsAccCountInStore = useMemo(() => habits.filter((h) => h.missionReport === "accomplished").length, [habits]);
+  const hubHabitsFailCountInStore = useMemo(() => habits.filter((h) => h.missionReport === "failed").length, [habits]);
+  const hubMinisCompletedCountInStore = useMemo(() => miniMissions.filter((m) => m.status === "completed").length, [miniMissions]);
+  const hubMinisCancelledCountInStore = useMemo(() => miniMissions.filter((m) => m.status === "cancelled").length, [miniMissions]);
+  const hubMinisMissedCountInStore = useMemo(() => miniMissions.filter((m) => m.status === "missed").length, [miniMissions]);
+
+  // Deliberately NOT `?? countInStore`: habits/miniMissions can already contain items
+  // that arrived via the old full sync (pre-dating this feature) rather than via this
+  // paginated RPC, so their length isn't a reliable pagination offset. Before any real
+  // fetch, start from 0 — a safe, server-confirmed anchor — and let the override (set
+  // from the RPC's own authoritative response) take over from there.
+  const hubHabitsAccCount = hubHabitsAccOverride ?? 0;
+  const hubHabitsFailCount = hubHabitsFailOverride ?? 0;
+  const hubHabitsHasMore =
+    hubHabitsHasMoreOverride ??
+    (hubHabitsAccCountInStore >= HOT_WINDOW_HISTORY_PAGE_SIZE || hubHabitsFailCountInStore >= HOT_WINDOW_HISTORY_PAGE_SIZE);
+  const hubMinisCompletedCount = hubMinisCompletedOverride ?? 0;
+  const hubMinisCancelledCount = hubMinisCancelledOverride ?? 0;
+  const hubMinisMissedCount = hubMinisMissedOverride ?? 0;
+  const hubMinisHasMore =
+    hubMinisHasMoreOverride ??
+    (hubMinisCompletedCountInStore >= HOT_WINDOW_HISTORY_PAGE_SIZE ||
+      hubMinisCancelledCountInStore >= HOT_WINDOW_HISTORY_PAGE_SIZE ||
+      hubMinisMissedCountInStore >= HOT_WINDOW_HISTORY_PAGE_SIZE);
+
+  const loadMoreHub = useCallback(async () => {
+    if (loadingMoreHub || !hubSheet) return;
+    const variant = hubSheet.mode === "habits-all" || hubSheet.mode === "habits-filter" ? "habits" : "minis";
+    setLoadingMoreHub(true);
+    try {
+      if (variant === "habits") {
+        const [accPage, failPage] = await Promise.all([
+          fetchHabitsHistoryPage({ offset: hubHabitsAccCount, limit: HOT_WINDOW_HISTORY_PAGE_SIZE, status: "accomplished" }),
+          fetchHabitsHistoryPage({ offset: hubHabitsFailCount, limit: HOT_WINDOW_HISTORY_PAGE_SIZE, status: "failed" }),
+        ]);
+        if (accPage) {
+          for (const item of accPage.items) mergeFetchedHabit(item);
+          setHubHabitsAccOverride(hubHabitsAccCount + accPage.items.length);
+        }
+        if (failPage) {
+          for (const item of failPage.items) mergeFetchedHabit(item);
+          setHubHabitsFailOverride(hubHabitsFailCount + failPage.items.length);
+        }
+        setHubHabitsHasMoreOverride((accPage?.hasMore ?? false) || (failPage?.hasMore ?? false));
+      } else {
+        const [completedPage, cancelledPage, missedPage] = await Promise.all([
+          fetchMiniMissionsHistoryPage({ offset: hubMinisCompletedCount, limit: HOT_WINDOW_HISTORY_PAGE_SIZE, status: "completed" }),
+          fetchMiniMissionsHistoryPage({ offset: hubMinisCancelledCount, limit: HOT_WINDOW_HISTORY_PAGE_SIZE, status: "cancelled" }),
+          fetchMiniMissionsHistoryPage({ offset: hubMinisMissedCount, limit: HOT_WINDOW_HISTORY_PAGE_SIZE, status: "missed" }),
+        ]);
+        if (completedPage) {
+          for (const item of completedPage.items) mergeFetchedMiniMission(item);
+          setHubMinisCompletedOverride(hubMinisCompletedCount + completedPage.items.length);
+        }
+        if (cancelledPage) {
+          for (const item of cancelledPage.items) mergeFetchedMiniMission(item);
+          setHubMinisCancelledOverride(hubMinisCancelledCount + cancelledPage.items.length);
+        }
+        if (missedPage) {
+          for (const item of missedPage.items) mergeFetchedMiniMission(item);
+          setHubMinisMissedOverride(hubMinisMissedCount + missedPage.items.length);
+        }
+        setHubMinisHasMoreOverride(
+          (completedPage?.hasMore ?? false) || (cancelledPage?.hasMore ?? false) || (missedPage?.hasMore ?? false),
+        );
+      }
+    } finally {
+      setLoadingMoreHub(false);
+    }
+  }, [
+    hubHabitsAccCount,
+    hubHabitsFailCount,
+    hubMinisCancelledCount,
+    hubMinisCompletedCount,
+    hubMinisMissedCount,
+    hubSheet,
+    loadingMoreHub,
+    mergeFetchedHabit,
+    mergeFetchedMiniMission,
+  ]);
 
   const hubModalContent = useMemo(() => {
     if (!hubSheet) return null;
@@ -2070,6 +2209,9 @@ export default function ProfileScreen() {
             emptyHint={hubModalContent.emptyHint}
             variant="habits"
             items={hubModalContent.items}
+            hasMore={hubHabitsHasMore}
+            loadingMore={loadingMoreHub}
+            onLoadMore={loadMoreHub}
           />
         ) : hubModalContent && hubModalContent.variant === "minis" ? (
           <HubListModal
@@ -2079,6 +2221,9 @@ export default function ProfileScreen() {
             emptyHint={hubModalContent.emptyHint}
             variant="minis"
             items={hubModalContent.items}
+            hasMore={hubMinisHasMore}
+            loadingMore={loadingMoreHub}
+            onLoadMore={loadMoreHub}
           />
         ) : null}
       </LazyMount>

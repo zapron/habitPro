@@ -5,6 +5,10 @@ import { habitFromRow } from "./sync";
 
 let historyPageRpcUnavailable = false;
 let historyPageRpcWarned = false;
+let byIdRpcUnavailable = false;
+let byIdRpcWarned = false;
+let byChallengeGroupIdRpcUnavailable = false;
+let byChallengeGroupIdRpcWarned = false;
 
 export type HabitsHistoryPageRequest = PageRequest & {
   status?: MissionReport | null;
@@ -79,4 +83,82 @@ export async function fetchHabitsHistoryPage(
     return null;
   }
   return normalizeHistoryPagePayload(data, offset, limit);
+}
+
+/**
+ * Direct fetch of one of the signed-in user's own habits by id, via
+ * rpc_habit_by_id_v1 — the fallback for when a habit isn't in the local
+ * store (e.g. opened via search or an old, not-yet-loaded mission), since
+ * the store can no longer be assumed to hold full history. Returns null on
+ * not-found, not-owned, or RPC-unavailable — callers should treat all of
+ * those as "couldn't load," not distinguish between them.
+ */
+export async function fetchHabitById(id: string): Promise<Habit | null> {
+  const supabase = getSupabase();
+  if (!supabase || !id) return null;
+  if (byIdRpcUnavailable) return null;
+  const { data, error } = await supabase.rpc("rpc_habit_by_id_v1", { p_id: id });
+  if (error) {
+    const message = typeof error.message === "string" ? error.message : String(error);
+    const code = typeof (error as { code?: unknown }).code === "string" ? (error as { code: string }).code : "";
+    const schemaCacheMiss =
+      code === "PGRST202" ||
+      message.toLowerCase().includes("schema cache") ||
+      message.toLowerCase().includes("could not find the function");
+    if (schemaCacheMiss) {
+      byIdRpcUnavailable = true;
+    }
+    if (__DEV__ && !byIdRpcWarned) {
+      byIdRpcWarned = true;
+      console.warn("[habitPro] rpc_habit_by_id_v1 unavailable", message);
+    }
+    return null;
+  }
+  if (!data || typeof data !== "object") return null;
+  try {
+    return habitFromRow(data as Parameters<typeof habitFromRow>[0]);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Direct fetch of the signed-in user's own habit linked to a given challenge group,
+ * via rpc_habit_by_challenge_group_id_v1 — the fallback for challenge/[id].tsx and
+ * compete.tsx's invite-accept flow, both of which look up "my habit for this
+ * challenge" from the local store. For an old, already-completed challenge whose
+ * habit fell outside the hot window, that lookup can wrongly come back empty —
+ * compete.tsx's invite-accept flow in particular must not treat that as "no habit
+ * exists yet" and create a duplicate. Returns null on not-found, not-owned, or
+ * RPC-unavailable.
+ */
+export async function fetchHabitByChallengeGroupId(challengeGroupId: string): Promise<Habit | null> {
+  const supabase = getSupabase();
+  if (!supabase || !challengeGroupId) return null;
+  if (byChallengeGroupIdRpcUnavailable) return null;
+  const { data, error } = await supabase.rpc("rpc_habit_by_challenge_group_id_v1", {
+    p_challenge_group_id: challengeGroupId,
+  });
+  if (error) {
+    const message = typeof error.message === "string" ? error.message : String(error);
+    const code = typeof (error as { code?: unknown }).code === "string" ? (error as { code: string }).code : "";
+    const schemaCacheMiss =
+      code === "PGRST202" ||
+      message.toLowerCase().includes("schema cache") ||
+      message.toLowerCase().includes("could not find the function");
+    if (schemaCacheMiss) {
+      byChallengeGroupIdRpcUnavailable = true;
+    }
+    if (__DEV__ && !byChallengeGroupIdRpcWarned) {
+      byChallengeGroupIdRpcWarned = true;
+      console.warn("[habitPro] rpc_habit_by_challenge_group_id_v1 unavailable", message);
+    }
+    return null;
+  }
+  if (!data || typeof data !== "object") return null;
+  try {
+    return habitFromRow(data as Parameters<typeof habitFromRow>[0]);
+  } catch {
+    return null;
+  }
 }

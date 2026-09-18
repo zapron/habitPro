@@ -77,6 +77,7 @@ import { usePremium } from "../../src/context/PremiumContext";
 import { usePlusUpsell } from "../../src/context/PlusUpsellContext";
 import { useRefreshPremiumAccess } from "../../src/hooks/useRefreshPremiumAccess";
 import { useRemoteStoreRefreshOnFocus } from "../../src/hooks/useRemoteStoreRefreshOnFocus";
+import { fetchMiniMissionById } from "../../src/lib/miniMissionsHistoryApi";
 import { useUsernameGate } from "../../src/context/UsernameGateContext";
 import { useNotificationGate } from "../../src/context/NotificationGateContext";
 import { isSupabaseConfigured } from "../../src/lib/env";
@@ -1175,6 +1176,7 @@ export default function MiniMissionDetail() {
   const mission = useHabitStore((state) =>
     missionId ? state.getMiniMission(missionId) : undefined,
   );
+  const mergeFetchedMiniMission = useHabitStore((state) => state.mergeFetchedMiniMission);
 
 
   const lastVisibilityRef = useRef<{
@@ -1187,6 +1189,28 @@ export default function MiniMissionDetail() {
   const [timerFrozenAtMs, setTimerFrozenAtMs] = useState<number | null>(null);
   /** Avoid not-found flash after delete; mission is removed before navigation finishes. */
   const [pendingExitAfterRemove, setPendingExitAfterRemove] = useState(false);
+  /** Not in the local store's window (e.g. opened via search or an old mission) — try a direct by-id fetch before showing "not found". */
+  const [byIdFallbackPending, setByIdFallbackPending] = useState(false);
+
+  useEffect(() => {
+    if (mission || !missionId || pendingExitAfterRemove) {
+      setByIdFallbackPending(false);
+      return;
+    }
+    let cancelled = false;
+    setByIdFallbackPending(true);
+    void fetchMiniMissionById(missionId)
+      .then((fetched) => {
+        if (cancelled || !fetched) return;
+        mergeFetchedMiniMission(fetched);
+      })
+      .finally(() => {
+        if (!cancelled) setByIdFallbackPending(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [mergeFetchedMiniMission, mission, missionId, pendingExitAfterRemove]);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [operationProgress, setOperationProgress] = useState<OperationProgressState | null>(null);
   const [missionDetailsOpen, setMissionDetailsOpen] = useState(false);
@@ -1605,7 +1629,7 @@ export default function MiniMissionDetail() {
             <ArrowLeft size={theme.icon.lg} color={theme.colors.textPrimary} />
           </TouchableOpacity>
         </View>
-        {pendingExitAfterRemove ? (
+        {pendingExitAfterRemove || byIdFallbackPending ? (
           <View style={styles.centered}>
             <ActivityIndicator size="large" color={theme.colors.cyan[400]} />
           </View>

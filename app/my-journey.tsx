@@ -70,6 +70,9 @@ import {
 } from "../src/lib/communityWinsApi";
 import { formatRelativeTime } from "../src/lib/communityWinFeedFormat";
 import { formatDateDisplay } from "../src/utils/dateDisplay";
+import { fetchHabitsHistoryPage } from "../src/lib/habitsHistoryApi";
+import { fetchMiniMissionsHistoryPage } from "../src/lib/miniMissionsHistoryApi";
+import { HOT_WINDOW_HISTORY_PAGE_SIZE } from "../src/lib/sync";
 import { getJourneyMiniGridLayout } from "../src/utils/journeyMiniGrid";
 import { levelFromTotalXp, xpInCurrentLevel } from "../src/utils/xpLevel";
 import { playerLeagueForLevel } from "../src/utils/playerLeague";
@@ -1834,16 +1837,70 @@ export default function MyJourneyScreen() {
     }
   }, []);
   const [listWidth, setListWidth] = useState(0);
-  const { xp, username, avatarUrl, habits, miniMissions } = useHabitStore(
+  const { xp, username, avatarUrl, habits, miniMissions, mergeFetchedHabit, mergeFetchedMiniMission } = useHabitStore(
     useShallow((s) => ({
       xp: s.xp,
       username: s.username,
       avatarUrl: s.avatarUrl,
       habits: s.habits,
       miniMissions: s.miniMissions,
+      mergeFetchedHabit: s.mergeFetchedHabit,
+      mergeFetchedMiniMission: s.mergeFetchedMiniMission,
     })),
   );
   const userId = session?.user?.id ?? null;
+
+  // Load More for private mode's mission/mini list — inert until now (Phase D's hot
+  // window is the first phase where habits/miniMissions don't already hold full
+  // history by default). A fully-private mission (never shared to Community) only
+  // ever appears here via buildPrivateStory scanning habits/miniMissions directly, so
+  // once those are windowed, an old private-only mission would vanish from this list
+  // entirely unless this screen pages through the same history RPCs independently of
+  // the global store — exactly parallel to how it already independently paginates the
+  // public side above. Fetched pages are merged into the global store
+  // (mergeFetchedHabit/mergeFetchedMiniMission) so buildPrivateStory's own
+  // habits/miniMissions selector picks them up automatically on the next render, and
+  // they stay available elsewhere in the app afterward too.
+  // fetchedCount/hasMore use an "override" pattern rather than seeding a plain
+  // useState at mount: the store hasn't necessarily hydrated/synced yet on first
+  // render, so a one-time initializer can freeze at an empty-array snapshot and never
+  // update again. Before any explicit Load More tap, these stay null and the values
+  // below are derived live from habits/miniMissions (so they track real data as it
+  // streams in); after the first tap, the override holds the server's authoritative
+  // answer.
+  const [privateHabitsAccOverride, setPrivateHabitsAccOverride] = useState<number | null>(null);
+  const [privateHabitsFailOverride, setPrivateHabitsFailOverride] = useState<number | null>(null);
+  const [privateHabitsHasMoreOverride, setPrivateHabitsHasMoreOverride] = useState<boolean | null>(null);
+  const [privateMinisCompletedOverride, setPrivateMinisCompletedOverride] = useState<number | null>(null);
+  const [privateMinisCancelledOverride, setPrivateMinisCancelledOverride] = useState<number | null>(null);
+  const [privateMinisMissedOverride, setPrivateMinisMissedOverride] = useState<number | null>(null);
+  const [privateMinisHasMoreOverride, setPrivateMinisHasMoreOverride] = useState<boolean | null>(null);
+
+  const privateHabitsAccCountInStore = useMemo(() => habits.filter((h) => h.missionReport === "accomplished").length, [habits]);
+  const privateHabitsFailCountInStore = useMemo(() => habits.filter((h) => h.missionReport === "failed").length, [habits]);
+  const privateMinisCompletedCountInStore = useMemo(() => miniMissions.filter((m) => m.status === "completed").length, [miniMissions]);
+  const privateMinisCancelledCountInStore = useMemo(() => miniMissions.filter((m) => m.status === "cancelled").length, [miniMissions]);
+  const privateMinisMissedCountInStore = useMemo(() => miniMissions.filter((m) => m.status === "missed").length, [miniMissions]);
+
+  // Deliberately NOT `?? countInStore`: habits/miniMissions can already contain items
+  // that arrived via the old full sync (pre-dating this feature) rather than via this
+  // paginated RPC, so their length isn't a reliable pagination offset. Before any real
+  // fetch, start from 0 — a safe, server-confirmed anchor — and let the override (set
+  // from the RPC's own authoritative response) take over from there.
+  const privateHabitsAccCount = privateHabitsAccOverride ?? 0;
+  const privateHabitsFailCount = privateHabitsFailOverride ?? 0;
+  const privateHabitsHasMore =
+    privateHabitsHasMoreOverride ??
+    (privateHabitsAccCountInStore >= HOT_WINDOW_HISTORY_PAGE_SIZE || privateHabitsFailCountInStore >= HOT_WINDOW_HISTORY_PAGE_SIZE);
+  const privateMinisCompletedCount = privateMinisCompletedOverride ?? 0;
+  const privateMinisCancelledCount = privateMinisCancelledOverride ?? 0;
+  const privateMinisMissedCount = privateMinisMissedOverride ?? 0;
+  const privateMinisHasMore =
+    privateMinisHasMoreOverride ??
+    (privateMinisCompletedCountInStore >= HOT_WINDOW_HISTORY_PAGE_SIZE ||
+      privateMinisCancelledCountInStore >= HOT_WINDOW_HISTORY_PAGE_SIZE ||
+      privateMinisMissedCountInStore >= HOT_WINDOW_HISTORY_PAGE_SIZE);
+
   const level = levelFromTotalXp(xp);
   const xpInLevel = xpInCurrentLevel(xp);
   const league = playerLeagueForLevel(level, theme, isDark);
@@ -1984,7 +2041,9 @@ export default function MyJourneyScreen() {
   const hasLocalHistoryMore = activeTabVisible < activeTabTotal;
   const activePublicHasMore =
     journeyMode === "public" ? (activeTab === "missions" ? publicMissionHasMore : publicMiniHasMore) : false;
-  const hasMoreHistory = hasLocalHistoryMore || activePublicHasMore;
+  const activePrivateHasMore =
+    journeyMode === "private" ? (activeTab === "missions" ? privateHabitsHasMore : privateMinisHasMore) : false;
+  const hasMoreHistory = hasLocalHistoryMore || activePublicHasMore || activePrivateHasMore;
 
   const onModeChange = useCallback((mode: JourneyMode) => {
     if (mode === journeyMode) return;
@@ -2005,6 +2064,56 @@ export default function MyJourneyScreen() {
       setMiniVisibleCount((count) => Math.min(count + MINI_POST_LIMIT, activeMinis.length));
       return;
     }
+
+    if (journeyMode === "private") {
+      const privateHasMore = activeTab === "missions" ? privateHabitsHasMore : privateMinisHasMore;
+      if (!privateHasMore || loadingMoreHistory) return;
+      setLoadingMoreHistory(true);
+      try {
+        if (activeTab === "missions") {
+          const [accPage, failPage] = await Promise.all([
+            fetchHabitsHistoryPage({ offset: privateHabitsAccCount, limit: HOT_WINDOW_HISTORY_PAGE_SIZE, status: "accomplished" }),
+            fetchHabitsHistoryPage({ offset: privateHabitsFailCount, limit: HOT_WINDOW_HISTORY_PAGE_SIZE, status: "failed" }),
+          ]);
+          if (accPage) {
+            for (const item of accPage.items) mergeFetchedHabit(item);
+            setPrivateHabitsAccOverride(privateHabitsAccCount + accPage.items.length);
+          }
+          if (failPage) {
+            for (const item of failPage.items) mergeFetchedHabit(item);
+            setPrivateHabitsFailOverride(privateHabitsFailCount + failPage.items.length);
+          }
+          setPrivateHabitsHasMoreOverride((accPage?.hasMore ?? false) || (failPage?.hasMore ?? false));
+          setMissionVisibleCount((count) => count + MISSION_STORY_LIMIT);
+        } else {
+          const [completedPage, cancelledPage, missedPage] = await Promise.all([
+            fetchMiniMissionsHistoryPage({ offset: privateMinisCompletedCount, limit: HOT_WINDOW_HISTORY_PAGE_SIZE, status: "completed" }),
+            fetchMiniMissionsHistoryPage({ offset: privateMinisCancelledCount, limit: HOT_WINDOW_HISTORY_PAGE_SIZE, status: "cancelled" }),
+            fetchMiniMissionsHistoryPage({ offset: privateMinisMissedCount, limit: HOT_WINDOW_HISTORY_PAGE_SIZE, status: "missed" }),
+          ]);
+          if (completedPage) {
+            for (const item of completedPage.items) mergeFetchedMiniMission(item);
+            setPrivateMinisCompletedOverride(privateMinisCompletedCount + completedPage.items.length);
+          }
+          if (cancelledPage) {
+            for (const item of cancelledPage.items) mergeFetchedMiniMission(item);
+            setPrivateMinisCancelledOverride(privateMinisCancelledCount + cancelledPage.items.length);
+          }
+          if (missedPage) {
+            for (const item of missedPage.items) mergeFetchedMiniMission(item);
+            setPrivateMinisMissedOverride(privateMinisMissedCount + missedPage.items.length);
+          }
+          setPrivateMinisHasMoreOverride(
+            (completedPage?.hasMore ?? false) || (cancelledPage?.hasMore ?? false) || (missedPage?.hasMore ?? false),
+          );
+          setMiniVisibleCount((count) => count + MINI_POST_LIMIT);
+        }
+      } finally {
+        setLoadingMoreHistory(false);
+      }
+      return;
+    }
+
     const feedSource = activeTab === "missions" ? "habit_streak" : "mini";
     const offset = activeTab === "missions" ? publicMissionFetchedCount : publicMiniFetchedCount;
     const remoteHasMore = activeTab === "missions" ? publicMissionHasMore : publicMiniHasMore;
@@ -2044,9 +2153,18 @@ export default function MyJourneyScreen() {
     activeMinis.length,
     activeTab,
     loadingMoreHistory,
+    mergeFetchedHabit,
+    mergeFetchedMiniMission,
     miniVisibleCount,
     missionVisibleCount,
     journeyMode,
+    privateHabitsAccCount,
+    privateHabitsFailCount,
+    privateHabitsHasMore,
+    privateMinisCancelledCount,
+    privateMinisCompletedCount,
+    privateMinisHasMore,
+    privateMinisMissedCount,
     publicMiniFetchedCount,
     publicMiniHasMore,
     publicMissionFetchedCount,

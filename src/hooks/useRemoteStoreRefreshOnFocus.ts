@@ -175,7 +175,16 @@ export function useRemoteStoreRefreshOnFocus(enabled = true) {
             () => pullFromSupabase(userId, { includeCohortPeerHabits: false }),
             { meta: { reason: "delta-unavailable" } },
           );
-          remoteWithLocalPeers = { ...remote, cohortPeerHabits: local.cohortPeerHabits };
+          // Merge rather than replace: once the full pull is windowed (a later
+          // phase), a wholesale replace would drop anything already loaded that
+          // falls outside the fetched window. applyFocusDeltaToStore already only
+          // removes what's explicitly deleted (or this device's own pending
+          // deletes) — never something merely absent from the fetched batch. No
+          // behavior change yet here since `remote` is still a full, unbounded
+          // fetch at this phase.
+          remoteWithLocalPeers = traceSync("focusRefresh.mergeFull", () =>
+            applyFocusDeltaToStore(local, remote, { habitIds: [], miniIds: [] }),
+          );
         }
       } else {
         const remote = await traceAsync(
@@ -183,7 +192,9 @@ export function useRemoteStoreRefreshOnFocus(enabled = true) {
           () => pullFromSupabase(userId, { includeCohortPeerHabits: false }),
           { meta: { reason: lastRefreshAt > 0 ? "forced" : "first-refresh" } },
         );
-        remoteWithLocalPeers = { ...remote, cohortPeerHabits: local.cohortPeerHabits };
+        remoteWithLocalPeers = traceSync("focusRefresh.mergeFull", () =>
+          applyFocusDeltaToStore(local, remote, { habitIds: [], miniIds: [] }),
+        );
       }
       const latestLocal = useHabitStore.getState();
       if (

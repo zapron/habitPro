@@ -1,6 +1,7 @@
 import { Text } from "./AppText";
 import { memo } from "react";
 import {
+  ActivityIndicator,
   Animated,
   Modal,
   View,
@@ -10,10 +11,12 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
+import { LinearGradient } from "expo-linear-gradient";
 import { X, Globe, User } from "lucide-react-native";
 import type { Habit, MiniMission } from "../types/habit";
 import { useTheme } from "../context/ThemeContext";
 import type { AppTheme } from "../styles/theme";
+import { withAlpha } from "../styles/theme";
 import { getMiniMissionDisplayStatus } from "../utils/miniMissionTime";
 import { GlassTopHighlight } from "./GlassTopHighlight";
 import { useListCardEntrance } from "../hooks/useListCardEntrance";
@@ -23,6 +26,10 @@ export type HubListModalProps = {
   onClose: () => void;
   title: string;
   emptyHint: string;
+  /** Older history beyond what's currently loaded — shows a "Load more" footer when true. */
+  hasMore?: boolean;
+  loadingMore?: boolean;
+  onLoadMore?: () => void;
 } & (
   | { variant: "habits"; items: Habit[] }
   | { variant: "minis"; items: MiniMission[] }
@@ -154,8 +161,8 @@ const HubMiniRow = memo(function HubMiniRow({
 });
 
 export function HubListModal(props: HubListModalProps) {
-  const { visible, onClose, title, emptyHint } = props;
-  const { theme } = useTheme();
+  const { visible, onClose, title, emptyHint, hasMore, loadingMore, onLoadMore } = props;
+  const { theme, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
 
@@ -168,6 +175,40 @@ export function HubListModal(props: HubListModalProps) {
   );
 
   const empty = props.items.length === 0;
+
+  const loadMoreFooter = hasMore ? (
+    <View style={styles.loadMoreWrap}>
+      <TouchableOpacity
+        onPress={onLoadMore}
+        disabled={loadingMore}
+        accessibilityRole="button"
+        accessibilityLabel="Load more"
+        style={[
+          styles.loadMoreButton,
+          {
+            borderColor: isDark ? withAlpha(theme.colors.indigo[400], 42) : withAlpha(theme.colors.indigo[600], 20),
+            opacity: loadingMore ? 0.78 : 1,
+          },
+        ]}
+      >
+        <LinearGradient
+          colors={
+            isDark
+              ? (["rgba(79, 70, 229, 0.82)", "rgba(6, 182, 212, 0.62)"] as const)
+              : ([theme.colors.indigo[500], theme.colors.cyan[500]] as const)
+          }
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.loadMoreGradient}
+        >
+          {loadingMore ? <ActivityIndicator size="small" color={theme.colors.white} /> : null}
+          <Text style={[styles.loadMoreText, { color: theme.colors.white }]}>
+            {loadingMore ? "Loading..." : "Load more"}
+          </Text>
+        </LinearGradient>
+      </TouchableOpacity>
+    </View>
+  ) : null;
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
@@ -202,6 +243,7 @@ export function HubListModal(props: HubListModalProps) {
             ]}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
+            ListFooterComponent={loadMoreFooter}
           />
         ) : (
           <FlatList<MiniMission>
@@ -214,6 +256,7 @@ export function HubListModal(props: HubListModalProps) {
             ]}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
+            ListFooterComponent={loadMoreFooter}
           />
         )}
       </View>
@@ -242,6 +285,25 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   listContent: { paddingHorizontal: 16, paddingTop: 12 },
+  loadMoreWrap: { paddingTop: 12, paddingBottom: 4, alignItems: "center" },
+  loadMoreButton: {
+    minHeight: 38,
+    borderRadius: 999,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+  },
+  loadMoreGradient: {
+    minHeight: 38,
+    paddingHorizontal: 18,
+    paddingVertical: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  loadMoreText: { fontSize: 12, lineHeight: 16, fontWeight: "900" },
   emptyWrap: { flex: 1, justifyContent: "center", alignItems: "center", paddingHorizontal: 28 },
   emptyText: { fontSize: 15, textAlign: "center", lineHeight: 22 },
 });

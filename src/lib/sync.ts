@@ -1115,6 +1115,118 @@ export function applyFocusDeltaToStore(
   };
 }
 
+/** Page size used for the default/initial windowed fetch (Phase D) — exported so
+ * "Load More" UIs can use the same value to guess whether more history might exist
+ * before their first explicit fetch call gets an authoritative hasMore back. */
+export const HOT_WINDOW_HISTORY_PAGE_SIZE = 20;
+const MINI_ROW_SELECT =
+  "user_id, id, title, objective, visibility, community_feed_revoked, estimated_minutes, extended_minutes, completion_mode, status, created_at, scheduled_start_at, started_at, completed_at, completion_memory, live_squad_id, live_squad_role, task_checklist, capture_mode";
+
+async function fetchHabitsHistoryPageRaw(
+  supabase: SupabaseClient,
+  status: "accomplished" | "failed",
+): Promise<Record<string, unknown>[]> {
+  const { data, error } = await supabase.rpc("rpc_habits_history_page_v1", {
+    p_offset: 0,
+    p_limit: HOT_WINDOW_HISTORY_PAGE_SIZE,
+    p_status: status,
+  });
+  if (error) {
+    if (__DEV__) console.warn(`[habitPro] rpc_habits_history_page_v1(${status}) failed`, error.message);
+    return [];
+  }
+  const items = data && typeof data === "object" ? (data as { items?: unknown }).items : null;
+  return Array.isArray(items) ? (items as Record<string, unknown>[]) : [];
+}
+
+async function fetchMiniMissionsHistoryPageRaw(
+  supabase: SupabaseClient,
+  status: "completed" | "cancelled" | "missed",
+): Promise<Record<string, unknown>[]> {
+  const { data, error } = await supabase.rpc("rpc_mini_missions_history_page_v1", {
+    p_offset: 0,
+    p_limit: HOT_WINDOW_HISTORY_PAGE_SIZE,
+    p_status: status,
+    p_query: null,
+  });
+  if (error) {
+    if (__DEV__) console.warn(`[habitPro] rpc_mini_missions_history_page_v1(${status}) failed`, error.message);
+    return [];
+  }
+  const items = data && typeof data === "object" ? (data as { items?: unknown }).items : null;
+  return Array.isArray(items) ? (items as Record<string, unknown>[]) : [];
+}
+
+/**
+ * Hot-window plan, Phase D: the default/initial fetch used to be every habit and mini
+ * mission a user ever had, unbounded. It now eagerly loads only what's always safe to
+ * assume is small and current (active habits, active/queued mini missions) plus the
+ * most recent page of each terminal bucket (accomplished/failed, completed/cancelled/
+ * missed) via the same paginated history RPCs the Done/Failed "Load More" UI uses —
+ * reusing the pagination primitive rather than building a second one. Anything older
+ * than that first page is reached lazily: via "Load More" on the relevant tab, via
+ * search, or via the single-mission-by-id fallback (Phase B) — and once fetched, stays
+ * merged into the store (Phase C) rather than needing to be re-fetched every time.
+ */
+async function pullWindowedFromSupabase(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<{ habits: Habit[]; miniMissions: MiniMission[] }> {
+  const [activeHabitsRes, activeMinisRes, accomplishedRaw, failedRaw, completedRaw, cancelledRaw, missedRaw, repairedByHabit] =
+    await Promise.all([
+      // status <> 'failed' matters here, not just is_completed = false: a failed habit
+      // also has is_completed = false (it never finished), so without this it would
+      // defeat the whole point of windowing for the failed bucket — every failed habit,
+      // no matter how old, would get eagerly loaded here regardless of the history
+      // RPC's page limit below.
+      supabase
+        .from("habits")
+        .select(HABIT_ROW_SELECT)
+        .eq("user_id", userId)
+        .eq("is_completed", false)
+        .neq("status", "failed"),
+      supabase
+        .from("mini_missions")
+        .select(MINI_ROW_SELECT)
+        .eq("user_id", userId)
+        .in("status", ["pending", "scheduled", "in_progress"]),
+      fetchHabitsHistoryPageRaw(supabase, "accomplished"),
+      fetchHabitsHistoryPageRaw(supabase, "failed"),
+      fetchMiniMissionsHistoryPageRaw(supabase, "completed"),
+      fetchMiniMissionsHistoryPageRaw(supabase, "cancelled"),
+      fetchMiniMissionsHistoryPageRaw(supabase, "missed"),
+      fetchAppliedRepairsByHabit(supabase, userId),
+    ]);
+
+  if (activeHabitsRes.error) throw activeHabitsRes.error;
+  if (activeMinisRes.error) throw activeMinisRes.error;
+
+  const habitRowsById = new Map<string, Record<string, unknown>>();
+  for (const row of (activeHabitsRes.data ?? []) as Record<string, unknown>[]) {
+    habitRowsById.set(String(row.id ?? ""), row);
+  }
+  for (const row of [...accomplishedRaw, ...failedRaw]) {
+    habitRowsById.set(String(row.id ?? ""), row);
+  }
+
+  const miniRowsById = new Map<string, Record<string, unknown>>();
+  for (const row of (activeMinisRes.data ?? []) as Record<string, unknown>[]) {
+    miniRowsById.set(String(row.id ?? ""), row);
+  }
+  for (const row of [...completedRaw, ...cancelledRaw, ...missedRaw]) {
+    miniRowsById.set(String(row.id ?? ""), row);
+  }
+
+  const habits = [...habitRowsById.values()].map((row) => {
+    const hid = String(row.id ?? "");
+    const repairedDates = repairedByHabit.get(hid) ?? [];
+    return habitFromRow({ ...(row as any), repairedDates });
+  });
+  const miniMissions = [...miniRowsById.values()].map((row) => miniFromRow(row));
+
+  return { habits, miniMissions };
+}
+
 export async function pullFromSupabase(
   userId: string,
   options?: { includeCohortPeerHabits?: boolean },
@@ -1127,76 +1239,36 @@ export async function pullFromSupabase(
   const includeCohortPeerHabits = options?.includeCohortPeerHabits ?? true;
 
   const baseFetchStartedAt = Date.now();
-  const [deltaPayload, repairedByHabit] = await Promise.all([
-    pullViaFocusDeltaRpc(supabase, null),
-    fetchAppliedRepairsByHabit(supabase, userId),
+  const [windowed, profileRes] = await Promise.all([
+    pullWindowedFromSupabase(supabase, userId),
+    supabase.from("profiles").select("xp, username").eq("id", userId).maybeSingle(),
   ]);
   logSyncPerf("sync.pull.baseFetch", baseFetchStartedAt, {
-    mode: deltaPayload ? "rpc_delta" : "legacy_full",
-    repairs: repairedByHabit.size,
+    mode: "windowed",
+    habits: windowed.habits.length,
+    miniMissions: windowed.miniMissions.length,
   });
 
-  let habits: Habit[];
-  let miniMissions: MiniMission[];
-  let xp: number;
-  let username: string | null;
+  if (profileRes.error) throw profileRes.error;
+  const rawUser = profileRes.data as { username?: string | null } | null;
+  const xp = profileRes.data?.xp ?? 0;
+  const username =
+    typeof rawUser?.username === "string" && rawUser.username.trim().length > 0
+      ? rawUser.username.trim().toLowerCase()
+      : null;
 
-  if (deltaPayload) {
-    const mapStartedAt = Date.now();
-    const partial = await mapFocusDeltaPayload(supabase, userId, deltaPayload, repairedByHabit);
-    const deleted = deletedIdsFromPayload(deltaPayload);
-    habits = partial.habits.filter((h) => !deleted.habitIds.includes(h.id));
-    miniMissions = partial.miniMissions.filter((m) => !deleted.miniIds.includes(m.id));
-    xp = partial.xp;
-    username = partial.username;
-    logSyncPerf("sync.pull.mapDelta", mapStartedAt, {
-      habits: habits.length,
-      miniMissions: miniMissions.length,
-      deletedHabits: deleted.habitIds.length,
-      deletedMinis: deleted.miniIds.length,
-    });
-  } else {
-    const legacyStartedAt = Date.now();
-    const [habitsRes, miniRes, profileRes] = await Promise.all([
-      supabase.from("habits").select(HABIT_ROW_SELECT).eq("user_id", userId),
-      supabase
-        .from("mini_missions")
-        .select(
-          "user_id, id, title, objective, visibility, community_feed_revoked, estimated_minutes, extended_minutes, completion_mode, status, created_at, scheduled_start_at, started_at, completed_at, completion_memory, live_squad_id, live_squad_role, task_checklist, capture_mode",
-        )
-        .eq("user_id", userId),
-      supabase.from("profiles").select("xp, username").eq("id", userId).maybeSingle(),
-    ]);
-
-    if (habitsRes.error) throw habitsRes.error;
-    if (miniRes.error) throw miniRes.error;
-    if (profileRes.error) throw profileRes.error;
-
-    habits = (habitsRes.data ?? []).map((r) => {
-      const row = r as unknown as Record<string, unknown>;
-      const hid = String(row.id ?? "");
-      const repairedDates = repairedByHabit.get(hid) ?? [];
-      return habitFromRow({ ...(r as any), repairedDates });
-    });
-    miniMissions = (miniRes.data ?? []).map((r) => miniFromRow(r));
-    xp = profileRes.data?.xp ?? 0;
-    const rawUser = profileRes.data as { username?: string | null } | null;
-    username =
-      typeof rawUser?.username === "string" && rawUser.username.trim().length > 0
-        ? rawUser.username.trim().toLowerCase()
-        : null;
-
-    const alignGroupIds = habits
-      .map((h) => h.challengeGroupId)
-      .filter((id): id is string => Boolean(id));
-    const groupMeta = await fetchChallengeGroupAlignmentMeta(supabase, alignGroupIds);
-    habits = alignHabitsToChallengeGroups(habits, groupMeta);
-    logSyncPerf("sync.pull.legacyFull", legacyStartedAt, {
-      habits: habits.length,
-      miniMissions: miniMissions.length,
-      groupIds: alignGroupIds.length,
-    });
-  }
+  const alignStartedAt = Date.now();
+  const alignGroupIds = windowed.habits
+    .map((h) => h.challengeGroupId)
+    .filter((id): id is string => Boolean(id));
+  const groupMeta = await fetchChallengeGroupAlignmentMeta(supabase, alignGroupIds);
+  const habits = alignHabitsToChallengeGroups(windowed.habits, groupMeta);
+  const miniMissions = windowed.miniMissions;
+  logSyncPerf("sync.pull.align", alignStartedAt, {
+    habits: habits.length,
+    miniMissions: miniMissions.length,
+    groupIds: alignGroupIds.length,
+  });
 
   const cohortStartedAt = Date.now();
   const cohortPeerHabits = includeCohortPeerHabits
@@ -1471,23 +1543,43 @@ function mergeDirtyLocalIntoRemote(
   const pendingHabitDeletes = new Set(local.pendingDeleteHabitIds ?? []);
   const pendingMiniDeletes = new Set(local.pendingDeleteMiniMissionIds ?? []);
 
-  let preservedLocalChange = false;
-  const habitsById = new Map(remote.habits.map((habit) => [habit.id, habit]));
+  // Seed from local first (own-user items only, minus pending deletes), then overlay
+  // remote on top (remote wins for any id it returns). This way anything already
+  // loaded locally — e.g. fetched lazily via a by-id lookup or an older history page
+  // — survives a re-hydrate (which runs on every cold start, not just a genuine first
+  // sign-in) even once remote's own fetch is windowed and doesn't include it. Dirty
+  // local edits below still override whichever version won this base merge, same as
+  // before.
+  const habitsById = new Map<string, Habit>();
+  for (const habit of local.habits) {
+    if (!belongsToUser(habit, userId) || pendingHabitDeletes.has(habit.id)) continue;
+    habitsById.set(habit.id, habit);
+  }
+  for (const habit of remote.habits) {
+    habitsById.set(habit.id, habit);
+  }
+
+  const miniMissionsById = new Map<string, MiniMission>();
+  for (const mission of local.miniMissions) {
+    if (!belongsToUser(mission, userId) || pendingMiniDeletes.has(mission.id)) continue;
+    miniMissionsById.set(mission.id, mission);
+  }
+  for (const mission of remote.miniMissions) {
+    miniMissionsById.set(mission.id, mission);
+  }
+
   for (const habit of local.habits) {
     if (!dirtyHabitIds.has(habit.id) || !belongsToUser(habit, userId)) continue;
     if (pendingHabitDeletes.has(habit.id)) continue;
-    preservedLocalChange = true;
     habitsById.set(habit.id, {
       ...habit,
       ownerUserId: habit.ownerUserId ?? userId,
     });
   }
 
-  const miniMissionsById = new Map(remote.miniMissions.map((mission) => [mission.id, mission]));
   for (const mission of local.miniMissions) {
     if (!dirtyMiniIds.has(mission.id) || !belongsToUser(mission, userId)) continue;
     if (pendingMiniDeletes.has(mission.id)) continue;
-    preservedLocalChange = true;
     miniMissionsById.set(mission.id, {
       ...mission,
       ownerUserId: mission.ownerUserId ?? userId,
@@ -1497,30 +1589,23 @@ function mergeDirtyLocalIntoRemote(
   // draftTasks is local-only (never pushed/pulled, see MiniMission.draftTasks) — carry it
   // forward regardless of dirty status, or a mission whose dirty flag already cleared from
   // an unrelated field push (timer tick, fuel extend, ...) silently loses its in-progress
-  // task logs the next time this device signs in / cold-starts. Deliberately not gated by
-  // the dirtyHabitIds/dirtyMiniIds early-return above, since this can be the only thing
-  // that needs preserving.
+  // task logs the next time this device signs in / cold-starts.
   for (const mission of local.miniMissions) {
     if (!mission.draftTasks || !belongsToUser(mission, userId)) continue;
     const merged = miniMissionsById.get(mission.id);
     if (!merged || merged.status !== "in_progress" || merged.draftTasks) continue;
-    preservedLocalChange = true;
     miniMissionsById.set(mission.id, { ...merged, draftTasks: mission.draftTasks });
   }
 
-  // draftMemories (freeform capture) — same local-only, not-gated-by-dirty-status
-  // preservation as draftTasks above. Applying this from the start, not after a bug
-  // report: see app-architecture.md's Sync Architecture section for the exact failure
-  // shape this pattern exists to prevent.
+  // draftMemories (freeform capture) — same local-only preservation as draftTasks above.
+  // See app-architecture.md's Sync Architecture section for the failure shape this
+  // pattern exists to prevent.
   for (const mission of local.miniMissions) {
     if (!mission.draftMemories || !belongsToUser(mission, userId)) continue;
     const merged = miniMissionsById.get(mission.id);
     if (!merged || merged.status !== "in_progress" || merged.draftMemories) continue;
-    preservedLocalChange = true;
     miniMissionsById.set(mission.id, { ...merged, draftMemories: mission.draftMemories });
   }
-
-  if (!preservedLocalChange) return remote;
 
   return {
     ...remote,

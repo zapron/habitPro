@@ -5,6 +5,8 @@ import { miniFromRow } from "./sync";
 
 let historyPageRpcUnavailable = false;
 let historyPageRpcWarned = false;
+let byIdRpcUnavailable = false;
+let byIdRpcWarned = false;
 
 export type MiniMissionsHistoryPageRequest = PageRequest & {
   status?: MiniMission["status"] | null;
@@ -86,4 +88,40 @@ export async function searchMiniMissions(query: string, limit = 30): Promise<Min
   if (!trimmed) return [];
   const page = await fetchMiniMissionsHistoryPage({ offset: 0, limit, query: trimmed });
   return page?.items ?? [];
+}
+
+/**
+ * Direct fetch of one of the signed-in user's own mini missions by id, via
+ * rpc_mini_mission_by_id_v1 — the fallback for when a mini mission isn't in
+ * the local store. Returns null on not-found, not-owned, or
+ * RPC-unavailable — callers should treat all of those as "couldn't load,"
+ * not distinguish between them.
+ */
+export async function fetchMiniMissionById(id: string): Promise<MiniMission | null> {
+  const supabase = getSupabase();
+  if (!supabase || !id) return null;
+  if (byIdRpcUnavailable) return null;
+  const { data, error } = await supabase.rpc("rpc_mini_mission_by_id_v1", { p_id: id });
+  if (error) {
+    const message = typeof error.message === "string" ? error.message : String(error);
+    const code = typeof (error as { code?: unknown }).code === "string" ? (error as { code: string }).code : "";
+    const schemaCacheMiss =
+      code === "PGRST202" ||
+      message.toLowerCase().includes("schema cache") ||
+      message.toLowerCase().includes("could not find the function");
+    if (schemaCacheMiss) {
+      byIdRpcUnavailable = true;
+    }
+    if (__DEV__ && !byIdRpcWarned) {
+      byIdRpcWarned = true;
+      console.warn("[habitPro] rpc_mini_mission_by_id_v1 unavailable", message);
+    }
+    return null;
+  }
+  if (!data || typeof data !== "object") return null;
+  try {
+    return miniFromRow(data as Record<string, unknown>);
+  } catch {
+    return null;
+  }
 }

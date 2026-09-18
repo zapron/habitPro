@@ -92,6 +92,20 @@ type MissionStats = {
   };
 };
 
+/**
+ * Server-computed lifetime totals (rpc_profile_lifetime_stats_v1), used in place of
+ * scanning the full local habits/miniMissions arrays. Optional — while unavailable
+ * (still loading, or the RPC failed) the values below fall back to the local scan, so
+ * this never blocks rendering; it only replaces the source of truth once it resolves.
+ */
+export type ProfileLifetimeStatsOverride = {
+  lifetimeCheckIns: number;
+  maxStreak: number;
+  memoryProofs: number;
+  publicMoments: number;
+  repairs: { total: number; squad: number; solo: number };
+};
+
 type BuildProfileIntelligenceInput = {
   habits: readonly Habit[];
   miniMissions: readonly MiniMission[];
@@ -100,6 +114,7 @@ type BuildProfileIntelligenceInput = {
   missionStats: MissionStats;
   communityEnabled?: boolean;
   now?: Date;
+  lifetimeStats?: ProfileLifetimeStatsOverride | null;
 };
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -353,6 +368,7 @@ export function buildProfileIntelligence({
   missionStats,
   communityEnabled = true,
   now = new Date(),
+  lifetimeStats = null,
 }: BuildProfileIntelligenceInput): ProfileIntelligence {
   const weeklyScore = weeklyCompeteScore([...habits], [...miniMissions], level, now);
   const tier = weeklyTierLabel(weeklyScore);
@@ -399,14 +415,14 @@ export function buildProfileIntelligence({
   const habitPoints = habitCheckInsThisWeek * WEEKLY_HABIT_CHECKIN_POINTS;
   const miniPoints = miniCompletionsThisWeek * WEEKLY_MINI_COMPLETION_POINTS;
 
-  const lifetimeCheckIns = totalLifetimeCheckIns([...habits]);
-  const maxStreak = maxHabitStreak([...habits]);
-  const repairs = computeRepairCounts(habits);
+  const lifetimeCheckIns = lifetimeStats?.lifetimeCheckIns ?? totalLifetimeCheckIns([...habits]);
+  const maxStreak = lifetimeStats?.maxStreak ?? maxHabitStreak([...habits]);
+  const repairs = lifetimeStats?.repairs ?? computeRepairCounts(habits);
   const cleanCheckIns = Math.max(0, lifetimeCheckIns - repairs.total);
-  const memoryProofs = countMemoryProofs(habits, miniMissions);
+  const memoryProofs = lifetimeStats?.memoryProofs ?? countMemoryProofs(habits, miniMissions);
   const completedActions = lifetimeCheckIns + miniDoneTotal;
   const reflectionRate = percent(memoryProofs, completedActions);
-  const publicMoments = countPublicMoments(habits, miniMissions);
+  const publicMoments = lifetimeStats?.publicMoments ?? countPublicMoments(habits, miniMissions);
   const miniMinutes = miniCompletedMinutes(miniMissions);
   const activeHabits = countActiveHabits([...habits]);
   const activeLoad = activeHabits + miniLiveTotal;

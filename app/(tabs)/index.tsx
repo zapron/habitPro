@@ -18,6 +18,7 @@ import {
   ScrollView,
   InteractionManager,
   Linking,
+  ActivityIndicator,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -41,6 +42,8 @@ import {
   Download,
 } from "lucide-react-native";
 import { useHabitStore } from "../../src/store/habitStore";
+import { fetchHabitsHistoryPage } from "../../src/lib/habitsHistoryApi";
+import { HOT_WINDOW_HISTORY_PAGE_SIZE } from "../../src/lib/sync";
 import { useShallow } from "zustand/react/shallow";
 import { useAuth } from "../../src/context/AuthContext";
 import { useAppVersion } from "../../src/context/AppVersionContext";
@@ -282,12 +285,13 @@ export default function Home() {
   const { softUpdateAvailable, latestVersion, softUpdateUrl, softUpdateMessage } = useAppVersion();
   const reduceMotion = useReducedMotion();
   const { showToast } = useToast();
-  const { habits, cohortPeerHabits, miniMissions, xp } = useHabitStore(
+  const { habits, cohortPeerHabits, miniMissions, xp, mergeFetchedHabit } = useHabitStore(
     useShallow((s) => ({
       habits: isFocused ? s.habits : EMPTY_HABITS,
       cohortPeerHabits: isFocused ? s.cohortPeerHabits : EMPTY_HABITS,
       miniMissions: isFocused ? s.miniMissions : EMPTY_MINI_MISSIONS,
       xp: isFocused ? s.xp : 0,
+      mergeFetchedHabit: s.mergeFetchedHabit,
     })),
   );
   const [activeTab, setActiveTab] = useState<"missions" | "reports">(
@@ -311,6 +315,58 @@ export default function Home() {
   const [reportsSegment, setReportsSegment] = useState<
     "pending" | "accomplished" | "failed"
   >("pending");
+  // Load More for the accomplished/failed reports segments — inert until now (Phase D's
+  // hot window is the first phase where the local store doesn't already hold full
+  // habit history by default). Fetched items are merged into the global store
+  // (mergeFetchedHabit) so they stay available afterward instead of being re-fetched.
+  //
+  // fetchedCount/hasMore use an "override" pattern rather than seeding a plain
+  // useState at mount: the store hasn't necessarily hydrated/synced yet on first
+  // render, so a one-time initializer can freeze at an empty-array snapshot and never
+  // update again. Before any explicit Load More tap, these stay null and the values
+  // below are derived live from `habits` (so they track real data as it streams in);
+  // after the first tap, the override holds the server's authoritative answer.
+  const [accomplishedFetchedOverride, setAccomplishedFetchedOverride] = useState<number | null>(null);
+  const [accomplishedHasMoreOverride, setAccomplishedHasMoreOverride] = useState<boolean | null>(null);
+  const [failedReportsFetchedOverride, setFailedReportsFetchedOverride] = useState<number | null>(null);
+  const [failedReportsHasMoreOverride, setFailedReportsHasMoreOverride] = useState<boolean | null>(null);
+  const [loadingMoreReports, setLoadingMoreReports] = useState(false);
+
+  const accomplishedCountInStore = useMemo(() => habits.filter((h) => h.missionReport === "accomplished").length, [habits]);
+  const failedReportsCountInStore = useMemo(() => habits.filter((h) => h.missionReport === "failed").length, [habits]);
+  // Deliberately NOT `?? countInStore`: the local array can already contain items
+  // that arrived via the old full sync (pre-dating this feature) rather than via this
+  // paginated RPC, so its length isn't a reliable pagination offset. Before any real
+  // fetch, start from 0 — a safe, server-confirmed anchor — and let the override (set
+  // from the RPC's own authoritative response) take over from there.
+  const accomplishedFetchedCount = accomplishedFetchedOverride ?? 0;
+  const failedReportsFetchedCount = failedReportsFetchedOverride ?? 0;
+  const accomplishedHasMore = accomplishedHasMoreOverride ?? accomplishedCountInStore >= HOT_WINDOW_HISTORY_PAGE_SIZE;
+  const failedReportsHasMore = failedReportsHasMoreOverride ?? failedReportsCountInStore >= HOT_WINDOW_HISTORY_PAGE_SIZE;
+  const reportsSegmentHasMore =
+    reportsSegment === "accomplished" ? accomplishedHasMore : reportsSegment === "failed" ? failedReportsHasMore : false;
+
+  const loadMoreReportsSegment = useCallback(async () => {
+    if (loadingMoreReports || reportsSegment === "pending") return;
+    setLoadingMoreReports(true);
+    try {
+      const status = reportsSegment;
+      const offset = status === "accomplished" ? accomplishedFetchedCount : failedReportsFetchedCount;
+      const page = await fetchHabitsHistoryPage({ offset, limit: HOT_WINDOW_HISTORY_PAGE_SIZE, status });
+      if (page) {
+        for (const item of page.items) mergeFetchedHabit(item);
+        if (status === "accomplished") {
+          setAccomplishedFetchedOverride(offset + page.items.length);
+          setAccomplishedHasMoreOverride(page.hasMore);
+        } else {
+          setFailedReportsFetchedOverride(offset + page.items.length);
+          setFailedReportsHasMoreOverride(page.hasMore);
+        }
+      }
+    } finally {
+      setLoadingMoreReports(false);
+    }
+  }, [accomplishedFetchedCount, failedReportsFetchedCount, loadingMoreReports, mergeFetchedHabit, reportsSegment]);
   const [storeHydrated, setStoreHydrated] = useState(() =>
     useHabitStore.persist.hasHydrated(),
   );
@@ -1433,6 +1489,41 @@ export default function Home() {
               refreshControl={
                 showAccount && session?.user ? notifRefreshControl : undefined
               }
+              ListFooterComponent={
+                activeTab === "reports" && reportsSegmentHasMore ? (
+                  <View style={styles.loadMoreWrap}>
+                    <TouchableOpacity
+                      onPress={loadMoreReportsSegment}
+                      disabled={loadingMoreReports}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Load more ${reportsSegment} missions`}
+                      style={[
+                        styles.loadMoreButton,
+                        {
+                          borderColor: isDark ? withAlpha(theme.colors.indigo[400], 42) : withAlpha(theme.colors.indigo[600], 20),
+                          opacity: loadingMoreReports ? 0.78 : 1,
+                        },
+                      ]}
+                    >
+                      <LinearGradient
+                        colors={
+                          isDark
+                            ? (["rgba(79, 70, 229, 0.82)", "rgba(6, 182, 212, 0.62)"] as const)
+                            : ([theme.colors.indigo[500], theme.colors.cyan[500]] as const)
+                        }
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
+                        style={styles.loadMoreGradient}
+                      >
+                        {loadingMoreReports ? <ActivityIndicator size="small" color={theme.colors.white} /> : null}
+                        <Text style={[styles.loadMoreText, { color: theme.colors.white }]}>
+                          {loadingMoreReports ? "Loading..." : `Load more ${reportsSegment}`}
+                        </Text>
+                      </LinearGradient>
+                    </TouchableOpacity>
+                  </View>
+                ) : null
+              }
             />
           )}
         </View>
@@ -1641,6 +1732,25 @@ const styles = StyleSheet.create({
   reportSegText: { fontSize: 11, fontWeight: "700", textAlign: "center" },
   listWrap: { flex: 1, minHeight: 0 },
   listContent: { paddingBottom: 40 },
+  loadMoreWrap: { paddingTop: 12, paddingBottom: 4, alignItems: "center" },
+  loadMoreButton: {
+    minHeight: 38,
+    borderRadius: 999,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+  },
+  loadMoreGradient: {
+    minHeight: 38,
+    paddingHorizontal: 18,
+    paddingVertical: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  loadMoreText: { fontSize: 12, lineHeight: 16, fontWeight: "900" },
   emptyScroll: { flex: 1 },
   emptyScrollContent: {
     flexGrow: 1,

@@ -33,6 +33,7 @@ import { ConfirmDialog } from "../../src/components/ConfirmDialog";
 import { useTheme } from "../../src/context/ThemeContext";
 import { useToast } from "../../src/context/ToastContext";
 import { useHabitStore } from "../../src/store/habitStore";
+import { fetchHabitByChallengeGroupId } from "../../src/lib/habitsHistoryApi";
 import { useChallengeStore } from "../../src/store/challengeStore";
 import { useShallow } from "zustand/react/shallow";
 import { CHALLENGE_TEMPLATES, getChallengeTemplate } from "../../src/constants/challengeTemplates";
@@ -1297,7 +1298,18 @@ export default function CompeteScreen() {
       const taskChecklist = parseTaskChecklist(tpl.taskChecklist);
       const startIso = inviteeHabitStartIsoFromGroupStartDate(group.start_date, group.creator_timezone);
 
-      const existingHabit = useHabitStore.getState().habits.find((h) => h.challengeGroupId === group.id);
+      let existingHabit = useHabitStore.getState().habits.find((h) => h.challengeGroupId === group.id);
+      if (!existingHabit) {
+        // An old, already-completed challenge's habit can fall outside the hot
+        // window — the local store check above would then wrongly say "no habit
+        // yet" and create a duplicate for a challenge the user already has a
+        // completed record for. Confirm with the server before deciding to create.
+        const fetched = await fetchHabitByChallengeGroupId(group.id);
+        if (fetched) {
+          useHabitStore.getState().mergeFetchedHabit(fetched);
+          existingHabit = fetched;
+        }
+      }
       const createdLocalHabit = !existingHabit;
       const newHabitId =
         existingHabit?.id ??

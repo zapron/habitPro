@@ -82,6 +82,7 @@ import { usePremium } from '../../src/context/PremiumContext';
 import { usePlusUpsell } from '../../src/context/PlusUpsellContext';
 import { useRefreshPremiumAccess } from "../../src/hooks/useRefreshPremiumAccess";
 import { useRemoteStoreRefreshOnFocus } from "../../src/hooks/useRemoteStoreRefreshOnFocus";
+import { fetchHabitById } from "../../src/lib/habitsHistoryApi";
 import { useUsernameGate } from "../../src/context/UsernameGateContext";
 import { useNotificationGate } from "../../src/context/NotificationGateContext";
 import { getRemotePushPermissionDetails } from "../../src/lib/pushTokens";
@@ -441,6 +442,7 @@ export default function HabitDetail() {
         deleteHabit,
         setHabitVisibility,
         setMissionReport,
+        mergeFetchedHabit,
     } = useHabitStore(
       useShallow((state) => ({
         habit: habitId ? state.getHabit(habitId) : undefined,
@@ -453,6 +455,7 @@ export default function HabitDetail() {
         deleteHabit: state.deleteHabit,
         setHabitVisibility: state.setHabitVisibility,
         setMissionReport: state.setMissionReport,
+        mergeFetchedHabit: state.mergeFetchedHabit,
       })),
     );
 
@@ -557,6 +560,32 @@ export default function HabitDetail() {
     const [habitCommunityPublishPending, setHabitCommunityPublishPending] = useState(false);
     /** Avoid Mission not found flash after delete/leave; store clears before navigation finishes. */
     const [pendingExitAfterRemove, setPendingExitAfterRemove] = useState(false);
+    /** A habit opened via search/an old mission may not be in the local store's window — try a direct fetch before showing "not found". */
+    const [byIdFallbackPending, setByIdFallbackPending] = useState(false);
+
+    // Not in the local store's window (e.g. opened via search, a deep link, or an old
+    // mission that fell outside the hot window) — try a direct by-id fetch before
+    // showing "not found". Merges into the store on success so it stays available.
+    useEffect(() => {
+        if (habit || !habitId || pendingExitAfterRemove) {
+            setByIdFallbackPending(false);
+            return;
+        }
+        let cancelled = false;
+        setByIdFallbackPending(true);
+        void fetchHabitById(habitId)
+            .then((fetched) => {
+                if (cancelled || !fetched) return;
+                mergeFetchedHabit(fetched);
+            })
+            .finally(() => {
+                if (!cancelled) setByIdFallbackPending(false);
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [habit, habitId, mergeFetchedHabit, pendingExitAfterRemove]);
+
     const [detailHeavyContentReady, setDetailHeavyContentReady] = useState(false);
     const [visibleGridDayCount, setVisibleGridDayCount] = useState(INITIAL_GRID_RENDER_DAYS);
     const [reminderEditorOpen, setReminderEditorOpen] = useState(false);
@@ -1671,7 +1700,7 @@ export default function HabitDetail() {
                         <ArrowLeft size={theme.icon.xl} color={theme.colors.textPrimary} />
                     </TouchableOpacity>
                 </View>
-                {pendingExitAfterRemove ? (
+                {pendingExitAfterRemove || byIdFallbackPending ? (
                     <View style={styles.notFoundContainer}>
                         <ActivityIndicator size="large" color={theme.colors.cyan[400]} />
                     </View>

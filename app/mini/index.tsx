@@ -42,7 +42,10 @@ import { useRemoteStoreRefreshOnFocus } from "../../src/hooks/useRemoteStoreRefr
 import { useReducedMotion } from "../../src/hooks/useReducedMotion";
 import { backOrReplace } from "../../src/lib/navigation";
 import { traceSync } from "../../src/lib/jsThreadProbe";
-import { searchMiniMissions } from "../../src/lib/miniMissionsHistoryApi";
+import { fetchMiniMissionsHistoryPage, searchMiniMissions } from "../../src/lib/miniMissionsHistoryApi";
+import { HOT_WINDOW_HISTORY_PAGE_SIZE } from "../../src/lib/sync";
+import { LinearGradient } from "expo-linear-gradient";
+import { withAlpha } from "../../src/styles/theme";
 import {
   getMiniMissionDisplayStatus,
   getMiniRemainingMs,
@@ -278,6 +281,7 @@ export default function MiniMissionsScreen() {
   useRemoteStoreRefreshOnFocus();
   const { view, tab: tabParam } = useLocalSearchParams<{ view?: string; tab?: string }>();
   const miniMissions = useHabitStore((state) => state.miniMissions);
+  const mergeFetchedMiniMission = useHabitStore((state) => state.mergeFetchedMiniMission);
   const initialTab: MiniTab =
     tabParam === "queued"
       ? "queued"
@@ -471,6 +475,82 @@ export default function MiniMissionsScreen() {
     }, 300);
     return () => clearTimeout(timer);
   }, [searchQuery]);
+
+  // Load More for the Completed/Failed tabs — inert until now (Phase D's hot window is
+  // the first phase where the local store doesn't already hold full history by
+  // default). "Failed" combines two real statuses (cancelled, missed — a timer-depleted
+  // in_progress mission is covered separately by the always-loaded active bucket, see
+  // isMiniMissionMissed), so it pages two independent RPC cursors together. Fetched
+  // items are merged into the global store (mergeFetchedMiniMission) so they stay
+  // available afterward instead of being re-fetched on every tap.
+  //
+  // fetchedCount/hasMore use an "override" pattern rather than seeding a plain
+  // useState from miniMissions at mount: the store hasn't necessarily hydrated/synced
+  // yet on first render, so a one-time useState(() => ...) initializer can freeze at
+  // an empty-array snapshot and never update again. Before any explicit Load More
+  // tap, these stay null and the values below are derived live from whatever's
+  // currently in the store (so they track real data as it streams in); after the
+  // first tap, the override holds the server's authoritative answer.
+  const [completedFetchedOverride, setCompletedFetchedOverride] = useState<number | null>(null);
+  const [completedHasMoreOverride, setCompletedHasMoreOverride] = useState<boolean | null>(null);
+  const [cancelledFetchedOverride, setCancelledFetchedOverride] = useState<number | null>(null);
+  const [missedFetchedOverride, setMissedFetchedOverride] = useState<number | null>(null);
+  const [failedHasMoreOverride, setFailedHasMoreOverride] = useState<boolean | null>(null);
+  const [loadingMoreTabHistory, setLoadingMoreTabHistory] = useState(false);
+
+  const completedCountInStore = useMemo(() => miniMissions.filter((m) => m.status === "completed").length, [miniMissions]);
+  const cancelledCountInStore = useMemo(() => miniMissions.filter((m) => m.status === "cancelled").length, [miniMissions]);
+  const missedCountInStore = useMemo(() => miniMissions.filter((m) => m.status === "missed").length, [miniMissions]);
+
+  // Deliberately NOT `?? countInStore`: the local list can already contain items that
+  // arrived via the old full sync (pre-dating this feature) rather than via this
+  // paginated RPC, so its length isn't a reliable pagination offset. Before any real
+  // fetch, start from 0 — a safe, server-confirmed anchor — and let the override
+  // (set from the RPC's own authoritative response) take over from there.
+  const completedFetchedCount = completedFetchedOverride ?? 0;
+  const cancelledFetchedCount = cancelledFetchedOverride ?? 0;
+  const missedFetchedCount = missedFetchedOverride ?? 0;
+  const completedHasMore = completedHasMoreOverride ?? completedCountInStore >= HOT_WINDOW_HISTORY_PAGE_SIZE;
+  const failedHasMore =
+    failedHasMoreOverride ??
+    (cancelledCountInStore >= HOT_WINDOW_HISTORY_PAGE_SIZE || missedCountInStore >= HOT_WINDOW_HISTORY_PAGE_SIZE);
+
+  const tabHistoryHasMore = tab === "completed" ? completedHasMore : tab === "failed" ? failedHasMore : false;
+
+  const loadMoreTabHistory = useCallback(async () => {
+    if (loadingMoreTabHistory) return;
+    setLoadingMoreTabHistory(true);
+    try {
+      if (tab === "completed") {
+        const page = await fetchMiniMissionsHistoryPage({
+          offset: completedFetchedCount,
+          limit: HOT_WINDOW_HISTORY_PAGE_SIZE,
+          status: "completed",
+        });
+        if (page) {
+          for (const item of page.items) mergeFetchedMiniMission(item);
+          setCompletedFetchedOverride(completedFetchedCount + page.items.length);
+          setCompletedHasMoreOverride(page.hasMore);
+        }
+      } else if (tab === "failed") {
+        const [cancelledPage, missedPage] = await Promise.all([
+          fetchMiniMissionsHistoryPage({ offset: cancelledFetchedCount, limit: HOT_WINDOW_HISTORY_PAGE_SIZE, status: "cancelled" }),
+          fetchMiniMissionsHistoryPage({ offset: missedFetchedCount, limit: HOT_WINDOW_HISTORY_PAGE_SIZE, status: "missed" }),
+        ]);
+        if (cancelledPage) {
+          for (const item of cancelledPage.items) mergeFetchedMiniMission(item);
+          setCancelledFetchedOverride(cancelledFetchedCount + cancelledPage.items.length);
+        }
+        if (missedPage) {
+          for (const item of missedPage.items) mergeFetchedMiniMission(item);
+          setMissedFetchedOverride(missedFetchedCount + missedPage.items.length);
+        }
+        setFailedHasMoreOverride((cancelledPage?.hasMore ?? false) || (missedPage?.hasMore ?? false));
+      }
+    } finally {
+      setLoadingMoreTabHistory(false);
+    }
+  }, [cancelledFetchedCount, completedFetchedCount, loadingMoreTabHistory, mergeFetchedMiniMission, missedFetchedCount, tab]);
 
   // The FAB and the empty state's own "Create a Mini Mission" button would otherwise
   // stack redundantly on an empty Active/Waiting tab; and with nothing in any tab at
@@ -729,6 +809,41 @@ export default function MiniMissionsScreen() {
             ItemSeparatorComponent={() => (
               <View style={[styles.rowDivider, { backgroundColor: theme.colors.border }]} />
             )}
+            ListFooterComponent={
+              tabHistoryHasMore ? (
+                <View style={styles.loadMoreWrap}>
+                  <TouchableOpacity
+                    onPress={loadMoreTabHistory}
+                    disabled={loadingMoreTabHistory}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Load more ${tab} missions`}
+                    style={[
+                      styles.loadMoreButton,
+                      {
+                        borderColor: isDark ? withAlpha(theme.colors.indigo[400], 42) : withAlpha(theme.colors.indigo[600], 20),
+                        opacity: loadingMoreTabHistory ? 0.78 : 1,
+                      },
+                    ]}
+                  >
+                    <LinearGradient
+                      colors={
+                        isDark
+                          ? (["rgba(79, 70, 229, 0.82)", "rgba(6, 182, 212, 0.62)"] as const)
+                          : ([theme.colors.indigo[500], theme.colors.cyan[500]] as const)
+                      }
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={styles.loadMoreGradient}
+                    >
+                      {loadingMoreTabHistory ? <ActivityIndicator size="small" color={theme.colors.white} /> : null}
+                      <Text style={[styles.loadMoreText, { color: theme.colors.white }]}>
+                        {loadingMoreTabHistory ? "Loading..." : `Load more ${tab}`}
+                      </Text>
+                    </LinearGradient>
+                  </TouchableOpacity>
+                </View>
+              ) : null
+            }
           />
         )}
       </View>
@@ -809,6 +924,25 @@ const styles = StyleSheet.create({
   tabCountBadgeText: { color: "#ffffff", fontSize: 11, fontWeight: "800" },
   listWrap: { flex: 1 },
   listContent: { paddingBottom: 100 },
+  loadMoreWrap: { paddingTop: 12, paddingBottom: 4, alignItems: "center" },
+  loadMoreButton: {
+    minHeight: 38,
+    borderRadius: 999,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+  },
+  loadMoreGradient: {
+    minHeight: 38,
+    paddingHorizontal: 18,
+    paddingVertical: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  loadMoreText: { fontSize: 12, lineHeight: 16, fontWeight: "900" },
   rowDivider: { height: StyleSheet.hairlineWidth },
   // Card styles — flat list rows, no chip/border/shadow chrome (divider comes from the list's own ItemSeparatorComponent)
   card: { paddingVertical: 14 },
