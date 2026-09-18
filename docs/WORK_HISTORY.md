@@ -30,6 +30,9 @@ matching entry.
   preserves captured moments; Retry carries them forward. Also fixed a
   live timer-detection gap found while verifying this.
 - Migrations tested locally, not yet pushed to production (user's call).
+- Pushed to `origin/main` (`18c9e68`) and OTA'd to production: update
+  group `4fe50022-4c71-48cc-b3bc-b96e3e20ce80`, runtime `1.1.35`
+  (unchanged).
 
 ## 2026-09-16 (Phases 2 + 3 shipped)
 

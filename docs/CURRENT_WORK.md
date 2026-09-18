@@ -89,13 +89,18 @@ testing, not part of the original plan:
   the countdown hit zero never triggered anything until navigating away and
   back. Added a 1s live tick while a mission is genuinely in progress.
 
-**Not yet done**: migrations not pushed to production (user's call, per
-`pre_migration.md`); Profile's Hub modal load-more and Home/Mini Missions
+**6. Pushed and OTA'd.** `main` pushed to `origin` at `18c9e68`
+(`55249bf`..`18c9e68`: `489c640` hot-window plan, `ec3e1c9` freeform fix,
+`18c9e68` this docs entry). Published to production OTA: update group
+`4fe50022-4c71-48cc-b3bc-b96e3e20ce80`, runtime `1.1.35` (unchanged),
+commit `18c9e68`. JS/TS/TSX-only batch, no native/version changes.
+
+**Not yet done**: the three new migrations are tested locally but **not
+pushed to production** — that's the user's call to make, per
+`pre_migration.md`. Profile's Hub modal load-more and Home/Mini Missions
 load-more are UI-tested via the simulator but not yet exercised at true
 scale (no account currently has enough history to trigger a second real
-page beyond what's already cached). GitHub push and OTA status: see whether
-this entry was updated again below, or check `git log`/`git status`
-directly — this paragraph was written before that step ran.
+page beyond what's already cached).
 
 ## Session Handoff (2026-09-16, end of session — Phases 2 + 3 shipped)
 
