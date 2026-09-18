@@ -1,6 +1,101 @@
 # HabitPro Current Work
 
-Last updated: 2026-09-16 (end of session — Phases 0-3 of the pagination/search roadmap all shipped: Mini Missions search, a paginated habits-history RPC for Home's reports segment (backend only, not wired to UI yet), and real per-mission photo-gallery pagination in My Journey. Also fixed an iOS-only bug where a mission's description popover rendered hidden behind the fullscreen gallery. Full detail immediately below; the 2026-09-16 mid-session handoff entry right after this one covers Phase 0+1 in more depth and is kept for history.).
+Last updated: 2026-09-19 (end of session — the hot-window cutoff plan (Phases A-F) fully shipped and committed: bounded sync load, three new RPCs, "Load More" wired into four screens, two real bugs found and fixed during verification. Also fixed a genuine data-loss bug in freeform mini missions (captured moments were being deleted on timeout/fail/retry) plus a live timer-detection gap. Full detail immediately below.).
+
+## Session Handoff (2026-09-19, end of session — hot-window plan shipped + freeform mini mission fixes)
+
+**State: `main` is 2 commits ahead of the previous session's tip (`55249bf`..`ec3e1c9`), committed locally, not yet pushed to `origin` or OTA'd as of the start of this entry (see the end of this entry for the actual push/OTA outcome).** `npx tsc --noEmit` clean after every commit. Three new migrations tested locally via `db:reset` against real snapshot data; **not yet on production** — the user runs `npm run db:push` themselves per `pre_migration.md`.
+
+**1. Hot-window cutoff, Phases A-F (`489c640`)** — the full plan from
+`/Users/raktimmacbook/.claude/plans/reflective-baking-sparkle.md`, executed
+end to end in one session:
+- **Phase A**: `rpc_profile_lifetime_stats_v1` — Profile's lifetime stats
+  (lifetime check-ins, best streak, memory proofs, repairs, mission totals)
+  moved from client-side array scans to a server aggregate. Verified exact
+  match against the real ~176-habit account. Safe fallback while
+  loading/unavailable — never blocks rendering.
+- **Phase B**: `rpc_habit_by_id_v1` / `rpc_mini_mission_by_id_v1` — direct
+  fetch for a mission not in the local store (opened via search, a deep
+  link, or an old mission outside the window). Wired as a fallback into
+  `habit/[id].tsx` and `mini/[id].tsx`; merges into the store on success via
+  two new store actions (`mergeFetchedHabit`/`mergeFetchedMiniMission`).
+- **Phase C**: the full-pull and sign-in/cold-start hydrate paths now merge
+  into the local store (`applyFocusDeltaToStore`, already-existing and
+  already-safe) instead of replacing it — verified via standalone logic
+  tests copied from the real code.
+- **Phase D**: `pullFromSupabase` actually shrank — active habits/minis
+  (unbounded, always current) + first history page per terminal bucket via
+  the already-built history RPCs. **Real bug caught during verification**:
+  the active-habits query (`is_completed = false`) was accidentally
+  including every failed habit ever, since a failed habit also has
+  `is_completed = false` — fixed by adding `status <> 'failed'`. "Load More"
+  wired into Mini Missions (Completed/Failed), Home (Reports), and
+  Profile's Hub modal (`HubListModal` gained `hasMore`/`onLoadMore` props).
+- **Phase E**: My Journey's private mission list (fully-private, never
+  shared to Community) now pages through the same history RPCs
+  independently of the global store, so old private-only missions don't
+  vanish from the list once the store is windowed.
+- **Phase F fix**: verification found the original audit's "likely safe"
+  call on `challenge/[id].tsx` and Compete's invite-accept flow was wrong —
+  both look up "my habit for this challenge" from the local store, and for
+  an old completed challenge outside the window that lookup could come back
+  empty. In `challenge/[id].tsx` that just breaks the screen; in Compete's
+  invite-accept flow it would have **created a duplicate habit**. New
+  `rpc_habit_by_challenge_group_id_v1` closes both.
+
+**2. Second real bug found post-hoc, by the user testing on-device
+(fixed in the same commit)**: each screen's "has more" state was seeded
+once via a `useState(() => ...)` initializer reading the store at mount —
+but the store hadn't necessarily hydrated/synced yet at that instant, so it
+could freeze at an empty-array snapshot and never update, permanently
+hiding the Load More button. Fixed by deriving the pre-first-fetch guess
+reactively instead of once. **Third bug**, found right after: the offset
+sent on the first "Load More" tap used the local array's length as a proxy
+for "how many pages have been fetched" — wrong on any device with
+pre-existing full-sync data (i.e. every current user), since local array
+size doesn't reflect real pagination progress. Fixed by anchoring the first
+tap's offset at 0 (server-confirmed) instead of the local count.
+
+**3. Local dev environment resynced with cloud mid-session** (`npm run
+db:snapshot` + `db:reset`) — real data refreshed (177 habits, 372 mini
+missions at sync time). Local Supabase Auth (`auth.users`/`auth.identities`)
+had to be re-seeded for `raktim24@gmail.com` (local-only password) since
+`db:snapshot` deliberately excludes the `auth` schema and wipes any
+previous local-only auth seed — this needs redoing after any future
+`db:snapshot`/`db:reset`.
+
+**4. Investigated, found no bug: Live Squad freeform-capture inheritance.**
+User reported a friend's device not receiving freeform capture mode via a
+Live Squad invite. Traced the entire pipeline (invite creation, RPC
+storage, snapshot, accept handler, store action, bidirectional sync
+mapping, render branch) — all correct, and confirmed directly against
+production that the relevant RPCs/columns are live. This exact bug was
+already fixed 11 days earlier (`a798866`, 2026-09-08). Most likely
+explanation: the friend's device hadn't picked up that OTA yet.
+
+**5. Freeform mini mission timeout fix (`ec3e1c9`)** — found via user
+testing, not part of the original plan:
+- Freeform missions previously auto-failed the instant their timer hit
+  zero (Manual Finish mode never got the "did you complete this?" review
+  that Timer Check-In mode already had). Now gets the same Complete/Retry/
+  Fail prompt (`mini/[id].tsx`'s `isTimerCheckInReview` widened).
+- **Real data-loss bug**: both Fail and Retry unconditionally wiped
+  `draftMemories`/`draftTasks` (every captured freeform moment, local-only,
+  never synced). Fail now preserves them; Retry carries them forward into
+  the new attempt (explicit user decision — retry is another shot at the
+  same mission, not a wipe).
+- **Separate bug found while verifying the above**: timer-expiry detection
+  only re-ran on mount/focus-change, so sitting on the mission screen while
+  the countdown hit zero never triggered anything until navigating away and
+  back. Added a 1s live tick while a mission is genuinely in progress.
+
+**Not yet done**: migrations not pushed to production (user's call, per
+`pre_migration.md`); Profile's Hub modal load-more and Home/Mini Missions
+load-more are UI-tested via the simulator but not yet exercised at true
+scale (no account currently has enough history to trigger a second real
+page beyond what's already cached). GitHub push and OTA status: see whether
+this entry was updated again below, or check `git log`/`git status`
+directly — this paragraph was written before that step ran.
 
 ## Session Handoff (2026-09-16, end of session — Phases 2 + 3 shipped)
 

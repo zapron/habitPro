@@ -2,6 +2,35 @@
 
 This is a concise chronological log for future sessions. Keep secrets out of this file.
 
+## 2026-09-19 (hot-window plan shipped + freeform mini mission fixes)
+
+### Hot-window cutoff (Phases A-F) + freeform mini mission data-loss fix
+
+Commits `489c640`, `ec3e1c9`. Full detail in `docs/CURRENT_WORK.md`'s
+matching entry.
+
+- Phases A-F of the hot-window plan all shipped: bounded sync load (active
+  missions + first history page instead of unbounded), 3 new RPCs
+  (lifetime stats, by-id fallback x2, by-challenge-group-id fallback),
+  safe merge instead of replace on every full pull, "Load More" wired
+  into Mini Missions/Home/Profile/My Journey.
+- Two real bugs caught during verification (active-habits query wrongly
+  including failed habits; challenge-lookup gap that could have created
+  duplicate habits) and two more caught by the user testing on-device
+  post-ship (stale `hasMore` guess frozen at mount; wrong pagination
+  offset anchor) — all fixed in the same commit.
+- Investigated a reported Live Squad freeform-capture bug — found no
+  code issue, already fixed 11 days earlier, likely an OTA-lag on the
+  reporting device.
+- Separately: freeform mini missions were auto-failing on timeout with
+  no chance to complete, and worse, silently deleting every captured
+  moment on both Fail and Retry (local-only `draftMemories`, never
+  synced — genuine data loss, not just a display bug). Fixed: same
+  Complete/Retry/Fail review Timer Check-In mode already had; Fail
+  preserves captured moments; Retry carries them forward. Also fixed a
+  live timer-detection gap found while verifying this.
+- Migrations tested locally, not yet pushed to production (user's call).
+
 ## 2026-09-16 (Phases 2 + 3 shipped)
 
 ### Habits history RPC (backend only) + My Journey gallery pagination + iOS modal fix
