@@ -44,6 +44,26 @@ Commits `f479a05`, `e6deeaf`, `84af185` (app); `a6ef620`, `086c4f4`, `3c9825a`
   can't reach `127.0.0.1` (that's always "itself," not the host Mac) —
   pointed `.env.local` at the Mac's LAN IP instead, one value that works
   for iOS Simulator, Android Emulator, and a physical device alike.
+- Real bug found via user testing, fixed + OTA'd (`e3acea6`, update group
+  `9da187d4-e45a-402d-8082-1828220ec336`): checklist/freeform completions
+  never showed a photo on the share-your-win card — both paths only ever
+  populate `completionMemory.imageUrl`, but the share-card code was
+  reading `.imageUri`, always `null`. Fixed with a shared
+  `localCoverUriFrom()` helper (uses the photo only if it's still local,
+  falls back to the placeholder for an already-uploaded remote URL).
+- EAS build gotcha: Android kept building the *old* version despite the
+  same commit correctly giving iOS the new one. `.easignore` deliberately
+  includes `/android` (unlike `/ios`, which always regenerates fresh from
+  `app.json`), so EAS was reading the stale, gitignored local
+  `android/app/build.gradle` — not updated by the app.json/package.json
+  version bump. `agent.md` already documented this; missed it this round.
+- Drafted `app_version_releases`/`app_version_policy` SQL for the user to
+  run themselves for the 1.1.36 changelog + force-update card, including a
+  generated on-brand hero image (gradient matching the existing
+  force-update fallback colors + real logo + a share motif, composed
+  locally via PIL after Pollinations.ai's free tier produced an unusable
+  result) hosted on habitPro-web. Confirmed zero app-code changes needed —
+  `image_url` was already fully wired, just unused until now.
 
 ## 2026-09-19 (hot-window plan shipped + freeform mini mission fixes)
 
