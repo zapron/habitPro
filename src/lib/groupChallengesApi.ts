@@ -314,6 +314,108 @@ export async function sendChallengeInvite(
   return { error: new Error(error.message) };
 }
 
+export type ChallengePublicPreview = {
+  challengeId: string;
+  title: string;
+  creatorUsername: string | null;
+  creatorDisplayName: string | null;
+  memberCount: number;
+  myMembershipStatus: "creator" | "member" | "none";
+  myRequestStatus: "pending" | "approved" | "declined" | null;
+};
+
+export type ChallengeJoinRequestRow = {
+  id: string;
+  requesterId: string;
+  requesterUsername: string | null;
+  requesterDisplayName: string | null;
+  approvalsRequired: number;
+  approveCount: number;
+  declineCount: number;
+  myVote: "approve" | "decline" | null;
+  createdAt: string;
+};
+
+/** RLS-bypassing preview for a non-member — challenge_groups itself is member-only. */
+export async function fetchChallengePublicPreview(challengeId: string): Promise<ChallengePublicPreview | null> {
+  const supabase = getSupabase();
+  if (!supabase) return null;
+  const { data, error } = await supabase
+    .rpc("rpc_challenge_public_preview_v1", { p_challenge_id: challengeId })
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  const row = data as Record<string, unknown>;
+  return {
+    challengeId: row.challenge_id as string,
+    title: row.title as string,
+    creatorUsername: (row.creator_username as string | null) ?? null,
+    creatorDisplayName: (row.creator_display_name as string | null) ?? null,
+    memberCount: row.member_count as number,
+    myMembershipStatus: row.my_membership_status as ChallengePublicPreview["myMembershipStatus"],
+    myRequestStatus: (row.my_request_status as ChallengePublicPreview["myRequestStatus"]) ?? null,
+  };
+}
+
+export async function requestToJoinChallenge(challengeId: string): Promise<GroupActionErrorResult> {
+  const supabase = getSupabase();
+  if (!supabase) return { error: new Error("Supabase not configured") };
+  const { error } = await supabase.rpc("rpc_request_join_challenge_v1", { p_challenge_id: challengeId });
+  if (!error) return { error: null };
+  const low = error.message.toLowerCase();
+  if (low.includes("username_required")) {
+    return { error: new Error("Choose a username first.") };
+  }
+  if (low.includes("already_joined")) {
+    return { error: new Error("You're already part of this mission.") };
+  }
+  if (low.includes("cannot_request_own_challenge")) {
+    return { error: new Error("This is your own mission.") };
+  }
+  if (low.includes("request_already_pending")) {
+    return { error: new Error("You already asked to join — waiting on approval.") };
+  }
+  return { error: new Error(error.message) };
+}
+
+export async function listPendingJoinRequests(challengeId: string): Promise<ChallengeJoinRequestRow[]> {
+  const supabase = getSupabase();
+  if (!supabase) return [];
+  const { data, error } = await supabase.rpc("rpc_list_pending_join_requests_v1", { p_challenge_id: challengeId });
+  if (error) throw error;
+  return ((data ?? []) as Record<string, unknown>[]).map((r) => ({
+    id: r.id as string,
+    requesterId: r.requester_id as string,
+    requesterUsername: (r.requester_username as string | null) ?? null,
+    requesterDisplayName: (r.requester_display_name as string | null) ?? null,
+    approvalsRequired: r.approvals_required as number,
+    approveCount: r.approve_count as number,
+    declineCount: r.decline_count as number,
+    myVote: (r.my_vote as "approve" | "decline" | null) ?? null,
+    createdAt: r.created_at as string,
+  }));
+}
+
+export async function voteChallengeJoinRequest(
+  requestId: string,
+  vote: "approve" | "decline",
+): Promise<GroupActionErrorResult> {
+  const supabase = getSupabase();
+  if (!supabase) return { error: new Error("Supabase not configured") };
+  const { error } = await supabase.rpc("rpc_vote_challenge_join_request_v1", {
+    p_request_id: requestId,
+    p_vote: vote,
+  });
+  if (!error) return { error: null };
+  if (isPremiumPolicyError(error)) {
+    return {
+      error: new Error("Voting on join requests is a HabitPro Community feature."),
+      reason: "premium_required",
+    };
+  }
+  return { error: new Error(error.message) };
+}
+
 export async function listPendingInvitesForMe(): Promise<ChallengeInviteRow[]> {
   const supabase = getSupabase();
   if (!supabase) return [];

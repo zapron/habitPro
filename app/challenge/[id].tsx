@@ -49,6 +49,7 @@ import { useReducedMotion } from "../../src/hooks/useReducedMotion";
 import { useTheme } from "../../src/context/ThemeContext";
 import { useToast } from "../../src/context/ToastContext";
 import { useAuth } from "../../src/context/AuthContext";
+import { useUsernameGate } from "../../src/context/UsernameGateContext";
 import { usePremium } from "../../src/context/PremiumContext";
 import { usePlusUpsell } from "../../src/context/PlusUpsellContext";
 import { useHabitStore } from "../../src/store/habitStore";
@@ -63,12 +64,18 @@ import {
   sendChallengeNudge,
 } from "../../src/lib/challengeCohort";
 import {
+  fetchChallengePublicPreview,
   getCachedChallengePrimarySnapshot,
   getCachedChallengeStreakMembersPage,
   getProfileLabelsForIds,
   leaveChallengeGroup,
   listChallengeStreakMembersPage,
+  listPendingJoinRequests,
   loadChallengePrimarySnapshot,
+  requestToJoinChallenge,
+  voteChallengeJoinRequest,
+  type ChallengeJoinRequestRow,
+  type ChallengePublicPreview,
   type ProfileLabel,
 } from "../../src/lib/groupChallengesApi";
 import { backOrReplace } from "../../src/lib/navigation";
@@ -217,6 +224,94 @@ const STREAK_MEMBERS_INITIAL_PAGE_SIZE = 3;
 const STREAK_MEMBERS_NEXT_PAGE_SIZE = 5;
 const STREAK_SKELETON_CARD_COUNT = 3;
 const EMPTY_SENT_PRESET_NUDGE_KINDS = new Set<PresetChallengeNudgeKind>();
+
+function NotAMemberScreen({
+  theme,
+  isDark,
+  preview,
+  previewLoading,
+  requesting,
+  onRequest,
+  onBack,
+}: {
+  theme: any;
+  isDark: boolean;
+  preview: ChallengePublicPreview | null;
+  previewLoading: boolean;
+  requesting: boolean;
+  onRequest: () => void;
+  onBack: () => void;
+}) {
+  const insets = useSafeAreaInsets();
+  const requestStatus = preview?.myRequestStatus ?? null;
+  const ctaLabel =
+    requestStatus === "pending"
+      ? "Request sent"
+      : requesting
+        ? "Sending..."
+        : "Request to join";
+  const ctaDisabled = requestStatus === "pending" || requesting || previewLoading;
+
+  return (
+    <Screen>
+      <View style={[nmStyles.header, { paddingTop: insets.top + 8 }]}>
+        <TouchableOpacity
+          style={[nmStyles.iconButton, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}
+          onPress={onBack}
+        >
+          <ArrowLeft size={theme.icon.xl} color={theme.colors.textPrimary} />
+        </TouchableOpacity>
+      </View>
+      <View style={nmStyles.body}>
+        {previewLoading && !preview ? (
+          <ActivityIndicator color={theme.colors.indigo[400]} />
+        ) : (
+          <>
+            <View
+              style={[
+                nmStyles.icon,
+                {
+                  backgroundColor: isDark ? withAlpha(theme.colors.cyan[400], 12) : withAlpha(theme.colors.cyan[500], 10),
+                  borderColor: isDark ? withAlpha(theme.colors.cyan[400], 32) : withAlpha(theme.colors.cyan[500], 26),
+                },
+              ]}
+            >
+              <Users size={28} color={theme.colors.cyan[400]} />
+            </View>
+            <Text style={[nmStyles.title, { color: theme.colors.textPrimary }]}>
+              {preview?.title ?? "Group mission"}
+            </Text>
+            <Text style={[nmStyles.body_text, { color: theme.colors.textSecondary }]}>
+              {preview?.creatorUsername
+                ? `Hosted by @${preview.creatorUsername} · ${preview.memberCount} ${preview.memberCount === 1 ? "member" : "members"}`
+                : "You're not part of this mission yet."}
+            </Text>
+            <Button title={ctaLabel} onPress={onRequest} disabled={ctaDisabled} style={{ marginTop: 22, minWidth: 220 }} />
+            {requestStatus === "pending" ? (
+              <Text style={[nmStyles.hint, { color: theme.colors.textMuted }]}>
+                The squad needs a couple of approvals — you'll get a notification once it's decided.
+              </Text>
+            ) : requestStatus === "declined" ? (
+              <Text style={[nmStyles.hint, { color: theme.colors.textMuted }]}>
+                Your last request wasn't approved. You can ask again.
+              </Text>
+            ) : null}
+          </>
+        )}
+      </View>
+    </Screen>
+  );
+}
+
+const nmStyles = StyleSheet.create({
+  header: { flexDirection: "row", paddingHorizontal: 16, paddingBottom: 8 },
+  iconButton: { width: 40, height: 40, borderRadius: 20, borderWidth: 1, alignItems: "center", justifyContent: "center" },
+  body: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 28 },
+  icon: { width: 64, height: 64, borderRadius: 32, borderWidth: 1, alignItems: "center", justifyContent: "center", marginBottom: 18 },
+  title: { fontSize: 22, fontWeight: "900", textAlign: "center" },
+  body_text: { fontSize: 14, fontWeight: "600", textAlign: "center", marginTop: 8, lineHeight: 20 },
+  hint: { fontSize: 12, fontWeight: "600", textAlign: "center", marginTop: 14, maxWidth: 280, lineHeight: 17 },
+});
 
 type ChallengeDetailTab = "streaks" | "activity" | "repairs";
 const DETAIL_TAB_ORDER: ChallengeDetailTab[] = ["streaks", "activity", "repairs"];
@@ -485,8 +580,14 @@ export default function ChallengeDetailScreen() {
   const { isPremium, loading: premiumLoading } = usePremium();
   const { openUpsell } = usePlusUpsell();
   const refreshPremiumAccess = useRefreshPremiumAccess();
+  const { requireUsername } = useUsernameGate();
   const socialLocked = !isPremium || premiumLoading;
   const myUserId = session?.user?.id ?? null;
+  const [nonMemberPreview, setNonMemberPreview] = useState<ChallengePublicPreview | null>(null);
+  const [nonMemberPreviewLoading, setNonMemberPreviewLoading] = useState(false);
+  const [joinRequestBusy, setJoinRequestBusy] = useState(false);
+  const [pendingJoinRequests, setPendingJoinRequests] = useState<ChallengeJoinRequestRow[]>([]);
+  const [joinRequestVoteBusyId, setJoinRequestVoteBusyId] = useState<string | null>(null);
 
   const myHabit = useHabitStore(
     useCallback(
@@ -896,6 +997,82 @@ export default function ChallengeDetailScreen() {
       if (!silent && screenActiveRef.current) setLoading(false);
     }
   }, [challengeId]);
+
+  // group stays null once `load` resolves iff RLS blocked the row — i.e. genuinely not a
+  // member (not "still loading"). Fetch the RLS-bypassing preview so there's something to
+  // decide on, and load pending join requests for a viewer who already IS a member.
+  useEffect(() => {
+    if (!challengeId || loading) return;
+    if (group) {
+      setNonMemberPreview(null);
+      void listPendingJoinRequests(challengeId)
+        .then(setPendingJoinRequests)
+        .catch(() => setPendingJoinRequests([]));
+      return;
+    }
+    let cancelled = false;
+    setNonMemberPreviewLoading(true);
+    void fetchChallengePublicPreview(challengeId)
+      .then((preview) => {
+        if (!cancelled) setNonMemberPreview(preview);
+      })
+      .catch(() => {
+        if (!cancelled) setNonMemberPreview(null);
+      })
+      .finally(() => {
+        if (!cancelled) setNonMemberPreviewLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [challengeId, group, loading]);
+
+  const handleRequestToJoin = useCallback(async () => {
+    if (!challengeId || joinRequestBusy) return;
+    const ok = await requireUsername("group_invite");
+    if (!ok) {
+      showToast("Choose a username to request to join.", "info");
+      return;
+    }
+    setJoinRequestBusy(true);
+    try {
+      const { error } = await requestToJoinChallenge(challengeId);
+      if (error) {
+        showToast(error.message, "error");
+        return;
+      }
+      const preview = await fetchChallengePublicPreview(challengeId).catch(() => null);
+      setNonMemberPreview(preview);
+      showToast("Request sent — the squad will decide.", "success");
+    } finally {
+      setJoinRequestBusy(false);
+    }
+  }, [challengeId, joinRequestBusy, requireUsername, showToast]);
+
+  const handleVoteJoinRequest = useCallback(
+    async (requestId: string, vote: "approve" | "decline") => {
+      if (joinRequestVoteBusyId) return;
+      setJoinRequestVoteBusyId(requestId);
+      try {
+        const { error, reason } = await voteChallengeJoinRequest(requestId, vote);
+        if (error) {
+          if (reason === "premium_required") {
+            openUpsell("group_mission");
+          } else {
+            showToast(error.message, "error");
+          }
+          return;
+        }
+        if (challengeId) {
+          void listPendingJoinRequests(challengeId).then(setPendingJoinRequests).catch(() => undefined);
+        }
+        showToast(vote === "approve" ? "Vote recorded." : "Request declined.", "success");
+      } finally {
+        setJoinRequestVoteBusyId(null);
+      }
+    },
+    [challengeId, joinRequestVoteBusyId, openUpsell, showToast],
+  );
 
   useEffect(() => {
     const seededStreakPage = challengeId
@@ -1734,6 +1911,20 @@ export default function ChallengeDetailScreen() {
     );
   }
 
+  if (!loading && !group) {
+    return (
+      <NotAMemberScreen
+        theme={theme}
+        isDark={isDark}
+        preview={nonMemberPreview}
+        previewLoading={nonMemberPreviewLoading}
+        requesting={joinRequestBusy}
+        onRequest={() => void handleRequestToJoin()}
+        onBack={() => backOrReplace(router, "/(tabs)/compete")}
+      />
+    );
+  }
+
   return (
     <Screen>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={theme.colors.background} />
@@ -1863,6 +2054,78 @@ export default function ChallengeDetailScreen() {
             />
           }
         >
+          {pendingJoinRequests.length > 0 ? (
+            <View
+              style={[
+                styles.card,
+                {
+                  backgroundColor: theme.colors.surface,
+                  borderColor: theme.colors.border,
+                  marginBottom: 14,
+                  ...theme.shadow.card,
+                },
+              ]}
+            >
+              <Text style={{ fontSize: 12, fontWeight: "900", letterSpacing: 0.4, color: theme.colors.textMuted, marginBottom: 10 }}>
+                {pendingJoinRequests.length} PENDING TO JOIN
+              </Text>
+              {pendingJoinRequests.map((req) => (
+                <View
+                  key={req.id}
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    paddingVertical: 8,
+                    gap: 10,
+                  }}
+                >
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text style={{ fontSize: 14, fontWeight: "900", color: theme.colors.textPrimary }} numberOfLines={1}>
+                      @{req.requesterUsername ?? "someone"}
+                    </Text>
+                    <Text style={{ fontSize: 12, fontWeight: "600", color: theme.colors.textMuted, marginTop: 2 }}>
+                      {req.myVote
+                        ? `You voted ${req.myVote}`
+                        : `${req.approveCount}/${req.approvalsRequired} approvals`}
+                    </Text>
+                  </View>
+                  {req.myVote || joinRequestVoteBusyId === req.id ? (
+                    joinRequestVoteBusyId === req.id ? (
+                      <ActivityIndicator color={theme.colors.indigo[400]} size="small" />
+                    ) : null
+                  ) : (
+                    <View style={{ flexDirection: "row", gap: 8 }}>
+                      <TouchableOpacity
+                        onPress={() => void handleVoteJoinRequest(req.id, "decline")}
+                        style={{
+                          paddingHorizontal: 12,
+                          paddingVertical: 7,
+                          borderRadius: 10,
+                          borderWidth: 1,
+                          borderColor: theme.colors.border,
+                        }}
+                      >
+                        <Text style={{ fontSize: 12, fontWeight: "800", color: theme.colors.textMuted }}>Decline</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() => void handleVoteJoinRequest(req.id, "approve")}
+                        style={{
+                          paddingHorizontal: 12,
+                          paddingVertical: 7,
+                          borderRadius: 10,
+                          backgroundColor: theme.colors.indigo[400],
+                        }}
+                      >
+                        <Text style={{ fontSize: 12, fontWeight: "800", color: "#fff" }}>Approve</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </View>
+              ))}
+            </View>
+          ) : null}
+
           {myHabit?.id ? (
             <Pressable
               accessibilityRole="button"

@@ -165,6 +165,16 @@ function RootLayoutNav() {
         return;
       }
 
+      if (type === "challenge_join_request" || type === "challenge_join_request_result") {
+        const challengeId = typeof data.challenge_id === "string" ? data.challenge_id : "";
+        if (challengeId) {
+          router.push(`/challenge/${challengeId}`);
+        } else {
+          router.push("/(tabs)/compete");
+        }
+        return;
+      }
+
       if (type === "streak_window_reminder") {
         const habitId = typeof data.habit_id === "string" ? data.habit_id : "";
         if (habitId) {
@@ -329,7 +339,9 @@ function RootLayoutNav() {
       p === "/forgot-password" ||
       p === "/reset-password";
     if (!session && !inAuth) {
-      router.replace("/login");
+      // Preserve the deep-link target (e.g. a shared /challenge/<id> link) so login can
+      // resume there instead of always landing on home — see login.tsx's `next` handling.
+      router.replace(p && p !== "/" ? { pathname: "/login", params: { next: p } } : "/login");
     }
     if (session && inAuth && p !== "/reset-password") {
       router.replace("/");

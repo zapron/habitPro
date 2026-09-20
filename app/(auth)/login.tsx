@@ -14,7 +14,7 @@ import {
   Platform,
 } from "react-native";
 import * as AppleAuthentication from "expo-apple-authentication";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { Eye, EyeOff, MailCheck } from "lucide-react-native";
 import { Screen } from "../../src/components/Screen";
 import { useTheme } from "../../src/context/ThemeContext";
@@ -52,6 +52,7 @@ function AuthImageBackdrop({ isDark }: { isDark: boolean }) {
 
 export default function LoginScreen() {
   const router = useRouter();
+  const { next } = useLocalSearchParams<{ next?: string }>();
   const { theme, isDark } = useTheme();
   const { supabaseConfigured, signIn, signUp, signInWithGoogle, signInWithApple, session } = useAuth();
 
@@ -81,9 +82,10 @@ export default function LoginScreen() {
   useEffect(() => {
     if (supabaseConfigured && session) {
       setPendingSignupEmail(null);
-      router.replace("/");
+      const resumeTarget = typeof next === "string" && next.startsWith("/") ? next : "/";
+      router.replace(resumeTarget);
     }
-  }, [supabaseConfigured, session, router]);
+  }, [supabaseConfigured, session, router, next]);
 
   useEffect(() => {
     if (Platform.OS !== "ios") {
