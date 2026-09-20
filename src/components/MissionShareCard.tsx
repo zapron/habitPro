@@ -9,18 +9,22 @@ const CARD_HEIGHT = 400;
 
 type Props = {
   title: string;
-  /** Local file URI only — a remote URL may not be loaded yet at capture time. */
-  localPhotoUri?: string | null;
+  /**
+   * Local or remote — caller is responsible for prefetching a remote URL
+   * (see `prefetchCoverUriIfRemote` in mini/[id].tsx) before showing this
+   * card, since capture happens the instant it mounts.
+   */
+  photoUri?: string | null;
   dateLabel: string;
 };
 
 /**
  * Fixed-size, always-visible view captured by react-native-view-shot — anything
  * conditionally rendered here risks capturing a blank frame, so keep this
- * dumb and synchronous (no async image loads from remote URLs).
+ * dumb and synchronous.
  */
 export const MissionShareCard = forwardRef<View, Props>(function MissionShareCard(
-  { title, localPhotoUri, dateLabel },
+  { title, photoUri, dateLabel },
   ref,
 ) {
   const { theme } = useTheme();
@@ -43,8 +47,8 @@ export const MissionShareCard = forwardRef<View, Props>(function MissionShareCar
           <Text style={styles.brandText}>HabitPro</Text>
         </View>
 
-        {localPhotoUri ? (
-          <Image source={{ uri: localPhotoUri }} style={styles.photo} resizeMode="cover" />
+        {photoUri ? (
+          <Image source={{ uri: photoUri }} style={styles.photo} resizeMode="cover" />
         ) : (
           <View style={styles.photoPlaceholder}>
             <Text style={styles.checkmark}>✓</Text>

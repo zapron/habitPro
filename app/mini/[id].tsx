@@ -135,16 +135,33 @@ function runAfterSettledInteractions(task: () => void, delayMs = POST_OPERATION_
 }
 
 /**
- * Checklist/freeform completion memories only ever populate `imageUrl` (never
- * `imageUri`), and it can hold either a not-yet-uploaded local file path or an
- * already-uploaded https URL depending on whether that proof was synced yet.
- * Only the local case is safe to hand to the share card for an instant capture —
- * a remote URL isn't guaranteed to be loaded in memory, so we'd risk a blank frame.
+ * Prefers `imageUrl` (checklist/freeform always populate this — often an
+ * already-uploaded https URL, since capture uploads immediately rather than
+ * deferring to publish time) and falls back to `imageUri` (the plain
+ * timer-completion path, or an upload that failed/was skipped).
  */
-function localCoverUriFrom(memory: StreakMemory | null): string | null {
-  const url = memory?.imageUrl;
-  if (!url || /^https?:\/\//.test(url)) return null;
-  return url;
+function coverUriFrom(memory: StreakMemory | null): string | null {
+  const url = memory?.imageUrl?.trim();
+  if (url) return url;
+  const uri = memory?.imageUri?.trim();
+  return uri || null;
+}
+
+/**
+ * A remote image isn't guaranteed to be loaded in memory the instant the
+ * share card mounts — capturing it too early risks a blank frame. Prefetch
+ * (RN's own network-image cache) before showing the card so the following
+ * <Image> render paints from cache instead of racing a fresh download.
+ * Best-effort: a failed prefetch just means the card may show a blank photo
+ * area, never a crash.
+ */
+async function prefetchCoverUriIfRemote(uri: string | null): Promise<void> {
+  if (!uri || !/^https?:\/\//.test(uri)) return;
+  try {
+    await Image.prefetch(uri);
+  } catch {
+    // best-effort
+  }
 }
 
 function waitForOperationStep(ms = OPERATION_STEP_DELAY_MS): Promise<void> {
@@ -1782,7 +1799,9 @@ export default function MiniMissionDetail() {
     });
     playMiniMissionCompletedSound();
     void maybeRequestStoreReview();
-    setShareWinPhotoUri(memoryToSave?.imageUri ?? null);
+    const shareCoverUri = coverUriFrom(memoryToSave);
+    await prefetchCoverUriIfRemote(shareCoverUri);
+    setShareWinPhotoUri(shareCoverUri);
     setShareWinVisible(true);
     const completedMission = useHabitStore.getState().getMiniMission(mission.id);
     void syncLiveMiniFromLocalMission(completedMission, {
@@ -1944,7 +1963,9 @@ export default function MiniMissionDetail() {
       });
       playMiniMissionCompletedSound();
       void maybeRequestStoreReview();
-      setShareWinPhotoUri(localCoverUriFrom(completionMemory));
+      const shareCoverUri = coverUriFrom(completionMemory);
+      await prefetchCoverUriIfRemote(shareCoverUri);
+      setShareWinPhotoUri(shareCoverUri);
       setShareWinVisible(true);
       const completedMission = useHabitStore.getState().getMiniMission(mission.id);
       void syncLiveMiniFromLocalMission(completedMission, {
@@ -2104,7 +2125,9 @@ export default function MiniMissionDetail() {
       });
       playMiniMissionCompletedSound();
       void maybeRequestStoreReview();
-      setShareWinPhotoUri(localCoverUriFrom(completionMemory));
+      const shareCoverUri = coverUriFrom(completionMemory);
+      await prefetchCoverUriIfRemote(shareCoverUri);
+      setShareWinPhotoUri(shareCoverUri);
       setShareWinVisible(true);
       const completedMission = useHabitStore.getState().getMiniMission(mission.id);
       void syncLiveMiniFromLocalMission(completedMission, {
@@ -2386,7 +2409,7 @@ export default function MiniMissionDetail() {
           visible={shareWinVisible}
           onClose={() => setShareWinVisible(false)}
           title={mission.title}
-          localPhotoUri={shareWinPhotoUri}
+          photoUri={shareWinPhotoUri}
         />
       </LazyMount>
 

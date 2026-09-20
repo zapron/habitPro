@@ -14,10 +14,10 @@ type Props = {
   visible: boolean;
   onClose: () => void;
   title: string;
-  localPhotoUri?: string | null;
+  photoUri?: string | null;
 };
 
-export function ShareWinModal({ visible, onClose, title, localPhotoUri }: Props) {
+export function ShareWinModal({ visible, onClose, title, photoUri }: Props) {
   const { theme, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const { showToast } = useToast();
@@ -73,7 +73,7 @@ export function ShareWinModal({ visible, onClose, title, localPhotoUri }: Props)
           </View>
 
           <View style={styles.cardWrap}>
-            <MissionShareCard ref={cardRef} title={title} localPhotoUri={localPhotoUri} dateLabel={dateLabel} />
+            <MissionShareCard ref={cardRef} title={title} photoUri={photoUri} dateLabel={dateLabel} />
           </View>
 
           <Button
