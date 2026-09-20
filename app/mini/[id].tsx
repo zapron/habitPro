@@ -83,6 +83,7 @@ import { useNotificationGate } from "../../src/context/NotificationGateContext";
 import { isSupabaseConfigured } from "../../src/lib/env";
 import { MiniVisibilityRow } from "../../src/components/MiniVisibilityRow";
 import { LiveMiniInviteSheet } from "../../src/components/LiveMiniInviteSheet";
+import { ShareWinModal } from "../../src/components/ShareWinModal";
 import { LazyMount } from "../../src/components/LazyMount";
 import {
   deleteCommunityWin,
@@ -111,6 +112,7 @@ import { showAppAlert } from "../../src/context/AppDialogContext";
 import { startJsStallProbe, traceSync } from "../../src/lib/jsThreadProbe";
 import { waitForHabitPersistIdle } from "../../src/lib/chunkedHabitPersistStorage";
 import { isMiniMissionAwaitingCheckIn } from "../../src/utils/miniMissionTime";
+import { maybeRequestStoreReview } from "../../src/lib/reviewPrompt";
 import {
   playMiniMissionCompletedSound,
   playMiniMissionReminderSound,
@@ -1185,6 +1187,8 @@ export default function MiniMissionDetail() {
   } | null>(null);
   const startPromptBusyRef = useRef(false);
   const [completeSheetOpen, setCompleteSheetOpen] = useState(false);
+  const [shareWinVisible, setShareWinVisible] = useState(false);
+  const [shareWinPhotoUri, setShareWinPhotoUri] = useState<string | null>(null);
   /** Wall time when user tapped Mark Complete — freezes countdown until sheet closes or mission completes. */
   const [timerFrozenAtMs, setTimerFrozenAtMs] = useState<number | null>(null);
   /** Avoid not-found flash after delete; mission is removed before navigation finishes. */
@@ -1764,6 +1768,9 @@ export default function MiniMissionDetail() {
       completedAt,
     });
     playMiniMissionCompletedSound();
+    void maybeRequestStoreReview();
+    setShareWinPhotoUri(memoryToSave?.imageUri ?? null);
+    setShareWinVisible(true);
     const completedMission = useHabitStore.getState().getMiniMission(mission.id);
     void syncLiveMiniFromLocalMission(completedMission, {
       completedAt,
@@ -1923,6 +1930,9 @@ export default function MiniMissionDetail() {
         completedAt,
       });
       playMiniMissionCompletedSound();
+      void maybeRequestStoreReview();
+      setShareWinPhotoUri(null);
+      setShareWinVisible(true);
       const completedMission = useHabitStore.getState().getMiniMission(mission.id);
       void syncLiveMiniFromLocalMission(completedMission, {
         completedAt,
@@ -2080,6 +2090,9 @@ export default function MiniMissionDetail() {
         completedAt,
       });
       playMiniMissionCompletedSound();
+      void maybeRequestStoreReview();
+      setShareWinPhotoUri(completionMemory?.imageUri ?? null);
+      setShareWinVisible(true);
       const completedMission = useHabitStore.getState().getMiniMission(mission.id);
       void syncLiveMiniFromLocalMission(completedMission, {
         completedAt,
@@ -2352,6 +2365,15 @@ export default function MiniMissionDetail() {
           visible={liveMiniSheetOpen}
           mission={mission}
           onClose={() => setLiveMiniSheetOpen(false)}
+        />
+      </LazyMount>
+
+      <LazyMount visible={shareWinVisible} unmountOnExit>
+        <ShareWinModal
+          visible={shareWinVisible}
+          onClose={() => setShareWinVisible(false)}
+          title={mission.title}
+          localPhotoUri={shareWinPhotoUri}
         />
       </LazyMount>
 

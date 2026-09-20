@@ -4,7 +4,7 @@
     "owner": "raktim24",
     "slug": "habitPro",
     "scheme": "habitpro",
-    "version": "1.1.35",
+    "version": "1.1.36",
     "platforms": [
       "ios",
       "android"
@@ -13,7 +13,7 @@
     "icon": "./assets/app-icon-v4.png",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
-    "runtimeVersion": "1.1.35",
+    "runtimeVersion": "1.1.36",
     "updates": {
       "url": "https://u.expo.dev/cdfc2b93-f246-47b6-94ca-6a816ffda876",
       "checkAutomatically": "ON_LOAD",
@@ -30,7 +30,7 @@
     },
     "ios": {
       "bundleIdentifier": "com.rakti.habitpro",
-      "buildNumber": "36",
+      "buildNumber": "37",
       "supportsTablet": false,
       "usesAppleSignIn": true,
       "infoPlist": {
@@ -39,7 +39,7 @@
     },
     "android": {
       "package": "com.rakti.habitpro",
-      "versionCode": 36,
+      "versionCode": 37,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon-v4-foreground.png",
         "backgroundColor": "#070B14"
@@ -48,7 +48,8 @@
       "permissions": [
         "com.android.vending.BILLING",
         "android.permission.POST_NOTIFICATIONS"
-      ]
+      ],
+      "playStoreUrl": "https://play.google.com/store/apps/details?id=com.rakti.habitpro"
     },
     "web": {
       "favicon": "./assets/swirling-gradient-flame-logo.png"

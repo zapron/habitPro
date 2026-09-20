@@ -24,6 +24,7 @@ import {
   searchProfilesByUsernamePrefix,
   sendChallengeInvite,
 } from "../lib/groupChallengesApi";
+import { shareInviteLink } from "../lib/inviteShare";
 import { useHabitStore } from "../store/habitStore";
 import { useAuth } from "../context/AuthContext";
 import { usePremium } from "../context/PremiumContext";
@@ -234,6 +235,25 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
     router.push(`/challenge/${id}`);
   };
 
+  const handleShareInvite = useCallback(async () => {
+    const gid = habit.challengeGroupId;
+    if (!gid) return;
+    const uname = myUsername?.trim() ?? "";
+    if (!uname) {
+      const ok = await requireUsername("group_invite");
+      if (!ok) {
+        showToast("Choose a username to share an invite.", "info");
+      }
+      return;
+    }
+    await shareInviteLink({
+      type: "challenge",
+      path: `challenge/${gid}`,
+      fromUsername: uname,
+      title: habit.title,
+    });
+  }, [habit.challengeGroupId, habit.title, myUsername, requireUsername, showToast]);
+
   return (
     <>
     <Modal visible={visible} animationType="slide" transparent statusBarTranslucent onRequestClose={onClose}>
@@ -277,6 +297,12 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
                 This mission is linked to a group. Open the group mission to see the cohort.
               </Text>
               <Button title="Open group mission" onPress={openChallenge} />
+              <Button
+                title="Share invite link"
+                variant="secondary"
+                onPress={() => void handleShareInvite()}
+                style={{ marginTop: 10 }}
+              />
               <Text style={[styles.sectionLabel, { color: theme.colors.textMuted }]}>Invite someone</Text>
               <TextInput
                 editable
