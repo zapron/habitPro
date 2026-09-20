@@ -134,6 +134,19 @@ function runAfterSettledInteractions(task: () => void, delayMs = POST_OPERATION_
   }, delayMs);
 }
 
+/**
+ * Checklist/freeform completion memories only ever populate `imageUrl` (never
+ * `imageUri`), and it can hold either a not-yet-uploaded local file path or an
+ * already-uploaded https URL depending on whether that proof was synced yet.
+ * Only the local case is safe to hand to the share card for an instant capture —
+ * a remote URL isn't guaranteed to be loaded in memory, so we'd risk a blank frame.
+ */
+function localCoverUriFrom(memory: StreakMemory | null): string | null {
+  const url = memory?.imageUrl;
+  if (!url || /^https?:\/\//.test(url)) return null;
+  return url;
+}
+
 function waitForOperationStep(ms = OPERATION_STEP_DELAY_MS): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -1931,7 +1944,7 @@ export default function MiniMissionDetail() {
       });
       playMiniMissionCompletedSound();
       void maybeRequestStoreReview();
-      setShareWinPhotoUri(null);
+      setShareWinPhotoUri(localCoverUriFrom(completionMemory));
       setShareWinVisible(true);
       const completedMission = useHabitStore.getState().getMiniMission(mission.id);
       void syncLiveMiniFromLocalMission(completedMission, {
@@ -2091,7 +2104,7 @@ export default function MiniMissionDetail() {
       });
       playMiniMissionCompletedSound();
       void maybeRequestStoreReview();
-      setShareWinPhotoUri(completionMemory?.imageUri ?? null);
+      setShareWinPhotoUri(localCoverUriFrom(completionMemory));
       setShareWinVisible(true);
       const completedMission = useHabitStore.getState().getMiniMission(mission.id);
       void syncLiveMiniFromLocalMission(completedMission, {
