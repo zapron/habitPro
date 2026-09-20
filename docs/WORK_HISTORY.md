@@ -2,6 +2,49 @@
 
 This is a concise chronological log for future sessions. Keep secrets out of this file.
 
+## 2026-09-21 (growth Phase 1 + request-to-join for group missions)
+
+### Invite-link sharing, store review prompt, share-your-win card, request-to-join
+
+Commits `f479a05`, `e6deeaf`, `84af185` (app); `a6ef620`, `086c4f4`, `3c9825a`
+(habitPro-web). Full detail in `docs/CURRENT_WORK.md`'s matching entry.
+
+- Growth/marketing strategy audit + plan written first (`docs/GROWTH_STRATEGY.md`,
+  `docs/PLAY_STORE_LISTING.md`) — explicitly declined to build mass
+  automated messaging/fake engagement, scoped to real product + content
+  work instead.
+- habitPro-web: sitemap.xml/robots.txt/Vercel Analytics (none existed
+  before), new `/invite` landing page.
+- App: "Share invite link" button in Live Squad + Group Challenge invite
+  sheets. Real bug found + fixed: `Share.share({ message, url })` made iOS
+  show a raw duplicate link ahead of the message text — dropped the `url`
+  field.
+- Three new native modules (`expo-store-review`, `expo-sharing`,
+  `react-native-view-shot`) — store review prompt (milestone-gated,
+  correctly inert on TestFlight) + a shareable branded completion card,
+  user-tested on-device and confirmed working. Version bumped 1.1.35 →
+  1.1.36 (native modules mean a real store build, not OTA, for this batch).
+- Request-to-join for group missions, added mid-session after the user
+  asked what a non-member sees when opening an invite link (previously: an
+  undesigned blank screen). Governance explicitly walked through with the
+  user — landed on mirroring the existing streak-repair squad-vote system
+  exactly (any 2 members approve, 1 decline vetoes, no special creator
+  authority) rather than a creator-only model. New migration + 5 RPCs;
+  found and fixed a real pre-existing gap where older challenges' creators
+  were missing from `challenge_members` (would have locked them out of
+  voting on their own mission), plus an `ON CONFLICT` target mismatch
+  against `challenge_invites`' actual partial unique index. Verified fully
+  locally (request/duplicate-guard/approve/decline/re-request) with two
+  real accounts before considering it done. Not pushed to production yet.
+- Also fixed: a deep-link's target was silently dropped if you weren't
+  signed in yet (login always landed on home) — `/login` now carries and
+  resumes to a `next` param.
+- Local dev fixes: `JAVA_HOME` wasn't set for Android/Gradle builds (fixed
+  via Android Studio's bundled JDK in `~/.zprofile`); Android Emulator
+  can't reach `127.0.0.1` (that's always "itself," not the host Mac) —
+  pointed `.env.local` at the Mac's LAN IP instead, one value that works
+  for iOS Simulator, Android Emulator, and a physical device alike.
+
 ## 2026-09-19 (hot-window plan shipped + freeform mini mission fixes)
 
 ### Hot-window cutoff (Phases A-F) + freeform mini mission data-loss fix
