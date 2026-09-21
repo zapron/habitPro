@@ -283,6 +283,32 @@ function buildMessage(
         data,
       };
     }
+    case "challenge_join_request": {
+      const requesterName =
+        typeof payload.requester_username === "string" && payload.requester_username.length > 0
+          ? `@${payload.requester_username.toLowerCase()}`
+          : "Someone";
+      const missionTitle =
+        typeof payload.challenge_title === "string" && payload.challenge_title.length > 0
+          ? payload.challenge_title
+          : "your mission";
+      return {
+        title: "Join request",
+        body: `${requesterName} wants to join "${missionTitle}". Tap to review.`,
+        data,
+      };
+    }
+    case "challenge_join_request_result": {
+      const missionTitle =
+        typeof payload.challenge_title === "string" && payload.challenge_title.length > 0
+          ? payload.challenge_title
+          : "that mission";
+      return {
+        title: "Join request declined",
+        body: `Your request to join "${missionTitle}" wasn't approved this time.`,
+        data,
+      };
+    }
     default: {
       // Fallback: webhook may omit notifications.type; squad check-in payload is distinctive
       if (

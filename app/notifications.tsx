@@ -206,6 +206,10 @@ function notificationTitle(type: string, payload?: Record<string, unknown>): str
       return "Streak repair request";
     case "streak_repair_result":
       return payload?.status === "applied" ? "Streak repaired" : "Repair request declined";
+    case "challenge_join_request":
+      return "Join request";
+    case "challenge_join_request_result":
+      return "Join request declined";
     default:
       return type;
   }
@@ -287,6 +291,21 @@ function notificationSubtitle(n: NotificationRow): string | null {
       if (p.reason === "insufficient_xp") return "Approved but insufficient XP · Earn more and retry";
       return "Your repair was declined by the squad · Tap to view";
     }
+    case "challenge_join_request": {
+      const who = typeof p.requester_username === "string" && p.requester_username.trim().length > 0
+        ? `@${p.requester_username.trim().toLowerCase()}`
+        : "Someone";
+      const mission = typeof p.challenge_title === "string" && p.challenge_title.trim().length > 0
+        ? p.challenge_title.trim()
+        : "your mission";
+      return `${who} wants to join "${mission}" · Tap to review`;
+    }
+    case "challenge_join_request_result": {
+      const mission = typeof p.challenge_title === "string" && p.challenge_title.trim().length > 0
+        ? p.challenge_title.trim()
+        : "that mission";
+      return `Your request to join "${mission}" wasn't approved · Tap to try again`;
+    }
     default:
       return null;
   }
@@ -327,6 +346,10 @@ function notificationVisual(n: NotificationRow): { Icon: LucideIcon; tone: Notif
       return { Icon: Wrench, tone: "social" };
     case "streak_repair_result":
       return p.status === "applied" ? { Icon: Flame, tone: "positive" } : { Icon: X, tone: "muted" };
+    case "challenge_join_request":
+      return { Icon: UserPlus, tone: "social" };
+    case "challenge_join_request_result":
+      return { Icon: X, tone: "muted" };
     case "streak_window_reminder": {
       const phase = p.reminder_phase;
       return phase === "closing" ? { Icon: Clock3, tone: "urgent" } : { Icon: Clock3, tone: "social" };
@@ -687,6 +710,16 @@ export default function NotificationsScreen() {
       if (hid) {
         router.push(`/habit/${hid}`);
       }
+      return;
+    }
+
+    if (n.type === "challenge_join_request" || n.type === "challenge_join_request_result") {
+      if (challengeId) {
+        router.push(`/challenge/${challengeId}`);
+      } else {
+        router.push("/(tabs)/compete");
+      }
+      return;
     }
   }, [router]);
 
