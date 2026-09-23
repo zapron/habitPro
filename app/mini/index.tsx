@@ -160,7 +160,7 @@ const MiniMissionCard = memo(function MiniMissionCard({ item, index }: { item: M
             {/* Live now shows top-right on every tab, including Failed, same spot as Done */}
             {item.liveSquadId ? (
               <View style={[styles.liveBadge, { borderColor: theme.colors.border }]}>
-                <Text style={[styles.liveBadgeText, { color: theme.colors.textSecondary }]}>Live</Text>
+                <Text style={[styles.liveBadgeText, { color: theme.colors.textSecondary }]} numberOfLines={1}>Live</Text>
               </View>
             ) : null}
             {/* Done tab: a dull camera glyph marks a captured moment instead of an inline "· Moment" text */}
@@ -170,7 +170,7 @@ const MiniMissionCard = memo(function MiniMissionCard({ item, index }: { item: M
             {/* "Waiting"/"Completed"/"Failed" are redundant with the tab they're already filtered into — skip the pill there */}
             {!isWaiting && !isCompleted && !isTimerUp ? (
               <View style={[styles.statusBadge, { backgroundColor: statusConfig.color + "18" }]}>
-                <Text style={[styles.statusBadgeText, { color: statusConfig.color }]}>{statusConfig.label}</Text>
+                <Text style={[styles.statusBadgeText, { color: statusConfig.color }]} numberOfLines={1}>{statusConfig.label}</Text>
               </View>
             ) : null}
           </View>
@@ -965,7 +965,11 @@ const styles = StyleSheet.create({
   cardTitleRow: { flex: 1, flexDirection: "row", alignItems: "center", marginRight: 8, minWidth: 0 },
   publicTitleIcon: { marginRight: 6 },
   cardTitle: { fontWeight: "700", flex: 1, minWidth: 0 },
-  cardBadgeStack: { flexDirection: "row", alignItems: "center", gap: 8, maxWidth: 118 },
+  // No maxWidth — a fixed cap clipped the status badge's text (rather than ellipsizing it)
+  // whenever both the Live pill and an in-progress status badge needed to fit at once.
+  // flexShrink: 0 keeps this stack at its natural content size so the adjacent title
+  // (already numberOfLines={1}) absorbs the space pressure instead.
+  cardBadgeStack: { flexDirection: "row", alignItems: "center", gap: 8, flexShrink: 0 },
   failedMetaInlineRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 10, flexWrap: "wrap" },
   liveBadge: {
     flexDirection: "row",
