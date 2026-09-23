@@ -2,6 +2,34 @@
 
 This is a concise chronological log for future sessions. Keep secrets out of this file.
 
+## 2026-09-24 (promo-grant billing bug found + fixed, real user support)
+
+### community_access_grants promo type was invisible to the paywall's own gate
+
+Commit `89f1036`. Full detail in `docs/CURRENT_WORK.md`'s matching entry.
+
+- Manually granted a real user 3 months of Community access via
+  `community_access_grants` (not `profiles.is_premium` directly) after
+  a support request — chosen so it can't be clobbered by a future
+  RevenueCat webhook.
+- Separately audited a real Play Billing purchase-failure report for
+  another user — ruled out a code/config bug (production Android key
+  confirmed real via EAS env vars; no per-user billing-key branching
+  exists anywhere), checked her RevenueCat customer record directly
+  (zero purchase events at all), and concluded the failure happens
+  before RevenueCat's SDK call ever resolves — a Play Store
+  account/device-side issue, not this app's integration.
+- Real bug found while checking why grant #1 wasn't taking effect:
+  `rpc_get_community_access_status()` (the RPC that actually gates the
+  client's paywall) only ever recognized `trial`-type grants — a
+  `promo` grant was invisible to it, even though every other premium
+  check in the codebase already handled any grant type correctly. The
+  paywall would show "already used trial" and demand payment forever
+  regardless of a valid promo grant. Fixed with a second, type-agnostic
+  grant lookup mirroring the already-correct logic elsewhere; trial-
+  specific fields left untouched. Tested locally before/after with a
+  seeded promo grant.
+
 ## 2026-09-23 (Community mission entry point, share-card redesign, misc fixes)
 
 ### Tap-to-join from Community, redesigned share card, two real bugs, permanent LAN-IP fix
