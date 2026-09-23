@@ -3,6 +3,7 @@
   "version": "1.1.36",
   "main": "index.js",
   "scripts": {
+    "prestart": "node scripts/sync-local-supabase-ip.mjs",
     "start": "expo start",
     "db:link": "npx supabase link",
     "predb:push": "npm run db:reset",
@@ -14,7 +15,9 @@
     "db:stop": "npx supabase stop",
     "db:reset": "npx supabase db reset",
     "db:snapshot": "npx supabase db dump --data-only --linked --schema public --exclude public.app_version_policy --exclude public.community_access_config -f supabase/seed.sql",
+    "preandroid": "node scripts/sync-local-supabase-ip.mjs",
     "android": "expo run:android",
+    "preios": "node scripts/sync-local-supabase-ip.mjs",
     "ios": "expo run:ios",
     "web": "expo start --web",
     "build:apk": "eas build -p android --profile apk",
