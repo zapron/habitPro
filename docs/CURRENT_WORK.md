@@ -22,7 +22,9 @@ New migration `rpc_challenge_group_id_for_habit_v1` — single-habit lookup (byp
 
 **5. Local dev: permanent fix for the recurring LAN-IP-drift issue (`d26ffc0`).** `.env.local` points at the Mac's LAN IP (not `127.0.0.1`) so one value works across iOS Simulator/Android Emulator/a physical device — but that IP drifted on WiFi reconnect **three separate times in this session alone**, each time surfacing as a generic, hard-to-diagnose "network request failed." New `scripts/sync-local-supabase-ip.mjs` detects the current LAN IP via Node's own network interface list and rewrites `.env.local` if stale; wired as `prestart`/`preandroid`/`preios` (npm's own pre-hook convention) so it self-heals automatically instead of needing a manual fix every time. Tested three ways (unchanged case, forced-mismatch case, actual npm-hook invocation) before considering it done.
 
-**Not yet done, explicitly next**: push this session's commits to `origin`; user runs `db:push` for both new migrations once ready; the unwired batch join-status RPC is available whenever the proactive "Join" badge trial is revisited; Live Squad's own request-to-join system remains a clean, unstarted future task.
+**6. Pushed and OTA'd.** `main` pushed to `origin` at `8d14635` (`37e40b3`..`8d14635`: the 5 commits above + this docs entry). Published to production OTA: update group `61e3a8e5-6834-4345-994b-6f3e5f79906c`, runtime `1.1.36`, commit `8d14635` — confirmed via `git diff e6deeaf..HEAD --stat -- package.json package-lock.json app.json eas.json` that the only diff since the last native build (the new `pre*` script hooks, dev-tooling only, never bundled into the app) was safe to OTA.
+
+**Not yet done, explicitly next**: user runs `db:push` for both new migrations (`rpc_challenge_group_id_for_habit_v1`, `rpc_community_habit_join_status_batch_v1`) once ready; the unwired batch join-status RPC is available whenever the proactive "Join" badge trial is revisited; Live Squad's own request-to-join system remains a clean, unstarted future task.
 
 ## Session Handoff (2026-09-21, end of session — growth Phase 1 + request-to-join)
 
