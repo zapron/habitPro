@@ -1,6 +1,6 @@
 import { getSupabase } from "./supabase";
 
-export type CommunityAccessSource = "paid" | "trial" | "none";
+export type CommunityAccessSource = "paid" | "trial" | "promo" | "none";
 
 export type CommunityAccessStatus = {
   hasAccess: boolean;
@@ -55,7 +55,7 @@ function stringOrNull(value: unknown): string | null {
 }
 
 function accessSource(value: unknown): CommunityAccessSource {
-  return value === "paid" || value === "trial" || value === "none" ? value : "none";
+  return value === "paid" || value === "trial" || value === "promo" || value === "none" ? value : "none";
 }
 
 export function parseCommunityAccessStatus(raw: unknown): CommunityAccessStatus {
