@@ -12,7 +12,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { Radio, Share2, UserPlus, Users, X } from "lucide-react-native";
+import { Radio, UserPlus, Users, X } from "lucide-react-native";
 import { Text } from "./AppText";
 import { Button } from "./Button";
 import { PlusBadge } from "./PlusBadge";
@@ -33,7 +33,6 @@ import { traceAsync } from "../lib/perfTrace";
 import {
   searchProfilesByUsernamePrefix,
 } from "../lib/groupChallengesApi";
-import { shareInviteLink } from "../lib/inviteShare";
 import { useHabitStore } from "../store/habitStore";
 import type { MiniMission } from "../types/habit";
 import type { LiveMiniParticipantStatus } from "../types/liveMiniMission";
@@ -84,7 +83,6 @@ export function LiveMiniInviteSheet({ visible, mission, onClose }: Props) {
   const refreshPremiumAccess = useRefreshPremiumAccess();
   const { requireUsername } = useUsernameGate();
   const setMiniMissionLiveSquad = useHabitStore((s) => s.setMiniMissionLiveSquad);
-  const username = useHabitStore((s) => s.username);
 
   const [squadId, setSquadId] = useState<string | null>(mission.liveSquadId ?? null);
   const [creating, setCreating] = useState(false);
@@ -240,21 +238,6 @@ export function LiveMiniInviteSheet({ visible, mission, onClose }: Props) {
     signedIn,
   ]);
 
-  const handleShareInvite = useCallback(async () => {
-    if (!squadId) return;
-    const ok = await requireUsername("live_mini_invite");
-    if (!ok) {
-      showToast("Choose a username to share an invite.", "info");
-      return;
-    }
-    await shareInviteLink({
-      type: "live_mini",
-      path: `live-mini/${squadId}`,
-      fromUsername: username ?? "",
-      title: mission.title,
-    });
-  }, [mission.title, requireUsername, showToast, squadId, username]);
-
   const handleInvite = useCallback(
     async (userId: string) => {
       if (!squadId || statusByUserId[userId]) return;
@@ -409,24 +392,6 @@ export function LiveMiniInviteSheet({ visible, mission, onClose }: Props) {
                         Open Live Board
                       </Text>
                     </TouchableOpacity>
-                    {canInviteInExistingSquad ? (
-                      <TouchableOpacity
-                        style={[
-                          styles.boardButton,
-                          {
-                            borderColor: isDark ? withAlpha(theme.colors.indigo[400], 35) : withAlpha(theme.colors.indigo[500], 28),
-                            backgroundColor: isDark ? withAlpha(theme.colors.indigo[400], 10) : withAlpha(theme.colors.indigo[500], 8),
-                          },
-                        ]}
-                        onPress={() => void handleShareInvite()}
-                        activeOpacity={0.88}
-                      >
-                        <Share2 size={18} color={theme.colors.indigo[400]} />
-                        <Text style={[styles.boardButtonText, { color: theme.colors.textPrimary }]}>
-                          Share invite link
-                        </Text>
-                      </TouchableOpacity>
-                    ) : null}
                   </View>
 
                   {statusesLoading ? (
