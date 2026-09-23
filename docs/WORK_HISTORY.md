@@ -2,6 +2,45 @@
 
 This is a concise chronological log for future sessions. Keep secrets out of this file.
 
+## 2026-09-23 (Community mission entry point, share-card redesign, misc fixes)
+
+### Tap-to-join from Community, redesigned share card, two real bugs, permanent LAN-IP fix
+
+Commits `94a20ac`, `35b6d5a`, `889ab4a`, `ffce87f`, `d26ffc0`. Full detail in
+`docs/CURRENT_WORK.md`'s matching entry.
+
+- Tapping a mission name directly from the Community feed or a player's
+  profile now checks membership and routes into the existing
+  request-to-join system (built the prior session) — a missing entry
+  point, not a new feature. New migration for the single-habit lookup.
+- Explored a full visual-options artifact (icon badges, pennant tags,
+  proactive "Join" badges) but — asked directly to weigh the real cost —
+  landed on plain uncolored tappable text for this trial, deliberately
+  skipping the batch-membership-lookup complexity a proactive badge
+  would need. Built and tested that batch RPC anyway, left unwired for
+  later.
+- Real bug found while wiring this: a Community gallery photo with no
+  note of its own was showing the *first* photo's note instead (a `??`
+  fallback firing too eagerly). Fixed.
+- Share card redesigned: photo-forward (Instagram-story style, scrim
+  gradient sampled from the real logo) or a plain Minimalist-theme
+  surface when there's no photo — replacing the flat indigo→cyan
+  gradient called out as generic/AI-looking. Both now carry a bundled
+  QR-code link back to the app.
+- Live Squad's share-link removed — investigated what a non-member
+  actually sees (a dead-end "not found" screen, since Live Squad has no
+  request-to-join system) and reverted to the pre-existing
+  invite-by-username flow rather than building a second full system in
+  the same pass.
+- Real bug found via a user screenshot: the mini-mission status badge's
+  text was clipping raw (no ellipsis) whenever both the Live pill and
+  the in-progress badge needed to fit at once — a hardcoded `maxWidth`
+  sized for the single-badge case. Fixed.
+- Local dev: the LAN-IP-drift issue (documented in the prior session's
+  entry) recurred three separate times this session — built a script
+  that auto-detects and corrects it, wired into `prestart`/`preandroid`/
+  `preios` so it's no longer a manual fix.
+
 ## 2026-09-21 (growth Phase 1 + request-to-join for group missions)
 
 ### Invite-link sharing, store review prompt, share-your-win card, request-to-join
