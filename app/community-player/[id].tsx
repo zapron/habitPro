@@ -55,6 +55,7 @@ import {
   fetchCommunityPlayerStory,
   fetchCommunityPlayerMissionJourneyPage,
   fetchCommunityPlayerStoryPage,
+  habitIdFromStoryKey,
   mergeCommunityPlayerStoryPosts,
   recordCommunityJourneyView,
   toggleCheer,
@@ -65,6 +66,7 @@ import {
   type CommunityPlayerStoryPost,
   type CommunityPlayerWeeklyRank,
 } from "../../src/lib/communityWinsApi";
+import { fetchChallengeGroupIdForHabit } from "../../src/lib/groupChallengesApi";
 import { formatRelativeTime } from "../../src/lib/communityWinFeedFormat";
 import { formatDateDisplay } from "../../src/utils/dateDisplay";
 import { getJourneyMiniGridLayout } from "../../src/utils/journeyMiniGrid";
@@ -159,6 +161,7 @@ function rebuildMissionStory(
   const sorted = mergeCommunityPlayerStoryPosts([], [...posts]).sort((a, b) => sortTime(b.createdAt) - sortTime(a.createdAt));
   return {
     key,
+    habitId: habitIdFromStoryKey(key),
     title,
     description: description?.trim() || null,
     postCount: sorted.length,
@@ -700,6 +703,7 @@ function MissionStoryCard({
   isDark,
   onOpenGallery,
   onOpenImage,
+  onOpenMission,
   photoWidth,
   photoHeight,
   imagesEnabled,
@@ -710,6 +714,7 @@ function MissionStoryCard({
   isDark: boolean;
   onOpenGallery: () => void;
   onOpenImage: (slides: CommunityLightboxSlide[], initialIndex?: number) => void;
+  onOpenMission: (habitId: string) => void;
   photoWidth: number;
   photoHeight: number;
   imagesEnabled: boolean;
@@ -733,11 +738,24 @@ function MissionStoryCard({
     <View style={[styles.missionCard, { borderColor: theme.colors.border, backgroundColor: theme.colors.surface }]}>
       <GlassTopHighlight radius={15} />
       <View style={styles.missionHeader}>
-        <View style={styles.missionTitleWrap}>
-          <Text style={[styles.missionTitle, { color: theme.colors.textPrimary }]} numberOfLines={1}>
-            {story.title}
-          </Text>
-        </View>
+        {story.habitId ? (
+          <Pressable
+            style={styles.missionTitleWrap}
+            onPress={() => onOpenMission(story.habitId!)}
+            accessibilityRole="button"
+            accessibilityLabel={`Open ${story.title}`}
+          >
+            <Text style={[styles.missionTitle, { color: theme.colors.textPrimary }]} numberOfLines={1}>
+              {story.title}
+            </Text>
+          </Pressable>
+        ) : (
+          <View style={styles.missionTitleWrap}>
+            <Text style={[styles.missionTitle, { color: theme.colors.textPrimary }]} numberOfLines={1}>
+              {story.title}
+            </Text>
+          </View>
+        )}
         <Pressable
           onPress={onOpenGallery}
           accessibilityRole="button"
@@ -1369,6 +1387,26 @@ export default function CommunityPlayerStoryScreen() {
   const { requireUsername } = useUsernameGate();
   const userId = paramString(params.id);
   const identity = avatarIdentityFor(userId);
+  const openMissionBusyRef = useRef<string | null>(null);
+  const handleOpenMissionFromStory = useCallback(
+    async (habitId: string) => {
+      if (!userId || openMissionBusyRef.current) return;
+      openMissionBusyRef.current = habitId;
+      try {
+        const challengeGroupId = await fetchChallengeGroupIdForHabit(userId, habitId);
+        if (challengeGroupId) {
+          router.push(`/challenge/${challengeGroupId}`);
+        } else {
+          showToast("This mission isn't part of a group — nothing to join.", "info");
+        }
+      } catch {
+        showToast("Couldn't open that mission right now.", "error");
+      } finally {
+        openMissionBusyRef.current = null;
+      }
+    },
+    [router, showToast, userId],
+  );
   const routeTab = paramString(params.tab) === "minis" ? "minis" : "missions";
   const [story, setStory] = useState<CommunityPlayerStory | null>(null);
   const [activeTab, setActiveTab] = useState<StoryTab>(routeTab);
@@ -1968,6 +2006,7 @@ export default function CommunityPlayerStoryScreen() {
                   photoWidth={missionPreviewPhotoSize}
                   photoHeight={missionPreviewPhotoSize}
                   onOpenGallery={() => setSelectedMission(mission)}
+                  onOpenMission={handleOpenMissionFromStory}
                   index={index}
                 />
               ))}

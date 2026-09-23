@@ -336,6 +336,61 @@ export type ChallengeJoinRequestRow = {
   createdAt: string;
 };
 
+/**
+ * Resolves a habit id (from a Community story, so possibly not your own) to its
+ * group mission id, if any — lets a story tap route into /challenge/[id], which
+ * already handles both "already a member" and "request to join." Null for a
+ * private/solo habit (nothing to join) or a habit id that doesn't resolve.
+ */
+export async function fetchChallengeGroupIdForHabit(
+  ownerUserId: string,
+  habitId: string,
+): Promise<string | null> {
+  const supabase = getSupabase();
+  if (!supabase) return null;
+  const { data, error } = await supabase.rpc("rpc_challenge_group_id_for_habit_v1", {
+    p_user_id: ownerUserId,
+    p_habit_id: habitId,
+  });
+  if (error) throw error;
+  return typeof data === "string" ? data : null;
+}
+
+export type ChallengeJoinStatus = { challengeGroupId: string; isMember: boolean };
+
+/** habits.id alone isn't globally unique (composite PK with user_id) — key on this. */
+export function communityHabitJoinStatusKey(ownerUserId: string, habitId: string): string {
+  return `${ownerUserId}:${habitId}`;
+}
+
+/**
+ * Batched version of `fetchChallengeGroupIdForHabit`, for showing a "Join" affordance
+ * proactively (before any tap) across a whole loaded feed page — one call instead of N.
+ * Map value is undefined for a private/solo habit (nothing to join, no badge to show).
+ */
+export async function fetchChallengeJoinStatusBatch(
+  pairs: readonly { ownerUserId: string; habitId: string }[],
+): Promise<Map<string, ChallengeJoinStatus>> {
+  const result = new Map<string, ChallengeJoinStatus>();
+  const supabase = getSupabase();
+  if (!supabase || pairs.length === 0) return result;
+  const { data, error } = await supabase.rpc("rpc_community_habit_join_status_batch_v1", {
+    p_pairs: pairs.map((p) => ({ owner_user_id: p.ownerUserId, habit_id: p.habitId })),
+  });
+  if (error) throw error;
+  for (const row of (data ?? []) as Record<string, unknown>[]) {
+    const ownerUserId = row.owner_user_id as string;
+    const habitId = row.habit_id as string;
+    const challengeGroupId = row.challenge_group_id as string | null;
+    if (!challengeGroupId) continue;
+    result.set(communityHabitJoinStatusKey(ownerUserId, habitId), {
+      challengeGroupId,
+      isMember: Boolean(row.is_member),
+    });
+  }
+  return result;
+}
+
 /** RLS-bypassing preview for a non-member — challenge_groups itself is member-only. */
 export async function fetchChallengePublicPreview(challengeId: string): Promise<ChallengePublicPreview | null> {
   const supabase = getSupabase();

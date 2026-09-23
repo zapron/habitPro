@@ -28,7 +28,7 @@ import {
   ListChecks,
 } from "lucide-react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import type { CommunityWinFeedItem } from "../lib/communityWinsApi";
+import { habitIdFromHabitStreakMiniMissionId, type CommunityWinFeedItem } from "../lib/communityWinsApi";
 import type { CommunityLightboxSlide } from "./CommunityWinImageLightbox";
 import { buildStreakCelebrationKicker } from "../lib/communityStreakFeedCopy";
 import { formatCompletedAt, formatRelativeTime } from "../lib/communityWinFeedFormat";
@@ -91,6 +91,8 @@ type Props = {
   onToggleExpanded: () => void;
   onOpenLightbox: (slides: CommunityLightboxSlide[], initialIndex?: number) => void;
   onOpenPlayer?: (win: CommunityWinFeedItem) => void;
+  /** Tapping the mission name directly, without going through the player's journey first. */
+  onOpenMission?: (habitId: string, ownerUserId: string) => void;
   /** Returns whether the cheer API succeeded (optimistic list update in parent). */
   onCheer: (win: CommunityWinFeedItem) => Promise<boolean>;
   onOpenCheerers?: (win: CommunityWinFeedItem) => void;
@@ -249,6 +251,7 @@ export const CommunityWinFeedPost = memo(function CommunityWinFeedPost({
   onToggleExpanded,
   onOpenLightbox,
   onOpenPlayer,
+  onOpenMission,
   onCheer,
   onOpenCheerers,
   canCheer = true,
@@ -271,7 +274,10 @@ export const CommunityWinFeedPost = memo(function CommunityWinFeedPost({
     galleryEntries && galleryEntries.length > 0
       ? galleryEntries[Math.min(activeGalleryIndex, galleryEntries.length - 1)]
       : null;
-  const noteText = (activeGalleryItem?.note ?? win.memory_note ?? "").trim();
+  // A real multi-item gallery must use ONLY that item's own note — falling back to the
+  // post-level memory_note (the "cover" task's note) here would bleed slide 1's note
+  // onto a later slide that genuinely has none of its own.
+  const noteText = (activeGalleryItem ? activeGalleryItem.note ?? "" : win.memory_note ?? "").trim();
   const hasNote = noteText.length > 0;
   const hasLongNote = noteText.length > 90 || noteText.includes("\n");
   /** Flattened (no hard line breaks) so a short-but-multiline note still collapses to a single
@@ -309,6 +315,10 @@ export const CommunityWinFeedPost = memo(function CommunityWinFeedPost({
   const level = levelFromTotalXp(win.xp);
   const playerLeague = playerLeagueForLevel(level, theme, isDark);
   const showMissionTitle = !streakKicker;
+  /** Null for a real mini mission — only a habit-streak post (current or legacy-synthetic-id) resolves. */
+  const missionHabitId = habitIdFromHabitStreakMiniMissionId(win.mini_mission_id);
+  const missionLineText = streakKicker ? streakKicker.missionLine : showMissionTitle ? win.title : null;
+  const missionLineTappable = Boolean(missionHabitId && onOpenMission);
   const showDetailsToggle = hasLongNote || expanded;
   const isLiveSquadWin = win.feed_source === "mini" && Boolean(win.live_squad_id);
 
@@ -509,14 +519,26 @@ export const CommunityWinFeedPost = memo(function CommunityWinFeedPost({
               {playerLeague.label}
             </Text>
           </View>
-          {streakKicker ? (
-            <Text style={[styles.playerMissionLine, { color: theme.colors.textSecondary }]} numberOfLines={1}>
-              {streakKicker.missionLine}
-            </Text>
-          ) : showMissionTitle ? (
-            <Text style={[styles.playerMissionLine, { color: theme.colors.textSecondary }]} numberOfLines={1}>
-              {win.title}
-            </Text>
+          {missionLineText !== null ? (
+            missionLineTappable ? (
+              // Plain text, no color/weight change — tap still works, just no visual cue
+              // (trial: decided the cue itself needs more thought before committing to one).
+              <Pressable
+                onPress={() => onOpenMission!(missionHabitId!, win.user_id)}
+                hitSlop={6}
+                style={({ pressed }) => ({ opacity: pressed ? 0.65 : 1, alignSelf: "flex-start" })}
+                accessibilityRole="button"
+                accessibilityLabel={`Open mission ${win.title}`}
+              >
+                <Text style={[styles.playerMissionLine, { color: theme.colors.textSecondary }]} numberOfLines={1}>
+                  {missionLineText}
+                </Text>
+              </Pressable>
+            ) : (
+              <Text style={[styles.playerMissionLine, { color: theme.colors.textSecondary }]} numberOfLines={1}>
+                {missionLineText}
+              </Text>
+            )
           ) : null}
           {showHandle ? (
             <Text style={[styles.playerHandle, { color: theme.colors.textMuted }]} numberOfLines={1}>

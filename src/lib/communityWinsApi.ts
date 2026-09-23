@@ -8,6 +8,13 @@ export function habitStreakCommunityWinId(habitId: string, memoryDateStr: string
   return `habitwin:${habitId}:${memoryDateStr}`;
 }
 
+/** Inverse of `habitStreakCommunityWinId` — null for a real (non-synthetic) mini_mission_id. */
+export function habitIdFromHabitStreakMiniMissionId(miniMissionId: string): string | null {
+  if (!miniMissionId.startsWith("habitwin:")) return null;
+  const habitId = miniMissionId.slice("habitwin:".length).split(":")[0]?.trim();
+  return habitId || null;
+}
+
 export type CommunityWinFeedSource = "mini" | "habit_streak";
 
 /**
@@ -97,6 +104,8 @@ export type CommunityPlayerStoryPost = {
 
 export type CommunityPlayerMissionStory = {
   key: string;
+  /** The habit this story is grouped by, when resolvable from `key` (see `habitIdFromStoryKey`) — null for a mini-mission story or a legacy title-only grouping. Lets a viewer tap through to check group-mission membership. */
+  habitId: string | null;
   title: string;
   description?: string | null;
   postCount: number;
@@ -656,7 +665,7 @@ function habitStoryKey(row: CommunityWinRow): string {
   return normalizedTitle ? `habit-title:${normalizedTitle}` : `habit:${row.id}`;
 }
 
-function habitIdFromStoryKey(key: string): string | null {
+export function habitIdFromStoryKey(key: string): string | null {
   if (!key.startsWith("habit:")) return null;
   const habitId = key.slice("habit:".length).trim();
   return habitId || null;
@@ -746,6 +755,7 @@ function groupMissionStories(rows: CommunityWinRow[], postsById: Map<string, Com
       }, null);
       return {
         key,
+        habitId: habitIdFromStoryKey(key),
         title: sorted[0]?.title ?? "Mission",
         description: null,
         postCount: sorted.length,

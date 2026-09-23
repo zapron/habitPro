@@ -32,6 +32,7 @@ import {
   toggleCheer,
   type CommunityWinFeedItem,
 } from "../lib/communityWinsApi";
+import { fetchChallengeGroupIdForHabit } from "../lib/groupChallengesApi";
 import { traceAsync } from "../lib/perfTrace";
 import { CommunityWinFeedPost } from "./CommunityWinFeedPost";
 import { CommunityWinFeedSkeletonRow } from "./CommunityWinFeedSkeleton";
@@ -317,6 +318,27 @@ export function CommunityWinsFeed({
     });
   }, [router, userId]);
 
+  const openMissionBusyRef = useRef<string | null>(null);
+  const openMissionFromFeed = useCallback(
+    async (habitId: string, ownerUserId: string) => {
+      if (openMissionBusyRef.current) return;
+      openMissionBusyRef.current = habitId;
+      try {
+        const challengeGroupId = await fetchChallengeGroupIdForHabit(ownerUserId, habitId);
+        if (challengeGroupId) {
+          router.push(`/challenge/${challengeGroupId}`);
+        } else {
+          showToast("This mission isn't part of a group — nothing to join.", "info");
+        }
+      } catch {
+        showToast("Couldn't open that mission right now.", "error");
+      } finally {
+        openMissionBusyRef.current = null;
+      }
+    },
+    [router, showToast],
+  );
+
   const renderItem: ListRenderItem<ListRow> = useCallback(
     ({ item }) => {
       if (item.kind === "skeleton") {
@@ -338,6 +360,7 @@ export function CommunityWinsFeed({
             setLightboxIndex(initialIndex ?? 0);
           }}
           onOpenPlayer={openPlayerStory}
+          onOpenMission={openMissionFromFeed}
           onCheer={handleCheer}
           onOpenCheerers={(w) => setCheerersSheet({ winId: w.id, totalLikes: w.cheerCount })}
           canCheer={canCheer}

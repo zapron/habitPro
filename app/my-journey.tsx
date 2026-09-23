@@ -59,6 +59,7 @@ import {
   fetchCommunityPlayerMissionJourneyPage,
   fetchCommunityPlayerStory,
   fetchCommunityPlayerStoryPage,
+  habitIdFromStoryKey,
   mergeCommunityPlayerStoryPosts,
   type CommunityMemoryGalleryItem,
   type CommunityPlayerMissionStory,
@@ -338,6 +339,7 @@ function buildPrivateStory(habits: readonly Habit[], minis: readonly MiniMission
       const sorted = posts.sort((a, b) => sortTime(b.createdAt) - sortTime(a.createdAt));
       missionStories.push({
         key: `private-habit-${habit.id}`,
+        habitId: habit.id,
         title: habit.title,
         description: habit.description?.trim() || null,
         postCount: sorted.length,
@@ -471,6 +473,7 @@ function rebuildMissionStory(
   const sorted = dedupeStoryPostsPreferPublic(posts).sort((a, b) => sortTime(b.createdAt) - sortTime(a.createdAt));
   return {
     key,
+    habitId: habitIdFromStoryKey(key),
     title,
     description: description?.trim() || null,
     postCount: sorted.length,
