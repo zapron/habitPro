@@ -103,7 +103,11 @@ export function ShareWinModal({ visible, onClose, title, photoUri, tagLabel, day
             title={sharing ? "Preparing..." : "Share"}
             onPress={() => void handleShare()}
             disabled={sharing}
-            style={{ marginTop: 18 }}
+            style={{
+              marginTop: 18,
+              backgroundColor: theme.colors.green[600],
+              borderColor: theme.colors.green[500],
+            }}
           />
           <TouchableOpacity onPress={onClose} style={styles.notNow} disabled={sharing}>
             <Text style={[styles.notNowText, { color: theme.colors.textMuted }]}>Not now</Text>

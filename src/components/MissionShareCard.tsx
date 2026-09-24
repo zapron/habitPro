@@ -12,9 +12,9 @@ const CARD_HEIGHT = 400;
  * real scan test: a QR this dense still decodes reliably down to ~90px after downscaling. */
 const QR_SIZE = 44;
 
-/** Sampled directly from the real logo's own gradient (deep navy anchor) — the bottom
- * scrim over a photo, not an invented brand color. */
-const SCRIM_NAVY = "2,2,63";
+/** Deep, desaturated forest green — a moody photo backdrop, not a highlighter.
+ * Replaces the earlier navy-indigo scrim per explicit design feedback ("generic AI"). */
+const SCRIM_FOREST = "6,36,22";
 
 /** Static day-grid data for a habit share — caller derives `doneDays` from its own
  * completedDateSet/mission-day-slot logic; this card stays dumb about mission rules. */
@@ -114,7 +114,7 @@ export const MissionShareCard = forwardRef<View, Props>(function MissionShareCar
         totalDays={dayGrid.totalDays}
         doneDays={dayGrid.doneDays}
         boxSize={56}
-        doneColor={hasPhoto ? "#ffffff" : "#5B5BD6"}
+        doneColor={hasPhoto ? "#ffffff" : "#22c55e"}
         emptyColor={hasPhoto ? "rgba(255,255,255,0.22)" : "#28262f"}
       />
       <Text style={[styles.dayGridCaption, hasPhoto ? styles.textOnPhoto : styles.textPlainPrimary]}>
@@ -144,7 +144,7 @@ export const MissionShareCard = forwardRef<View, Props>(function MissionShareCar
       <View ref={ref} collapsable={false} style={styles.card}>
         <Image source={{ uri: photoUri! }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
         <LinearGradient
-          colors={[`rgba(${SCRIM_NAVY},0.05)`, `rgba(${SCRIM_NAVY},0.32)`, `rgba(${SCRIM_NAVY},0.95)`]}
+          colors={[`rgba(${SCRIM_FOREST},0.05)`, `rgba(${SCRIM_FOREST},0.36)`, `rgba(${SCRIM_FOREST},0.97)`]}
           locations={[0, 0.45, 1]}
           style={StyleSheet.absoluteFillObject}
         />
@@ -244,7 +244,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   tagPlain: {
-    color: "#8484e0",
+    color: "#22c55e",
   },
   title: {
     fontSize: 22,
