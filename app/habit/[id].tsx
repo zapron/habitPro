@@ -71,7 +71,8 @@ import { MissionDetailsSheet } from '../../src/components/MissionDetailsSheet';
 import { StreakRepairSheet } from "../../src/components/StreakRepairSheet";
 import { ChecklistDaySheet } from '../../src/components/ChecklistDaySheet';
 import { LazyMount } from '../../src/components/LazyMount';
-import type { StreakMemory, StreakMemoryTaskEntry, TaskChecklistItem } from '../../src/types/habit';
+import type { Habit, StreakMemory, StreakMemoryTaskEntry, TaskChecklistItem } from '../../src/types/habit';
+import type { StreakMemoryGalleryEntry } from '../../src/components/StreakMemoryGallery';
 import {
     canUseStreakMemoryUpload,
     deleteHabitStreakMemoryImages,
@@ -145,16 +146,47 @@ function waitForOperationStep(ms = OPERATION_STEP_DELAY_MS): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/** Most recent day with a saved photo (uploaded URL preferred, local URI as fallback) — used as the
- * on-demand share card's cover when no specific day was tapped. */
-function latestHabitMemoryPhotoUri(habit: { streakMemories?: Record<string, { imageUrl?: string; imageUri?: string }> }): string | null {
-    const dates = Object.keys(habit.streakMemories ?? {}).sort((a, b) => b.localeCompare(a));
-    for (const dateStr of dates) {
-        const memory = habit.streakMemories![dateStr];
-        const url = memory.imageUrl?.trim();
-        if (url) return url;
-        const uri = memory.imageUri?.trim();
-        if (uri) return uri;
+function formatShareDayDateLabel(dateStr: string): string {
+    const [y, m, d] = dateStr.split('-').map(Number);
+    if (!y || !m || !d) return dateStr;
+    return new Date(y, m - 1, d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+/** One day's best photo — a classic day's `imageUrl`/`imageUri`, or (checklist days
+ * never set those, see StreakMemoryGallery.tsx's identical derivation) the first
+ * logged task's photo. */
+function habitDayCoverPhoto(memory: StreakMemory): { uri: string; taskLabel?: string } | null {
+    const taskEntries = memory.tasks ?? [];
+    if (taskEntries.length > 0) {
+        const withPhoto = taskEntries.find((t) => t.proofUrls[0]);
+        return withPhoto ? { uri: withPhoto.proofUrls[0], taskLabel: withPhoto.label } : null;
+    }
+    const uri = memory.imageUrl?.trim() || memory.imageUri?.trim();
+    return uri ? { uri } : null;
+}
+
+/** Prefers today's/the currently-active day's photo (if it has one) over just "most
+ * recent" — so tapping Share on day 21 shows day 21, not a stale day 15 photo, whenever
+ * day 21 actually has something to show. Falls back to the most recent day with any
+ * photo at all. */
+function defaultHabitSharePick(habit: Habit, nowMs: number): { uri: string; dateLabel: string } | null {
+    const dayNumberByDate = missionDayNumberMapForHabit(habit, nowMs);
+    const activeSlot = getHabitActiveMissionDaySlot(habit, nowMs);
+    const activeDateStr = activeSlot != null ? calendarDateForHabitMissionDayIndex(habit, activeSlot - 1, nowMs) : null;
+
+    const dates = Object.keys(habit.streakMemories ?? {})
+        .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d))
+        .sort((a, b) => b.localeCompare(a));
+    const orderedDates = activeDateStr ? [activeDateStr, ...dates.filter((d) => d !== activeDateStr)] : dates;
+
+    for (const dateStr of orderedDates) {
+        const memory = habit.streakMemories?.[dateStr];
+        const cover = memory ? habitDayCoverPhoto(memory) : null;
+        if (!cover) continue;
+        const dayNumber = dayNumberByDate.get(dateStr);
+        const label = dayNumber != null ? `Day ${dayNumber}` : dateStr;
+        const base = `${label} · ${formatShareDayDateLabel(dateStr)}`;
+        return { uri: cover.uri, dateLabel: cover.taskLabel ? `${base} · ${cover.taskLabel}` : base };
     }
     return null;
 }
@@ -582,6 +614,8 @@ export default function HabitDetail() {
     const [missionDetailsOpen, setMissionDetailsOpen] = useState(false);
     const [shareWinVisible, setShareWinVisible] = useState(false);
     const [shareWinPhotoUri, setShareWinPhotoUri] = useState<string | null>(null);
+    const [shareWinDateLabel, setShareWinDateLabel] = useState<string | null>(null);
+    const [shareWinDayGridOverride, setShareWinDayGridOverride] = useState<{ totalDays: number; doneDays: boolean[] } | null>(null);
     const shareOnDemandBusyRef = useRef(false);
     const [missionDialog, setMissionDialog] = useState<MissionDialogState>({ kind: 'none' });
     const [operationProgress, setOperationProgress] = useState<OperationProgressState | null>(null);
@@ -1766,13 +1800,53 @@ export default function HabitDetail() {
         shareOnDemandBusyRef.current = true;
         void (async () => {
             try {
-                const shareCoverUri = latestHabitMemoryPhotoUri(habit);
-                await prefetchCoverUriIfRemote(shareCoverUri);
-                setShareWinPhotoUri(shareCoverUri);
+                const pick = defaultHabitSharePick(habit, Date.now());
+                await prefetchCoverUriIfRemote(pick?.uri ?? null);
+                setShareWinPhotoUri(pick?.uri ?? null);
+                setShareWinDateLabel(pick?.dateLabel ?? null);
+                setShareWinDayGridOverride(null);
                 setShareWinVisible(true);
             } finally {
                 shareOnDemandBusyRef.current = false;
             }
+        })();
+    };
+
+    /**
+     * Sharing a specific day's memory — reuses the gallery viewer the user is already
+     * looking at instead of a separate picker sheet, so there's never a second Modal
+     * stacked on top of one that's still open (that was found to render blank/
+     * inconsistently on iOS). The dot grid reflects completion *as of that day* — days
+     * after it are shown as not-yet-done even if they're actually complete now, since
+     * a photo from day 5 next to today's full grid would misrepresent that moment.
+     */
+    const handleShareFromMemory = (entry: StreakMemoryGalleryEntry, activeTaskId?: string) => {
+        if (!habit) return;
+        const cover = habitDayCoverPhoto(entry.memory);
+        const taskLabel = activeTaskId
+            ? entry.memory.tasks?.find((t) => t.taskId === activeTaskId)?.label
+            : cover?.taskLabel;
+        const uri = activeTaskId
+            ? entry.memory.tasks?.find((t) => t.taskId === activeTaskId)?.proofUrls[0] ?? null
+            : cover?.uri ?? null;
+
+        const nowMs = Date.now();
+        const totalDays = Math.max(1, habit.totalDays ?? 21);
+        const dayNumberByDate = missionDayNumberMapForHabit(habit, nowMs);
+        const uptoDay = dayNumberByDate.get(entry.dateStr) ?? entry.missionDay ?? totalDays;
+        const doneDays = Array.from({ length: totalDays }, (_, i) => {
+            if (i >= uptoDay) return false;
+            const dateStr = calendarDateForHabitMissionDayIndex(habit, i, nowMs);
+            return dateStr ? completedDateSet.has(dateStr) : false;
+        });
+
+        const label = `Day ${uptoDay} · ${formatShareDayDateLabel(entry.dateStr)}`;
+        void (async () => {
+            await prefetchCoverUriIfRemote(uri);
+            setShareWinPhotoUri(uri);
+            setShareWinDateLabel(taskLabel ? `${label} · ${taskLabel}` : label);
+            setShareWinDayGridOverride({ totalDays, doneDays });
+            setShareWinVisible(true);
         })();
     };
 
@@ -1832,8 +1906,9 @@ export default function HabitDetail() {
                     onClose={() => setShareWinVisible(false)}
                     title={habit.title}
                     photoUri={shareWinPhotoUri}
+                    dateLabel={shareWinDateLabel ?? undefined}
                     tagLabel={habit.status === 'completed' ? 'MISSION COMPLETE' : 'STREAK UPDATE'}
-                    dayGrid={shareCardDayGrid}
+                    dayGrid={shareWinDayGridOverride ?? shareCardDayGrid}
                 />
             </LazyMount>
 
@@ -2384,7 +2459,9 @@ export default function HabitDetail() {
                     </Modal>
                 ) : null}
 
-                {memoryGalleryEntries.length > 0 ? <StreakMemoryGallery entries={memoryGalleryEntries} /> : null}
+                {memoryGalleryEntries.length > 0 ? (
+                    <StreakMemoryGallery entries={memoryGalleryEntries} onShare={handleShareFromMemory} />
+                ) : null}
 
                 <View style={styles.gridHeaderRow}>
                     <View style={styles.gridHeaderTextCol}>

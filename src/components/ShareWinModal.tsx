@@ -23,20 +23,28 @@ type Props = {
   tagLabel?: string;
   /** Habit shares only — see `MissionShareCard`'s own prop of the same name. */
   dayGrid?: DayGridData | null;
+  /**
+   * Overrides the default "today" label — used once a specific day/task photo is
+   * either the default pick or a deliberate one, so the card never claims a
+   * day/photo pairing that isn't real. Falls back to today's date when absent.
+   */
+  dateLabel?: string;
 };
 
-export function ShareWinModal({ visible, onClose, title, photoUri, tagLabel, dayGrid }: Props) {
+export function ShareWinModal({ visible, onClose, title, photoUri, tagLabel, dayGrid, dateLabel: dateLabelOverride }: Props) {
   const { theme, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const { showToast } = useToast();
   const cardRef = useRef<View>(null);
   const [sharing, setSharing] = useState(false);
 
-  const dateLabel = new Date().toLocaleDateString(undefined, {
-    weekday: "long",
-    month: "short",
-    day: "numeric",
-  });
+  const dateLabel =
+    dateLabelOverride ??
+    new Date().toLocaleDateString(undefined, {
+      weekday: "long",
+      month: "short",
+      day: "numeric",
+    });
 
   const handleShare = async () => {
     if (sharing) return;

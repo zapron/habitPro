@@ -16,7 +16,7 @@ import {
   type ViewStyle,
 } from "react-native";
 import { FlashList } from "@shopify/flash-list";
-import { Bookmark, Wrench, X } from "lucide-react-native";
+import { Bookmark, Share2, Wrench, X } from "lucide-react-native";
 import Svg, { ClipPath, Defs, Image as SvgImage, Path } from "react-native-svg";
 import { useTheme } from "../context/ThemeContext";
 import { useReducedMotion } from "../hooks/useReducedMotion";
@@ -30,7 +30,8 @@ import { playMemoryFormationHaptics } from "../utils/hapticFeedback";
 import { storageThumbnailUri } from "../utils/imageThumbnail";
 import { traceSync } from "../lib/jsThreadProbe";
 
-type Entry = { dateStr: string; memory: StreakMemory; missionDay?: number | null };
+export type StreakMemoryGalleryEntry = { dateStr: string; memory: StreakMemory; missionDay?: number | null };
+type Entry = StreakMemoryGalleryEntry;
 type HoneycombColumn = {
   key: string;
   items: Array<{ entry: Entry; index: number; row: number }>;
@@ -46,6 +47,13 @@ type StreakMemoryGalleryProps = {
    * Only http(s) images render; otherwise a note-only or placeholder card is shown.
    */
   remotePeer?: boolean;
+  /**
+   * Sharing a specific day's (or, for a checklist day, a specific task's) photo —
+   * reuses this viewer instead of a separate picker sheet, so tapping Share never
+   * has two Modals open at once. Absent/omitted for a remote peer's gallery (sharing
+   * someone else's memory as your own win doesn't make sense).
+   */
+  onShare?: (entry: Entry, activeTaskId?: string) => void;
 };
 
 const HONEYCOMB_ROWS = 2;
@@ -161,6 +169,7 @@ export function StreakMemoryGallery({
   sectionTitle = "Your moments",
   sectionHint = "Tap a hex to revisit. Moments are view-only after you save them.",
   remotePeer = false,
+  onShare,
 }: StreakMemoryGalleryProps) {
   const { theme, isDark } = useTheme();
   const reduceMotion = useReducedMotion();
@@ -628,6 +637,21 @@ export function StreakMemoryGallery({
                 <Text style={[styles.viewerNote, { color: theme.colors.textMuted, fontStyle: "italic" }]}>Photo only</Text>
               )}
             </View>
+            {onShare && !remotePeer && open ? (
+              <Pressable
+                onPress={() => {
+                  const entry = open;
+                  const taskId = isGalleryOpen ? activeTask?.taskId : undefined;
+                  setOpen(null);
+                  onShare(entry, taskId);
+                }}
+                style={[styles.viewerShare, { backgroundColor: theme.colors.surface }]}
+                accessibilityRole="button"
+                accessibilityLabel="Share this moment"
+              >
+                <Share2 size={20} color={theme.colors.textPrimary} />
+              </Pressable>
+            ) : null}
             <Pressable
               onPress={() => setOpen(null)}
               style={[styles.viewerClose, { backgroundColor: theme.colors.surface }]}
@@ -768,6 +792,16 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: 12,
     right: 12,
+    width: 40,
+    height: 40,
+    borderRadius: 9999,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  viewerShare: {
+    position: "absolute",
+    top: 12,
+    left: 12,
     width: 40,
     height: 40,
     borderRadius: 9999,

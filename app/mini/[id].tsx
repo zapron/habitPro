@@ -148,6 +148,13 @@ function coverUriFrom(memory: StreakMemory | null): string | null {
   return uri || null;
 }
 
+/** Same format ShareWinModal falls back to on its own — computed here too so an
+ * explicit override (sharing one specific task's photo from the completed-mission
+ * viewer) looks identical to the default whenever there's nothing to disambiguate. */
+function todayShareDateLabel(): string {
+  return new Date().toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" });
+}
+
 /**
  * A remote image isn't guaranteed to be loaded in memory the instant the
  * share card mounts — capturing it too early risks a blank frame. Prefetch
@@ -1221,6 +1228,7 @@ export default function MiniMissionDetail() {
   const [completeSheetOpen, setCompleteSheetOpen] = useState(false);
   const [shareWinVisible, setShareWinVisible] = useState(false);
   const [shareWinPhotoUri, setShareWinPhotoUri] = useState<string | null>(null);
+  const [shareWinDateLabel, setShareWinDateLabel] = useState<string | null>(null);
   /** Wall time when user tapped Mark Complete — freezes countdown until sheet closes or mission completes. */
   const [timerFrozenAtMs, setTimerFrozenAtMs] = useState<number | null>(null);
   /** Avoid not-found flash after delete; mission is removed before navigation finishes. */
@@ -1711,11 +1719,32 @@ export default function MiniMissionDetail() {
       try {
         const shareCoverUri = coverUriFrom(mission.completionMemory ?? null);
         await prefetchCoverUriIfRemote(shareCoverUri);
+        setShareWinDateLabel(null);
         setShareWinPhotoUri(shareCoverUri);
         setShareWinVisible(true);
       } finally {
         shareOnDemandBusyRef.current = false;
       }
+    })();
+  };
+
+  /**
+   * Sharing a specific moment's photo — reuses the moment viewer the user is already
+   * looking at instead of a separate picker, so there's never more than one Modal open
+   * at once (a second stacked Modal was found to render blank/inconsistently on iOS —
+   * see StreakMemoryGallery's own note on the same issue).
+   */
+  const handleShareFromMoment = () => {
+    const tasks = mission.completionMemory?.tasks;
+    const activeTask = tasks && tasks.length > 0 ? tasks[momentViewerIndex] : undefined;
+    const shareUri = activeTask ? activeTask.proofUrls[0] ?? null : completionImageUri;
+    const label = activeTask && tasks!.length > 1 ? ` · ${activeTask.label}` : "";
+    setCompletionImageOpen(false);
+    void (async () => {
+      await prefetchCoverUriIfRemote(shareUri);
+      setShareWinDateLabel(label ? `${todayShareDateLabel()}${label}` : null);
+      setShareWinPhotoUri(shareUri);
+      setShareWinVisible(true);
     })();
   };
 
@@ -1818,6 +1847,7 @@ export default function MiniMissionDetail() {
     void maybeRequestStoreReview();
     const shareCoverUri = coverUriFrom(memoryToSave);
     await prefetchCoverUriIfRemote(shareCoverUri);
+    setShareWinDateLabel(null);
     setShareWinPhotoUri(shareCoverUri);
     setShareWinVisible(true);
     const completedMission = useHabitStore.getState().getMiniMission(mission.id);
@@ -1982,6 +2012,7 @@ export default function MiniMissionDetail() {
       void maybeRequestStoreReview();
       const shareCoverUri = coverUriFrom(completionMemory);
       await prefetchCoverUriIfRemote(shareCoverUri);
+      setShareWinDateLabel(null);
       setShareWinPhotoUri(shareCoverUri);
       setShareWinVisible(true);
       const completedMission = useHabitStore.getState().getMiniMission(mission.id);
@@ -2144,6 +2175,7 @@ export default function MiniMissionDetail() {
       void maybeRequestStoreReview();
       const shareCoverUri = coverUriFrom(completionMemory);
       await prefetchCoverUriIfRemote(shareCoverUri);
+      setShareWinDateLabel(null);
       setShareWinPhotoUri(shareCoverUri);
       setShareWinVisible(true);
       const completedMission = useHabitStore.getState().getMiniMission(mission.id);
@@ -2427,6 +2459,7 @@ export default function MiniMissionDetail() {
           onClose={() => setShareWinVisible(false)}
           title={mission.title}
           photoUri={shareWinPhotoUri}
+          dateLabel={shareWinDateLabel ?? undefined}
         />
       </LazyMount>
 
@@ -3096,6 +3129,15 @@ export default function MiniMissionDetail() {
                     <Text style={[styles.completionMomentTitle, { color: theme.colors.textPrimary }]}>
                       Your moment
                     </Text>
+                    <TouchableOpacity
+                      onPress={handleShareFromMoment}
+                      style={styles.completionMomentShareBtn}
+                      accessibilityRole="button"
+                      accessibilityLabel="Share this moment"
+                      hitSlop={8}
+                    >
+                      <Share2 size={16} color={theme.colors.textMuted} />
+                    </TouchableOpacity>
                   </View>
                   {mission.completionMemory?.tasks && mission.completionMemory.tasks.length > 0 ? (
                     <MiniMomentCarousel
@@ -3275,6 +3317,14 @@ export default function MiniMissionDetail() {
               ) : (
                 <Image source={{ uri: completionImageUri! }} style={styles.viewerImg} resizeMode="contain" />
               )}
+              <Pressable
+                onPress={handleShareFromMoment}
+                style={[styles.viewerShare, { backgroundColor: theme.colors.surface }]}
+                accessibilityRole="button"
+                accessibilityLabel="Share this moment"
+              >
+                <Share2 size={20} color={theme.colors.textPrimary} />
+              </Pressable>
               <Pressable
                 onPress={() => setCompletionImageOpen(false)}
                 style={[styles.viewerClose, { backgroundColor: theme.colors.surface }]}
@@ -3464,6 +3514,7 @@ const styles = StyleSheet.create({
   completionMomentSection: { marginTop: 4, marginBottom: 4, gap: 10 },
   completionMomentHead: { flexDirection: "row", alignItems: "center", gap: 8 },
   completionMomentTitle: { fontWeight: "800", fontSize: 14 },
+  completionMomentShareBtn: { marginLeft: "auto", padding: 4 },
   completionImageWrap: {
     borderRadius: 14,
     borderWidth: 1,
@@ -3497,6 +3548,16 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: 12,
     right: 12,
+    width: 42,
+    height: 42,
+    borderRadius: 9999,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  viewerShare: {
+    position: "absolute",
+    top: 12,
+    left: 12,
     width: 42,
     height: 42,
     borderRadius: 9999,
