@@ -1,6 +1,24 @@
 # HabitPro Current Work
 
-Last updated: 2026-09-24, second entry (always-available Share button + habit streak-dot grid card, a real broken-QR-code bug found and fixed on the share card, and a permanent fix for local dev's recurring "my account isn't in local auth" problem). Full detail immediately below; the promo-grant billing bug entry from earlier the same day follows after.
+Last updated: 2026-09-24, third entry (a real iOS/Android bug in the new share flow — a picker sheet stacked a second native Modal on top of the still-open share modal, the same class of bug already diagnosed once before in this codebase — fixed by removing the picker and putting Share directly inside the memory/moment viewers the user already opens; plus a real truncated-note bug in mini missions' moment carousel). Full detail immediately below; the share-feature-expansion entry from earlier the same day follows after.
+
+## Session Handoff (2026-09-24, third entry — share picker replaced with in-viewer Share, moment-note truncation fixed)
+
+**State: `main` is 2 commits ahead of the previous entry's tip (`1d1c5e8`..`b4a3e13`), pushed to `origin`. `npx tsc --noEmit` clean after every commit. No new migrations. Published to production OTA (see below).**
+
+**1. The "Change photo" picker sheet from the previous entry never actually worked — found via real device testing on both platforms (`6ef6e02`).** User tried it on the iOS simulator: the share modal didn't come up at all. On Android: photos weren't appearing, and tapping "Change photo" landed on a blank screen. Root cause: the picker opened as a second native `Modal` while `ShareWinModal`'s own `Modal` was still `visible={true}` underneath it — the exact double-Modal-stacking pattern already found and fixed once before in this codebase (`MissionGalleryModal`'s description popup, logged 2026-09-16, where a second `Modal` opening while a `presentationStyle="fullScreen"` one was still open rendered behind it on iOS).
+
+User's own suggested fix, unprompted: instead of a separate picker screen, put Share directly on the memory/moment viewers the user already opens — the habit honeycomb gallery's photo viewer, and the mini mission's per-task "moment" viewer. This is both simpler and structurally avoids the bug entirely, since there's never a reason for two Modals to be open at once.
+
+Removed `SharePhotoPickerSheet` entirely (component deleted). Instead:
+- **Habits**: `StreakMemoryGallery` gained an `onShare` prop — a Share button now sits in its existing fullscreen photo viewer, next to the close button. Sharing from a specific day's memory truncates the card's dot grid to completion **as of that day** (days after it show as not-yet-done even if they're actually complete now) — sharing an old day's photo next to today's full progress would misrepresent that moment. The header "Share" button (added in the previous entry) stays as the simple fast path: today's/most-recent photo, full live dot grid, no picker.
+- **Mini missions**: the completed-mission's own per-task moment viewer (fullscreen `Modal`, already existed) gained a Share button. Then, per the user's follow-up observation that the moment carousel is already inline on the page (no tap needed to see it), **also** added a Share button directly in the "Your moment" section header — shares whichever moment is currently swiped to, no extra tap into the fullscreen viewer required. Both entry points call the same handler.
+
+**2. Real bug found via a user screenshot while testing the above: mini mission moment notes were silently truncated (`b4a3e13`).** `MiniMomentCarousel`'s per-photo caption capped a moment's note at `numberOfLines={2}` (5 for a no-photo text-only slide) — for a real use case (a gym-workout mini mission logging several exercises with rep counts per moment), the actual data ran well past 2 lines and was lost to `...` with no way to read the rest, since the fullscreen viewer only ever showed the *photo* for a photo-bearing moment, never the note. Fixed: the caption now grows to fit its note in full (no cap); the no-photo slide (fixed-height frame) scrolls instead of clipping. Checked the other note-display spots in the app (habit's own memory viewer, mini mission's classic single-note view) — both were already unbounded; this was isolated to this one component.
+
+**3. Pushed and OTA'd.** `main` pushed to `origin` at `b4a3e13` (`1d1c5e8`..`b4a3e13`: the 2 commits above). Published to production OTA: update group `b798af35-8316-4b55-83c6-bc834ef2608b`, runtime `1.1.36`, commit `b4a3e13` — confirmed via `git diff e6deeaf..HEAD --stat -- package.json package-lock.json app.json eas.json` that nothing native/config changed since the last real build, so this was safe to OTA.
+
+**Not yet done, explicitly next**: nothing outstanding from this entry.
 
 ## Session Handoff (2026-09-24, second entry — share feature expansion, QR fix, local auth auto-seed)
 

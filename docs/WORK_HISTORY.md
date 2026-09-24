@@ -2,6 +2,32 @@
 
 This is a concise chronological log for future sessions. Keep secrets out of this file.
 
+## 2026-09-24, third entry (share picker replaced with in-viewer Share, moment-note truncation fixed)
+
+### Photo-picker sheet caused a real iOS/Android bug (double-Modal stacking) — replaced with Share buttons inside existing viewers; mini mission notes were silently truncated
+
+Commits `6ef6e02`, `b4a3e13`. OTA update group
+`b798af35-8316-4b55-83c6-bc834ef2608b`. Full detail in `docs/CURRENT_WORK.md`'s
+matching entry.
+
+- The "Change photo" picker sheet from the previous entry didn't work on
+  either platform when actually tested on-device — a second native
+  `Modal` stacked on top of the still-open share modal, the same class
+  of bug already fixed once before in this codebase. Removed the picker
+  entirely.
+- User's own suggestion: put Share directly on the memory/moment
+  viewers already in the app instead of building a new picker screen.
+  Habits: a Share button in the honeycomb gallery's existing photo
+  viewer (dot grid truncated to completion as of that specific day).
+  Mini missions: a Share button in the completed mission's per-task
+  moment viewer, plus one directly in the inline "Your moment" header
+  since that carousel needs no extra tap to see.
+- Real bug found via a user screenshot: mini mission moment notes were
+  capped at 2 lines (5 for text-only moments) with no way to read the
+  rest anywhere — real workout-log data (multiple exercises, rep
+  counts) was being silently lost to truncation. Fixed to show notes
+  in full.
+
 ## 2026-09-24, second entry (share feature expansion, QR fix, local auth auto-seed)
 
 ### Always-available Share button + habit streak-dot grid, broken share-card QR fixed, local db auto-seed
