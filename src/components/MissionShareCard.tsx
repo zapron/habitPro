@@ -1,10 +1,16 @@
 import { forwardRef } from "react";
 import { Image, StyleSheet, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
+import QRCode from "react-native-qrcode-svg";
 import { Text } from "./AppText";
+import { getHabitProWebUrl } from "../lib/env";
 
 const CARD_WIDTH = 320;
 const CARD_HEIGHT = 400;
+/** Rendered fresh from `getHabitProWebUrl()` every time — never a baked-in image, so it can
+ * never drift from wherever EXPO_PUBLIC_HABITPRO_WEB_URL actually points. Size chosen from a
+ * real scan test: a QR this dense still decodes reliably down to ~90px after downscaling. */
+const QR_SIZE = 44;
 
 /** Sampled directly from the real logo's own gradient (deep navy anchor) — the bottom
  * scrim over a photo, not an invented brand color. */
@@ -99,6 +105,8 @@ export const MissionShareCard = forwardRef<View, Props>(function MissionShareCar
   ref,
 ) {
   const hasPhoto = Boolean(photoUri);
+  const webUrl = getHabitProWebUrl();
+  const webUrlDisplay = webUrl.replace(/^https?:\/\//, "");
 
   const dayGridRow = dayGrid ? (
     <View style={styles.dayGridRow}>
@@ -117,13 +125,15 @@ export const MissionShareCard = forwardRef<View, Props>(function MissionShareCar
 
   const footer = (
     <View style={[styles.footer, hasPhoto ? styles.footerOnPhoto : styles.footerPlain]}>
-      <Image source={require("../../assets/qr-get-habitpro.png")} style={styles.qr} />
+      <View style={styles.qr}>
+        <QRCode value={webUrl} size={QR_SIZE} color="#000000" backgroundColor="#ffffff" ecl="M" quietZone={4} />
+      </View>
       <View>
         <Text style={[styles.footerLine1, hasPhoto ? styles.textOnPhoto : styles.textPlainPrimary]}>
           Get HabitPro
         </Text>
         <Text style={[styles.footerLine2, hasPhoto ? styles.textOnPhotoMuted : styles.textPlainMuted]}>
-          habitpro-web.vercel.app
+          {webUrlDisplay}
         </Text>
       </View>
     </View>
@@ -274,9 +284,12 @@ const styles = StyleSheet.create({
     borderTopColor: "#28262f",
   },
   qr: {
-    width: 34,
-    height: 34,
-    borderRadius: 5,
+    width: QR_SIZE + 6,
+    height: QR_SIZE + 6,
+    borderRadius: 6,
+    backgroundColor: "#ffffff",
+    alignItems: "center",
+    justifyContent: "center",
   },
   footerLine1: {
     fontSize: 11,
