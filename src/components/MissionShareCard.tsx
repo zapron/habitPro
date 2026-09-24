@@ -10,6 +10,14 @@ const CARD_HEIGHT = 400;
  * scrim over a photo, not an invented brand color. */
 const SCRIM_NAVY = "2,2,63";
 
+/** Static day-grid data for a habit share — caller derives `doneDays` from its own
+ * completedDateSet/mission-day-slot logic; this card stays dumb about mission rules. */
+type DayGridData = {
+  totalDays: number;
+  /** `doneDays[i]` = day (i+1) was completed. Length should be `totalDays`. */
+  doneDays: boolean[];
+};
+
 type Props = {
   title: string;
   /**
@@ -19,7 +27,64 @@ type Props = {
    */
   photoUri?: string | null;
   dateLabel: string;
+  /** Defaults to "MISSION COMPLETE" (mini missions). Habits pass their own label. */
+  tagLabel?: string;
+  /** When set (habit shares only), renders a compact streak-dot grid + "X/Y DAYS". */
+  dayGrid?: DayGridData | null;
 };
+
+/**
+ * Fixed-size square grid, bounded to `boxSize` regardless of `totalDays` (mirrors
+ * `MiniDayGrid` in HabitCard.tsx, but static — no blink/repair affordances, since
+ * this is a one-shot capture, not a live control).
+ */
+function ShareCardDayDots({
+  totalDays,
+  doneDays,
+  boxSize,
+  doneColor,
+  emptyColor,
+}: {
+  totalDays: number;
+  doneDays: boolean[];
+  boxSize: number;
+  doneColor: string;
+  emptyColor: string;
+}) {
+  const days = Math.max(1, Math.floor(totalDays));
+  const columns = Math.max(1, Math.ceil(Math.sqrt(days)));
+  const rows = Math.max(1, Math.ceil(days / columns));
+  const gap = 2;
+  const cell = Math.max(3, Math.floor((boxSize - gap * (Math.max(columns, rows) - 1)) / Math.max(columns, rows)));
+
+  const cells = [];
+  for (let day = 0; day < days; day++) {
+    cells.push(
+      <View
+        key={day}
+        style={{
+          width: cell,
+          height: cell,
+          borderRadius: cell / 2,
+          backgroundColor: doneDays[day] ? doneColor : emptyColor,
+        }}
+      />,
+    );
+  }
+
+  return (
+    <View
+      style={{
+        width: columns * cell + gap * (columns - 1),
+        flexDirection: "row",
+        flexWrap: "wrap",
+        gap,
+      }}
+    >
+      {cells}
+    </View>
+  );
+}
 
 /**
  * Fixed-size, always-visible view captured by react-native-view-shot — anything
@@ -30,10 +95,25 @@ type Props = {
  * neutral-surface card matching the app's own Minimalist theme pack, not a gradient.
  */
 export const MissionShareCard = forwardRef<View, Props>(function MissionShareCard(
-  { title, photoUri, dateLabel },
+  { title, photoUri, dateLabel, tagLabel = "MISSION COMPLETE", dayGrid },
   ref,
 ) {
   const hasPhoto = Boolean(photoUri);
+
+  const dayGridRow = dayGrid ? (
+    <View style={styles.dayGridRow}>
+      <ShareCardDayDots
+        totalDays={dayGrid.totalDays}
+        doneDays={dayGrid.doneDays}
+        boxSize={56}
+        doneColor={hasPhoto ? "#ffffff" : "#5B5BD6"}
+        emptyColor={hasPhoto ? "rgba(255,255,255,0.22)" : "#28262f"}
+      />
+      <Text style={[styles.dayGridCaption, hasPhoto ? styles.textOnPhoto : styles.textPlainPrimary]}>
+        {dayGrid.doneDays.filter(Boolean).length}/{dayGrid.totalDays} DAYS
+      </Text>
+    </View>
+  ) : null;
 
   const footer = (
     <View style={[styles.footer, hasPhoto ? styles.footerOnPhoto : styles.footerPlain]}>
@@ -68,10 +148,11 @@ export const MissionShareCard = forwardRef<View, Props>(function MissionShareCar
             <Text style={[styles.brandText, styles.textOnPhoto]}>HabitPro</Text>
           </View>
           <View style={styles.bottomBlock}>
-            <Text style={[styles.tag, styles.textOnPhotoMuted]}>MISSION COMPLETE</Text>
+            <Text style={[styles.tag, styles.textOnPhotoMuted]}>{tagLabel}</Text>
             <Text style={[styles.title, styles.textOnPhoto]} numberOfLines={3}>
               {title}
             </Text>
+            {dayGridRow}
             <Text style={[styles.date, styles.textOnPhotoMuted]}>{dateLabel}</Text>
             {footer}
           </View>
@@ -92,10 +173,11 @@ export const MissionShareCard = forwardRef<View, Props>(function MissionShareCar
           <Text style={[styles.brandText, styles.textPlainPrimary]}>HabitPro</Text>
         </View>
         <View style={styles.rule} />
-        <Text style={[styles.tag, styles.tagPlain]}>MISSION COMPLETE</Text>
+        <Text style={[styles.tag, styles.tagPlain]}>{tagLabel}</Text>
         <Text style={[styles.title, styles.textPlainPrimary]} numberOfLines={3}>
           {title}
         </Text>
+        {dayGridRow}
         <Text style={[styles.date, styles.textPlainMuted]}>{dateLabel}</Text>
         <View style={styles.plainFooterSpacer} />
         {footer}
@@ -163,6 +245,18 @@ const styles = StyleSheet.create({
     marginTop: 8,
     fontSize: 12,
     fontWeight: "700",
+  },
+  dayGridRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginTop: 10,
+  },
+  dayGridCaption: {
+    fontSize: 12,
+    fontWeight: "800",
+    letterSpacing: 0.3,
+    fontVariant: ["tabular-nums"],
   },
   footer: {
     marginTop: 16,

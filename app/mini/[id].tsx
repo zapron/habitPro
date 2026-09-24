@@ -43,6 +43,7 @@ import {
   Minimize2,
   Radio,
   Users,
+  Share2,
 } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
@@ -1216,6 +1217,7 @@ export default function MiniMissionDetail() {
     prev: MissionVisibility;
   } | null>(null);
   const startPromptBusyRef = useRef(false);
+  const shareOnDemandBusyRef = useRef(false);
   const [completeSheetOpen, setCompleteSheetOpen] = useState(false);
   const [shareWinVisible, setShareWinVisible] = useState(false);
   const [shareWinPhotoUri, setShareWinPhotoUri] = useState<string | null>(null);
@@ -1701,6 +1703,21 @@ export default function MiniMissionDetail() {
       </Screen>
     );
   }
+
+  const handleShareOnDemand = () => {
+    if (shareOnDemandBusyRef.current) return;
+    shareOnDemandBusyRef.current = true;
+    void (async () => {
+      try {
+        const shareCoverUri = coverUriFrom(mission.completionMemory ?? null);
+        await prefetchCoverUriIfRemote(shareCoverUri);
+        setShareWinPhotoUri(shareCoverUri);
+        setShareWinVisible(true);
+      } finally {
+        shareOnDemandBusyRef.current = false;
+      }
+    })();
+  };
 
   const handleStart = () => {
     if (startPromptBusyRef.current) return;
@@ -2564,27 +2581,43 @@ export default function MiniMissionDetail() {
         >
           <ArrowLeft size={theme.icon.lg} color={theme.colors.textPrimary} />
         </TouchableOpacity>
-        <TouchableOpacity
-          style={[
-            styles.iconButton,
-            {
-              backgroundColor: theme.colors.surface,
-              borderColor: theme.colors.border,
-            },
-          ]}
-          onPress={() => {
-            if (mission.liveSquadId) {
-              showAppAlert("Live Squad mission", "Live mini missions cannot be deleted. Cancel it instead to close your run.");
-              return;
-            }
-            setDeleteDialogOpen(true);
-          }}
-        >
-          <Trash2
-            size={theme.icon.md}
-            color={mission.liveSquadId ? theme.colors.textMuted : theme.colors.red[500]}
-          />
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          <TouchableOpacity
+            style={[
+              styles.iconButton,
+              {
+                backgroundColor: theme.colors.surface,
+                borderColor: theme.colors.border,
+              },
+            ]}
+            onPress={handleShareOnDemand}
+            accessibilityRole="button"
+            accessibilityLabel="Share this mission"
+          >
+            <Share2 size={theme.icon.md} color={theme.colors.textMuted} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.iconButton,
+              {
+                backgroundColor: theme.colors.surface,
+                borderColor: theme.colors.border,
+              },
+            ]}
+            onPress={() => {
+              if (mission.liveSquadId) {
+                showAppAlert("Live Squad mission", "Live mini missions cannot be deleted. Cancel it instead to close your run.");
+                return;
+              }
+              setDeleteDialogOpen(true);
+            }}
+          >
+            <Trash2
+              size={theme.icon.md}
+              color={mission.liveSquadId ? theme.colors.textMuted : theme.colors.red[500]}
+            />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView
@@ -3264,6 +3297,10 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 20,
+  },
+  headerActions: {
+    flexDirection: "row",
+    gap: 8,
   },
   iconButton: {
     width: 40,

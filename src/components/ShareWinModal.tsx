@@ -10,14 +10,22 @@ import { MissionShareCard } from "./MissionShareCard";
 import { useTheme } from "../context/ThemeContext";
 import { useToast } from "../context/ToastContext";
 
+type DayGridData = {
+  totalDays: number;
+  doneDays: boolean[];
+};
+
 type Props = {
   visible: boolean;
   onClose: () => void;
   title: string;
   photoUri?: string | null;
+  tagLabel?: string;
+  /** Habit shares only — see `MissionShareCard`'s own prop of the same name. */
+  dayGrid?: DayGridData | null;
 };
 
-export function ShareWinModal({ visible, onClose, title, photoUri }: Props) {
+export function ShareWinModal({ visible, onClose, title, photoUri, tagLabel, dayGrid }: Props) {
   const { theme, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const { showToast } = useToast();
@@ -73,7 +81,14 @@ export function ShareWinModal({ visible, onClose, title, photoUri }: Props) {
           </View>
 
           <View style={styles.cardWrap}>
-            <MissionShareCard ref={cardRef} title={title} photoUri={photoUri} dateLabel={dateLabel} />
+            <MissionShareCard
+              ref={cardRef}
+              title={title}
+              photoUri={photoUri}
+              dateLabel={dateLabel}
+              tagLabel={tagLabel}
+              dayGrid={dayGrid}
+            />
           </View>
 
           <Button

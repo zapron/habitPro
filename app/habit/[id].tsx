@@ -21,12 +21,14 @@ import { View,
   ActivityIndicator,
   InteractionManager,
   Platform,
+  Image,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { GlassTopHighlight } from '../../src/components/GlassTopHighlight';
 import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ArrowLeft, Trash2, Lock, RotateCcw, Plane, Gamepad2, Globe, User, Users, Info, Bell, Wrench, Camera, MessageSquare } from 'lucide-react-native';
+import { ArrowLeft, Trash2, Lock, RotateCcw, Plane, Gamepad2, Globe, User, Users, Info, Bell, Wrench, Camera, MessageSquare, Share2 } from 'lucide-react-native';
+import { ShareWinModal } from '../../src/components/ShareWinModal';
 import Svg, { Path } from 'react-native-svg';
 import { useHabitStore } from '../../src/store/habitStore';
 import { useShallow } from 'zustand/react/shallow';
@@ -141,6 +143,31 @@ function runAfterSettledInteractions(task: () => void, delayMs = POST_OPERATION_
 
 function waitForOperationStep(ms = OPERATION_STEP_DELAY_MS): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Most recent day with a saved photo (uploaded URL preferred, local URI as fallback) — used as the
+ * on-demand share card's cover when no specific day was tapped. */
+function latestHabitMemoryPhotoUri(habit: { streakMemories?: Record<string, { imageUrl?: string; imageUri?: string }> }): string | null {
+    const dates = Object.keys(habit.streakMemories ?? {}).sort((a, b) => b.localeCompare(a));
+    for (const dateStr of dates) {
+        const memory = habit.streakMemories![dateStr];
+        const url = memory.imageUrl?.trim();
+        if (url) return url;
+        const uri = memory.imageUri?.trim();
+        if (uri) return uri;
+    }
+    return null;
+}
+
+/** See `prefetchCoverUriIfRemote` in app/mini/[id].tsx — same reasoning, duplicated locally
+ * since it's a small, screen-local concern rather than shared lib code. */
+async function prefetchCoverUriIfRemote(uri: string | null): Promise<void> {
+    if (!uri || !/^https?:\/\//.test(uri)) return;
+    try {
+        await Image.prefetch(uri);
+    } catch {
+        // best-effort
+    }
 }
 
 function formatUnlockDuration(ms: number): string {
@@ -553,6 +580,9 @@ export default function HabitDetail() {
     const [acceptedGroupMemberCount, setAcceptedGroupMemberCount] = useState<number>(0);
     const [groupSheetOpen, setGroupSheetOpen] = useState(false);
     const [missionDetailsOpen, setMissionDetailsOpen] = useState(false);
+    const [shareWinVisible, setShareWinVisible] = useState(false);
+    const [shareWinPhotoUri, setShareWinPhotoUri] = useState<string | null>(null);
+    const shareOnDemandBusyRef = useRef(false);
     const [missionDialog, setMissionDialog] = useState<MissionDialogState>({ kind: 'none' });
     const [operationProgress, setOperationProgress] = useState<OperationProgressState | null>(null);
     const [habitCommunityBusy, setHabitCommunityBusy] = useState(false);
@@ -716,6 +746,16 @@ export default function HabitDetail() {
         [effectiveCompletedDates, habit],
     );
     const completedDateSet = useMemo(() => new Set(effectiveCompletedDates), [effectiveCompletedDates]);
+    /** Streak-dot grid for the on-demand share card (Option A: quiet strip under the title). */
+    const shareCardDayGrid = useMemo(() => {
+        if (!habit) return null;
+        const totalDays = Math.max(1, habit.totalDays ?? 21);
+        const doneDays = Array.from({ length: totalDays }, (_, i) => {
+            const dateStr = calendarDateForHabitMissionDayIndex(habit, i, Date.now());
+            return dateStr ? completedDateSet.has(dateStr) : false;
+        });
+        return { totalDays, doneDays };
+    }, [habit, completedDateSet]);
     const milestoneSet = useMemo(() => new Set(milestones), [milestones]);
     const repairedDateSet = useMemo(() => new Set(habit?.repairedDates ?? []), [habit?.repairedDates]);
     const streakMemoryCount = useMemo(() => Object.keys(habit?.streakMemories ?? {}).length, [habit?.streakMemories]);
@@ -1721,6 +1761,21 @@ export default function HabitDetail() {
         );
     }
 
+    const handleShareOnDemand = () => {
+        if (shareOnDemandBusyRef.current) return;
+        shareOnDemandBusyRef.current = true;
+        void (async () => {
+            try {
+                const shareCoverUri = latestHabitMemoryPhotoUri(habit);
+                await prefetchCoverUriIfRemote(shareCoverUri);
+                setShareWinPhotoUri(shareCoverUri);
+                setShareWinVisible(true);
+            } finally {
+                shareOnDemandBusyRef.current = false;
+            }
+        })();
+    };
+
     return (
         <Screen>
             <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={theme.colors.background} />
@@ -1739,6 +1794,14 @@ export default function HabitDetail() {
                     <ArrowLeft size={theme.icon.xl} color={theme.colors.textPrimary} />
                 </TouchableOpacity>
                 <View style={styles.headerActions}>
+                    <TouchableOpacity
+                        style={[styles.iconButton, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}
+                        onPress={handleShareOnDemand}
+                        accessibilityRole="button"
+                        accessibilityLabel="Share this mission"
+                    >
+                        <Share2 size={theme.icon.xl} color={theme.colors.textMuted} />
+                    </TouchableOpacity>
                     {canOpenGroupMissionSheet ? (
                         <TouchableOpacity
                             style={[styles.iconButton, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}
@@ -1761,6 +1824,17 @@ export default function HabitDetail() {
 
             <LazyMount visible={groupSheetOpen && canOpenGroupMissionSheet} unmountOnExit>
                 <GroupChallengeSheet visible={groupSheetOpen && canOpenGroupMissionSheet} onClose={() => setGroupSheetOpen(false)} habit={habit} />
+            </LazyMount>
+
+            <LazyMount visible={shareWinVisible} unmountOnExit>
+                <ShareWinModal
+                    visible={shareWinVisible}
+                    onClose={() => setShareWinVisible(false)}
+                    title={habit.title}
+                    photoUri={shareWinPhotoUri}
+                    tagLabel={habit.status === 'completed' ? 'MISSION COMPLETE' : 'STREAK UPDATE'}
+                    dayGrid={shareCardDayGrid}
+                />
             </LazyMount>
 
             <LazyMount visible={missionDetailsOpen} unmountOnExit>
