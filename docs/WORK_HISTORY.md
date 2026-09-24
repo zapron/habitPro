@@ -2,6 +2,32 @@
 
 This is a concise chronological log for future sessions. Keep secrets out of this file.
 
+## 2026-09-24, second entry (share feature expansion, QR fix, local auth auto-seed)
+
+### Always-available Share button + habit streak-dot grid, broken share-card QR fixed, local db auto-seed
+
+Commits `7c8ca68`, `1121d50`, `246f47d`. OTA update group
+`56df7a1c-9618-4e55-b0c1-ae7fe6be603e`. Full detail in `docs/CURRENT_WORK.md`'s
+matching entry.
+
+- Mini mission and habit detail screens both got a persistent header
+  Share button — sharing no longer requires catching the prompt right
+  after completion. Habit shares also render a streak-dot grid on the
+  card (a design-comparison artifact settled the placement first).
+- Real bug found via user testing: the share card's bundled QR image
+  was corrupt and never actually scanned, for either mission type,
+  since both share one component. Replaced with a live-generated QR
+  (`react-native-qrcode-svg`, pure JS, no native rebuild needed) and
+  verified independently that it actually decodes to the right URL.
+  Also stopped hardcoding the share link — both the QR and its footer
+  text now read `EXPO_PUBLIC_HABITPRO_WEB_URL` like the rest of the app.
+- Local dev: `supabase db reset` silently wipes `auth.users` every time
+  (a recurring, previously-manual gotcha logged in several earlier
+  entries) — new `scripts/seed-local-dev-users.mjs`, wired as
+  `postdb:reset`, now re-seeds both dev accounts automatically on every
+  reset. Verified with a real reset + real login, not just by reading
+  the code.
+
 ## 2026-09-24 (promo-grant billing bug found + fixed, real user support)
 
 ### community_access_grants promo type was invisible to the paywall's own gate
