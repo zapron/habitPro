@@ -14,6 +14,8 @@
     "db:start": "npx supabase start",
     "db:stop": "npx supabase stop",
     "db:reset": "npx supabase db reset",
+    "postdb:reset": "node scripts/seed-local-dev-users.mjs",
+    "db:seed-users": "node scripts/seed-local-dev-users.mjs",
     "db:snapshot": "npx supabase db dump --data-only --linked --schema public --exclude public.app_version_policy --exclude public.community_access_config -f supabase/seed.sql",
     "preandroid": "node scripts/sync-local-supabase-ip.mjs",
     "android": "expo run:android",
