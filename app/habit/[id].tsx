@@ -1022,6 +1022,15 @@ export default function HabitDetail() {
             const isMilestone = milestones.includes(ctx.day);
             const xpGained = useHabitStore.getState().xp - xpBefore;
             fireCompletionCelebration(ctx.dayIndex, ctx.day, isMilestone, xpGained);
+            // Let the confetti burst (~1s) have the screen to itself before the share
+            // sheet slides up over it — opening both at once buries the celebration.
+            setTimeout(() => {
+                handleShareFromMemory({
+                    dateStr: ctx.dateStr,
+                    memory: memoryToSave ?? { createdAt: new Date().toISOString(), checkInOnly: true },
+                    missionDay: ctx.day,
+                });
+            }, 900);
 
             const wantsPublishAfterSave = meta?.publishToCommunity === true && Boolean(memoryToSave);
             if (wantsPublishAfterSave && memoryToSave) {
@@ -1167,6 +1176,14 @@ export default function HabitDetail() {
                     const isMilestone = milestones.includes(ctx.day);
                     const xpGained = useHabitStore.getState().xp - xpBefore;
                     fireCompletionCelebration(ctx.dayIndex, ctx.day, isMilestone, xpGained);
+                    const freshMemory = useHabitStore.getState().getHabit(habit.id)?.streakMemories?.[ctx.dateStr];
+                    setTimeout(() => {
+                        handleShareFromMemory({
+                            dateStr: ctx.dateStr,
+                            memory: freshMemory ?? { createdAt: new Date().toISOString(), tasks: nextTasks },
+                            missionDay: ctx.day,
+                        });
+                    }, 900);
                 }
             }
 
@@ -1196,6 +1213,14 @@ export default function HabitDetail() {
             const isMilestone = milestones.includes(day);
             const xpGained = useHabitStore.getState().xp - xpBefore;
             fireCompletionCelebration(dayIndex, day, isMilestone, xpGained);
+            const freshMemory = useHabitStore.getState().getHabit(habit.id)?.streakMemories?.[dateStr];
+            setTimeout(() => {
+                handleShareFromMemory({
+                    dateStr,
+                    memory: freshMemory ?? { createdAt: new Date().toISOString(), checkInOnly: true },
+                    missionDay: day,
+                });
+            }, 900);
             setChecklistDayUi(null);
         },
         [habit, markChecklistDayComplete, milestones, fireCompletionCelebration, showToast],
