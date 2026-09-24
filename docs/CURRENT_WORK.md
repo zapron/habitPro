@@ -1,6 +1,21 @@
 # HabitPro Current Work
 
-Last updated: 2026-09-24, third entry (a real iOS/Android bug in the new share flow — a picker sheet stacked a second native Modal on top of the still-open share modal, the same class of bug already diagnosed once before in this codebase — fixed by removing the picker and putting Share directly inside the memory/moment viewers the user already opens; plus a real truncated-note bug in mini missions' moment carousel). Full detail immediately below; the share-feature-expansion entry from earlier the same day follows after.
+Last updated: 2026-09-25 (habits now auto-open the share card after "Mark Complete", same as mini missions already did; the share card's indigo/navy accents were recolored to the app's real green tokens per explicit design feedback — previewed as an artifact before any code changed). Full detail immediately below; the 2026-09-24 share-picker-bug-fix entry follows after.
+
+## Session Handoff (2026-09-25 — habit auto-share on complete, share card recolored to green)
+
+**State: `main` is 2 commits ahead of the previous entry's tip (`6154ae9`..`b8c79af`), pushed to `origin`. `npx tsc --noEmit` clean after every commit. No new migrations. Published to production OTA (see below).**
+
+**1. Habits now auto-open the share card after completing a day (`713031b`).** Mini missions already opened `ShareWinModal` automatically right after completion; habits only ever had the manual entry points (header button, gallery-viewer button) added in prior entries. Wired into all three ways a habit day can complete: the classic photo/note capture (`handleMemoryCommit`), a checklist day that auto-completes once its last task is logged, and the explicit "Mark Day Complete" button. Each reuses the already-existing `handleShareFromMemory(entry)` — no new share logic, just new call sites. Deliberately delayed 900ms behind the completion confetti (which runs ~1s) so the celebration animation gets to play before a modal covers the screen — copying it without the delay would have buried the confetti immediately.
+
+**2. Share card recolored from indigo/navy to green, per direct design feedback (`b8c79af`).** User feedback verbatim: indigo "seems like very generic AI shit." Rather than guess at a replacement, built a preview artifact first (colors pulled from the app's real Minimalist-pack tokens, nothing invented) and only touched code after explicit approval — same discipline as every other visual decision this session (share-card layout, day-grid placement, all previewed before building).
+- `ShareWinModal`'s Share button: was hardcoded to the primary indigo variant, now explicitly overridden to `theme.colors.green[600]`/`green[500]` (fill/border) — theme-aware, so it's a different real green in light vs. dark mode, same fill/border relationship the indigo button used.
+- `MissionShareCard`'s plain (no-photo) card: tag color and day-grid `doneColor` were two different indigo/purple shades (`#8484e0`, `#5B5BD6`) — both now the single `#22c55e`.
+- The photo card's bottom scrim: navy `rgb(2,2,63)` (originally sampled from the real logo) → forest `rgb(6,36,22)`, kept deliberately dark/desaturated so it still reads as a moody photo backdrop rather than a highlighter.
+
+**3. Pushed and OTA'd.** `main` pushed to `origin` at `b8c79af` (`6154ae9`..`b8c79af`: the 2 commits above). Published to production OTA: update group `c8bc3d2f-6825-45a4-a8fd-28a1530fe5d4`, runtime `1.1.36`, commit `b8c79af` — confirmed via `git diff e6deeaf..HEAD --stat -- package.json package-lock.json app.json eas.json` that nothing native/config changed since the last real build, so this was safe to OTA.
+
+**Not yet done, explicitly next**: two features discussed this session were deliberately deferred, not started — a streak-gated short-video reward (audited for Supabase cost/feasibility, verified real package versions for Expo SDK 54, but explicitly parked) and a drag-to-reorder UI for a mission's task/moment photos before publishing to Community (scoped, PanResponder-based approach recommended to stay OTA-safe, not started). A group-challenge "kick out member" mechanism was also designed (creator-authority removal + private report-to-creator flag, preserving the removed member's own progress as a personal mission) but not built.
 
 ## Session Handoff (2026-09-24, third entry — share picker replaced with in-viewer Share, moment-note truncation fixed)
 

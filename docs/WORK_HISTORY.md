@@ -2,6 +2,29 @@
 
 This is a concise chronological log for future sessions. Keep secrets out of this file.
 
+## 2026-09-25 (habit auto-share on complete, share card recolored to green)
+
+### Habits auto-open the share card like mini missions already did; indigo/navy replaced with green everywhere on the card
+
+Commits `713031b`, `b8c79af`. OTA update group
+`c8bc3d2f-6825-45a4-a8fd-28a1530fe5d4`. Full detail in `docs/CURRENT_WORK.md`'s
+matching entry.
+
+- Habit "Mark Complete" now opens the share card automatically, matching
+  mini missions — wired into all three habit completion paths, delayed
+  900ms behind the completion confetti so the celebration isn't
+  immediately buried by a modal.
+- Share card recolored from indigo/navy to the app's real green tokens,
+  per direct feedback that indigo read as "generic AI." Previewed as
+  an artifact first, applied only after explicit approval: the Share
+  button, the plain card's tag + dot grid, and the photo card's bottom
+  scrim (navy → a deliberately dark, desaturated forest green).
+- Also discussed and deliberately parked this session, not started:
+  a streak-gated short-video reward (full Supabase cost audit done,
+  real SDK-54-compatible package versions verified), a drag-to-reorder
+  UI for community-publish photo order, and a group-challenge
+  "kick out member" mechanism design.
+
 ## 2026-09-24, third entry (share picker replaced with in-viewer Share, moment-note truncation fixed)
 
 ### Photo-picker sheet caused a real iOS/Android bug (double-Modal stacking) — replaced with Share buttons inside existing viewers; mini mission notes were silently truncated
