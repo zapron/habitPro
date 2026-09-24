@@ -6,6 +6,7 @@ import {
   NativeScrollEvent,
   NativeSyntheticEvent,
   Pressable,
+  ScrollView,
   StyleSheet,
   View,
   useWindowDimensions,
@@ -78,11 +79,14 @@ export function MiniMomentCarousel({ tasks, onPressSlide, onIndexChange }: Props
               {item.proofUrls[0] ? (
                 <Image source={{ uri: item.proofUrls[0] }} style={styles.slideImage} resizeMode="cover" />
               ) : (
-                <View style={[styles.textSlide, { backgroundColor: theme.colors.surface }]}>
-                  <Text numberOfLines={5} style={[styles.textSlideNote, { color: theme.colors.textSecondary }]}>
+                <ScrollView
+                  style={[styles.textSlide, { backgroundColor: theme.colors.surface }]}
+                  contentContainerStyle={styles.textSlideContent}
+                >
+                  <Text style={[styles.textSlideNote, { color: theme.colors.textSecondary }]}>
                     {item.note ?? "Marked complete"}
                   </Text>
-                </View>
+                </ScrollView>
               )}
             </Pressable>
           )}
@@ -104,9 +108,7 @@ export function MiniMomentCarousel({ tasks, onPressSlide, onIndexChange }: Props
             {active.label}
           </Text>
           {active.note ? (
-            <Text style={[styles.captionNote, { color: theme.colors.textSecondary }]} numberOfLines={2}>
-              {active.note}
-            </Text>
+            <Text style={[styles.captionNote, { color: theme.colors.textSecondary }]}>{active.note}</Text>
           ) : null}
         </View>
       ) : null}
@@ -125,7 +127,8 @@ const styles = StyleSheet.create({
   },
   frame: { height: 260 },
   slideImage: { width: "100%", height: "100%" },
-  textSlide: { width: "100%", height: "100%", alignItems: "center", justifyContent: "center", padding: 20 },
+  textSlide: { width: "100%", height: "100%" },
+  textSlideContent: { flexGrow: 1, alignItems: "center", justifyContent: "center", padding: 20 },
   textSlideNote: { fontSize: 14, lineHeight: 20, fontWeight: "600", textAlign: "center" },
   dotsRow: {
     position: "absolute",
