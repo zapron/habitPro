@@ -26,6 +26,8 @@ User tested live: on iOS, `ActionSheetIOS` looked right (dismiss by tapping outs
 
 **Verified:** `npx tsc --noEmit` clean. Not yet seen live on Android — worth confirming the new menu's tap targets and backdrop-dismiss feel right, and that light mode specifically looks better than the old three-button version.
 
+**Pushed and OTA'd.** Commit `91b2b16`, pushed to `origin`. Published via `npm run update:production` — update group `c8f07351-d777-4b0f-a933-ca2c884092c7`, runtime `1.1.36`.
+
 ## Session Handoff (2026-09-26 — production incident: test RevenueCat key shipped via OTA, fixed)
 
 **State: no git changes this entry — this was a deploy-process incident, not a code bug. Two prior OTA publishes (update groups `1ac83fee-d03e-46ef-bce3-6da3eb172c96` and `5db92263-d9f1-4ccf-b38f-eacb22deefe3`, both from this session) are superseded by a corrected republish, update group `afbcf601-f881-408c-92d6-07728f7d2b96`.**
