@@ -3094,7 +3094,7 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
   },
   inviteGroupStreaksBtnText: { fontSize: 15, fontWeight: "700", letterSpacing: 0, backgroundColor: "transparent" },
-  inviteActions: { flexDirection: "row", gap: 10, alignItems: "center" },
+  inviteActions: { flexDirection: "row", gap: 12, alignItems: "center", marginTop: 14 },
   declineBtn: {
     flex: 1,
     alignItems: "center",
