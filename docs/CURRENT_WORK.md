@@ -1,6 +1,20 @@
 # HabitPro Current Work
 
-Last updated: 2026-09-26 (real incident: two `eas update` OTA publishes shipped the Android **test** RevenueCat key to production instead of the real one — root cause and fix below; read this before running `eas update` again). Full detail immediately below; the 2026-09-25 group-mission-governance entry follows after.
+Last updated: 2026-09-26 (habit detail screen: the Share and "Group mission" header icons were merged into one Share-icon menu — Share a Moment / Share Invite; also a real production incident this session: two `eas update` OTA publishes shipped the Android **test** RevenueCat key to production instead of the real one — root cause and fix below; read this before running `eas update` again). Full detail immediately below; the 2026-09-25 group-mission-governance entry follows after.
+
+## Session Handoff (2026-09-26, second entry — habit screen Share/Invite menu consolidation)
+
+**State: no new migrations, pure client-side change. `npx tsc --noEmit` clean.**
+
+User's ask: the habit detail screen had two separate header icons — Share (`Share2`, opens `ShareWinModal`) and a "Group mission" icon (`Users`, opens `GroupChallengeSheet`) — sitting side by side, easy to conflate. Wanted them folded into one menu behind the Share icon: "Share a Moment" vs "Share Invite", without changing either destination's internals ("whatever the current implementation is there, let it be").
+
+**Architectural lift: low.** Neither `ShareWinModal` nor `GroupChallengeSheet` needed any change — both were already fully wired to this screen (`handleShareOnDemand`, `setGroupSheetOpen(true)`). The "choose between N actions from one button" pattern already exists in this codebase (`StreakMemorySheet.tsx`'s photo-source picker: `ActionSheetIOS` on iOS, `showAppAlert` with icon'd buttons as the Android/fallback) — reused verbatim rather than building a new dropdown component. Net change was one new handler (`handleShareIconPress` in `app/habit/[id].tsx`) routing to the two existing handlers, plus removing the now-redundant standalone `Users` icon button.
+
+- When `canOpenGroupMissionSheet` is false (mission already finished — same gate the old standalone icon used), the menu is skipped entirely and the Share icon goes straight to `handleShareOnDemand`, since a one-item menu would just be an extra tap.
+- Otherwise: iOS gets a native `ActionSheetIOS` ("Share a Moment" / "Share Invite"); Android/fallback gets the same two options via `showAppAlert`'s neutral-styled buttons with icons, matching the exact pattern already used for the photo-source picker.
+- "Share Invite" calls the exact same `setGroupSheetOpen(true)` the old standalone icon called — `GroupChallengeSheet` itself is untouched, so it still handles both "start a new group mission" and "invite more people to an existing one" the same way it always did.
+
+**Verified:** `npx tsc --noEmit` clean. Not yet seen live — worth confirming both the iOS action sheet and the Android alert-based menu render correctly, and that the mission-finished (no-menu, direct-to-share) path still works.
 
 ## Session Handoff (2026-09-26 — production incident: test RevenueCat key shipped via OTA, fixed)
 

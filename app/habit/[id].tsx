@@ -22,6 +22,7 @@ import { View,
   InteractionManager,
   Platform,
   Image,
+  ActionSheetIOS,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { GlassTopHighlight } from '../../src/components/GlassTopHighlight';
@@ -1880,6 +1881,55 @@ export default function HabitDetail() {
     };
 
     /**
+     * The header's single Share icon used to open the share card directly —
+     * with the group-mission "Users" icon sitting right next to it as a
+     * second, easy-to-miss entry point for inviting someone. Folding both
+     * into one menu here so there's one obvious place to look, not two
+     * similar-looking icons. Neither destination (ShareWinModal,
+     * GroupChallengeSheet) changed at all — this only changes how you get to
+     * them. When there's no group-mission option to offer (mission already
+     * finished), skip the menu entirely and go straight to sharing, since a
+     * one-item menu is just an extra tap for nothing.
+     */
+    const handleShareIconPress = useCallback(() => {
+        if (!canOpenGroupMissionSheet) {
+            handleShareOnDemand();
+            return;
+        }
+        if (Platform.OS === 'ios') {
+            ActionSheetIOS.showActionSheetWithOptions(
+                {
+                    title: 'Share',
+                    options: ['Cancel', 'Share a Moment', 'Share Invite'],
+                    cancelButtonIndex: 0,
+                    userInterfaceStyle: isDark ? 'dark' : 'light',
+                },
+                (buttonIndex) => {
+                    if (buttonIndex === 1) handleShareOnDemand();
+                    else if (buttonIndex === 2) setGroupSheetOpen(true);
+                },
+            );
+            return;
+        }
+        showAppAlert('Share', undefined, [
+            { text: 'Cancel', style: 'cancel' },
+            {
+                text: 'Share a Moment',
+                style: 'neutral',
+                icon: <Share2 size={18} color={theme.colors.textSecondary} strokeWidth={2} />,
+                onPress: handleShareOnDemand,
+            },
+            {
+                text: 'Share Invite',
+                style: 'neutral',
+                icon: <Users size={18} color={theme.colors.textSecondary} strokeWidth={2} />,
+                onPress: () => setGroupSheetOpen(true),
+            },
+        ]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [canOpenGroupMissionSheet, isDark, theme, habit]);
+
+    /**
      * Sharing a specific day's memory — reuses the gallery viewer the user is already
      * looking at instead of a separate picker sheet, so there's never a second Modal
      * stacked on top of one that's still open (that was found to render blank/
@@ -1937,21 +1987,12 @@ export default function HabitDetail() {
                 <View style={styles.headerActions}>
                     <TouchableOpacity
                         style={[styles.iconButton, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}
-                        onPress={handleShareOnDemand}
+                        onPress={handleShareIconPress}
                         accessibilityRole="button"
-                        accessibilityLabel="Share this mission"
+                        accessibilityLabel={canOpenGroupMissionSheet ? "Share this mission or invite someone" : "Share this mission"}
                     >
                         <Share2 size={theme.icon.xl} color={theme.colors.textMuted} />
                     </TouchableOpacity>
-                    {canOpenGroupMissionSheet ? (
-                        <TouchableOpacity
-                            style={[styles.iconButton, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}
-                            onPress={() => setGroupSheetOpen(true)}
-                            accessibilityLabel="Group mission"
-                        >
-                            <Users size={theme.icon.xl} color={theme.colors.textMuted} />
-                        </TouchableOpacity>
-                    ) : null}
                     {!isGroupMission ? (
                         <TouchableOpacity style={styles.resetButton} onPress={handleReset}>
                             <RotateCcw size={theme.icon.xl} color={theme.colors.amber[500]} />
