@@ -8,13 +8,16 @@ those two don't need to carry.
 
 ## Status
 
-**Phases 1, 2, and 3 are all built.** Phase 1 (kick-out) is verified at the
-database level with one UI path (re-invite) deliberately deferred to a
-real-device test, not chased further blind on the simulator — see that
-phase's log entry below before touching it again. Phases 2+3 (room rules,
-both preset and premium-custom) are built, migrated locally, and sanity-
-checked at the database level; not yet exercised through the real app UI.
-Not yet pushed to production, not yet committed to git.
+**Phases 1, 2, and 3 are all built, committed, pushed, migrated to
+production, and OTA'd** (commits `9b7aba4`, `b85e5ad`, `820e83e`, `4a72df6`;
+migration pushed via `npm run db:push`; OTA update group
+`1ac83fee-d03e-46ef-bce3-6da3eb172c96`, runtime `1.1.36`). Phase 1
+(kick-out) is verified at the database level with one UI path (re-invite)
+deliberately deferred to a real-device test, not chased further blind on
+the simulator — see that phase's log entry below before touching it
+again. Phases 2+3 (room rules, both preset and premium-custom) are built
+and verified live (the tier pill + commitment step were confirmed working
+by the user on a real invite before this shipped).
 **Confirmed scope:** Phases 0–3 are in. Phase 4 (automated auto-kick) is
 explicitly deferred — not even the dry-run version yet.
 

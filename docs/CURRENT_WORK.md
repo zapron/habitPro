@@ -1,10 +1,10 @@
 # HabitPro Current Work
 
-Last updated: 2026-09-25 (group mission governance — kick-out, room rules, invite-time commitment step — built, committed, and pushed; **local migrations not yet pushed to production, do this before any OTA**). Full detail immediately below; the earlier 2026-09-25 share-recolor entry follows after.
+Last updated: 2026-09-25 (group mission governance — kick-out, room rules, invite-time commitment step — built, committed, pushed, migrated to production, and OTA'd). Full detail immediately below; the earlier 2026-09-25 share-recolor entry follows after.
 
 ## Session Handoff (2026-09-25, second entry — group mission governance: kick-out, room rules, invite commitment step)
 
-**State: `main` is 3 commits ahead of the previous entry's tip (`277ed3d`..`820e83e`), pushed to `origin`. `npx tsc --noEmit` clean after every commit. Two new migrations, tested locally (`db:reset` + scripted RPC tests), NOT yet pushed to production — user must run `npm run db:push` themselves. No OTA yet — see the blocking-dependency warning below before doing one.**
+**State: `main` is 4 commits ahead of the previous entry's tip (`277ed3d`..`4a72df6`), pushed to `origin`. `npx tsc --noEmit` clean after every commit. Both new migrations pushed to production by the user via `npm run db:push`. Published to production OTA (see #4 below).**
 
 Full technical detail lives in `docs/GROUP_CHALLENGE_GOVERNANCE.md` (new this session) — this entry is the condensed version.
 
@@ -14,9 +14,9 @@ Full technical detail lives in `docs/GROUP_CHALLENGE_GOVERNANCE.md` (new this se
 
 **3. Invite-time mission difficulty + a commitment step before Accept (`820e83e`).** Habit invite cards now show the mission's tier next to "Group". Accepting a habit invite (mini missions untouched) now requires one extra confirm step: a promise line plus the specific rule for that mission's tier, "I Accept" to actually join. Also fixed a real layout bug caught from a live screenshot: pills were fighting the title for the same row; moved to their own row at the bottom, unified to a muted-outline style except the one pill that's actually dynamic (Accepted/Declined/Action needed).
 
-**Not yet done, explicitly next — this is the important one**: `sync.ts`'s `habitToRow` now writes `require_note`/`require_photo` on **every** habit upsert, not just group missions. If the JS in these commits ever OTAs to production before the two new migrations (`20260925110000_habit_room_rule.sql`, `20260925120000_challenge_removed_members.sql`) are pushed via `npm run db:push`, **every habit sync for every user breaks** (unknown column). The migration must land first, always, for this batch specifically.
+**4. Migrated, then pushed and OTA'd.** User ran `npm run db:push` (both migrations live in production) before anything shipped — critical because `sync.ts`'s `habitToRow` writes `require_note`/`require_photo` on **every** habit upsert, not just group missions, so OTA-ing the JS first would have broken habit sync for every user. Once the migration was confirmed live: `main` pushed to `origin` at `4a72df6` (`277ed3d`..`4a72df6`: the 4 commits above). Published to production OTA: update group `1ac83fee-d03e-46ef-bce3-6da3eb172c96`, runtime `1.1.36`, commit `4a72df6` — confirmed via `git diff e6deeaf..HEAD --stat -- package.json package-lock.json app.json eas.json` that the only diff since the last real native build is the already-vetted dev-tooling + pure-JS `react-native-qrcode-svg` change from a prior session, so this was safe to OTA.
 
-Phase 1's one open item (re-inviting a removed member showed no result on the simulator) is still parked for a physical-device test — see the governance doc's Status section before touching it again. Phase 4 (automated auto-kick) remains fully deferred.
+**Not yet done, explicitly next**: Phase 1's one open item (re-inviting a removed member showed no result on the simulator) is still parked for a physical-device test — see the governance doc's Status section before touching it again. Phase 4 (automated auto-kick) remains fully deferred. Premium "Custom" room rules exist in code but stay hidden behind `CUSTOM_ROOM_RULES_ENABLED = false` until richer premium controls are designed.
 
 ## Session Handoff (2026-09-25 — habit auto-share on complete, share card recolored to green)
 

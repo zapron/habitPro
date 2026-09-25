@@ -6,12 +6,14 @@ This is a concise chronological log for future sessions. Keep secrets out of thi
 
 ### Sole-admin kick-out, Easy/Medium/Hard room rules, and an invite-time commitment step for group missions
 
-Commits `9b7aba4`, `b85e5ad`, `820e83e`. Full technical detail in
-`docs/GROUP_CHALLENGE_GOVERNANCE.md`. **Two new migrations tested locally,
-NOT yet pushed to production** — user runs `db:push`. **Blocking
-dependency: `sync.ts` now writes `require_note`/`require_photo` on every
-habit upsert, so the migration must land before any OTA of this code, or
-every habit sync breaks for every user.**
+Commits `9b7aba4`, `b85e5ad`, `820e83e`, `4a72df6` (docs). Full technical
+detail in `docs/GROUP_CHALLENGE_GOVERNANCE.md`. Both new migrations
+pushed to production via `npm run db:push` before anything shipped —
+`sync.ts` writes `require_note`/`require_photo` on every habit upsert, so
+the migration had to land first or every habit sync would have broken
+for every user. Pushed to `origin` and published to production OTA:
+update group `1ac83fee-d03e-46ef-bce3-6da3eb172c96`, runtime `1.1.36`,
+commit `4a72df6`.
 
 - Creator-only "kick out" a member from a group mission — additive to the
   existing peer-vote join-request system, not a replacement. Removal only
