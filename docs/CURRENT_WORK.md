@@ -16,6 +16,8 @@ User's ask: the habit detail screen had two separate header icons — Share (`Sh
 
 **Verified:** `npx tsc --noEmit` clean. Not yet seen live — worth confirming both the iOS action sheet and the Android alert-based menu render correctly, and that the mission-finished (no-menu, direct-to-share) path still works.
 
+**Pushed and OTA'd.** Commit `6b54af7`, pushed to `origin`. Published via `npm run update:production` — update group `fb0c33c8-f99d-43ce-98ad-bcdd75ac607e`, runtime `1.1.36`.
+
 ## Session Handoff (2026-09-26 — production incident: test RevenueCat key shipped via OTA, fixed)
 
 **State: no git changes this entry — this was a deploy-process incident, not a code bug. Two prior OTA publishes (update groups `1ac83fee-d03e-46ef-bce3-6da3eb172c96` and `5db92263-d9f1-4ccf-b38f-eacb22deefe3`, both from this session) are superseded by a corrected republish, update group `afbcf601-f881-408c-92d6-07728f7d2b96`.**
