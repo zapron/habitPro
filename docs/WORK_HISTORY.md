@@ -2,6 +2,37 @@
 
 This is a concise chronological log for future sessions. Keep secrets out of this file.
 
+## 2026-09-25, second entry (group mission governance: kick-out, room rules, invite commitment step)
+
+### Sole-admin kick-out, Easy/Medium/Hard room rules, and an invite-time commitment step for group missions
+
+Commits `9b7aba4`, `b85e5ad`, `820e83e`. Full technical detail in
+`docs/GROUP_CHALLENGE_GOVERNANCE.md`. **Two new migrations tested locally,
+NOT yet pushed to production** — user runs `db:push`. **Blocking
+dependency: `sync.ts` now writes `require_note`/`require_photo` on every
+habit upsert, so the migration must land before any OTA of this code, or
+every habit sync breaks for every user.**
+
+- Creator-only "kick out" a member from a group mission — additive to the
+  existing peer-vote join-request system, not a replacement. Removal only
+  clears the member's `challenge_group_id` (+ room-rule flags); their
+  progress survives as a normal personal mission. Permanent re-join
+  blocklist. Non-creators get a private "Report member" instead.
+- Creator-set room rules per group mission: Easy/Medium/Hard, enforced
+  client-side. Real bug caught by the user testing live — room rules
+  survived removal from the group — fixed both at the source and
+  defensively. Premium "Custom" rules built, then flagged off for this
+  release per the user's call.
+- Invite cards now show the mission's tier; accepting a habit invite adds
+  one commitment-confirmation step. A live-screenshot bug (pills fighting
+  the title for the same row) was fixed by moving all pills to their own
+  row at the bottom of the card, unified to one muted style except the
+  dynamic status pill.
+- Two rounds of design iteration were done as Artifact mockups before
+  touching code (the moderation entry point's icon/pill/text shape, and
+  the invite card's pill layout) — both times the user picked from
+  concrete options rather than a described plan.
+
 ## 2026-09-25 (habit auto-share on complete, share card recolored to green)
 
 ### Habits auto-open the share card like mini missions already did; indigo/navy replaced with green everywhere on the card

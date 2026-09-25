@@ -1,6 +1,22 @@
 # HabitPro Current Work
 
-Last updated: 2026-09-25 (habits now auto-open the share card after "Mark Complete", same as mini missions already did; the share card's indigo/navy accents were recolored to the app's real green tokens per explicit design feedback — previewed as an artifact before any code changed). Full detail immediately below; the 2026-09-24 share-picker-bug-fix entry follows after.
+Last updated: 2026-09-25 (group mission governance — kick-out, room rules, invite-time commitment step — built, committed, and pushed; **local migrations not yet pushed to production, do this before any OTA**). Full detail immediately below; the earlier 2026-09-25 share-recolor entry follows after.
+
+## Session Handoff (2026-09-25, second entry — group mission governance: kick-out, room rules, invite commitment step)
+
+**State: `main` is 3 commits ahead of the previous entry's tip (`277ed3d`..`820e83e`), pushed to `origin`. `npx tsc --noEmit` clean after every commit. Two new migrations, tested locally (`db:reset` + scripted RPC tests), NOT yet pushed to production — user must run `npm run db:push` themselves. No OTA yet — see the blocking-dependency warning below before doing one.**
+
+Full technical detail lives in `docs/GROUP_CHALLENGE_GOVERNANCE.md` (new this session) — this entry is the condensed version.
+
+**1. Group mission kick-out with sole-admin authority (`9b7aba4`).** Creator-only removal of a member from a public group mission, additive to the existing peer-vote join-request system (that stays for admission; this is moderation). Removing someone only clears `habits.challenge_group_id` (+ room-rule flags) — their own progress survives as a normal personal mission. New `challenge_removed_members` table permanently blocks re-joining/re-inviting. Non-creators get a private "Report member" instead. `ParticipantCard`'s moderation entry point iterated through several shapes (icon, pill, icon+text) before settling on a muted-outline pill — "Remove" plain text for the creator, amber-icon "Report" pill for everyone else.
+
+**2. Preset room rules for group missions — Easy/Medium/Hard (`b85e5ad`).** Creator picks check-in strictness when starting a group mission: Easy (mark complete), Medium (a note **or** a photo), Hard (both). Stored as two plain booleans (`habits.require_note`/`require_photo`), not an enum — enforced client-side, matching this app's local-first trust model. Real bug caught by the user testing live: room rules survived being removed from the group; fixed at the source (removal RPC now also clears both flags) and defensively (`app/habit/[id].tsx` derives `effectiveRequireNote`/`effectiveRequirePhoto`, forced false whenever not in a group). Premium "Custom" room rules were built, then hidden behind `CUSTOM_ROOM_RULES_ENABLED = false` for this release — the user's call, since it has no distinct value over the presets today.
+
+**3. Invite-time mission difficulty + a commitment step before Accept (`820e83e`).** Habit invite cards now show the mission's tier next to "Group". Accepting a habit invite (mini missions untouched) now requires one extra confirm step: a promise line plus the specific rule for that mission's tier, "I Accept" to actually join. Also fixed a real layout bug caught from a live screenshot: pills were fighting the title for the same row; moved to their own row at the bottom, unified to a muted-outline style except the one pill that's actually dynamic (Accepted/Declined/Action needed).
+
+**Not yet done, explicitly next — this is the important one**: `sync.ts`'s `habitToRow` now writes `require_note`/`require_photo` on **every** habit upsert, not just group missions. If the JS in these commits ever OTAs to production before the two new migrations (`20260925110000_habit_room_rule.sql`, `20260925120000_challenge_removed_members.sql`) are pushed via `npm run db:push`, **every habit sync for every user breaks** (unknown column). The migration must land first, always, for this batch specifically.
+
+Phase 1's one open item (re-inviting a removed member showed no result on the simulator) is still parked for a physical-device test — see the governance doc's Status section before touching it again. Phase 4 (automated auto-kick) remains fully deferred.
 
 ## Session Handoff (2026-09-25 — habit auto-share on complete, share card recolored to green)
 
