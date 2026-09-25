@@ -26,6 +26,8 @@ User's report: "Restore Backup" (the "Recovery snapshots" card in `app/(tabs)/pr
 
 **Verified:** `npx tsc --noEmit` clean. Not yet seen live — worth a real sign-out/sign-in cycle on an account with old completed missions to confirm the prompt no longer fires when nothing is actually wrong.
 
+**Pushed and OTA'd, correctly this time.** Commit `b198127`, pushed to `origin`. Published via `npm run update:production` (not raw `eas update`, per the lesson above) — update group `6af751dd-8593-47f6-a306-fb6ba9595eb8`, runtime `1.1.36`. Re-verified the resulting Android `.hbc` bundle contains the real `goog_...` RevenueCat key, not the test one, as a habit check going forward.
+
 ## Session Handoff (2026-09-25, second entry — group mission governance: kick-out, room rules, invite commitment step)
 
 **State: `main` is 4 commits ahead of the previous entry's tip (`277ed3d`..`4a72df6`), pushed to `origin`. `npx tsc --noEmit` clean after every commit. Both new migrations pushed to production by the user via `npm run db:push`. Published to production OTA (see #4 below).**
