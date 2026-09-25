@@ -1,6 +1,30 @@
 # HabitPro Current Work
 
-Last updated: 2026-09-25 (group mission governance — kick-out, room rules, invite-time commitment step — built, committed, pushed, migrated to production, and OTA'd). Full detail immediately below; the earlier 2026-09-25 share-recolor entry follows after.
+Last updated: 2026-09-26 (real incident: two `eas update` OTA publishes shipped the Android **test** RevenueCat key to production instead of the real one — root cause and fix below; read this before running `eas update` again). Full detail immediately below; the 2026-09-25 group-mission-governance entry follows after.
+
+## Session Handoff (2026-09-26 — production incident: test RevenueCat key shipped via OTA, fixed)
+
+**State: no git changes this entry — this was a deploy-process incident, not a code bug. Two prior OTA publishes (update groups `1ac83fee-d03e-46ef-bce3-6da3eb172c96` and `5db92263-d9f1-4ccf-b38f-eacb22deefe3`, both from this session) are superseded by a corrected republish, update group `afbcf601-f881-408c-92d6-07728f7d2b96`.**
+
+**What happened:** user reported Android showing a "this build does not support payment" style error and asked whether a test API key had leaked into production. Investigated and confirmed: `.env` (local dev config, intentionally) has `EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY=test_jkOIAHcareNiaouBbWabGEDfNZf`, while the real key lives in EAS's hosted "production" Environment (`goog_FLwtHCGUIagwfQwAoqRnmDRqMVP`, confirmed via `eas env:list --environment production`). `eas update` only pulls the EAS-hosted environment's vars when you pass `--environment <name>` explicitly; run without it (as both prior publishes in this session were), it silently falls back to whatever's in the local shell/`.env` files. Confirmed the actual live bug, not just the theory: extracted the previously-published Android `.hbc` bundle from a fresh `eas update` run's local `dist/` output and found the literal `test_jkOIAHcareNiaouBbWabGEDfNZf` string baked in, with no `goog_...` RevenueCat key present anywhere.
+
+**iOS was never affected** — `.env`'s iOS key already happens to match the real production iOS key, so this only ever manifested for Android.
+
+**Fix:** republished immediately with `npx eas update --branch production --environment production ...`. Verified the new bundle's `.hbc` contains the real `goog_...` key and no trace of the test key.
+
+**Open question, not yet answered**: whether earlier sessions' OTA publishes (going back further than this session) also omitted `--environment production` and could have shipped this same test key at some point in the past — not checked, since older `dist/` output no longer exists locally to inspect. If Android purchase failures were reported before this session, they may share this root cause.
+
+**The safeguard already existed and was bypassed, not missing.** `package.json` already has `"update:production": "eas update --channel production --environment production"` — the correct, safe command was sitting right there. Both broken publishes happened because the raw `eas update --branch production ...` was run directly instead of `npm run update:production`. **Lesson for every future session (and the user): always run `npm run update:production` for a real OTA push, never call `eas update` directly with hand-typed flags** — the command succeeds either way with no warning about which env vars it actually used, so a missing `--environment` flag fails silently, not loudly.
+
+### Second issue, same session: spurious "Restore Backup" prompt, root cause found and fixed
+
+User's report: "Restore Backup" (the "Recovery snapshots" card in `app/(tabs)/profile.tsx`) sometimes appears around login/logout for no reason, even when data is fine. Root cause: `hasRecoverableMissionData` (`profile.tsx:296-`) decides whether to offer a restore purely by comparing raw check-in/memory/completed-mini **counts** between a locally cached backup and whatever's currently in the store — no concept of *why* current might be smaller. That assumption broke on 2026-09-19's "hot-window cutoff" change (`489c640`): a normal sign-in now only eagerly loads active missions (unbounded) plus the most recent `HOT_WINDOW_HISTORY_PAGE_SIZE = 20` items per terminal bucket (completed/failed habits, completed/cancelled/missed minis) — see `pullWindowedFromSupabase` in `src/lib/sync.ts`. Any backup with more historical items than that window (completely normal — the rest is one "Load More" tap away, never lost) now looks like "recoverable data" and fires the prompt on a perfectly healthy account. This exact risk was flagged (and explicitly deferred) in the hot-window work's own plan doc at the time — it's now actually happened.
+
+**Fix:** `hasRecoverableMissionData` now only compares **active** habits' check-in/memory counts (active missions are never windowed — `pullWindowedFromSupabase` loads them unbounded — so a mismatch there is a genuine signal). The completed-mini-count comparison was removed entirely — a completed mini has no "active" fallback the way a habit does, and its count is inherently part of the windowed/paginated bucket, so it can never be compared safely without a server-side lifetime-totals check (which doesn't exist yet). `countCompletedMinis` (now fully unused) was deleted.
+
+**Trade-off, stated plainly:** this narrows what the recovery-snapshot safety net can catch — it no longer flags a loss confined to completed/historical missions, only to still-active ones. The right long-term fix is a lightweight server-side lifetime-totals RPC to compare against instead of the local windowed store (this was already independently proposed as "Phase A" of a hot-window follow-up plan, not yet built) — flagging here so a future session doesn't have to rediscover this.
+
+**Verified:** `npx tsc --noEmit` clean. Not yet seen live — worth a real sign-out/sign-in cycle on an account with old completed missions to confirm the prompt no longer fires when nothing is actually wrong.
 
 ## Session Handoff (2026-09-25, second entry — group mission governance: kick-out, room rules, invite commitment step)
 

@@ -153,10 +153,6 @@ function countHabitMemoryEntries(habits: readonly Habit[]): number {
   return habits.reduce((total, habit) => total + Object.keys(habit.streakMemories ?? {}).length, 0);
 }
 
-function countCompletedMinis(minis: readonly MiniMission[]): number {
-  return minis.reduce((total, mini) => total + (mini.status === "completed" ? 1 : 0), 0);
-}
-
 function formatOneDecimal(value: number): string {
   if (!Number.isFinite(value)) return "0";
   return value % 1 === 0 ? String(value) : value.toFixed(1);
@@ -296,17 +292,30 @@ function getProfileInfoForMode(key: ProfileInfoKey, socialIncluded: boolean): Pr
 function hasRecoverableMissionData(
   backup: AccountBackupSnapshot,
   currentHabits: readonly Habit[],
-  currentMinis: readonly MiniMission[],
+  _currentMinis: readonly MiniMission[],
   deletedMissionIds: AccountDeletedMissionIds,
 ): boolean {
   const deletedHabitIds = new Set(deletedMissionIds.habitIds);
-  const deletedMiniIds = new Set(deletedMissionIds.miniMissionIds);
   const backupHabits = backup.habits.filter((habit) => !deletedHabitIds.has(habit.id));
-  const backupMinis = backup.miniMissions.filter((mini) => !deletedMiniIds.has(mini.id));
+  /**
+   * Completed/failed habits and completed mini missions are windowed on a
+   * normal pull (the hot-window cutoff: sign-in only eagerly loads the most
+   * recent HOT_WINDOW_HISTORY_PAGE_SIZE of each terminal bucket, unbounded
+   * for still-active missions only — see src/lib/sync.ts's
+   * pullWindowedFromSupabase). Comparing raw historical counts against an
+   * older, fuller local backup would flag ordinary pagination as
+   * "recoverable data" even though nothing was lost — the rest is one tap
+   * away via "Load More", not gone. Restrict this check to ACTIVE habits,
+   * which are never windowed, so a mismatch here is a real loss signal
+   * instead of a pagination artifact. Completed minis are dropped from this
+   * check entirely: a completed mini has no "active" fallback the way a
+   * habit does, and its count is inherently part of the windowed bucket.
+   */
+  const activeBackupHabits = backupHabits.filter((habit) => !habit.isCompleted);
+  const activeCurrentHabits = currentHabits.filter((habit) => !habit.isCompleted);
   return (
-    countHabitCheckIns(backupHabits) > countHabitCheckIns(currentHabits) ||
-    countHabitMemoryEntries(backupHabits) > countHabitMemoryEntries(currentHabits) ||
-    countCompletedMinis(backupMinis) > countCompletedMinis(currentMinis)
+    countHabitCheckIns(activeBackupHabits) > countHabitCheckIns(activeCurrentHabits) ||
+    countHabitMemoryEntries(activeBackupHabits) > countHabitMemoryEntries(activeCurrentHabits)
   );
 }
 
