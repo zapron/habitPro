@@ -612,6 +612,7 @@ export default function HabitDetail() {
     const [checklistShareBusy, setChecklistShareBusy] = useState(false);
     const [acceptedGroupMemberCount, setAcceptedGroupMemberCount] = useState<number>(0);
     const [groupSheetOpen, setGroupSheetOpen] = useState(false);
+    const [shareMenuVisible, setShareMenuVisible] = useState(false);
     const [missionDetailsOpen, setMissionDetailsOpen] = useState(false);
     const [shareWinVisible, setShareWinVisible] = useState(false);
     const [shareWinPhotoUri, setShareWinPhotoUri] = useState<string | null>(null);
@@ -1911,23 +1912,14 @@ export default function HabitDetail() {
             );
             return;
         }
-        showAppAlert('Share', undefined, [
-            { text: 'Cancel', style: 'cancel' },
-            {
-                text: 'Share a Moment',
-                style: 'neutral',
-                icon: <Share2 size={18} color={theme.colors.textSecondary} strokeWidth={2} />,
-                onPress: handleShareOnDemand,
-            },
-            {
-                text: 'Share Invite',
-                style: 'neutral',
-                icon: <Users size={18} color={theme.colors.textSecondary} strokeWidth={2} />,
-                onPress: () => setGroupSheetOpen(true),
-            },
-        ]);
+        // Android/fallback: no native action sheet, so this is a small custom
+        // menu instead of the generic showAppAlert (three equal-weight bordered
+        // buttons, including a "Cancel" one, read as bland and cluttered next to
+        // iOS's clean native sheet). No Cancel row here either — tapping the
+        // backdrop dismisses it, matching how ActionSheetIOS already behaves.
+        setShareMenuVisible(true);
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [canOpenGroupMissionSheet, isDark, theme, habit]);
+    }, [canOpenGroupMissionSheet, isDark]);
 
     /**
      * Sharing a specific day's memory — reuses the gallery viewer the user is already
@@ -2007,6 +1999,60 @@ export default function HabitDetail() {
             <LazyMount visible={groupSheetOpen && canOpenGroupMissionSheet} unmountOnExit>
                 <GroupChallengeSheet visible={groupSheetOpen && canOpenGroupMissionSheet} onClose={() => setGroupSheetOpen(false)} habit={habit} />
             </LazyMount>
+
+            {/*
+             * Android/fallback "Share" menu — a small custom list instead of the
+             * generic showAppAlert. No Cancel row: tapping the backdrop dismisses
+             * it, the same as iOS's native ActionSheetIOS already does.
+             */}
+            <Modal
+                visible={shareMenuVisible}
+                animationType="fade"
+                transparent
+                onRequestClose={() => setShareMenuVisible(false)}
+            >
+                <Pressable
+                    style={[
+                        styles.backdrop,
+                        { backgroundColor: isDark ? withAlpha(theme.colors.scrim, 55) : withAlpha(theme.colors.scrim, 28) },
+                    ]}
+                    onPress={() => setShareMenuVisible(false)}
+                    accessibilityRole="button"
+                    accessibilityLabel="Dismiss"
+                >
+                    <Pressable
+                        onPress={(e) => e.stopPropagation()}
+                        style={[
+                            styles.shareMenuCard,
+                            { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, borderRadius: theme.radius.lg, ...theme.shadow.card },
+                        ]}
+                    >
+                        <TouchableOpacity
+                            style={styles.shareMenuRow}
+                            activeOpacity={0.7}
+                            onPress={() => {
+                                setShareMenuVisible(false);
+                                handleShareOnDemand();
+                            }}
+                        >
+                            <Share2 size={19} color={theme.colors.textPrimary} strokeWidth={2} />
+                            <Text style={[styles.shareMenuRowText, { color: theme.colors.textPrimary }]}>Share a Moment</Text>
+                        </TouchableOpacity>
+                        <View style={[styles.shareMenuDivider, { backgroundColor: theme.colors.border }]} />
+                        <TouchableOpacity
+                            style={styles.shareMenuRow}
+                            activeOpacity={0.7}
+                            onPress={() => {
+                                setShareMenuVisible(false);
+                                setGroupSheetOpen(true);
+                            }}
+                        >
+                            <Users size={19} color={theme.colors.textPrimary} strokeWidth={2} />
+                            <Text style={[styles.shareMenuRowText, { color: theme.colors.textPrimary }]}>Share Invite</Text>
+                        </TouchableOpacity>
+                    </Pressable>
+                </Pressable>
+            </Modal>
 
             <LazyMount visible={shareWinVisible} unmountOnExit>
                 <ShareWinModal
@@ -3019,6 +3065,10 @@ const styles = StyleSheet.create({
     visibilityTitle: { fontWeight: '700', fontSize: 14 },
     visibilityHint: { fontSize: 11, marginTop: 3, lineHeight: 15 },
     backdrop: { flex: 1, justifyContent: "center", alignItems: "center", paddingHorizontal: 18 },
+    shareMenuCard: { borderWidth: 1, width: "100%", maxWidth: 340, overflow: "hidden" },
+    shareMenuRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 16, paddingHorizontal: 18 },
+    shareMenuRowText: { fontSize: 15, fontWeight: "700" },
+    shareMenuDivider: { height: StyleSheet.hairlineWidth, marginHorizontal: 18 },
     reminderModal: { borderWidth: 1, borderRadius: 18, padding: 16, marginHorizontal: 18, width: "100%", maxWidth: 420 },
     reminderTitle: { fontSize: 16, fontWeight: "700" },
     reminderHint: { fontSize: 12, lineHeight: 17, fontWeight: "400", marginTop: 6 },

@@ -18,6 +18,14 @@ User's ask: the habit detail screen had two separate header icons — Share (`Sh
 
 **Pushed and OTA'd.** Commit `6b54af7`, pushed to `origin`. Published via `npm run update:production` — update group `fb0c33c8-f99d-43ce-98ad-bcdd75ac607e`, runtime `1.1.36`.
 
+### Follow-up, same feature: Android's fallback menu had a bland "Cancel" button, replaced with a small custom list
+
+User tested live: on iOS, `ActionSheetIOS` looked right (dismiss by tapping outside, no dedicated Cancel row needed). On Android, the fallback `showAppAlert`-based menu rendered "Cancel" as a third bordered button, equal visual weight to "Share a Moment"/"Share Invite" — read as cluttered, and all three buttons looked flat/bland in light mode (the `neutral` button style is deliberately muted, meant for equal-weight choices, not real actions). Wanted Android to behave like iOS: no Cancel row, dismissable by tapping outside, and the two real options to look more like actual actions.
+
+**Fix:** replaced the `showAppAlert` call (Android/fallback branch only — iOS's `ActionSheetIOS` path is untouched) with a small custom `Modal` + backdrop `Pressable` (tap-outside-to-dismiss, matching `ActionSheetIOS`'s own behavior, no Cancel row at all) containing two plain list rows (icon + bold label, `theme.colors.textPrimary`, a hairline divider between them) on a `theme.colors.surface` card — reads cleanly in both themes since it's plain text/icon on a surface, not a bordered pill competing with a Cancel pill. New state: `shareMenuVisible`; new styles `shareMenuCard`/`shareMenuRow`/`shareMenuRowText`/`shareMenuDivider` in `app/habit/[id].tsx`.
+
+**Verified:** `npx tsc --noEmit` clean. Not yet seen live on Android — worth confirming the new menu's tap targets and backdrop-dismiss feel right, and that light mode specifically looks better than the old three-button version.
+
 ## Session Handoff (2026-09-26 — production incident: test RevenueCat key shipped via OTA, fixed)
 
 **State: no git changes this entry — this was a deploy-process incident, not a code bug. Two prior OTA publishes (update groups `1ac83fee-d03e-46ef-bce3-6da3eb172c96` and `5db92263-d9f1-4ccf-b38f-eacb22deefe3`, both from this session) are superseded by a corrected republish, update group `afbcf601-f881-408c-92d6-07728f7d2b96`.**
