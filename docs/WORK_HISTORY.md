@@ -34,6 +34,13 @@ commit `4a72df6`.
   touching code (the moderation entry point's icon/pill/text shape, and
   the invite card's pill layout) — both times the user picked from
   concrete options rather than a described plan.
+- Follow-up (`3e31f29`, OTA update group `5db92263-d9f1-4ccf-b38f-eacb22deefe3`):
+  fixed the invite card's Decline/Accept buttons sitting flush against
+  the new bottom pill row. Also manually granted `raktim_info` 3 months
+  of Community access via `community_access_grants` (their old trial had
+  expired, so `profile_is_premium()` was actually `false` despite a stale
+  `profiles.is_premium = true`) — a direct production data change, not a
+  migration.
 
 ## 2026-09-25 (habit auto-share on complete, share card recolored to green)
 
