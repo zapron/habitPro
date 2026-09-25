@@ -33,7 +33,10 @@ export type AppDialogOptions = {
 
 type DialogState = {
   title: string;
-  message?: string;
+  /** Plain string for the common case; a ReactNode (e.g. nested <Text> runs
+   * with per-segment color/weight) when a caller needs to highlight part of
+   * the message, like a person's name. */
+  message?: string | ReactNode;
   buttons: AppDialogButton[];
   options?: AppDialogOptions;
 };
@@ -41,7 +44,7 @@ type DialogState = {
 type AppDialogContextValue = {
   showAlert: (
     title: string,
-    message?: string,
+    message?: string | ReactNode,
     buttons?: AppDialogButton[],
     options?: AppDialogOptions,
   ) => void;
@@ -182,7 +185,7 @@ export function AppDialogProvider({ children }: { children: ReactNode }) {
 
 export function showAppAlert(
   title: string,
-  message?: string,
+  message?: string | ReactNode,
   buttons?: AppDialogButton[],
   options?: AppDialogOptions,
 ) {
@@ -190,14 +193,15 @@ export function showAppAlert(
     globalShowAlert(title, message, buttons, options);
     return;
   }
-  // Native Alert has no "neutral" style (or icon) — this fallback only fires
-  // before the provider mounts, so it just needs to not crash, not match pixel-for-pixel.
+  // Native Alert has no "neutral" style (or icon), and can't render a rich
+  // (non-string) message — this fallback only fires before the provider
+  // mounts, so it just needs to not crash, not match pixel-for-pixel.
   const nativeButtons = buttons?.map((button) => ({
     text: button.text,
     onPress: button.onPress,
     style: button.style === "neutral" ? ("default" as const) : button.style,
   }));
-  NativeAlert.alert(title, message, nativeButtons, options);
+  NativeAlert.alert(title, typeof message === "string" ? message : undefined, nativeButtons, options);
 }
 
 export function useAppDialog(): AppDialogContextValue {

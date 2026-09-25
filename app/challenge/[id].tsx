@@ -24,7 +24,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
-import { ArrowLeft, Check, Clock, Eye, EyeOff, Info, LogOut, Users, X } from "lucide-react-native";
+import { AlertCircle, ArrowLeft, Check, Clock, Eye, EyeOff, Info, LogOut, Users, X } from "lucide-react-native";
 import { CohortLeaderHero } from "../../src/components/CohortLeaderHero";
 import type { CohortMastheadModel } from "../../src/components/CohortMasthead";
 import { CohortNudgeChips } from "../../src/components/CohortNudgeChips";
@@ -48,6 +48,7 @@ import { GlassTopHighlight } from "../../src/components/GlassTopHighlight";
 import { useReducedMotion } from "../../src/hooks/useReducedMotion";
 import { useTheme } from "../../src/context/ThemeContext";
 import { useToast } from "../../src/context/ToastContext";
+import { showAppAlert } from "../../src/context/AppDialogContext";
 import { useAuth } from "../../src/context/AuthContext";
 import { useUsernameGate } from "../../src/context/UsernameGateContext";
 import { usePremium } from "../../src/context/PremiumContext";
@@ -72,6 +73,8 @@ import {
   listChallengeStreakMembersPage,
   listPendingJoinRequests,
   loadChallengePrimarySnapshot,
+  removeChallengeMember,
+  reportChallengeMember,
   requestToJoinChallenge,
   voteChallengeJoinRequest,
   type ChallengeJoinRequestRow,
@@ -337,6 +340,10 @@ type ParticipantCardProps = {
   openUpsell: (reason: any) => void;
   onOpenCustomNote: (toUserId: string) => void;
   onOpenPlayerJourney: (memberId: string, label?: ProfileLabel) => void;
+  /** Governance Phase 1 (docs/GROUP_CHALLENGE_GOVERNANCE.md) — creator sees "Remove",
+   * everyone else sees "Report" instead, on any card that isn't their own. */
+  amCreator: boolean;
+  onModerateMember: (memberId: string, label: ProfileLabel | undefined) => void;
   themedStyles: any;
   theme: any;
   isDark: boolean;
@@ -410,6 +417,8 @@ const ParticipantCard = memo(function ParticipantCard({
   openUpsell,
   onOpenCustomNote,
   onOpenPlayerJourney,
+  amCreator,
+  onModerateMember,
   themedStyles,
   theme,
   isDark,
@@ -480,6 +489,10 @@ const ParticipantCard = memo(function ParticipantCard({
     onOpenPlayerJourney(memberId, label);
   }, [label, memberId, onOpenPlayerJourney]);
 
+  const handleModeratePress = useCallback(() => {
+    onModerateMember(memberId, label);
+  }, [label, memberId, onModerateMember]);
+
   return (
     <Animated.View style={entranceStyle}>
     <View style={[styles.participantCard, themedStyles.card]}>
@@ -528,6 +541,22 @@ const ParticipantCard = memo(function ParticipantCard({
             <Text style={[styles.streakPlaceholder, { color: theme.colors.textMuted }]}>-</Text>
           )}
         </View>
+        {myUserId && memberId !== myUserId ? (
+          <Pressable
+            onPress={handleModeratePress}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={amCreator ? "Remove from mission" : "Report member"}
+            style={[styles.participantModerateBtn, { borderColor: theme.colors.border }]}
+          >
+            {!amCreator ? (
+              <AlertCircle size={11} color={theme.colors.amber[500]} strokeWidth={2.4} />
+            ) : null}
+            <Text style={[styles.participantModerateBtnText, { color: theme.colors.textMuted }]}>
+              {amCreator ? "Remove" : "Report"}
+            </Text>
+          </Pressable>
+        ) : null}
       </View>
 
       {habit ? (
@@ -1806,6 +1835,96 @@ export default function ChallengeDetailScreen() {
     [myUserId, router],
   );
 
+  const amCreator = Boolean(myUserId && group?.creator_id === myUserId);
+
+  const handleRemoveMember = useCallback(
+    (targetUserId: string) => {
+      if (!challengeId) return;
+      void (async () => {
+        const { error } = await removeChallengeMember(challengeId, targetUserId);
+        if (error) {
+          showAppAlert("Couldn't remove member", error.message, [{ text: "OK" }]);
+          return;
+        }
+        setStreakMemberIds((prev) => prev.filter((id) => id !== targetUserId));
+        setMemberIdsOrdered((prev) => prev.filter((id) => id !== targetUserId));
+        setStreakHabitByMemberId((prev) => {
+          const next = { ...prev };
+          delete next[targetUserId];
+          return next;
+        });
+        showToast("Member removed. Their progress is saved as their own mission.", "success");
+      })();
+    },
+    [challengeId, showToast],
+  );
+
+  const handleReportMember = useCallback(
+    (targetUserId: string, reportedUsername?: string | null) => {
+      if (!challengeId || !group?.creator_id) return;
+      void (async () => {
+        const { error } = await reportChallengeMember(challengeId, group.creator_id, targetUserId, reportedUsername);
+        if (error) {
+          showAppAlert("Couldn't send report", error.message, [{ text: "OK" }]);
+          return;
+        }
+        showToast("Reported privately to the creator.", "success");
+      })();
+    },
+    [challengeId, group?.creator_id, showToast],
+  );
+
+  /**
+   * Governance Phase 1 — creator gets a fast, unilateral "Remove" (this is
+   * moderation, not a group vote, deliberately: see
+   * docs/GROUP_CHALLENGE_GOVERNANCE.md's Phase 0 reasoning). Everyone else
+   * gets "Report" instead — private to the creator, never visible to the
+   * rest of the group or the reported member.
+   */
+  const onModerateMember = useCallback(
+    (targetUserId: string, label: ProfileLabel | undefined) => {
+      const name = label?.displayName?.trim() || label?.username?.trim() || "this member";
+      if (amCreator) {
+        showAppAlert(
+          "Remove from mission?",
+          <>
+            <Text style={{ color: theme.colors.red[500], fontWeight: "800" }}>{name}</Text>
+            <Text> will be removed from this mission.</Text>
+            {"\n\n"}
+            <Text>
+              Their progress is saved as their own personal mission. They won't be part of this group
+              anymore, and they can't rejoin.
+            </Text>
+          </>,
+          [
+            { text: "Cancel", style: "cancel" },
+            { text: "Remove", style: "destructive", onPress: () => handleRemoveMember(targetUserId) },
+          ],
+        );
+        return;
+      }
+      showAppAlert(
+        "Report member?",
+        <>
+          <Text>This privately flags </Text>
+          <Text style={{ color: theme.colors.amber[500], fontWeight: "800" }}>{name}</Text>
+          <Text> to the mission </Text>
+          <Text style={{ color: theme.colors.textPrimary, fontWeight: "800" }}>creator</Text>
+          <Text>.</Text>
+          {"\n\n"}
+          <Text>They won't be notified, and nothing happens automatically. The </Text>
+          <Text style={{ color: theme.colors.textPrimary, fontWeight: "800" }}>creator</Text>
+          <Text> decides what happens next.</Text>
+        </>,
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Report", onPress: () => handleReportMember(targetUserId, label?.username) },
+        ],
+      );
+    },
+    [amCreator, handleRemoveMember, handleReportMember, theme],
+  );
+
   const onSubmitCustomNote = useCallback(
     async (text: string) => {
       if (!challengeId || !customNoteToUserId || !myUserId) return;
@@ -2910,6 +3029,8 @@ export default function ChallengeDetailScreen() {
                     openUpsell={openUpsell}
                     onOpenCustomNote={onOpenCustomNote}
                     onOpenPlayerJourney={onOpenPlayerJourney}
+                    amCreator={amCreator}
+                    onModerateMember={onModerateMember}
                     themedStyles={themedStyles}
                     theme={theme}
                     isDark={isDark}
@@ -3468,6 +3589,21 @@ const styles = StyleSheet.create({
   },
   participantHeaderStreakWrap: {
     flexShrink: 0,
+  },
+  participantModerateBtn: {
+    flexShrink: 0,
+    marginLeft: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    borderWidth: 1.4,
+    borderRadius: 999,
+    paddingVertical: 3,
+    paddingHorizontal: 9,
+  },
+  participantModerateBtnText: {
+    fontSize: 10.5,
+    fontWeight: "800",
   },
   participantBadgeRow: {
     flexDirection: "row",

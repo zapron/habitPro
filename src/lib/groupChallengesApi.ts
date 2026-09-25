@@ -77,6 +77,7 @@ export async function searchProfilesByUsernamePrefix(
 export async function createGroupChallengeFromHabit(
   habit: Habit,
   titleOverride?: string,
+  roomRule?: { requireNote?: boolean; requirePhoto?: boolean },
 ): Promise<{ group: ChallengeGroupRow; error: Error | null; reason?: PremiumFailureReason }> {
   const supabase = getSupabase();
   if (!supabase) return { group: null as unknown as ChallengeGroupRow, error: new Error("Supabase not configured") };
@@ -99,6 +100,12 @@ export async function createGroupChallengeFromHabit(
   }
   if (habit.taskChecklist && habit.taskChecklist.length > 0) {
     habitTemplate.taskChecklist = habit.taskChecklist;
+  }
+  if (roomRule?.requireNote) {
+    habitTemplate.requireNote = true;
+  }
+  if (roomRule?.requirePhoto) {
+    habitTemplate.requirePhoto = true;
   }
 
   const { data: group, error: gErr } = await supabase
@@ -311,6 +318,11 @@ export async function sendChallengeInvite(
       error: new Error("There is already a pending invite to this person for this group mission."),
     };
   }
+  if (low.includes("previously_removed")) {
+    return {
+      error: new Error("This person was previously removed from this mission and can't be re-invited."),
+    };
+  }
   return { error: new Error(error.message) };
 }
 
@@ -429,6 +441,9 @@ export async function requestToJoinChallenge(challengeId: string): Promise<Group
   }
   if (low.includes("request_already_pending")) {
     return { error: new Error("You already asked to join — waiting on approval.") };
+  }
+  if (low.includes("previously_removed")) {
+    return { error: new Error("You were previously removed from this mission and can't rejoin.") };
   }
   return { error: new Error(error.message) };
 }
@@ -1024,6 +1039,61 @@ export async function leaveChallengeGroup(challengeId: string): Promise<{ error:
   const supabase = getSupabase();
   if (!supabase) return { error: new Error("Supabase not configured") };
   const { error } = await supabase.rpc("rpc_leave_challenge", { p_challenge_id: challengeId });
+  if (error) return { error: new Error(error.message) };
+  return { error: null };
+}
+
+/**
+ * Creator-only moderation action (docs/GROUP_CHALLENGE_GOVERNANCE.md, Phase 1).
+ * Removes the target from `challenge_members` and severs their habit's
+ * `challenge_group_id` link server-side — their own completed_dates/streak/
+ * visibility survive untouched, so the mission keeps working as their own
+ * personal mission afterward. Also blocks them from ever rejoining this
+ * same challenge. The caller's own local habitStore is not touched here —
+ * this only ever runs as the creator acting on someone else.
+ */
+export async function removeChallengeMember(
+  challengeId: string,
+  targetUserId: string,
+): Promise<{ error: Error | null }> {
+  const supabase = getSupabase();
+  if (!supabase) return { error: new Error("Supabase not configured") };
+  const { error } = await supabase.rpc("rpc_remove_challenge_member_v1", {
+    p_challenge_id: challengeId,
+    p_target_user_id: targetUserId,
+  });
+  if (error) return { error: new Error(error.message) };
+  return { error: null };
+}
+
+/**
+ * Any member flagging another to the creator — private, never visible to
+ * the rest of the group or the reported member themselves. Deliberately not
+ * a vote and not an action on its own; only the creator's own
+ * `removeChallengeMember` call actually removes anyone.
+ */
+export async function reportChallengeMember(
+  challengeId: string,
+  challengeCreatorId: string,
+  targetUserId: string,
+  reportedUsername?: string | null,
+): Promise<{ error: Error | null }> {
+  const supabase = getSupabase();
+  if (!supabase) return { error: new Error("Supabase not configured") };
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: new Error("Not signed in") };
+  const { error } = await supabase.rpc("rpc_insert_notification", {
+    p_user_id: challengeCreatorId,
+    p_type: "challenge_member_reported",
+    p_payload: {
+      challenge_id: challengeId,
+      reported_user_id: targetUserId,
+      reported_username: reportedUsername ?? null,
+      reporter_id: user.id,
+    },
+  });
   if (error) return { error: new Error(error.message) };
   return { error: null };
 }

@@ -26,10 +26,12 @@ import {
   Bell,
   Check,
   Clock3,
+  Flag,
   Flame,
   Heart,
   MessageSquare,
   Trophy,
+  UserMinus,
   UserPlus,
   Users,
   Wrench,
@@ -210,6 +212,10 @@ function notificationTitle(type: string, payload?: Record<string, unknown>): str
       return "Join request";
     case "challenge_join_request_result":
       return "Join request declined";
+    case "challenge_removed":
+      return "Removed from mission";
+    case "challenge_member_reported":
+      return "Member reported";
     default:
       return type;
   }
@@ -306,6 +312,21 @@ function notificationSubtitle(n: NotificationRow): string | null {
         : "that mission";
       return `Your request to join "${mission}" wasn't approved · Tap to try again`;
     }
+    case "challenge_removed": {
+      const mission = typeof p.challenge_title === "string" && p.challenge_title.trim().length > 0
+        ? p.challenge_title.trim()
+        : "a mission";
+      const who = typeof p.removed_by_username === "string" && p.removed_by_username.trim().length > 0
+        ? `@${p.removed_by_username.trim().toLowerCase()}`
+        : "The creator";
+      return `${who} removed you from "${mission}" · Your progress is saved as your own mission`;
+    }
+    case "challenge_member_reported": {
+      const who = typeof p.reported_username === "string" && p.reported_username.trim().length > 0
+        ? `@${p.reported_username.trim().toLowerCase()}`
+        : "Someone";
+      return `${who} was flagged privately in your mission · Tap to review`;
+    }
     default:
       return null;
   }
@@ -350,6 +371,10 @@ function notificationVisual(n: NotificationRow): { Icon: LucideIcon; tone: Notif
       return { Icon: UserPlus, tone: "social" };
     case "challenge_join_request_result":
       return { Icon: X, tone: "muted" };
+    case "challenge_removed":
+      return { Icon: UserMinus, tone: "muted" };
+    case "challenge_member_reported":
+      return { Icon: Flag, tone: "urgent" };
     case "streak_window_reminder": {
       const phase = p.reminder_phase;
       return phase === "closing" ? { Icon: Clock3, tone: "urgent" } : { Icon: Clock3, tone: "social" };
@@ -714,6 +739,28 @@ export default function NotificationsScreen() {
     }
 
     if (n.type === "challenge_join_request" || n.type === "challenge_join_request_result") {
+      if (challengeId) {
+        router.push(`/challenge/${challengeId}`);
+      } else {
+        router.push("/(tabs)/compete");
+      }
+      return;
+    }
+
+    if (n.type === "challenge_removed") {
+      // Deliberately not /challenge/[id] — the removed user is no longer a
+      // participant there, so that would just land on a "not a member"
+      // screen. Their own habit is what actually still exists for them now.
+      const hid = typeof p.habit_id === "string" ? p.habit_id : "";
+      if (hid) {
+        router.push(`/habit/${hid}`);
+      } else {
+        router.push("/(tabs)");
+      }
+      return;
+    }
+
+    if (n.type === "challenge_member_reported") {
       if (challengeId) {
         router.push(`/challenge/${challengeId}`);
       } else {
