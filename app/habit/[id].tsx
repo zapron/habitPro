@@ -1204,6 +1204,30 @@ export default function HabitDetail() {
     const handleMarkChecklistDayComplete = useCallback(
         (dateStr: string, day: number, dayIndex: number) => {
             if (!habit) return;
+            // Governance Phase 2 (docs/GROUP_CHALLENGE_GOVERNANCE.md) — this button
+            // can otherwise finish a day with zero tasks logged at all (see its own
+            // "works with zero, some, or all tasks logged" design), which would
+            // silently bypass a Medium/Hard room rule. Require at least one already-
+            // logged task to satisfy the rule before allowing the bypass.
+            if (Boolean(habit.challengeGroupId) && (habit.requireNote || habit.requirePhoto)) {
+                // Medium (exactly one flag) is satisfied by either a note or a photo;
+                // Hard (both flags) needs each independently on the same task.
+                const bothRequired = Boolean(habit.requireNote && habit.requirePhoto);
+                const loggedTasks = habit.streakMemories?.[dateStr]?.tasks ?? [];
+                const satisfied = loggedTasks.some((t) =>
+                    bothRequired
+                        ? Boolean(t.note?.trim()) && t.proofUrls.length > 0
+                        : Boolean(t.note?.trim()) || t.proofUrls.length > 0,
+                );
+                if (!satisfied) {
+                    showAppAlert(
+                        bothRequired ? 'Note + photo required' : 'Note or photo required',
+                        `This mission's room rules need at least one logged task with a ${bothRequired ? 'note and a photo' : 'note or a photo'} before the day can be marked complete.`,
+                        [{ text: 'OK' }],
+                    );
+                    return;
+                }
+            }
             const xpBefore = useHabitStore.getState().xp;
             const changed = markChecklistDayComplete(habit.id, dateStr);
             if (!changed) {
@@ -1820,6 +1844,24 @@ export default function HabitDetail() {
         );
     }
 
+    /**
+     * Room rules (docs/GROUP_CHALLENGE_GOVERNANCE.md, Phases 2/3) only ever
+     * mean anything for a mission that's still actually part of a group —
+     * once `challengeGroupId` is gone (voluntary leave, or being removed by
+     * the creator), this is a plain personal mission again and must behave
+     * like any other solo habit, regardless of whatever requireNote/
+     * requirePhoto happen to still be sitting on the row. Deriving this here
+     * rather than trusting the stored fields directly means a future write
+     * path that forgets to clear them (like the removal RPC once did) can't
+     * silently resurrect rules that shouldn't apply anymore.
+     *
+     * Pass the two raw flags through as-is (not OR'd together) — StreakMemorySheet
+     * derives the tri-state itself: exactly one true = Medium ("note or photo"),
+     * both true = Hard ("note and photo").
+     */
+    const effectiveRequireNote = Boolean(habit.challengeGroupId) && Boolean(habit.requireNote);
+    const effectiveRequirePhoto = Boolean(habit.challengeGroupId) && Boolean(habit.requirePhoto);
+
     const handleShareOnDemand = () => {
         if (shareOnDemandBusyRef.current) return;
         shareOnDemandBusyRef.current = true;
@@ -1961,6 +2003,8 @@ export default function HabitDetail() {
                     plusCommunityOk={!socialLocked}
                     squadShare={squadShareProp}
                     habitViewCommunity={habitViewCommunityProp}
+                    requireNote={effectiveRequireNote}
+                    requirePhoto={effectiveRequirePhoto}
                     onClose={() => {
                         pendingMemoryRef.current = null;
                         setMemoryUi(null);
@@ -2050,6 +2094,8 @@ export default function HabitDetail() {
                         mode={taskMemoryUi?.kind === 'view' ? 'view' : 'create'}
                         noticeVariant="editable-until-complete"
                         hideCommunityPublish
+                        requireNote={effectiveRequireNote}
+                        requirePhoto={effectiveRequirePhoto}
                         prefill={taskMemoryUi?.kind === 'create' ? taskMemoryUi.prefill : undefined}
                         viewMemory={
                             taskMemoryUi?.kind === 'view'

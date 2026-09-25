@@ -271,6 +271,9 @@ export const useHabitStore = create<HabitStore>()(
         requestRemoteSync({ immediate: true });
       },
       synchronizeHabitWithChallengeGroup: (habitId, group: ChallengeGroupRow, options) => {
+        const tpl = group.habit_template as Record<string, unknown> | null | undefined;
+        const templateRequireNote = tpl && typeof tpl === "object" ? tpl.requireNote === true : false;
+        const templateRequirePhoto = tpl && typeof tpl === "object" ? tpl.requirePhoto === true : false;
         set((state) => ({
           habits: state.habits.map((h) => {
             if (h.id !== habitId) return h;
@@ -279,6 +282,8 @@ export const useHabitStore = create<HabitStore>()(
               challengeGroupId: group.id,
               challengeCreatorTimezone: group.creator_timezone,
               missionTimezone: group.creator_timezone ?? h.missionTimezone ?? getMissionCalendarTimeZone(),
+              ...(templateRequireNote ? { requireNote: true } : {}),
+              ...(templateRequirePhoto ? { requirePhoto: true } : {}),
             };
             return alignGroupHabitToChallengeStart(
               withMeta,
@@ -319,6 +324,8 @@ export const useHabitStore = create<HabitStore>()(
         requestRemoteSync: shouldRequestRemoteSync = true,
         taskChecklist,
         joinedChallengeAt,
+        requireNote,
+        requirePhoto,
       }) => {
         const now = startDateOverride ?? new Date().toISOString();
         const totalDays =
@@ -358,6 +365,8 @@ export const useHabitStore = create<HabitStore>()(
             : {}),
           ...(taskChecklist && taskChecklist.length > 0 ? { taskChecklist } : {}),
           ...(joinedChallengeAt ? { joinedChallengeAt } : {}),
+          ...(requireNote ? { requireNote: true } : {}),
+          ...(requirePhoto ? { requirePhoto: true } : {}),
         };
         set((state) => ({ habits: [...state.habits, newHabit] }));
         if (shouldRequestRemoteSync) {

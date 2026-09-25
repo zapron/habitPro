@@ -120,7 +120,22 @@ export interface Habit {
    * uses the classic single note+photo memory flow, completely unchanged.
    */
   taskChecklist?: TaskChecklistItem[];
+  /**
+   * Group-mission-only completion strictness (docs/GROUP_CHALLENGE_GOVERNANCE.md,
+   * Phases 2+3). Both absent/false means "easy" — today's existing behavior, a
+   * bare check-in with no memory required. Set by the creator at group-creation
+   * time (via a preset for non-premium creators, independently for premium
+   * ones), cloned onto each member's own habit from
+   * `challenge_groups.habit_template` — never looked up live, so completion
+   * gating still works fully offline.
+   */
+  requireNote?: boolean;
+  requirePhoto?: boolean;
 }
+
+/** UI-level presets for the creation picker — not stored on `Habit` itself,
+ * since "hard" and premium "custom" both reduce to the same two booleans. */
+export type RoomRule = "easy" | "medium" | "hard";
 
 export type MiniMissionStatus =
   | "pending"
@@ -210,6 +225,9 @@ export type AddHabitInput = {
   taskChecklist?: TaskChecklistItem[];
   /** Set when joining an existing group challenge mid-way — see `Habit.joinedChallengeAt`. */
   joinedChallengeAt?: string;
+  /** Cloned from the group's habit_template on accept — see `Habit.requireNote`/`requirePhoto`. */
+  requireNote?: boolean;
+  requirePhoto?: boolean;
 };
 
 export type HabitStore = {

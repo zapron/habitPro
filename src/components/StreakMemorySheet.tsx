@@ -55,6 +55,16 @@ type StreakMemorySheetProps = {
   habitPublishAvailable?: boolean;
   /** When false, Community publish/toggle is locked (e.g. HabitPro Community). Default true (unset). */
   plusCommunityOk?: boolean;
+  /**
+   * Group-mission room rules (docs/GROUP_CHALLENGE_GOVERNANCE.md, Phase 2).
+   * When either is true, "Just mark done" is hidden entirely and Save
+   * blocks until the requirement is met — a bare check-in isn't an option
+   * for a mission the creator set to Medium/Hard. Tri-state via two flags:
+   * exactly one true = Medium ("note OR photo" satisfies either), both
+   * true = Hard ("note AND photo", checked independently).
+   */
+  requireNote?: boolean;
+  requirePhoto?: boolean;
   /** view + habit: Community status and toggle (remove is one-way; parent shows confirm). */
   habitViewCommunity?: {
     posted: boolean;
@@ -117,6 +127,8 @@ export const StreakMemorySheet = React.memo(function StreakMemorySheet({
   prefill,
   noticeVariant = "locks-on-save",
   hideCommunityPublish = false,
+  requireNote = false,
+  requirePhoto = false,
 }: StreakMemorySheetProps) {
   const isMini = variant === "mini";
   const isView = mode === "view";
@@ -369,6 +381,20 @@ export const StreakMemorySheet = React.memo(function StreakMemorySheet({
       );
       return;
     }
+    // Medium (exactly one flag true) is satisfied by either a note or a photo —
+    // the `hasContent` check above already guarantees at least one exists, so
+    // no extra check is needed here. Hard (both flags true) requires each
+    // independently.
+    if (requireNote && requirePhoto) {
+      if (!memory.imageUri) {
+        showAppAlert("Photo required", "This mission's room rules require a note and a photo to complete a day.", [{ text: "OK" }]);
+        return;
+      }
+      if (!memory.note) {
+        showAppAlert("Note required", "This mission's room rules require a note and a photo to complete a day.", [{ text: "OK" }]);
+        return;
+      }
+    }
     const enableCommunityMeta =
       publishToCommunity && canPublishCommunity && Boolean(imageUri);
     const meta = enableCommunityMeta ? { publishToCommunity: true } : undefined;
@@ -391,6 +417,8 @@ export const StreakMemorySheet = React.memo(function StreakMemorySheet({
     onClose,
     publishToCommunity,
     canPublishCommunity,
+    requireNote,
+    requirePhoto,
   ]);
 
   // Was capped at a fixed 560px on top of the 88% ceiling — on most phones that's
@@ -763,8 +791,12 @@ export const StreakMemorySheet = React.memo(function StreakMemorySheet({
                     </Text>
                     {isHabitCreate ? (
                       <Text style={[styles.hint, styles.hintMemory, { color: theme.colors.textMuted }]}>
-                        Add a photo or a line you’ll love reading later, or tap Just mark done to check in without a memory.
-                        Closing this sheet without choosing an action cancels. Your day stays unchecked.
+                        {requireNote && requirePhoto
+                          ? "This mission's room rules require a note and a photo to complete a day."
+                          : requireNote || requirePhoto
+                            ? "This mission's room rules require a note or a photo to complete a day."
+                            : "Add a photo or a line you’ll love reading later, or tap Just mark done to check in without a memory."}
+                        {" "}Closing this sheet without choosing an action cancels. Your day stays unchecked.
                       </Text>
                     ) : null}
 
@@ -1022,7 +1054,7 @@ export const StreakMemorySheet = React.memo(function StreakMemorySheet({
                       },
                     ]}
                   >
-                    {!isEditingPrefill ? (
+                    {!isEditingPrefill && !requireNote && !requirePhoto ? (
                       <Pressable
                         onPress={handleJustMarkDone}
                         disabled={submitting}

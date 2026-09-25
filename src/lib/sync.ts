@@ -24,7 +24,7 @@ import {
 } from "./streakMemoryStorage";
 
 const HABIT_ROW_SELECT =
-  "user_id, id, title, description, mode, visibility, start_date, end_date, completed_dates, streak, total_days, is_completed, status, streak_memories, challenge_group_id, challenge_creator_timezone, mission_timezone, mission_report, mission_report_at, reminder_enabled, reminder_time_local, reminder_locked, task_checklist, joined_challenge_at";
+  "user_id, id, title, description, mode, visibility, start_date, end_date, completed_dates, streak, total_days, is_completed, status, streak_memories, challenge_group_id, challenge_creator_timezone, mission_timezone, mission_report, mission_report_at, reminder_enabled, reminder_time_local, reminder_locked, task_checklist, joined_challenge_at, require_note, require_photo";
 
 export type RemoteSnapshot = Pick<HabitStore, "habits" | "miniMissions" | "xp" | "username"> & {
   cohortPeerHabits: Habit[];
@@ -409,6 +409,8 @@ export function habitFromRow(row: {
   reminder_locked?: boolean | null;
   task_checklist?: unknown;
   joined_challenge_at?: string | null;
+  require_note?: boolean | null;
+  require_photo?: boolean | null;
 }): Habit {
   const vis: MissionVisibility =
     row.visibility === "public" || row.visibility === "solo"
@@ -490,6 +492,8 @@ export function habitFromRow(row: {
     missionTimezone: row.mission_timezone ?? null,
     taskChecklist: parseTaskChecklist(row.task_checklist),
     joinedChallengeAt: row.joined_challenge_at ?? undefined,
+    requireNote: row.require_note === true ? true : undefined,
+    requirePhoto: row.require_photo === true ? true : undefined,
   };
 }
 
@@ -519,6 +523,8 @@ function habitToRow(sessionUserId: string, h: Habit) {
     reminder_locked: h.reminderLocked ?? false,
     task_checklist: h.taskChecklist ?? null,
     joined_challenge_at: h.joinedChallengeAt ?? null,
+    require_note: h.requireNote ?? null,
+    require_photo: h.requirePhoto ?? null,
   };
 }
 

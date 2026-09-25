@@ -1296,6 +1296,8 @@ export default function CompeteScreen() {
       const tplEnd =
         typeof tpl.endDate === "string" && tpl.endDate.trim().length > 0 ? tpl.endDate.trim() : undefined;
       const taskChecklist = parseTaskChecklist(tpl.taskChecklist);
+      const requireNote = tpl.requireNote === true;
+      const requirePhoto = tpl.requirePhoto === true;
       const startIso = inviteeHabitStartIsoFromGroupStartDate(group.start_date, group.creator_timezone);
 
       let existingHabit = useHabitStore.getState().habits.find((h) => h.challengeGroupId === group.id);
@@ -1325,6 +1327,8 @@ export default function CompeteScreen() {
             startDate: startIso,
             endDate: mode === "manual" ? tplEnd : undefined,
             taskChecklist,
+            requireNote,
+            requirePhoto,
             requestRemoteSync: false,
             // startDate above is the cohort's day-1 anchor, not when this device
             // actually starts tracking — record the real join moment so streak-repair

@@ -7,6 +7,7 @@ import {
   Platform,
   ScrollView,
   StyleSheet,
+  Switch,
   TextInput,
   TouchableOpacity,
   View,
@@ -43,6 +44,20 @@ type Props = {
   habit: Habit;
 };
 
+/**
+ * Deliberately off for this release (docs/GROUP_CHALLENGE_GOVERNANCE.md,
+ * Phase 3) — since a lone true flag now means "either note or photo"
+ * (matching Medium), independently toggling the two switches no longer
+ * unlocks any combination Easy/Medium/Hard don't already cover, so
+ * "Custom" has zero distinct value today. Kept fully wired (typechecked,
+ * tested) rather than deleted or commented out, so it's a real entry point
+ * to pick back up once real granular controls (streak minimums,
+ * photo-memory rules, etc.) are designed — not a redo from scratch. Flip
+ * this back on once that's ready; nothing else needs to change for it to
+ * work again.
+ */
+const CUSTOM_ROOM_RULES_ENABLED = false;
+
 export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
@@ -64,6 +79,15 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
   const [searching, setSearching] = useState(false);
   const [invitingId, setInvitingId] = useState<string | null>(null);
   const [noUsernameDialogOpen, setNoUsernameDialogOpen] = useState(false);
+  /** Governance Phases 2+3 (docs/GROUP_CHALLENGE_GOVERNANCE.md) — set once at
+   * creation, cloned onto every member's own habit; not editable after the
+   * mission exists. Presets are just fixed combinations of the same two
+   * booleans "Custom" (premium-only) exposes independently — Hard is
+   * indistinguishable from Custom{note:true, photo:true} once sent. */
+  const [selectedRoomRule, setSelectedRoomRule] = useState<"easy" | "medium" | "hard">("easy");
+  const [customRoomRule, setCustomRoomRule] = useState(false);
+  const [customRequireNote, setCustomRequireNote] = useState(false);
+  const [customRequirePhoto, setCustomRequirePhoto] = useState(false);
   const [inviteeStatusById, setInviteeStatusById] = useState<
     Partial<Record<string, ChallengeInviteeStatus>>
   >({});
@@ -157,7 +181,14 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
         showToast("Choose a username to start a group mission.", "info");
         return;
       }
-      const { group, error, reason } = await createGroupChallengeFromHabit(habit);
+      const resolvedRoomRule =
+        customRoomRule && plusOk
+          ? { requireNote: customRequireNote, requirePhoto: customRequirePhoto }
+          : {
+              requireNote: selectedRoomRule === "medium" || selectedRoomRule === "hard",
+              requirePhoto: selectedRoomRule === "hard",
+            };
+      const { group, error, reason } = await createGroupChallengeFromHabit(habit, undefined, resolvedRoomRule);
       if (error || !group) {
         if (reason === "premium_required") {
           await handleServerPremiumRequired();
@@ -172,7 +203,7 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
       creatingRef.current = false;
       setCreating(false);
     }
-  }, [configured, creating, signedIn, habit, showToast, onClose, openUpsell, requireUsername, refreshPremiumAccess, handleServerPremiumRequired]);
+  }, [configured, creating, signedIn, habit, showToast, onClose, openUpsell, requireUsername, refreshPremiumAccess, handleServerPremiumRequired, selectedRoomRule, customRoomRule, customRequireNote, customRequirePhoto, plusOk]);
 
   const handleInvite = useCallback(
     async (userId: string) => {
@@ -387,6 +418,102 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
                 Create a shared group mission from this habit. You stay on this mission; invitees get a matching one when
                 they accept.
               </Text>
+              <Text style={{ color: theme.colors.textPrimary, fontWeight: "700", fontSize: 13, marginBottom: 8 }}>
+                How strict should check-ins be?
+              </Text>
+              <View style={styles.roomRuleRow}>
+                {(
+                  [
+                    { key: "easy", label: "Easy", hint: "Just mark the day done" },
+                    { key: "medium", label: "Medium", hint: "A note or a photo" },
+                    { key: "hard", label: "Hard", hint: "A note and a photo" },
+                  ] as const
+                ).map((opt) => {
+                  const selected = !customRoomRule && selectedRoomRule === opt.key;
+                  return (
+                    <TouchableOpacity
+                      key={opt.key}
+                      onPress={() => {
+                        setCustomRoomRule(false);
+                        setSelectedRoomRule(opt.key);
+                      }}
+                      style={[
+                        styles.roomRuleChip,
+                        {
+                          borderColor: selected ? theme.colors.indigo[400] : theme.colors.border,
+                          backgroundColor: selected ? theme.colors.indigo[400] + "1a" : "transparent",
+                          opacity: customRoomRule ? 0.5 : 1,
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={{
+                          color: selected ? theme.colors.indigo[400] : theme.colors.textPrimary,
+                          fontWeight: "800",
+                          fontSize: 13,
+                        }}
+                      >
+                        {opt.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+              <Text style={{ color: theme.colors.textMuted, fontSize: 12, marginBottom: 14 }}>
+                {customRoomRule
+                  ? "Custom rules below."
+                  : selectedRoomRule === "easy"
+                    ? "Marking the day complete is enough. Notes and photos are optional."
+                    : selectedRoomRule === "medium"
+                      ? "Everyone must add either a note or a photo to complete a day."
+                      : "Everyone must add a note and a photo to complete a day."}
+              </Text>
+
+              {CUSTOM_ROOM_RULES_ENABLED ? (
+                <>
+                  <TouchableOpacity
+                    onPress={() => {
+                      if (!plusOk) {
+                        openUpsell("group_mission");
+                        return;
+                      }
+                      setCustomRoomRule((prev) => {
+                        const next = !prev;
+                        if (next) {
+                          // Seed the custom switches from whatever preset was selected,
+                          // so turning "Custom" on doesn't silently reset to Easy.
+                          setCustomRequireNote(selectedRoomRule === "medium" || selectedRoomRule === "hard");
+                          setCustomRequirePhoto(selectedRoomRule === "hard");
+                        }
+                        return next;
+                      });
+                    }}
+                    style={[
+                      styles.customRoomRuleRow,
+                      { borderColor: customRoomRule ? theme.colors.indigo[400] : theme.colors.border },
+                    ]}
+                  >
+                    <Text style={{ color: theme.colors.textPrimary, fontWeight: "700", fontSize: 13 }}>
+                      Customize rules
+                    </Text>
+                    <PlusBadge />
+                  </TouchableOpacity>
+
+                  {customRoomRule ? (
+                    <View style={styles.customRoomRuleBody}>
+                      <View style={styles.customRoomRuleSwitchRow}>
+                        <Text style={{ color: theme.colors.textPrimary, fontSize: 13, flex: 1 }}>Require a note</Text>
+                        <Switch value={customRequireNote} onValueChange={setCustomRequireNote} />
+                      </View>
+                      <View style={styles.customRoomRuleSwitchRow}>
+                        <Text style={{ color: theme.colors.textPrimary, fontSize: 13, flex: 1 }}>Require a photo</Text>
+                        <Switch value={customRequirePhoto} onValueChange={setCustomRequirePhoto} />
+                      </View>
+                    </View>
+                  ) : null}
+                </>
+              ) : null}
+
               <Button
                 title={creating ? "Creating…" : "Start group mission"}
                 onPress={() => void handleCreateGroup()}
@@ -428,6 +555,37 @@ export function GroupChallengeSheet({ visible, onClose, habit }: Props) {
 const styles = StyleSheet.create({
   keyboardAvoider: {
     flex: 1,
+  },
+  roomRuleRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 8,
+  },
+  roomRuleChip: {
+    flex: 1,
+    borderWidth: 1.5,
+    borderRadius: 10,
+    paddingVertical: 10,
+    alignItems: "center",
+  },
+  customRoomRuleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    borderWidth: 1.5,
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginBottom: 10,
+  },
+  customRoomRuleBody: {
+    marginBottom: 14,
+    gap: 4,
+  },
+  customRoomRuleSwitchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 6,
   },
   backdrop: {
     flex: 1,
