@@ -67,6 +67,12 @@ import {
 } from "../../src/lib/groupChallengesApi";
 import { subscribeSyncSuccess } from "../../src/lib/syncQueue";
 import { parseTaskChecklist, upsertRemoteHabit } from "../../src/lib/sync";
+import {
+  roomRuleTierCommitmentLine,
+  roomRuleTierFromFlags,
+  roomRuleTierLabel,
+  type RoomRuleTier,
+} from "../../src/lib/roomRules";
 import { traceAsync } from "../../src/lib/perfTrace";
 import { startJsStallProbe, traceSync } from "../../src/lib/jsThreadProbe";
 import { waitForHabitPersistIdle } from "../../src/lib/chunkedHabitPersistStorage";
@@ -155,6 +161,8 @@ type InviteCardMeta = {
   challengeName: string;
   pillLabel: string;
   description?: string;
+  /** Habit (group-mission) invites only — absent for live-mini invites, which have no room rules. */
+  roomRuleTier?: RoomRuleTier;
 };
 
 type MixedInviteItem =
@@ -189,45 +197,26 @@ function parseInviteCardMeta(g: ChallengeGroupRow): InviteCardMeta {
   }
   if (!challengeName) challengeName = "Group mission";
 
-  return { challengeName, pillLabel: "Group", description };
+  const roomRuleTier = roomRuleTierFromFlags(tpl.requireNote === true, tpl.requirePhoto === true);
+
+  return { challengeName, pillLabel: "Group", description, roomRuleTier };
 }
 
 function InviteMissionHeader({
   meta,
   theme,
-  isDark,
   onPress,
-  statusPill,
 }: {
   meta: InviteCardMeta | undefined;
   theme: ReturnType<typeof useTheme>["theme"];
-  isDark: boolean;
   onPress?: () => void;
-  statusPill?: React.ReactNode;
 }) {
   const name = meta?.challengeName ?? "Group mission";
-  const pill = meta?.pillLabel ?? "Group";
   const header = (
     <>
-      <View style={styles.inviteTitleRow}>
-        <Text style={[styles.inviteChallengeName, { color: theme.colors.textPrimary }]} numberOfLines={2}>
-          {name}
-        </Text>
-        <View style={styles.invitePillsCol}>
-          <View
-            style={[
-              styles.inviteKindPill,
-              {
-                backgroundColor: isDark ? withAlpha(theme.colors.indigo[500], 18) : withAlpha(theme.colors.indigo[600], 10),
-                borderColor: isDark ? withAlpha(theme.colors.indigo[400], 45) : withAlpha(theme.colors.indigo[600], 28),
-              },
-            ]}
-          >
-            <Text style={[styles.inviteKindPillText, { color: theme.colors.indigo[400] }]}>{pill}</Text>
-          </View>
-          {statusPill}
-        </View>
-      </View>
+      <Text style={[styles.inviteChallengeName, { color: theme.colors.textPrimary }]} numberOfLines={2}>
+        {name}
+      </Text>
       {meta?.description ? (
         <Text
           style={[
@@ -256,6 +245,45 @@ function InviteMissionHeader({
     >
       {header}
     </TouchableOpacity>
+  );
+}
+
+/**
+ * Bottom pill strip for an invite card — deliberately placed after the
+ * description/from/status-text/action-button content, not next to the
+ * title (see docs/GROUP_CHALLENGE_GOVERNANCE.md's invite-card entry: a
+ * long title fighting 2-3 pills for the same row wrapped badly). "Group"/
+ * "Live Mini" and the room-rule tier are static facts about the mission
+ * and stay muted-outline; `statusPill` (Accepted/Declined/Action needed/
+ * live-mini's own status) is the one thing that's actually dynamic, so it
+ * keeps its filled color — that's the only pill meant to catch the eye.
+ */
+function InvitePillRow({
+  meta,
+  theme,
+  statusPill,
+}: {
+  meta: InviteCardMeta | undefined;
+  theme: ReturnType<typeof useTheme>["theme"];
+  statusPill?: React.ReactNode;
+}) {
+  if (!meta && !statusPill) return null;
+  return (
+    <View style={styles.invitePillRow}>
+      {meta ? (
+        <View style={[styles.inviteKindPill, { borderColor: theme.colors.border, backgroundColor: "transparent" }]}>
+          <Text style={[styles.inviteKindPillText, { color: theme.colors.textMuted }]}>{meta.pillLabel}</Text>
+        </View>
+      ) : null}
+      {meta?.roomRuleTier ? (
+        <View style={[styles.inviteKindPill, { borderColor: theme.colors.border, backgroundColor: "transparent" }]}>
+          <Text style={[styles.inviteKindPillText, { color: theme.colors.textMuted }]}>
+            {roomRuleTierLabel(meta.roomRuleTier)}
+          </Text>
+        </View>
+      ) : null}
+      {statusPill}
+    </View>
   );
 }
 
@@ -746,6 +774,8 @@ export default function CompeteScreen() {
   }, [segment, reduceMotion, segmentAnim]);
   const [groupInvites, setGroupInvites] = useState<ChallengeInviteRow[]>([]);
   const [liveMiniInvites, setLiveMiniInvites] = useState<LiveMiniInviteForMe[]>([]);
+  /** Habit invites only — a one-screen "confirm the mission's rules" step before Accept actually runs. */
+  const [pendingRuleConfirmInvite, setPendingRuleConfirmInvite] = useState<ChallengeInviteRow | null>(null);
   const [inviteCardMeta, setInviteCardMeta] = useState<Record<string, InviteCardMeta>>({});
   const [inviteRequesterLabels, setInviteRequesterLabels] = useState<Record<string, ProfileLabel>>({});
   const [inviteBusy, setInviteBusy] = useState<string | null>(null);
@@ -1678,7 +1708,7 @@ export default function CompeteScreen() {
             ]}
           />
         ) : null}
-        <InviteMissionHeader meta={liveMeta} theme={theme} isDark={isDark} />
+        <InviteMissionHeader meta={liveMeta} theme={theme} />
         <InviteRequesterLine username={liveInvite.creator?.username} theme={theme} />
         <View style={styles.inviteStatusRow}>
           <InviteStatusPill
@@ -1718,6 +1748,7 @@ export default function CompeteScreen() {
                     ? "This Live Mini timer expired."
                     : "Open the board to see the squad status."}
         </Text>
+        <InvitePillRow meta={liveMeta} theme={theme} />
         <View style={styles.inviteActions}>
           {pending ? (
             <Button
@@ -1845,11 +1876,8 @@ export default function CompeteScreen() {
               awaitingInvitePulseStyle,
             ]}
           />
-          <InviteMissionHeader meta={meta} theme={theme} isDark={isDark} />
+          <InviteMissionHeader meta={meta} theme={theme} />
           <InviteRequesterLine username={requesterLabel?.username} theme={theme} />
-          <View style={styles.inviteStatusRow}>
-            <InviteStatusPill variant="pending" label={accepting ? "Joining..." : "Action needed"} theme={theme} />
-          </View>
           {groupStreaksButton}
           <Text style={[styles.inviteHint, { color: theme.colors.textSecondary }]}>
             {accepting
@@ -1861,6 +1889,11 @@ export default function CompeteScreen() {
               Group missions need Community. Tap Accept to view your Play Store options.
             </Text>
           ) : null}
+          <InvitePillRow
+            meta={meta}
+            theme={theme}
+            statusPill={<InviteStatusPill variant="pending" label={accepting ? "Joining..." : "Action needed"} theme={theme} />}
+          />
           <View style={styles.inviteActions}>
             <Button
               title="Decline"
@@ -1873,7 +1906,7 @@ export default function CompeteScreen() {
             <Button
               title="Accept"
               variant="primary"
-              onPress={() => void handleAcceptGroupInvite(inv)}
+              onPress={() => setPendingRuleConfirmInvite(inv)}
               disabled={inviteAcceptPremiumUnknown || inviteBusy === inv.id}
               loading={inviteBusy === inv.id}
               style={[styles.acceptBtn, theme.shadow.glow]}
@@ -1891,12 +1924,11 @@ export default function CompeteScreen() {
           <InviteMissionHeader
             meta={meta}
             theme={theme}
-            isDark={isDark}
             onPress={() => router.push(`/habit/${linkedHabitId}`)}
-            statusPill={statusPill}
           />
           <InviteRequesterLine username={requesterLabel?.username} theme={theme} />
           {resolvedBlock}
+          <InvitePillRow meta={meta} theme={theme} statusPill={statusPill} />
         </View>
       );
     }
@@ -1904,9 +1936,10 @@ export default function CompeteScreen() {
     return (
       <View key={`group:${inv.id}`} style={cardStyle}>
         {rp ? null : <GlassTopHighlight radius={16} />}
-        <InviteMissionHeader meta={meta} theme={theme} isDark={isDark} statusPill={statusPill} />
+        <InviteMissionHeader meta={meta} theme={theme} />
         <InviteRequesterLine username={requesterLabel?.username} theme={theme} />
         {resolvedBlock}
+        <InvitePillRow meta={meta} theme={theme} statusPill={statusPill} />
       </View>
     );
   };
@@ -2649,6 +2682,27 @@ export default function CompeteScreen() {
           },
         ]}
       />
+
+      <ConfirmDialog
+        visible={pendingRuleConfirmInvite !== null}
+        onRequestClose={() => setPendingRuleConfirmInvite(null)}
+        title="Accept & join this mission?"
+        message={`I promise to complete this mission honestly and follow its house rules.\n\n• ${roomRuleTierCommitmentLine(
+          (pendingRuleConfirmInvite && inviteCardMeta[pendingRuleConfirmInvite.id]?.roomRuleTier) || "easy",
+        )}`}
+        actions={[
+          { label: "Not now", variant: "secondary", onPress: () => setPendingRuleConfirmInvite(null) },
+          {
+            label: "I Accept",
+            variant: "primary",
+            onPress: () => {
+              const invite = pendingRuleConfirmInvite;
+              setPendingRuleConfirmInvite(null);
+              if (invite) void handleAcceptGroupInvite(invite);
+            },
+          },
+        ]}
+      />
     </Screen>
   );
 }
@@ -2728,26 +2782,18 @@ const styles = StyleSheet.create({
     borderWidth: 2,
   },
   cardTitle: { fontWeight: "800", fontSize: 17, marginBottom: 10 },
-  inviteTitleRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 10,
-    marginBottom: 4,
-  },
   inviteChallengeName: {
-    flex: 1,
-    minWidth: 100,
     fontSize: 21,
     fontWeight: "800",
     letterSpacing: -0.3,
     lineHeight: 26,
+    marginBottom: 4,
   },
-  invitePillsCol: {
+  invitePillRow: {
     flexDirection: "row",
     flexWrap: "wrap",
-    justifyContent: "flex-end",
     gap: 8,
-    flexShrink: 0,
+    marginTop: 12,
   },
   inviteKindPill: {
     borderRadius: 9999,
