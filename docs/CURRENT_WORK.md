@@ -1,8 +1,28 @@
 # HabitPro Current Work
 
-Last updated: 2026-09-26 (**critical incident, fixed**: the new Share/Invite menu's Modal was a bare always-mounted `<Modal>`, unlike every other modal on the habit detail screen — crashed on both Android and iOS whenever the screen unmounted, e.g. right after deleting a habit; also a real production incident this session: two `eas update` OTA publishes shipped the Android **test** RevenueCat key instead of the real one, already fixed — read below before running `eas update` again). Full detail immediately below; the 2026-09-25 group-mission-governance entry follows after.
+Last updated: 2026-09-26 (**critical incident, actually fixed this time**: `handleShareIconPress` was a `useCallback` declared after the habit screen's `if (!habit) return` guard — a real Rules-of-Hooks violation, "Rendered fewer hooks than expected," crashing both platforms whenever `habit` became undefined mid-render, e.g. right after deleting a mission. An earlier same-day fix attempt — wrapping the menu's Modal in LazyMount — was a real improvement but NOT the actual cause; confirmed via live local repro, see below. Also a real production incident this session: two `eas update` OTA publishes shipped the Android **test** RevenueCat key instead of the real one, already fixed — read below before running `eas update` again). Full detail immediately below; the 2026-09-25 group-mission-governance entry follows after.
 
-## Session Handoff (2026-09-26, third entry — CRITICAL: habit screen crashed on delete, both platforms)
+## Session Handoff (2026-09-26, fourth entry — the delete crash's ACTUAL root cause, confirmed live)
+
+**State: fixed, committed (`97c64f3`), pushed, and OTA'd. This entry supersedes the third entry below it — that fix was real and worth keeping, but it was not what was actually crashing the app. Read this entry, not the third one, if this crash ever needs to be understood again.**
+
+**User reported the crash was still happening after the LazyMount fix shipped**, with more precise detail this time: a freshly-created personal habit, crash happens "before even the first stage" of the delete progress dialog — i.e. essentially immediately after tapping "Delete," not partway through. That timing didn't fit the LazyMount/unmount theory at all (that would only fire at the very end, on navigation-away).
+
+**Got a definitive answer instead of guessing again**: started local Supabase + a local Metro dev server, launched the already-installed dev-client build on a booted iOS Simulator on the same machine, and watched live logs while reproducing the delete. The actual error, verbatim:
+```
+ERROR  [Error: Rendered fewer hooks than expected. This may be caused by an accidental early return statement.]
+```
+This is React's Rules-of-Hooks violation error — fatal, uncatchable by any try/catch, and exactly matches what production showed with no text: a gray/blank screen on Android, a hard native crash on iOS.
+
+**Actual root cause:** `handleShareIconPress` (added in the second entry below) was written as `useCallback(() => {...}, [deps])` — a real React Hook — but placed in the source *after* this screen's existing `if (!habit) { return (...) }` early-return guard. Every other line of logic below that guard is a plain function specifically because hooks can't safely live there: the moment `habit` becomes falsy (which is exactly what happens the instant `deleteHabit()` runs, mid-delete), that guard fires and the render exits *before ever reaching* the `useCallback` line — one fewer hook call than the previous render made. React detects the mismatched hook count and throws immediately, before the progress dialog even gets to paint its first step. This is why it happened right away, not "mid-progress."
+
+**Fix:** changed `handleShareIconPress` from `useCallback(() => {...}, [canOpenGroupMissionSheet, isDark])` to a plain `const handleShareIconPress = () => {...}` — no hook, matching its sibling `handleShareOnDemand` right next to it, which was already a plain function for this exact reason. Nothing else changed.
+
+**Verified live, not just by reasoning:** confirmed the exact error above at the exact repro steps in a local dev build, then re-tested after the fix. (Local Supabase auth/network flakiness in that dev environment introduced unrelated noise mid-retest — a stale refresh token, a couple of `Network request timed out` warnings from local RPCs — none of that is related to this bug; the delete flow itself never depends on the network since it's a local-first store mutation.)
+
+**Lesson, worth remembering:** never place a `useCallback`/`useMemo`/`useState`/`useEffect` after a conditional early return in a component. `app/habit/[id].tsx` has exactly one such guard (`if (!habit) return (...)`, this screen only); everything below it must stay plain functions/consts, never hooks.
+
+## Session Handoff (2026-09-26, third entry — first fix attempt: real improvement, NOT the actual cause — superseded by the entry above)
 
 **State: fixed, committed (`263dc7c`), pushed to `origin`, and OTA'd immediately given the severity — update group `6e1838d8-dea3-4e94-953c-2c05fcc35815`, runtime `1.1.36`. `npx tsc --noEmit` clean.**
 
