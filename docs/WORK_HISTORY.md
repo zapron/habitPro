@@ -2,6 +2,36 @@
 
 This is a concise chronological log for future sessions. Keep secrets out of this file.
 
+## 2026-09-27 (manual moderation: deleted one squad custom-note message)
+
+No code change. User asked to remove a message sent in a squad's Activity
+feed (group "Life in Motion Season 3"); no in-app control exists for this
+yet. Found and confirmed the `challenge_nudges` row (kind `custom_note`,
+from `appy` to `raktim_24`, day 8, 2026-09-26) via direct SQL, showed it
+to the user, then deleted it by id after confirmation. Flagged as a real
+feature gap in `docs/CURRENT_WORK.md` — no delete affordance exists today
+for a squad member's own nudge/note.
+
+## 2026-09-26, fourth entry — the habit-delete crash's real root cause
+
+`handleShareIconPress` was a `useCallback` placed after `app/habit/[id].tsx`'s
+`if (!habit) return` guard — a Rules-of-Hooks violation ("Rendered fewer
+hooks than expected") that crashed both platforms the instant a habit was
+deleted, with no error text. An earlier same-day fix (wrapping the menu's
+Modal in `LazyMount`) was a real improvement but not the actual cause.
+Confirmed live via a local Metro + iOS Simulator repro before shipping
+the real fix. Commits `97c64f3`, `8852d74`/`6192838` (docs). OTA update
+group `4454ce39-7ec8-4afb-81be-8883391d1d33`.
+
+Also this day: found and fixed a real production incident where two
+earlier `eas update` publishes had shipped Android's **test** RevenueCat
+key instead of the real one (ran `eas update` without `--environment
+production`, silently falling back to the local `.env`'s dev key) —
+fixed by republishing via the pre-existing `npm run update:production`
+script, which was the correct command all along. Also fixed a spurious
+"Restore Backup" prompt firing on healthy accounts after the hot-window
+pull change. Full detail in `docs/CURRENT_WORK.md`.
+
 ## 2026-09-25, second entry (group mission governance: kick-out, room rules, invite commitment step)
 
 ### Sole-admin kick-out, Easy/Medium/Hard room rules, and an invite-time commitment step for group missions

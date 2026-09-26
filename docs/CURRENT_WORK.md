@@ -1,6 +1,14 @@
 # HabitPro Current Work
 
-Last updated: 2026-09-26 (**critical incident, actually fixed this time**: `handleShareIconPress` was a `useCallback` declared after the habit screen's `if (!habit) return` guard — a real Rules-of-Hooks violation, "Rendered fewer hooks than expected," crashing both platforms whenever `habit` became undefined mid-render, e.g. right after deleting a mission. An earlier same-day fix attempt — wrapping the menu's Modal in LazyMount — was a real improvement but NOT the actual cause; confirmed via live local repro, see below. Also a real production incident this session: two `eas update` OTA publishes shipped the Android **test** RevenueCat key instead of the real one, already fixed — read below before running `eas update` again). Full detail immediately below; the 2026-09-25 group-mission-governance entry follows after.
+Last updated: 2026-09-27 (manually deleted one `challenge_nudges` custom-note row on user request — no in-app control exists yet for a creator/recipient to remove a squad activity message; see the new entry at top for details and the flagged feature gap). Previous entry follows.
+
+## Session Handoff (2026-09-27 — manual moderation: deleted one squad custom-note message)
+
+**State: no code change, no migration — a one-off direct production data deletion, requested by the app owner on behalf of a real user request.**
+
+A user asked to have a message they'd sent in a squad's Activity feed removed. There's currently no in-app control for a creator or the recipient to delete a `challenge_nudges` row (the table backing squad nudges/custom notes) — moderation only exists for *members* (Phase 1's kick-out/report, see `docs/GROUP_CHALLENGE_GOVERNANCE.md`), not for individual *messages*. Found the row via direct SQL (group "Life in Motion Season 3", `challenge_id` `7a8da8d1-0a7c-4076-b9b7-b03841706114`, `from_user_id` = `appy`, `to_user_id` = `raktim_24`, `kind = 'custom_note'`, `target_mission_day = 8`, dated 2026-09-26): message text `"Tumi bajeee😭😭😭😭"`. Shown to the user for confirmation before deleting, per standard practice for any irreversible production data change. Deleted by primary key (`id = '8489b282-c668-43ab-b45b-34afa8caa4d4'`), confirmed gone via a follow-up count query.
+
+**Real feature gap, flagged for later, not built now:** there is no way for a squad member (or the group creator) to delete their own or someone else's nudge/note from within the app — every such request today requires a manual DB deletion like this one. Worth a small future feature: a delete affordance on `SquadActivitySection`'s own nudge, at minimum, for the sender to retract their own message; whether a creator should be able to delete others' messages is a moderation-authority question in the same spirit as Phase 1's kick-out design and should probably follow the same "creator-authority, private, not a vote" pattern if built.
 
 ## Session Handoff (2026-09-26, fourth entry — the delete crash's ACTUAL root cause, confirmed live)
 
