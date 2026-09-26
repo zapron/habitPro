@@ -1891,8 +1891,15 @@ export default function HabitDetail() {
      * them. When there's no group-mission option to offer (mission already
      * finished), skip the menu entirely and go straight to sharing, since a
      * one-item menu is just an extra tap for nothing.
+     *
+     * Deliberately a plain function, not useCallback — everything in this
+     * part of the component runs after the `if (!habit) return` guard above,
+     * so a hook here would sometimes get called and sometimes not depending
+     * on whether habit is still defined (e.g. right after this same screen
+     * deletes it), which is exactly the "Rendered fewer hooks than expected"
+     * crash this caused on both platforms. No hooks below that guard, ever.
      */
-    const handleShareIconPress = useCallback(() => {
+    const handleShareIconPress = () => {
         if (!canOpenGroupMissionSheet) {
             handleShareOnDemand();
             return;
@@ -1918,8 +1925,7 @@ export default function HabitDetail() {
         // iOS's clean native sheet). No Cancel row here either — tapping the
         // backdrop dismisses it, matching how ActionSheetIOS already behaves.
         setShareMenuVisible(true);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [canOpenGroupMissionSheet, isDark]);
+    };
 
     /**
      * Sharing a specific day's memory — reuses the gallery viewer the user is already
