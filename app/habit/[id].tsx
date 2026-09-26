@@ -2004,55 +2004,65 @@ export default function HabitDetail() {
              * Android/fallback "Share" menu — a small custom list instead of the
              * generic showAppAlert. No Cancel row: tapping the backdrop dismisses
              * it, the same as iOS's native ActionSheetIOS already does.
+             *
+             * Wrapped in LazyMount like every other modal on this screen
+             * (ShareWinModal, GroupChallengeSheet, MissionDetailsSheet) — a bare
+             * always-rendered <Modal> sat in the tree for this screen's entire
+             * lifetime even when never opened, and got torn down abruptly
+             * whenever the screen unmounted (e.g. right after deleting the
+             * mission), which crashed on both platforms. LazyMount means this
+             * never mounts at all unless the menu is actually opened.
              */}
-            <Modal
-                visible={shareMenuVisible}
-                animationType="fade"
-                transparent
-                onRequestClose={() => setShareMenuVisible(false)}
-            >
-                <Pressable
-                    style={[
-                        styles.backdrop,
-                        { backgroundColor: isDark ? withAlpha(theme.colors.scrim, 55) : withAlpha(theme.colors.scrim, 28) },
-                    ]}
-                    onPress={() => setShareMenuVisible(false)}
-                    accessibilityRole="button"
-                    accessibilityLabel="Dismiss"
+            <LazyMount visible={shareMenuVisible} unmountOnExit>
+                <Modal
+                    visible={shareMenuVisible}
+                    animationType="fade"
+                    transparent
+                    onRequestClose={() => setShareMenuVisible(false)}
                 >
                     <Pressable
-                        onPress={(e) => e.stopPropagation()}
                         style={[
-                            styles.shareMenuCard,
-                            { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, borderRadius: theme.radius.lg, ...theme.shadow.card },
+                            styles.backdrop,
+                            { backgroundColor: isDark ? withAlpha(theme.colors.scrim, 55) : withAlpha(theme.colors.scrim, 28) },
                         ]}
+                        onPress={() => setShareMenuVisible(false)}
+                        accessibilityRole="button"
+                        accessibilityLabel="Dismiss"
                     >
-                        <TouchableOpacity
-                            style={styles.shareMenuRow}
-                            activeOpacity={0.7}
-                            onPress={() => {
-                                setShareMenuVisible(false);
-                                handleShareOnDemand();
-                            }}
+                        <Pressable
+                            onPress={(e) => e.stopPropagation()}
+                            style={[
+                                styles.shareMenuCard,
+                                { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, borderRadius: theme.radius.lg, ...theme.shadow.card },
+                            ]}
                         >
-                            <Share2 size={19} color={theme.colors.textPrimary} strokeWidth={2} />
-                            <Text style={[styles.shareMenuRowText, { color: theme.colors.textPrimary }]}>Share a Moment</Text>
-                        </TouchableOpacity>
-                        <View style={[styles.shareMenuDivider, { backgroundColor: theme.colors.border }]} />
-                        <TouchableOpacity
-                            style={styles.shareMenuRow}
-                            activeOpacity={0.7}
-                            onPress={() => {
-                                setShareMenuVisible(false);
-                                setGroupSheetOpen(true);
-                            }}
-                        >
-                            <Users size={19} color={theme.colors.textPrimary} strokeWidth={2} />
-                            <Text style={[styles.shareMenuRowText, { color: theme.colors.textPrimary }]}>Share Invite</Text>
-                        </TouchableOpacity>
+                            <TouchableOpacity
+                                style={styles.shareMenuRow}
+                                activeOpacity={0.7}
+                                onPress={() => {
+                                    setShareMenuVisible(false);
+                                    handleShareOnDemand();
+                                }}
+                            >
+                                <Share2 size={19} color={theme.colors.textPrimary} strokeWidth={2} />
+                                <Text style={[styles.shareMenuRowText, { color: theme.colors.textPrimary }]}>Share a Moment</Text>
+                            </TouchableOpacity>
+                            <View style={[styles.shareMenuDivider, { backgroundColor: theme.colors.border }]} />
+                            <TouchableOpacity
+                                style={styles.shareMenuRow}
+                                activeOpacity={0.7}
+                                onPress={() => {
+                                    setShareMenuVisible(false);
+                                    setGroupSheetOpen(true);
+                                }}
+                            >
+                                <Users size={19} color={theme.colors.textPrimary} strokeWidth={2} />
+                                <Text style={[styles.shareMenuRowText, { color: theme.colors.textPrimary }]}>Share Invite</Text>
+                            </TouchableOpacity>
+                        </Pressable>
                     </Pressable>
-                </Pressable>
-            </Modal>
+                </Modal>
+            </LazyMount>
 
             <LazyMount visible={shareWinVisible} unmountOnExit>
                 <ShareWinModal

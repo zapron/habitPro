@@ -1,6 +1,22 @@
 # HabitPro Current Work
 
-Last updated: 2026-09-26 (habit detail screen: the Share and "Group mission" header icons were merged into one Share-icon menu — Share a Moment / Share Invite; also a real production incident this session: two `eas update` OTA publishes shipped the Android **test** RevenueCat key to production instead of the real one — root cause and fix below; read this before running `eas update` again). Full detail immediately below; the 2026-09-25 group-mission-governance entry follows after.
+Last updated: 2026-09-26 (**critical incident, fixed**: the new Share/Invite menu's Modal was a bare always-mounted `<Modal>`, unlike every other modal on the habit detail screen — crashed on both Android and iOS whenever the screen unmounted, e.g. right after deleting a habit; also a real production incident this session: two `eas update` OTA publishes shipped the Android **test** RevenueCat key instead of the real one, already fixed — read below before running `eas update` again). Full detail immediately below; the 2026-09-25 group-mission-governance entry follows after.
+
+## Session Handoff (2026-09-26, third entry — CRITICAL: habit screen crashed on delete, both platforms)
+
+**State: commit pending push/OTA at time of writing this entry — see the bottom of this section for the actual ship record. `npx tsc --noEmit` clean.**
+
+**User report, verbatim symptom:** deleting a (personal, non-group) habit crashed the app on both Android and iOS, with no error text — Android went gray, iOS showed the native "app crashed" system dialog. Crash happened mid-progress, during the "Deleting mission..." operation-progress sequence — i.e. right around when `backOrReplace(router, "/")` unmounts the habit detail screen after the delete completes.
+
+**Root cause:** the previous entry's Share/Invite menu (see below) added a custom `<Modal>` for the Android/fallback path, rendered as a bare, unconditional `<Modal visible={shareMenuVisible} ...>` sitting directly in the component tree — meaning it was actually **mounted** (as a real native modal host) for the entire lifetime of the screen, regardless of whether the user ever opened it. Every other modal on this exact screen (`ShareWinModal`, `GroupChallengeSheet`, `MissionDetailsSheet`) is wrapped in `<LazyMount visible={...} unmountOnExit>`, which renders `null` until first opened and cleanly unmounts after closing — so none of them are ever mounted unless actually used. An always-mounted native `Modal` getting torn down abruptly when its parent screen unmounts (exactly what happens right after a delete navigates away) is a known crash class on both Android and iOS — matches the reported symptoms exactly (gray screen / silent teardown on Android, hard native crash on iOS, no JS error text because it's not a JS-level exception).
+
+Diagnosed via elimination, not guesswork: reviewed every line changed in `app/habit/[id].tsx` and every other file touched this session for anything touching the delete path directly (none did — the existing `if (!habit)` early-return guard already safely handles the habit disappearing mid-delete, unchanged). User confirmed mini-mission delete was unaffected (different screen, no such modal), and confirmed the habit being deleted was a personal (non-group) mission — narrowing it specifically to something on this screen that's present regardless of mission type, which pointed at the always-mounted modal rather than anything room-rule/group-related.
+
+**Fix:** wrapped the Share/Invite menu's `<Modal>` in `<LazyMount visible={shareMenuVisible} unmountOnExit>`, matching the other three modals on this screen exactly. Now it never mounts at all unless the menu is actually opened.
+
+**Verified:** `npx tsc --noEmit` clean. Not yet verified live on a real device — this is the single most important thing to confirm before considering this closed, given the severity.
+
+**Not addressed, flagged for awareness only:** the pre-existing `reminderEditorOpen` modal on this same screen (unrelated to this session) is *also* a bare, unconditionally-rendered `<Modal>` (gated only by `{!reminderIsLocked ? (...) : null}`, not `LazyMount`) whenever a habit's reminder is unlocked/editable. It may carry a lower-probability version of the same latent risk. Deliberately not touched in this pass — this was already working code before today, and touching it wasn't necessary to fix the reported crash. Worth a dedicated look later if a similar unexplained crash ever surfaces again on this screen.
 
 ## Session Handoff (2026-09-26, second entry — habit screen Share/Invite menu consolidation)
 
