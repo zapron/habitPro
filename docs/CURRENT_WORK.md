@@ -22,6 +22,8 @@ This is React's Rules-of-Hooks violation error — fatal, uncatchable by any try
 
 **Lesson, worth remembering:** never place a `useCallback`/`useMemo`/`useState`/`useEffect` after a conditional early return in a component. `app/habit/[id].tsx` has exactly one such guard (`if (!habit) return (...)`, this screen only); everything below it must stay plain functions/consts, never hooks.
 
+**Pushed and OTA'd.** Commit `8852d74` (fix `97c64f3` + docs), pushed to `origin`. Published via `npm run update:production` — update group `4454ce39-7ec8-4afb-81be-8883391d1d33`, runtime `1.1.36`. Re-verified the Android `.hbc` bundle has the real RevenueCat key, not the test one. (One local hiccup during publish: a leftover Metro dev server from the local repro session was holding the Metro cache directory, causing the first publish attempt to fail with `ENOTEMPTY`; killed it and retried successfully.)
+
 ## Session Handoff (2026-09-26, third entry — first fix attempt: real improvement, NOT the actual cause — superseded by the entry above)
 
 **State: fixed, committed (`263dc7c`), pushed to `origin`, and OTA'd immediately given the severity — update group `6e1838d8-dea3-4e94-953c-2c05fcc35815`, runtime `1.1.36`. `npx tsc --noEmit` clean.**
