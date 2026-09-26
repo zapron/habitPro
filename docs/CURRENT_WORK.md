@@ -4,7 +4,7 @@ Last updated: 2026-09-26 (**critical incident, fixed**: the new Share/Invite men
 
 ## Session Handoff (2026-09-26, third entry — CRITICAL: habit screen crashed on delete, both platforms)
 
-**State: commit pending push/OTA at time of writing this entry — see the bottom of this section for the actual ship record. `npx tsc --noEmit` clean.**
+**State: fixed, committed (`263dc7c`), pushed to `origin`, and OTA'd immediately given the severity — update group `6e1838d8-dea3-4e94-953c-2c05fcc35815`, runtime `1.1.36`. `npx tsc --noEmit` clean.**
 
 **User report, verbatim symptom:** deleting a (personal, non-group) habit crashed the app on both Android and iOS, with no error text — Android went gray, iOS showed the native "app crashed" system dialog. Crash happened mid-progress, during the "Deleting mission..." operation-progress sequence — i.e. right around when `backOrReplace(router, "/")` unmounts the habit detail screen after the delete completes.
 
