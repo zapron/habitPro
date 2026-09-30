@@ -668,7 +668,7 @@ export const CommunityWinFeedPost = memo(function CommunityWinFeedPost({
             pointerEvents="none"
             colors={
               isDark
-                ? ["rgba(6, 182, 212, 0.16)", "rgba(99, 102, 241, 0.12)", "rgba(2, 6, 23, 0.34)"]
+                ? ["rgba(6, 182, 212, 0.16)", "rgba(34, 197, 94, 0.12)", "rgba(2, 6, 23, 0.34)"]
                 : ["rgba(207, 250, 254, 0.38)", "rgba(238, 242, 255, 0.4)", "rgba(255, 247, 237, 0.42)"]
             }
             start={{ x: 0, y: 0 }}

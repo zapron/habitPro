@@ -80,11 +80,11 @@ export default function CommunityScreen() {
             styles.upsellBanner,
             {
               backgroundColor: isDark
-                ? "rgba(99, 102, 241, 0.14)"
-                : "rgba(79, 70, 229, 0.08)",
+                ? "rgba(34, 197, 94, 0.14)"
+                : "rgba(21, 128, 61, 0.08)",
               borderColor: isDark
-                ? "rgba(129, 140, 248, 0.35)"
-                : "rgba(79, 70, 229, 0.25)",
+                ? "rgba(74, 222, 128, 0.35)"
+                : "rgba(21, 128, 61, 0.25)",
             },
           ]}
           onPress={() => openUpsell("community")}

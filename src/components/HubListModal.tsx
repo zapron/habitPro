@@ -194,7 +194,7 @@ export function HubListModal(props: HubListModalProps) {
         <LinearGradient
           colors={
             isDark
-              ? (["rgba(79, 70, 229, 0.82)", "rgba(6, 182, 212, 0.62)"] as const)
+              ? (["rgba(21, 128, 61, 0.82)", "rgba(6, 182, 212, 0.62)"] as const)
               : ([theme.colors.indigo[500], theme.colors.cyan[500]] as const)
           }
           start={{ x: 0, y: 0 }}

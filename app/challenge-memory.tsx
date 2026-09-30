@@ -63,7 +63,7 @@ import type { PresetChallengeNudgeKind } from "../src/types/groupChallenge";
 import { formatDateDisplay } from "../src/utils/dateDisplay";
 import { withAlpha } from "../src/styles/theme";
 
-const COMMUNITY_BADGE_BACKGROUND = "rgba(79, 70, 229, 0.9)";
+const COMMUNITY_BADGE_BACKGROUND = "rgba(21, 128, 61, 0.9)";
 const COMMUNITY_PHOTO_ASPECT_RATIO = 0.9;
 const NOTE_COLLAPSE_LIMIT = 90;
 
@@ -824,8 +824,8 @@ export default function ChallengeMemoryScreen() {
                           : kind === "fire"
                             ? theme.colors.amber[500]
                             : isDark
-                              ? "#c4b5fd"
-                              : "#7c3aed";
+                              ? "#86efac"
+                              : "#16a34a";
                     const bg =
                       kind === "cheer"
                         ? isDark ? withAlpha(theme.colors.indigo[400], 18) : withAlpha(theme.colors.indigo[500], 12)
@@ -834,8 +834,8 @@ export default function ChallengeMemoryScreen() {
                           : kind === "fire"
                             ? isDark ? withAlpha(theme.colors.yellow[400], 18) : withAlpha(theme.colors.amber[500], 12)
                             : isDark
-                              ? "rgba(167, 139, 250, 0.18)"
-                              : "rgba(124, 58, 237, 0.11)";
+                              ? "rgba(74, 222, 128, 0.18)"
+                              : "rgba(22, 163, 74, 0.11)";
 
                     return (
                       <Pressable

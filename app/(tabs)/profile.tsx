@@ -1786,12 +1786,14 @@ export default function ProfileScreen() {
               <View
                 style={[
                   styles.journeyCta,
-                  { borderWidth: 1, borderColor: theme.colors.indigo[500] },
+                  isDark
+                    ? { borderWidth: 0, backgroundColor: theme.colors.indigo[600] }
+                    : { borderWidth: 1, borderColor: theme.colors.indigo[500], backgroundColor: "transparent" },
                 ]}
               >
-                <BarChart3 size={15} color={theme.colors.indigo[400]} strokeWidth={2.4} />
-                <Text style={[styles.journeyCtaText, { color: theme.colors.indigo[400] }]}>View My Journey</Text>
-                <ChevronRight size={15} color={theme.colors.indigo[400]} strokeWidth={2.6} />
+                <BarChart3 size={15} color={isDark ? "#FFFFFF" : theme.colors.indigo[400]} strokeWidth={2.4} />
+                <Text style={[styles.journeyCtaText, { color: isDark ? "#FFFFFF" : theme.colors.indigo[400] }]}>View My Journey</Text>
+                <ChevronRight size={15} color={isDark ? "#FFFFFF" : theme.colors.indigo[400]} strokeWidth={2.6} />
               </View>
             </Pressable>
           </View>

@@ -96,7 +96,7 @@ const MISSION_STORY_LIMIT = 8;
 const MINI_POST_LIMIT = 20;
 const GALLERY_PAGE_SIZE = 12;
 const DAY_PILL_BACKGROUND = "rgba(14, 116, 144, 0.86)";
-const COMMUNITY_BADGE_BACKGROUND = "rgba(79, 70, 229, 0.9)";
+const COMMUNITY_BADGE_BACKGROUND = "rgba(21, 128, 61, 0.9)";
 const LIKE_BADGE_BACKGROUND = "rgba(15, 23, 42, 0.76)";
 const PRIVATE_BADGE_BACKGROUND = "rgba(8, 145, 178, 0.86)";
 const RECENT_PROOF_BADGE_PATH =
@@ -1019,9 +1019,15 @@ const MissionStoryCard = memo(function MissionStoryCard({
           onPress={() => onOpenGallery(story)}
           accessibilityRole="button"
           accessibilityLabel={`View ${story.title} journey`}
-          style={[styles.journeyButton, { borderColor: theme.colors.border, backgroundColor: theme.colors.surfaceElevated }]}
+          style={[
+            styles.journeyButton,
+            {
+              borderColor: theme.colors.border,
+              backgroundColor: isDark ? withAlpha(theme.colors.indigo[500], 10) : theme.colors.surfaceElevated,
+            },
+          ]}
         >
-          <Text style={[styles.journeyText, { color: theme.colors.indigo[400] }]} numberOfLines={1}>
+          <Text style={[styles.journeyText, { color: isDark ? theme.colors.textSecondary : theme.colors.indigo[400] }]} numberOfLines={1}>
             View journey
           </Text>
         </Pressable>
@@ -1505,7 +1511,7 @@ function MissionGalleryModal({
                   <LinearGradient
                     colors={
                       isDark
-                        ? (["rgba(79, 70, 229, 0.82)", "rgba(6, 182, 212, 0.62)"] as const)
+                        ? (["rgba(21, 128, 61, 0.82)", "rgba(6, 182, 212, 0.62)"] as const)
                         : ([theme.colors.indigo[500], theme.colors.cyan[500]] as const)
                     }
                     start={{ x: 0, y: 0 }}
@@ -2250,9 +2256,17 @@ export default function MyJourneyScreen() {
                 {league.label}
               </Text>
             </View>
-            <View style={[styles.levelPill, { borderColor: theme.colors.border, backgroundColor: theme.colors.surface }]}>
-              <User size={12} color={theme.colors.indigo[400]} />
-              <Text style={[styles.levelPillText, { color: theme.colors.indigo[400] }]} numberOfLines={1}>
+            <View
+              style={[
+                styles.levelPill,
+                {
+                  borderColor: isDark ? theme.colors.indigo[500] : theme.colors.border,
+                  backgroundColor: theme.colors.surface,
+                },
+              ]}
+            >
+              <User size={12} color={isDark ? theme.colors.textPrimary : theme.colors.indigo[400]} />
+              <Text style={[styles.levelPillText, { color: isDark ? theme.colors.textPrimary : theme.colors.indigo[400] }]} numberOfLines={1}>
                 Level {level}
               </Text>
             </View>
@@ -2288,8 +2302,8 @@ export default function MyJourneyScreen() {
             theme={theme}
             label="Global rank"
             value={publicStory?.globalRank ? `#${publicStory.globalRank.rankPosition}` : "-"}
-            accent={theme.colors.indigo[400]}
-            icon={<Globe size={15} color={theme.colors.indigo[400]} />}
+            accent={isDark ? theme.colors.green[500] : theme.colors.indigo[400]}
+            icon={<Globe size={15} color={isDark ? theme.colors.green[500] : theme.colors.indigo[400]} />}
           />
           <StatTile
             theme={theme}
@@ -2490,7 +2504,7 @@ export default function MyJourneyScreen() {
           <LinearGradient
             colors={
               isDark
-                ? (["rgba(79, 70, 229, 0.82)", "rgba(6, 182, 212, 0.62)"] as const)
+                ? (["rgba(21, 128, 61, 0.82)", "rgba(6, 182, 212, 0.62)"] as const)
                 : ([theme.colors.indigo[500], theme.colors.cyan[500]] as const)
             }
             start={{ x: 0, y: 0 }}

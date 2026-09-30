@@ -224,7 +224,7 @@ export function Timer({ startDate, mode = 'autopilot', endDate, missionTimezone,
                             digitTextShadow={
                                 isExpired
                                     ? { textShadowColor: 'rgba(239, 68, 68, 0.45)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 6 }
-                                    : { textShadowColor: 'rgba(99, 102, 241, 0.45)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 6 }
+                                    : { textShadowColor: 'rgba(34, 197, 94, 0.45)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 6 }
                             }
                         />
                         <View style={styles.legendContainer}>

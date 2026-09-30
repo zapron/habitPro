@@ -333,8 +333,8 @@ const styles = StyleSheet.create({
     borderColor: "rgba(245, 158, 11, 0.28)",
   },
   modePillMini: {
-    backgroundColor: "rgba(99, 102, 241, 0.1)",
-    borderColor: "rgba(99, 102, 241, 0.28)",
+    backgroundColor: "rgba(34, 197, 94, 0.1)",
+    borderColor: "rgba(34, 197, 94, 0.28)",
   },
   modePillText: {
     fontSize: 12,

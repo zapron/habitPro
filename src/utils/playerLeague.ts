@@ -5,7 +5,7 @@ export function playerLeagueForLevel(level: number, theme: AppTheme, isDark: boo
     return {
       label: "Mythic League",
       color: theme.colors.indigo[400],
-      backgroundColor: isDark ? "rgba(99, 102, 241, 0.16)" : "rgba(99, 102, 241, 0.09)",
+      backgroundColor: isDark ? "rgba(34, 197, 94, 0.16)" : "rgba(34, 197, 94, 0.09)",
     };
   }
   if (level >= 15) {

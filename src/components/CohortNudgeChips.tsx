@@ -27,8 +27,8 @@ const NUDGE_SPECS: {
     label: "Cheer",
     subtitle: "Show support",
     Icon: Heart,
-    bgLight: "rgba(99, 102, 241, 0.08)",
-    bgDark: "rgba(129, 140, 248, 0.1)",
+    bgLight: "rgba(22, 163, 74, 0.08)",
+    bgDark: "rgba(74, 222, 128, 0.1)",
   },
   {
     kind: "ping",
@@ -100,9 +100,9 @@ export const CohortNudgeChips = memo(function CohortNudgeChips({
   onCustomNotePress,
 }: Props) {
   const customBusy = nudgeBusyKey === `${memberId}-custom_note`;
-  const customBg = isDark ? "rgba(167, 139, 250, 0.1)" : "rgba(124, 58, 237, 0.06)";
-  const customBorder = isDark ? "rgba(167, 139, 250, 0.28)" : "rgba(124, 58, 237, 0.22)";
-  const customIcon = isDark ? "#c4b5fd" : "#7c3aed";
+  const customBg = isDark ? "rgba(74, 222, 128, 0.1)" : "rgba(22, 163, 74, 0.06)";
+  const customBorder = isDark ? "rgba(74, 222, 128, 0.28)" : "rgba(22, 163, 74, 0.22)";
+  const customIcon = isDark ? "#86efac" : "#16a34a";
 
   return (
     <View style={styles.row}>

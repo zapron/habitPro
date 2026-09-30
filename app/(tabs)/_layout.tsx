@@ -1,7 +1,8 @@
 import { Tabs } from "expo-router";
+import type { BottomTabBarButtonProps } from "@react-navigation/bottom-tabs";
 import type { ReactNode } from "react";
 import { Home, Swords, User, Users } from "lucide-react-native";
-import { StyleSheet, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   TAB_BAR_BOTTOM_GAP,
@@ -11,6 +12,7 @@ import {
 import { useTheme } from "../../src/context/ThemeContext";
 import { useInviteBadge } from "../../src/context/InviteBadgeContext";
 import { PulsingBorder } from "../../src/components/PulsingBorder";
+import { redesignPalette } from "../../src/styles/redesignPalette";
 
 const TAB_BAR_TOP_PAD = 8;
 
@@ -37,20 +39,55 @@ function TabIconWithDot({
 }
 
 export default function TabLayout() {
-  const { theme } = useTheme();
+  const { theme, isDark, themePack } = useTheme();
   const { pendingInviteCount } = useInviteBadge();
   const insets = useSafeAreaInsets();
 
   const paddingBottom = insets.bottom + TAB_BAR_BOTTOM_GAP;
   const tabBarHeight = tabBarOuterHeight(insets.bottom);
 
+  // Dark-mode-minimalist only: icon+label stay neutral regardless of
+  // selection, and the whole tab item (icon and label together, not just
+  // the icon) gets a squarish maroon background when selected — light mode
+  // (and the classic theme pack) render exactly as before, untouched.
+  const rp = themePack === "minimalist" ? (isDark ? redesignPalette.dark : redesignPalette.light) : null;
+  const neutralizeSelection = Boolean(rp && isDark);
+  const activeTintColor = neutralizeSelection ? theme.colors.textPrimary : theme.colors.indigo[400];
+
+  // Custom tabBarButton so the maroon selection is a tight chip around the
+  // icon+label content, not react-navigation's default full-height/width
+  // fill of the whole tab slot (which read as one big harsh rectangle).
+  // Only swapped in for dark-mode-minimalist; other cases fall through to
+  // undefined below so the library renders its normal default button.
+  const renderNeutralTabButton = neutralizeSelection
+    ? (props: BottomTabBarButtonProps) => {
+        const { children, style, onPress, onLongPress, accessibilityState, accessibilityLabel, testID } = props;
+        const focused = Boolean(accessibilityState?.selected);
+        return (
+          <Pressable
+            onPress={onPress}
+            onLongPress={onLongPress}
+            accessibilityState={accessibilityState}
+            accessibilityLabel={accessibilityLabel}
+            testID={testID}
+            style={style}
+          >
+            <View style={[styles.tabButtonChip, focused ? { backgroundColor: rp!.accentTint } : null]}>
+              {children}
+            </View>
+          </Pressable>
+        );
+      }
+    : undefined;
+
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
         lazy: true,
-        tabBarActiveTintColor: theme.colors.indigo[400],
+        tabBarActiveTintColor: activeTintColor,
         tabBarInactiveTintColor: theme.colors.textMuted,
+        tabBarButton: renderNeutralTabButton,
         tabBarStyle: {
           backgroundColor: theme.colors.surface,
           borderTopColor: theme.colors.border,
@@ -66,7 +103,11 @@ export default function TabLayout() {
         name="index"
         options={{
           title: "Home",
-          tabBarIcon: ({ color, size }) => <Home size={size ?? 22} color={color} />,
+          tabBarIcon: ({ color, size }) => (
+            <TabIconWithDot showDot={false}>
+              <Home size={size ?? 22} color={color} />
+            </TabIconWithDot>
+          ),
         }}
       />
       <Tabs.Screen
@@ -84,14 +125,22 @@ export default function TabLayout() {
         name="community"
         options={{
           title: "Community",
-          tabBarIcon: ({ color, size }) => <Users size={size ?? 22} color={color} />,
+          tabBarIcon: ({ color, size }) => (
+            <TabIconWithDot showDot={false}>
+              <Users size={size ?? 22} color={color} />
+            </TabIconWithDot>
+          ),
         }}
       />
       <Tabs.Screen
         name="profile"
         options={{
           title: "Profile",
-          tabBarIcon: ({ color, size }) => <User size={size ?? 22} color={color} />,
+          tabBarIcon: ({ color, size }) => (
+            <TabIconWithDot showDot={false}>
+              <User size={size ?? 22} color={color} />
+            </TabIconWithDot>
+          ),
         }}
       />
     </Tabs>
@@ -99,6 +148,14 @@ export default function TabLayout() {
 }
 
 const styles = StyleSheet.create({
+  tabButtonChip: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    marginHorizontal: 6,
+    marginVertical: 4,
+    borderRadius: 12,
+  },
   tabIconWrap: {
     position: "relative",
     alignItems: "center",

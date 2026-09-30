@@ -889,7 +889,7 @@ export default function Home() {
           <Text
             style={[
               styles.headerEyebrow,
-              { color: rp ? rp.accent : theme.colors.cyan[400] },
+              { color: rp ? (isDark ? rp.textMuted : rp.accent) : theme.colors.cyan[400] },
               rp ? { fontFamily: fontFamily.manropeBold } : null,
             ]}
           >
@@ -1303,7 +1303,7 @@ export default function Home() {
                     styles.tabText,
                     { color: rp ? rp.textSecondary : theme.colors.textSecondary },
                     rp ? { fontFamily: fontFamily.dmSansSemibold } : null,
-                    selected && { color: rp ? rp.accent : theme.colors.indigo[600] },
+                    selected && { color: rp ? (isDark ? rp.textPrimary : rp.accent) : theme.colors.indigo[600] },
                   ]}
                 >
                   {label}
@@ -1352,7 +1352,7 @@ export default function Home() {
                     styles.reportSegText,
                     { color: rp ? rp.textSecondary : theme.colors.textSecondary },
                     rp ? { fontFamily: fontFamily.dmSansSemibold } : null,
-                    reportsSegment === key && { color: rp ? rp.accentDark : theme.colors.indigo[400] },
+                    reportsSegment === key && { color: rp ? (isDark ? rp.textPrimary : rp.accentDark) : theme.colors.indigo[400] },
                   ]}
                   numberOfLines={1}
                 >
@@ -1508,7 +1508,7 @@ export default function Home() {
                       <LinearGradient
                         colors={
                           isDark
-                            ? (["rgba(79, 70, 229, 0.82)", "rgba(6, 182, 212, 0.62)"] as const)
+                            ? (["rgba(21, 128, 61, 0.82)", "rgba(6, 182, 212, 0.62)"] as const)
                             : ([theme.colors.indigo[500], theme.colors.cyan[500]] as const)
                         }
                         start={{ x: 0, y: 0 }}

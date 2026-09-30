@@ -1995,7 +1995,7 @@ export default function CompeteScreen() {
               {
                 width: (segmentTrackWidth - 4) / 2,
                 backgroundColor: rp
-                  ? (isDark ? rp.chipBg : rp.screenBg)
+                  ? (isDark ? rp.accentTint : rp.screenBg)
                   : (isDark ? theme.colors.surfaceElevated : theme.colors.surface),
                 ...(rp ? null : theme.shadow.card),
                 transform: [
@@ -2015,11 +2015,11 @@ export default function CompeteScreen() {
           onPress={() => setSegment("challenges")}
           activeOpacity={0.85}
         >
-          <Swords size={16} color={segment === "challenges" ? (rp ? rp.accent : theme.colors.indigo[600]) : rp ? rp.textMuted : theme.colors.textMuted} />
+          <Swords size={16} color={rp ? (segment === "challenges" ? (isDark ? rp.textPrimary : rp.accent) : rp.textMuted) : segment === "challenges" ? theme.colors.indigo[600] : theme.colors.textMuted} />
           <Text
             style={[
               styles.segmentLabel,
-              { color: segment === "challenges" ? (rp ? rp.accent : theme.colors.indigo[600]) : rp ? rp.textSecondary : theme.colors.textSecondary },
+              { color: rp ? (segment === "challenges" ? (isDark ? rp.textPrimary : rp.accent) : rp.textSecondary) : segment === "challenges" ? theme.colors.indigo[600] : theme.colors.textSecondary },
               rp ? { fontFamily: fontFamily.dmSansSemibold } : null,
             ]}
           >
@@ -2031,11 +2031,11 @@ export default function CompeteScreen() {
           onPress={() => setSegment("leaderboard")}
           activeOpacity={0.85}
         >
-          <Medal size={16} color={segment === "leaderboard" ? (rp ? rp.accent : theme.colors.indigo[600]) : rp ? rp.textMuted : theme.colors.textMuted} />
+          <Medal size={16} color={rp ? (segment === "leaderboard" ? (isDark ? rp.textPrimary : rp.accent) : rp.textMuted) : segment === "leaderboard" ? theme.colors.indigo[600] : theme.colors.textMuted} />
           <Text
             style={[
               styles.segmentLabel,
-              { color: segment === "leaderboard" ? (rp ? rp.accent : theme.colors.indigo[600]) : rp ? rp.textSecondary : theme.colors.textSecondary },
+              { color: rp ? (segment === "leaderboard" ? (isDark ? rp.textPrimary : rp.accent) : rp.textSecondary) : segment === "leaderboard" ? theme.colors.indigo[600] : theme.colors.textSecondary },
               rp ? { fontFamily: fontFamily.dmSansSemibold } : null,
             ]}
           >
@@ -2047,7 +2047,10 @@ export default function CompeteScreen() {
       {segment === "challenges" ? (
         <View style={styles.challengesSubOuter}>
           <TouchableOpacity
-            style={styles.challengesSubPill}
+            style={[
+              styles.challengesSubPill,
+              rp && isDark && challengesSubTab === "missions" ? { backgroundColor: rp.accentTint, borderRadius: 10 } : null,
+            ]}
             onPress={() => setChallengesSubTab("missions")}
             activeOpacity={0.6}
             accessibilityRole="button"
@@ -2057,10 +2060,9 @@ export default function CompeteScreen() {
               style={[
                 styles.challengesSubText,
                 {
-                  color:
-                    challengesSubTab === "missions"
-                      ? rp ? rp.accent : theme.colors.indigo[600]
-                      : rp ? rp.textSecondary : theme.colors.textSecondary,
+                  color: rp
+                    ? challengesSubTab === "missions" ? (isDark ? rp.textPrimary : rp.accent) : rp.textSecondary
+                    : challengesSubTab === "missions" ? theme.colors.indigo[600] : theme.colors.textSecondary,
                   fontWeight: challengesSubTab === "missions" ? "800" : "600",
                 },
                 rp ? { fontFamily: fontFamily.dmSansSemibold } : null,
@@ -2071,7 +2073,10 @@ export default function CompeteScreen() {
           </TouchableOpacity>
           <View style={[styles.challengesSubDivider, { backgroundColor: rp ? rp.border : theme.colors.border }]} />
           <TouchableOpacity
-            style={styles.challengesSubPill}
+            style={[
+              styles.challengesSubPill,
+              rp && isDark && challengesSubTab === "invites" ? { backgroundColor: rp.accentTint, borderRadius: 10 } : null,
+            ]}
             onPress={() => setChallengesSubTab("invites")}
             activeOpacity={0.6}
             accessibilityRole="button"
@@ -2082,10 +2087,9 @@ export default function CompeteScreen() {
                 style={[
                   styles.challengesSubText,
                   {
-                    color:
-                      challengesSubTab === "invites"
-                        ? rp ? rp.accent : theme.colors.indigo[600]
-                        : rp ? rp.textSecondary : theme.colors.textSecondary,
+                    color: rp
+                      ? challengesSubTab === "invites" ? (isDark ? rp.textPrimary : rp.accent) : rp.textSecondary
+                      : challengesSubTab === "invites" ? theme.colors.indigo[600] : theme.colors.textSecondary,
                     fontWeight: challengesSubTab === "invites" ? "800" : "600",
                   },
                   rp ? { fontFamily: fontFamily.dmSansSemibold } : null,

@@ -550,7 +550,7 @@ function GalleryMomentCard({
           styles.galleryCheerPill,
           {
             borderColor: liked ? theme.colors.indigo[400] : "rgba(255, 255, 255, 0.32)",
-            backgroundColor: liked ? "rgba(99, 102, 241, 0.88)" : "rgba(15, 23, 42, 0.72)",
+            backgroundColor: liked ? "rgba(34, 197, 94, 0.88)" : "rgba(15, 23, 42, 0.72)",
             opacity: isOwn || cheerPending ? 0.68 : 1,
           },
         ]}
@@ -760,9 +760,15 @@ function MissionStoryCard({
           onPress={onOpenGallery}
           accessibilityRole="button"
           accessibilityLabel={`View ${story.title} journey`}
-          style={[styles.journeyButton, { borderColor: theme.colors.border, backgroundColor: theme.colors.surfaceElevated }]}
+          style={[
+            styles.journeyButton,
+            {
+              borderColor: theme.colors.border,
+              backgroundColor: isDark ? withAlpha(theme.colors.indigo[500], 10) : theme.colors.surfaceElevated,
+            },
+          ]}
         >
-          <Text style={[styles.journeyText, { color: theme.colors.indigo[400] }]} numberOfLines={1}>
+          <Text style={[styles.journeyText, { color: isDark ? theme.colors.textSecondary : theme.colors.indigo[400] }]} numberOfLines={1}>
             View journey
           </Text>
         </Pressable>
@@ -1170,7 +1176,7 @@ function MissionGalleryModal({
               <LinearGradient
                 colors={
                   isDark
-                    ? (["rgba(79, 70, 229, 0.82)", "rgba(6, 182, 212, 0.62)"] as const)
+                    ? (["rgba(21, 128, 61, 0.82)", "rgba(6, 182, 212, 0.62)"] as const)
                     : ([theme.colors.indigo[500], theme.colors.cyan[500]] as const)
                 }
                 start={{ x: 0, y: 0 }}
@@ -2027,7 +2033,7 @@ export default function CommunityPlayerStoryScreen() {
                   <LinearGradient
                     colors={
                       isDark
-                        ? (["rgba(79, 70, 229, 0.82)", "rgba(6, 182, 212, 0.62)"] as const)
+                        ? (["rgba(21, 128, 61, 0.82)", "rgba(6, 182, 212, 0.62)"] as const)
                         : ([theme.colors.indigo[500], theme.colors.cyan[500]] as const)
                     }
                     start={{ x: 0, y: 0 }}
@@ -2110,7 +2116,7 @@ export default function CommunityPlayerStoryScreen() {
                 <LinearGradient
                   colors={
                     isDark
-                      ? (["rgba(79, 70, 229, 0.82)", "rgba(6, 182, 212, 0.62)"] as const)
+                      ? (["rgba(21, 128, 61, 0.82)", "rgba(6, 182, 212, 0.62)"] as const)
                       : ([theme.colors.indigo[500], theme.colors.cyan[500]] as const)
                   }
                   start={{ x: 0, y: 0 }}

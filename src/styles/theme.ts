@@ -125,7 +125,12 @@ const darkColors: ColorPalette = {
     400: "#94a3b8",
     200: "#e2e8f0",
   },
-  indigo: { 400: "#9B8AFB", 500: "#7C5CF2", 600: "#6144E0" },
+  /** Primary accent — deliberately the same three stops as `green` below
+   * (400→500, 500→600, 600→900) rather than a separate hex pick, so the
+   * app's one "brand" accent and its "success" semantic color are the same
+   * proven-legible-on-dark values instead of two independently-guessed
+   * greens drifting apart. */
+  indigo: { 400: "#22c55e", 500: "#16a34a", 600: "#1B4332" },
   cyan: { 400: "#2DD9E8", 500: "#0FB8CE" },
   amber: { 500: "#F0940A", 900: "#6B4413" },
   yellow: { 400: "#fbbf24" },
@@ -142,8 +147,8 @@ const darkColors: ColorPalette = {
 const lightColors: ColorPalette = {
   background: "#f8fafc",
   surface: "#ffffff",
-  /** Tonal elevation (Material 3 style): a whisper of the brand indigo mixed into the "elevated" surface instead of a flat gray step, so stacked/nested surfaces read as branded depth rather than generic gray. */
-  surfaceElevated: "#f3f1fb",
+  /** Tonal elevation (Material 3 style): a whisper of the brand green mixed into the "elevated" surface instead of a flat gray step, so stacked/nested surfaces read as branded depth rather than generic gray. */
+  surfaceElevated: "#eff6f0",
   border: "#e2e8f0",
   textPrimary: "#0f172a",
   textSecondary: "#475569",
@@ -158,7 +163,11 @@ const lightColors: ColorPalette = {
     400: "#64748b",
     200: "#1e293b",
   },
-  indigo: { 400: "#6D56E8", 500: "#5B3FDE", 600: "#4C2FC9" },
+  /** Same three-stops-as-`green` aliasing as dark mode's indigo — light
+   * mode's own green ramp already runs a shade darker than dark mode's at
+   * every stop for legibility against a light background, so this alias
+   * carries that same dark/light parity over to the accent automatically. */
+  indigo: { 400: "#16a34a", 500: "#15803d", 600: "#2D6A4F" },
   cyan: { 400: "#0C86A8", 500: "#106E8C" },
   amber: { 500: "#D1720A", 900: "#6B4413" },
   yellow: { 400: "#eab308" },
@@ -173,7 +182,7 @@ const lightColors: ColorPalette = {
 
 const darkShadow: ShadowSet = {
   glow: {
-    shadowColor: "#7C5CF2",
+    shadowColor: "#16a34a",
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.25,
     shadowRadius: 20,
@@ -190,7 +199,7 @@ const darkShadow: ShadowSet = {
 
 const lightShadow: ShadowSet = {
   glow: {
-    shadowColor: "#5B3FDE",
+    shadowColor: "#15803d",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
     shadowRadius: 14,
@@ -214,8 +223,9 @@ const lightShadow: ShadowSet = {
 /**
  * "habitPro redesign" theme pack — from the Claude Design mockup
  * ("habitPro light mode redesign" project): warm neutral ground (not the
- * cool slate-blue base above), one accent (`#5B5BD6`) instead of a
- * multi-step indigo ramp, flat bordered cards instead of shadowed ones.
+ * cool slate-blue base above), one flat accent (aliased to the app's forest
+ * green, not the mockup's original violet) instead of a multi-step indigo
+ * ramp, flat bordered cards instead of shadowed ones.
  * Semantic colors (cyan/amber/yellow/red/green) are carried over from the
  * matching classic palette unchanged — the mockup never redefined them, and
  * inventing new ones wasn't worth the drift risk against their existing
@@ -239,7 +249,7 @@ const minimalistLightColors: ColorPalette = {
     400: "#4a4850",
     200: "#1c1b1f",
   },
-  indigo: { 400: "#5B5BD6", 500: "#5B5BD6", 600: "#5B5BD6" },
+  indigo: { 400: "#6E1727", 500: "#6E1727", 600: "#6E1727" },
   cyan: lightColors.cyan,
   amber: lightColors.amber,
   yellow: lightColors.yellow,
@@ -268,7 +278,7 @@ const minimalistDarkColors: ColorPalette = {
     400: "#c7c4d1",
     200: "#f2f1f5",
   },
-  indigo: { 400: "#5B5BD6", 500: "#5B5BD6", 600: "#5B5BD6" },
+  indigo: { 400: "#8E1D33", 500: "#8E1D33", 600: "#8E1D33" },
   cyan: darkColors.cyan,
   amber: darkColors.amber,
   yellow: darkColors.yellow,

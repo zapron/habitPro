@@ -287,7 +287,7 @@ export function CommunityPlayerDrawer({ visible, player, onClose }: Props) {
                           { backgroundColor: theme.colors.surfaceElevated, borderColor: theme.colors.border },
                         ]}
                       >
-                        <View style={[styles.recentIcon, { backgroundColor: isHabit ? "rgba(245, 158, 11, 0.14)" : "rgba(99, 102, 241, 0.12)" }]}>
+                        <View style={[styles.recentIcon, { backgroundColor: isHabit ? "rgba(245, 158, 11, 0.14)" : "rgba(34, 197, 94, 0.12)" }]}>
                           {isHabit ? (
                             <Flame size={16} color={theme.colors.amber[500]} />
                           ) : (

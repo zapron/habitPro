@@ -27,9 +27,11 @@ export const redesignPalette: { light: RedesignPaletteVariant; dark: RedesignPal
     textMuted: "#8b8894",
     chipBg: "#f5f3ee",
     trackBg: "#eeece7",
-    accent: "#5B5BD6",
-    accentDark: "#4747A7",
-    accentTint: "#ebebfa",
+    /** Preview: maroon variant, matches `theme.ts`'s minimalist-light
+     * `indigo` alias for this comparison pass. */
+    accent: "#6E1727",
+    accentDark: "#5D1421",
+    accentTint: "#f7eef0",
   },
   dark: {
     screenBg: "#17161c",
@@ -39,8 +41,10 @@ export const redesignPalette: { light: RedesignPaletteVariant; dark: RedesignPal
     textMuted: "#847f91",
     chipBg: "#211f28",
     trackBg: "#2a2832",
-    accent: "#5B5BD6",
-    accentDark: "#8484e0",
-    accentTint: "#1e1e3d",
+    /** Preview: maroon variant, matches `theme.ts`'s minimalist-dark
+     * `indigo` alias for this comparison pass. */
+    accent: "#8E1D33",
+    accentDark: "#B3243F",
+    accentTint: "#2a1015",
   },
 };

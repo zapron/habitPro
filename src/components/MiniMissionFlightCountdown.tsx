@@ -70,7 +70,7 @@ export function MiniMissionFlightCountdown({
       : tone === "muted"
         ? undefined
         : {
-            textShadowColor: "rgba(99, 102, 241, 0.45)",
+            textShadowColor: "rgba(34, 197, 94, 0.45)",
             textShadowOffset: { width: 0, height: 1 },
             textShadowRadius: 6,
           };

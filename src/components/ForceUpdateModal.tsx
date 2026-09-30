@@ -73,7 +73,7 @@ export function ForceUpdateModal({
               <Image source={{ uri: imageUrl }} style={styles.heroImage} resizeMode="cover" />
             ) : (
               <LinearGradient
-                colors={isDark ? ["#4338ca", "#0e7490"] : ["#6366f1", "#0891b2"]}
+                colors={isDark ? ["#15803d", "#0e7490"] : ["#22c55e", "#0891b2"]}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={styles.heroImage}

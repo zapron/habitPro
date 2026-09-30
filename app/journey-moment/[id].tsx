@@ -320,7 +320,7 @@ export default function JourneyMomentScreen() {
             <View
               style={[
                 styles.sourcePill,
-                { backgroundColor: moment.live_squad_id ? "rgba(6, 182, 212, 0.88)" : "rgba(79, 70, 229, 0.9)" },
+                { backgroundColor: moment.live_squad_id ? "rgba(6, 182, 212, 0.88)" : "rgba(21, 128, 61, 0.9)" },
               ]}
             >
               {moment.live_squad_id ? <Radio size={13} color="#fff" /> : <Globe size={13} color="#fff" />}
@@ -332,7 +332,7 @@ export default function JourneyMomentScreen() {
                 styles.likePill,
                 {
                   backgroundColor: moment.viewerHasCheered
-                    ? "rgba(79, 70, 229, 0.9)"
+                    ? "rgba(34, 197, 94, 0.9)"
                     : isDark ? withAlpha(theme.colors.scrim, 82) : withAlpha(theme.colors.scrim, 72),
                 },
               ]}

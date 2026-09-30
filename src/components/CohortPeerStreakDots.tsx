@@ -494,7 +494,7 @@ export const CohortPeerStreakDots = memo(function CohortPeerStreakDots({
               styles.viewerInner,
               {
                 backgroundColor: theme.colors.surface,
-                borderColor: isDark ? "rgba(129, 140, 248, 0.32)" : theme.colors.border,
+                borderColor: isDark ? "rgba(74, 222, 128, 0.32)" : theme.colors.border,
               },
             ]}
           >

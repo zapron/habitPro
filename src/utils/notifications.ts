@@ -127,14 +127,14 @@ export async function setupNotifications() {
       importance: Notifications.AndroidImportance.MAX,
       sound: "default",
       vibrationPattern: [0, 250, 250, 250],
-      lightColor: "#6366f1",
+      lightColor: "#22c55e",
     });
     await Notifications.setNotificationChannelAsync(CHANNEL_ID, {
       name: "Timer Alerts",
       importance: Notifications.AndroidImportance.HIGH,
       sound: "default",
       vibrationPattern: [0, 250, 250, 250],
-      lightColor: "#6366f1",
+      lightColor: "#22c55e",
     });
   }
 }
