@@ -1,6 +1,26 @@
 # HabitPro Current Work
 
-Last updated: 2026-09-30 — Live Squad link-join + kick-out shipped (below, at top). Previous entries follow after it.
+Last updated: 2026-09-30 — Live Squad missed-timer memory loss fixed (below, at top). Previous entries follow after it.
+
+## Session Handoff (2026-09-30 — Live Squad: captured moments no longer lost when a participant misses the timer)
+
+**State: committed, `npx tsc --noEmit` clean, verified live via curl+JWT against local Supabase for all three relevant paths. Migration NOT yet pushed — the user runs `npm run db:push` themselves.**
+
+Closes the second open thread from the "Parked (2026-09-30)" entry below. User report: when two people are in a Live Squad and miss the timer, their captured moments should still survive — they didn't.
+
+**Real root cause, found via code investigation (not guessed) — two compounding bugs, not one:**
+1. `syncLiveMiniFromLocalMission` (`src/lib/liveMiniMissionProgress.ts`) only ever built a memory payload when the synced outcome was `"completed"` — a `"missed"` sync always sent null memory, even when the mission had captured photos/notes/tasks before the deadline (those live in `draftTasks`/`draftMemories`, deliberately preserved by `failMiniMission` rather than cleared — `completionMemory` itself is never populated for a missed mission, since that only gets set by `completeMiniMission`).
+2. Even if the client had sent memory, `rpc_sync_live_mini_progress`'s very first guard (`if v_participant.status in ('declined', 'missed', 'cancelled') then return`) silently no-opped the entire call once the row was already `'missed'` — which it usually already was by the time a client got around to syncing, since `rpc_refresh_live_mini_missed`'s background sweep flips any past-deadline `'in_progress'` row to `'missed'` the instant *any* participant merely opens/refreshes the squad (no per-user memory available to that sweep, by design).
+
+**Fix** (`supabase/migrations/20260930200000_preserve_live_mini_memory_on_missed.sql` + `liveMiniMissionProgress.ts`):
+- Client now builds a memory payload for a `"missed"` sync too, sourced from `draftTasks` (checklist mode) or `draftMemories` (freeform mode).
+- RPC gained a twin of the existing `'completed'` early-return branch for `'missed'` (memory-only update, no status/timing touched) so a late sync still lands even after the sweep already flipped the row — mirrors how a `'completed'` row already accepted a late memory-only update.
+- The main-path CASE conditions (status/timing update) now store memory on a first-time transition into `'missed'` too, not just `'completed'`.
+- `'declined'`/`'cancelled'` participants still correctly reject late memory — unchanged, verified live.
+
+No UI change needed — `app/live-mini/[id].tsx`'s memory-gallery/note rendering was never gated on `status === "completed"` in the first place, so a `'missed'` row with data now just renders it.
+
+**Verified live via curl+JWT** against local Supabase, not just typechecked: (1) simulated the exact real-world race — flipped a participant to `missed` with no memory (replicating the background sweep), then sent a memory-bearing sync as that user, confirmed it landed; (2) a first-time direct transition into `missed` with memory attached, confirmed it landed via the main path; (3) confirmed a `cancelled` participant's late memory sync is still correctly rejected, unchanged.
 
 ## Session Handoff (2026-09-30 — Live Squad link-based join requests + creator kick-out)
 

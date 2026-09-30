@@ -55,23 +55,6 @@ rebuild + store release, not an OTA. Worth doing since a share card with no
 real link undercuts the acquisition case, but should wait for the next
 native-build cycle rather than being bolted on standalone.
 
-## Live mini-mission memory loss on timer expiry (confirmed bug, fix scoped)
-
-A live (shared) mini mission whose timer expires loses its captured
-photo/note memory — solo missions already preserve it correctly, live ones
-don't.
-
-**Root cause** (confirmed via code investigation): `syncLiveMiniFromLocalMission`
-(`src/lib/liveMiniMissionProgress.ts`) nulls `memoryNote`/`memoryImageUrl`/
-`memoryGallery` whenever the synced outcome isn't `"completed"`, so a
-`"missed"` sync never sends the memory to the squad board even though it was
-captured locally before expiry.
-
-**Minimal fix**: have `syncLiveMiniFromLocalMission` transmit the
-best-available captured memory on a `"missed"` outcome too, and extend the
-`rpc_sync_live_mini_progress` RPC to accept/store it instead of discarding
-it. Touches a sync RPC — needs explicit go-ahead before starting.
-
 ## Brand accent hierarchy — amber as a second accent
 
 After the indigo → forest-green/maroon rebrand, the app currently leans on

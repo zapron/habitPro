@@ -59,8 +59,23 @@ export async function syncLiveMiniFromLocalMission(
     status === "completed"
       ? opts?.memoryImageUrl ?? completionMemory?.imageUrl ?? null
       : null;
+  // A "missed" live mission never reaches completeMiniMission, so it has no
+  // completionMemory — but failMiniMission deliberately preserves whatever
+  // was logged before the deadline in draftTasks/draftMemories rather than
+  // clearing it. Send that along too, so the squad board doesn't lose
+  // moments just because the timer beat the user to "Complete".
+  const missedTaskEntries =
+    status === "missed"
+      ? mission.captureMode === "freeform"
+        ? mission.draftMemories
+        : mission.draftTasks
+          ? Object.values(mission.draftTasks)
+          : undefined
+      : undefined;
   const completedMemoryGallery =
-    status === "completed" ? buildLiveMiniMemoryGallery(completionMemory?.tasks) : null;
+    status === "completed"
+      ? buildLiveMiniMemoryGallery(completionMemory?.tasks)
+      : buildLiveMiniMemoryGallery(missedTaskEntries);
   await syncLiveMiniMissionProgress({
     squadId: mission.liveSquadId,
     localMiniMissionId: mission.id,
