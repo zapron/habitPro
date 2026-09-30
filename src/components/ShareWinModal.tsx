@@ -2,13 +2,14 @@ import { useRef, useState } from "react";
 import { Modal, StyleSheet, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { captureRef } from "react-native-view-shot";
-import * as Sharing from "expo-sharing";
+import Share from "react-native-share";
 import { X } from "lucide-react-native";
 import { Text } from "./AppText";
 import { Button } from "./Button";
 import { MissionShareCard } from "./MissionShareCard";
 import { useTheme } from "../context/ThemeContext";
 import { useToast } from "../context/ToastContext";
+import { getHabitProWebUrl } from "../lib/env";
 
 type DayGridData = {
   totalDays: number;
@@ -50,13 +51,19 @@ export function ShareWinModal({ visible, onClose, title, photoUri, tagLabel, day
     if (sharing) return;
     setSharing(true);
     try {
-      const uri = await captureRef(cardRef, { format: "png", quality: 1 });
-      const available = await Sharing.isAvailableAsync();
-      if (!available) {
-        showToast("Sharing isn't available on this device.", "error");
-        return;
-      }
-      await Sharing.shareAsync(uri, { mimeType: "image/png", dialogTitle: "Share your win" });
+      // data-uri (not the default tmpfile path) so react-native-share gets a
+      // self-contained payload — no file:// scheme ambiguity across platforms.
+      // Card is small (320x400), so the base64-over-the-bridge cost is negligible.
+      const dataUri = await captureRef(cardRef, { format: "png", quality: 1, result: "data-uri" });
+      const webUrl = getHabitProWebUrl();
+      // Unlike the old expo-sharing call, this actually carries a real, tappable
+      // link alongside the image in the same share action — the pixels-only QR
+      // code on the card itself was never enough on its own.
+      await Share.open({
+        url: dataUri,
+        message: `${title} — completed on HabitPro. Get the app: ${webUrl}`,
+        failOnCancel: false,
+      });
     } catch {
       showToast("Couldn't create the share image.", "error");
     } finally {
