@@ -214,8 +214,8 @@ export default function LoginScreen() {
                 style={[
                   styles.logoWrapper,
                   {
-                    backgroundColor: isDark ? "rgba(255, 255, 255, 0.03)" : "rgba(34, 197, 94, 0.05)",
-                    borderColor: isDark ? "rgba(255, 255, 255, 0.08)" : "rgba(34, 197, 94, 0.12)",
+                    backgroundColor: "transparent",
+                    borderColor: "rgba(142, 29, 51, 0.45)",
                   },
                 ]}
                 accessibilityLabel="habitPro brand logo"
@@ -568,7 +568,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#22c55e",
+    shadowColor: "#8E1D33",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
     shadowRadius: 10,

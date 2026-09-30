@@ -136,7 +136,7 @@ export function AnimatedSplashOverlay({ onFirstLayout, dismiss, onDismissed }: P
         style={[
           styles.wisdomPanel,
           {
-            bottom: Math.max(insets.bottom, 24) + 160,
+            bottom: Math.max(insets.bottom, 24) + 210,
             opacity: wisdomOpacity,
             backgroundColor: wisdomPanelBg,
             borderColor: wisdomBorder,
