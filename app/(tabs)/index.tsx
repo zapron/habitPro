@@ -1191,14 +1191,19 @@ export default function Home() {
         >
           {rp ? null : <GlassTopHighlight radius={theme.radius.lg} />}
           <View style={styles.miniBannerLeft}>
-            <View style={[styles.commandIconMini, rp ? { backgroundColor: rp.accentTint, borderRadius: 12 } : null]}>
+            <View
+              style={[
+                styles.commandIconMini,
+                rp ? { backgroundColor: isDark ? "rgba(148, 163, 184, 0.14)" : rp.accentTint, borderRadius: 12 } : null,
+              ]}
+            >
               {miniMissionStats.live > 0 ? (
                 <FireLottie
                   source={{ uri: FIRE_LOTTIE_URI }}
                   size={28}
                 />
               ) : (
-                <Bolt size={18} color={rp ? rp.accentDark : theme.colors.yellow[400]} />
+                <Bolt size={18} color={rp ? (isDark ? theme.colors.textMuted : rp.accentDark) : theme.colors.yellow[400]} />
               )}
             </View>
             <View style={{ marginLeft: 10 }}>
