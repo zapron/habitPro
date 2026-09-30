@@ -1,6 +1,28 @@
 # HabitPro Current Work
 
-Last updated: 2026-09-30 — splash animation + full app-wide rebrand shipped locally, committed in phases, not yet OTA'd (command handed to the user to run). See the entry at top; the "Parked" entry right below it still tracks what's genuinely unstarted (item 4 there is now done — see below — items 1-3 still open, see `docs/ideas.md` for the durable version of that list).
+Last updated: 2026-09-30 — **critical**: the splash-animation OTA (below) crashed every Android launch in production for some window of time; root-caused and fixed, see the entry at top. Previous entry (the splash/rebrand session itself) follows after it.
+
+## Session Handoff (2026-09-30 — Android launch crash from the splash-animation OTA)
+
+**State: fixed, committed (`a4ccb61`), `npx tsc --noEmit` clean. Not yet OTA'd at the time of writing — this fix needs to go out immediately, before any other pending change, since every Android user who received the earlier splash-animation update is currently locked out.**
+
+**User report:** after running `npm run update:production` for the splash-animation/rebrand work (previous entry), habitPro crashed on every single launch attempt on Android — "keeps stopping," no way to even reach the login screen. iOS was completely unaffected.
+
+**Diagnosed from a real device stack trace the user provided** (not guessed):
+```
+java.lang.Throwable: ending radius must be > 0
+    at android.graphics.RadialGradient.<init>
+    at com.horcrux.svg.Brush.setupPaint
+    at com.horcrux.svg.RenderableView.setupFillPaint
+    at com.horcrux.svg.RenderableView.draw
+```
+`com.horcrux.svg` is react-native-svg's Android package. `SplashInfinityMark`'s core-ember circle (`coreR`) animates from **0** for the first ~3.4s of the splash, before the "Core" cue fires, and both circles it drives (`coreGlowProps`/`coreFireProps`) are filled with a `RadialGradient`. Android's native `RadialGradient` constructor throws the instant a gradient-filled shape's computed radius is exactly 0 — on the very first rendered frame, before the app could even reach the login screen. iOS's CoreGraphics-based renderer silently no-ops on the same degenerate case instead of throwing, which is exactly why this was invisible on iOS and fatal on every Android launch.
+
+**Fix:** floor both radii at `0.01` (`src/components/SplashInfinityMark.tsx`) so react-native-svg never hands Android's native layer a literal zero. The core group's own opacity is already 0 whenever `coreR<=0.1`, so this is a pure safety floor with no visual change — verified `npx tsc --noEmit` clean.
+
+**Lesson worth remembering:** a value that's mathematically valid (radius 0 is a perfectly normal "not visible yet" state) can still be fatal to a specific native renderer that has stricter input validation than its counterpart on the other platform. `RadialGradient`-filled shapes with an *animated* radius need a non-zero floor as a matter of course on this stack, not just when a bug surfaces — worth checking any *future* animated-radius-into-a-gradient-fill pattern against this same class of bug before it ships, on both platforms, not just the one being actively tested on.
+
+**A local Android emulator on this machine was NOT a valid repro environment** for this — it turned out to be a leftover dev-client build never pointed at the production update channel, so it never crashed no matter how many times it was launched. Real device logs (via the user's own crash report, once `adb`/`android-platform-tools` were installed via Homebrew on this machine) were what actually diagnosed this — don't trust a "the emulator doesn't crash" result as clearing an OTA-only production bug without first confirming the emulator is actually running the same update channel/runtime version.
 
 ## Session Handoff (2026-09-30 — splash animation, brand mark, and full color rebrand)
 
