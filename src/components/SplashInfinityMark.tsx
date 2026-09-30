@@ -253,11 +253,11 @@ export function SplashInfinityMark({ isDark, showWordmark = true, keepCore = fal
   const coreFireProps = useAnimatedProps(() => ({ r: Math.max(0.01, coreR.value) }));
 
   const wordmarkProps = useAnimatedProps(() => ({
-    y: -205 + 24 * (1 - wordOp.value),
+    y: -354 + 24 * (1 - wordOp.value),
     opacity: wordOp.value,
   }));
   const taglineProps = useAnimatedProps(() => ({
-    y: -142 + 16 * (1 - tagOp.value),
+    y: -291 + 16 * (1 - tagOp.value),
     opacity: tagOp.value,
   }));
 
@@ -301,7 +301,7 @@ export function SplashInfinityMark({ isDark, showWordmark = true, keepCore = fal
        * screen, leaving a big dead zone above and crowding the wisdom panel
        * below. This is a plain translate, so it doesn't touch any of the
        * relative math between the mark and the wordmark/tagline. */}
-      <G transform="translate(0 -205)">
+      <G transform="translate(0 -131)">
       <AnimatedG animatedProps={groupProps}>
         {/* infinity loop: forest-green base, maroon wipe trailing the pulse across the right lobe, darker crossing under the drawing tip */}
         <AnimatedPath d={SPLASH_PATH_D} fill="none" stroke={FOREST} strokeWidth={22} strokeLinecap="round" animatedProps={baseLoopProps} />
