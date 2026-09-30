@@ -375,7 +375,7 @@ export const StreakMemorySheet = React.memo(function StreakMemorySheet({
       showAppAlert(
         "Nothing to save",
         isMini
-          ? "Add a photo or a note first to use Complete with Memory, or tap Just Mark Complete to finish without one."
+          ? "Add a photo or a note first to use Add Memory, or tap Just Mark Complete to finish without one."
           : "Add a photo or a note to save a moment, or tap Just mark done to check in without one.",
         [{ text: "OK" }],
       );
@@ -1110,7 +1110,7 @@ export const StreakMemorySheet = React.memo(function StreakMemorySheet({
                           adjustsFontSizeToFit
                           minimumFontScale={0.8}
                         >
-                          {isMini ? "Complete with Memory" : "Save moment"}
+                          {isMini ? "Add Memory" : "Save moment"}
                         </Text>
                       )}
                     </Pressable>
