@@ -1,6 +1,24 @@
 # HabitPro Current Work
 
-Last updated: 2026-09-30 — **critical**: the splash-animation OTA (below) crashed every Android launch in production for some window of time; root-caused and fixed, see the entry at top. Previous entry (the splash/rebrand session itself) follows after it.
+Last updated: 2026-09-30 — Live Squad link-join + kick-out shipped (below, at top). Previous entries follow after it.
+
+## Session Handoff (2026-09-30 — Live Squad link-based join requests + creator kick-out)
+
+**State: committed, `npx tsc --noEmit` clean in both `habitPro` and `habitPro-web`, RPCs verified live via curl+JWT against local Supabase, OTA'd to production. Migration NOT yet pushed — the user runs `npm run db:push` themselves.**
+
+Closes the first open thread from the "Parked (2026-09-30)" entry below: Live Squad (the existing real-time shared mini-mission feature) could only be joined by searching an existing user's username — no shareable link, so it couldn't double as an acquisition channel for someone without the app yet. Scoped down from full deferred deep linking (flagged as its own much bigger item in `docs/ideas.md`) to reusing the existing `habitPro-web/app/invite` landing page, exactly like group-challenge invites already do in production.
+
+**New migration** (`supabase/migrations/20260930190000_live_mini_link_join_and_kickout.sql`):
+- `rpc_live_mini_public_preview_v1` — lets a non-participant see title/objective/creator/participant-count before requesting to join. Necessary because both `live_mini_squads`/`live_mini_participants`'s SELECT RLS only allow the creator or an existing participant — a brand-new link visitor has neither row yet. Mirrors `rpc_challenge_public_preview_v1`, the identical fix already shipped for group-challenge invite links.
+- New `link_requested` participant status (self-requested via link, awaiting creator approval) — kept distinct from `invited` (creator-initiated, no approval gate) at the user's explicit direction, for consistency with the app's existing kick-out accountability model.
+- `rpc_request_join_live_mini_squad_v1`, `rpc_approve_live_mini_join_request_v1`, `rpc_decline_live_mini_join_request_v1` — the approval flow.
+- `rpc_remove_live_mini_participant_v1` — creator-only kick-out, reuses the existing unused `cancelled` status. No report feature — explicit user call ("everything's there at the end only").
+
+**Client**: `liveMiniMissionsApi.ts` (wrappers for all four new RPCs + the preview fetch), `LiveMiniInviteSheet.tsx` (new "Share Invite Link" button using the pre-existing `shareInviteLink()` helper, previously wired for challenges but not live-mini), `app/live-mini/[id].tsx` (a "Request to Join" screen for non-participants with a timer picker, a pending-requests approval section and a remove-participant section for the creator, an effect that auto-starts the local timer the moment a request is approved). `habitPro-web/app/invite/page.tsx`'s live-mini copy updated for the new self-serve flow.
+
+**Verified live via direct curl+JWT calls** against local Supabase (two seeded test accounts) for every RPC, not just typechecked — full request→approve cycle, creator-self-removal blocked, non-creator removal blocked, re-request after kick-out allowed, duplicate-while-pending request rejected, decline/double-decline, RLS still blocking a direct table read for a non-participant while the preview RPC correctly bypasses it. One real bug caught this way: the RPC initially raised "not a participant" for every brand-new requester, because it called the existing stale-invite-refresh helpers which assume the caller is already a participant — fixed by removing those calls.
+
+**Two more sharing gaps found and scoped, not built** (user asked "do you have anything in mind" after a real AirDrop failure report): invite-link sharing isn't tap-friendly on every channel (AirDrop handed a receiver inert plain text; root cause and an OTA-safe fix identified), and the "share your win" card sends an image with zero accompanying real link in the payload (needs a new native dependency, `react-native-share`, so it needs a real rebuild, not an OTA). Both written up in `docs/ideas.md`.
 
 ## Session Handoff (2026-09-30 — Android launch crash from the splash-animation OTA)
 

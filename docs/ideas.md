@@ -4,18 +4,56 @@ Backlog of features/fixes that were discussed and scoped but not yet built.
 Cross-reference `docs/CURRENT_WORK.md` for session-by-session history of what
 *has* shipped.
 
-## Live mini-mission external invites (potential major USP)
+## Deferred deep linking for invite links (not started)
 
-Habits are an open-ended commitment that's hard to get someone else to join;
-a live mini mission (short, timed) is a much easier ask — "join me for the
-next 25 minutes." Could be a real differentiator if the invite/accept flow
-were built out properly.
+Today's invite links (Live Squad + group challenges) all round-trip through
+`habitPro-web/app/invite/page.tsx` — a new user installs the app from the
+store badge, opens it cold, and has to open the link again to land on the
+right screen. True deferred deep linking (install → land straight in the
+squad/challenge on first open, no second tap) needs a third-party
+attribution SDK or a custom install-referrer token scheme, plus new native
+config (`associatedDomains`/`intentFilters`, AASA/`assetlinks.json`) —
+confirmed via investigation that none of this exists in either repo today.
+Materially bigger lift than the link-join feature itself; worth it only if
+the "open link again after install" step turns out to be a real funnel
+leak.
 
-**Not scoped or built yet.** Open question that decides the whole
-architecture: does an invite link need to work for someone who doesn't have
-the app yet (deep-link → store → auto-join on first open), or only for
-existing users? That fork decides auth-before-join vs join-before-auth,
-guest state, etc. Needs a real planning pass before any code.
+## Invite-link sharing is not tap-friendly on every channel (scoped, not built)
+
+Real user report: AirDropping a Live Squad invite link handed the receiver
+inert plain text — no tappable link — and pasting that text into Google
+made it search the text instead of opening the URL. Root cause:
+`shareInviteLink()` (`src/lib/inviteShare.ts`) intentionally sends only a
+`message` string with the URL embedded in a sentence (a prior deliberate
+choice, to avoid iOS showing a duplicate raw-link preview alongside the
+text). That makes iOS hand the payload over as plain text
+(`public.plain-text`), not a URL-typed item, so AirDrop/Notes/etc. can't
+recognize it as a link.
+
+**Scoped fix, OTA-safe:** on iOS, pass `url` and `message` as separate
+fields to `Share.share()` (trim the link out of `message` itself so it
+isn't duplicated) so the OS shares a real `NSURL` item — tappable via
+AirDrop, Notes, Messages. Android stays as-is; its share intent already
+auto-linkifies a URL inside plain text. User has not yet said go.
+
+## Share-a-moment card has no real link in the share payload (needs a native dep, not started)
+
+The "share your win" card (`ShareWinModal.tsx` → `MissionShareCard.tsx`)
+sends only a captured PNG via `expo-sharing`'s `shareAsync()` — that API
+has no caption/text parameter on either platform, so today literally no
+real link is ever transmitted with the image. The "Get HabitPro" text and
+QR code on the card are just pixels, not an actual clickable/copyable link
+anywhere in the share payload.
+
+**No way to make pixels clickable** — needs a library that can attach an
+image + a text caption together in one share action (`react-native-share`'s
+`Share.open({url: fileUri, message: captionWithLink})` is the standard tool
+for this; RN's built-in `Share` has no file/image support on Android, and
+`expo-sharing` has no caption support on either platform). Not currently a
+dependency — adding it means a new native module, so it needs a real
+rebuild + store release, not an OTA. Worth doing since a share card with no
+real link undercuts the acquisition case, but should wait for the next
+native-build cycle rather than being bolted on standalone.
 
 ## Live mini-mission memory loss on timer expiry (confirmed bug, fix scoped)
 
