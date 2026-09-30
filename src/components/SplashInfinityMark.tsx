@@ -11,6 +11,7 @@ import Svg, {
   Stop,
   Text as SvgText,
 } from "react-native-svg";
+import type { GProps } from "react-native-svg/lib/typescript/elements/G";
 import Animated, {
   Easing,
   useAnimatedProps,
@@ -133,8 +134,23 @@ export function SplashInfinityMark({ isDark, showWordmark = true, keepCore = fal
 
   // ===== animated props =====
 
+  // RN's own View-style transform-object-array form, NOT a transform
+  // string and NOT a flat 6-number matrix — on Fabric, when Reanimated
+  // writes an animated `transform` straight into the shadow node
+  // (bypassing the JS-side parsing that only runs for statically-set
+  // props), react-native-svg's native G delegate feeds it through RN's
+  // shared TransformHelper.processTransform, which calls .getMap() on
+  // each array element — i.e. it always expects an array of single-key
+  // transform objects, exactly like RN View's own `transform` style, not
+  // a string (ClassCastException: String) and not a flat matrix
+  // (ClassCastException: Double, from treating each number as a map).
   const groupProps = useAnimatedProps(() => ({
-    transform: `translate(0 ${logoY.value}) scale(${logoScale.value})`,
+    // react-native-svg's own TS types model this as a discriminated union
+    // stricter than what's actually needed at runtime (each member must
+    // explicitly set every other key to undefined) — verified live on
+    // Android that this plain array-of-single-key-objects shape is what
+    // the native side actually wants; casting past the over-strict type.
+    transform: [{ translateY: logoY.value }, { scale: logoScale.value }] as unknown as GProps["transform"],
   }));
 
   const baseLoopProps = useAnimatedProps(() => {
@@ -155,7 +171,10 @@ export function SplashInfinityMark({ isDark, showWordmark = true, keepCore = fal
   const tipGroupProps = useAnimatedProps(() => {
     const tx = draw.value > 0 ? tip.value.x : 0;
     const ty = draw.value > 0 ? tip.value.y : 0;
-    return { opacity: tipOp.value, transform: `translate(${tx} ${ty}) scale(${seedScale.value})` };
+    return {
+      opacity: tipOp.value,
+      transform: [{ translateX: tx }, { translateY: ty }, { scale: seedScale.value }] as unknown as GProps["transform"],
+    };
   });
   const tipGlowProps = useAnimatedProps(() => ({ fill: draw.value > 0 ? "#F8FAF7" : FOREST }));
 
