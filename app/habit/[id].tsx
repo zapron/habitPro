@@ -2333,16 +2333,29 @@ export default function HabitDetail() {
                                             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                                             setMissionReport(habit.id, 'accomplished');
                                         }}
-                                        style={{ flex: 1, marginRight: 8 }}
+                                        style={{
+                                            flex: 1,
+                                            marginRight: 8,
+                                            backgroundColor: isDark ? withAlpha(theme.colors.green[500], 18) : withAlpha(theme.colors.green[600], 10),
+                                            borderWidth: 1,
+                                            borderColor: isDark ? withAlpha(theme.colors.green[500], 45) : withAlpha(theme.colors.green[600], 32),
+                                        }}
+                                        textStyle={{ color: isDark ? theme.colors.green[500] : theme.colors.green[600] }}
                                     />
                                     <Button
                                         title="No"
-                                        variant="danger"
                                         onPress={() => {
                                             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
                                             setMissionReport(habit.id, 'failed');
                                         }}
-                                        style={{ flex: 1, marginLeft: 8 }}
+                                        style={{
+                                            flex: 1,
+                                            marginLeft: 8,
+                                            backgroundColor: isDark ? withAlpha(theme.colors.maroon[500], 18) : withAlpha(theme.colors.maroon[600], 10),
+                                            borderWidth: 1,
+                                            borderColor: isDark ? withAlpha(theme.colors.maroon[500], 45) : withAlpha(theme.colors.maroon[600], 32),
+                                        }}
+                                        textStyle={{ color: isDark ? theme.colors.maroon[500] : theme.colors.maroon[600] }}
                                     />
                                 </View>
                             </>

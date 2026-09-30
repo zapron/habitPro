@@ -84,6 +84,16 @@ type ColorPalette = {
    * near-black value that blends calmly into a dark surface reads as stark, heavy contrast against
    * a light one, so light mode gets its own lighter forest step to keep the same calm feeling. */
   green: { 500: string; 600: string; 900: string };
+  /**
+   * Fixed brand maroon — unlike `indigo` (which aliases to this same hue only
+   * under the Minimalist pack), this stays the same real maroon regardless of
+   * active theme pack, for the few spots (Mission review Yes/No, the Growth
+   * index bar) that deliberately want the app's other brand color rather than
+   * whatever the active pack's accent happens to be. Flat across all three
+   * shades, matching how the Minimalist pack's own `indigo` alias already
+   * treats this hue (no tonal ramp, one value repeated).
+   */
+  maroon: { 500: string; 600: string; 900: string };
   white: string;
   scrim: string;
   sheen: string;
@@ -136,6 +146,7 @@ const darkColors: ColorPalette = {
   yellow: { 400: "#fbbf24" },
   red: { 500: "#ef4444", 900: "#6B1E1E" },
   green: { 500: "#22c55e", 600: "#16a34a", 900: "#1B4332" },
+  maroon: { 500: "#8E1D33", 600: "#8E1D33", 900: "#8E1D33" },
   white: "#ffffff",
   /** Modal/sheet backdrop dimming base — always a dark tint regardless of theme; callers apply their own withAlpha() opacity. */
   scrim: "#000000",
@@ -174,6 +185,7 @@ const lightColors: ColorPalette = {
   red: { 500: "#dc2626", 900: "#6B1E1E" },
   /** `900` is lighter than dark mode's — see the doc comment on `ColorPalette.green` for why. */
   green: { 500: "#16a34a", 600: "#15803d", 900: "#2D6A4F" },
+  maroon: { 500: "#6E1727", 600: "#6E1727", 900: "#6E1727" },
   white: "#ffffff",
   /** Same dark-ink tone serves both jobs in light mode — there's no separate "light scrim" concept the way dark mode needs pure black vs. pure white. */
   scrim: "#0f172a",
@@ -255,6 +267,7 @@ const minimalistLightColors: ColorPalette = {
   yellow: lightColors.yellow,
   red: lightColors.red,
   green: lightColors.green,
+  maroon: lightColors.maroon,
   white: "#ffffff",
   scrim: "#1c1b1f",
   sheen: "#1c1b1f",
@@ -284,6 +297,7 @@ const minimalistDarkColors: ColorPalette = {
   yellow: darkColors.yellow,
   red: darkColors.red,
   green: darkColors.green,
+  maroon: darkColors.maroon,
   white: "#ffffff",
   scrim: "#000000",
   sheen: "#ffffff",
