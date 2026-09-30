@@ -144,13 +144,19 @@ export function SplashInfinityMark({ isDark, showWordmark = true, keepCore = fal
   // transform objects, exactly like RN View's own `transform` style, not
   // a string (ClassCastException: String) and not a flat matrix
   // (ClassCastException: Double, from treating each number as a map).
+  // Also unlike a CSS/SVG transform string (where "translate() scale()"
+  // always means scale-then-translate regardless of write order), this
+  // native helper applies array entries strictly in the order given —
+  // `scale` must come first or the translation itself gets multiplied by
+  // the scale factor too, which is exactly what pushed the mark visibly
+  // further from the (separately, fixed-position) wordmark below it.
   const groupProps = useAnimatedProps(() => ({
     // react-native-svg's own TS types model this as a discriminated union
     // stricter than what's actually needed at runtime (each member must
     // explicitly set every other key to undefined) — verified live on
     // Android that this plain array-of-single-key-objects shape is what
     // the native side actually wants; casting past the over-strict type.
-    transform: [{ translateY: logoY.value }, { scale: logoScale.value }] as unknown as GProps["transform"],
+    transform: [{ scale: logoScale.value }, { translateY: logoY.value }] as unknown as GProps["transform"],
   }));
 
   const baseLoopProps = useAnimatedProps(() => {
@@ -173,7 +179,7 @@ export function SplashInfinityMark({ isDark, showWordmark = true, keepCore = fal
     const ty = draw.value > 0 ? tip.value.y : 0;
     return {
       opacity: tipOp.value,
-      transform: [{ translateX: tx }, { translateY: ty }, { scale: seedScale.value }] as unknown as GProps["transform"],
+      transform: [{ scale: seedScale.value }, { translateX: tx }, { translateY: ty }] as unknown as GProps["transform"],
     };
   });
   const tipGlowProps = useAnimatedProps(() => ({ fill: draw.value > 0 ? "#F8FAF7" : FOREST }));
