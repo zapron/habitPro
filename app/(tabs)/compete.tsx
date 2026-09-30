@@ -2047,10 +2047,7 @@ export default function CompeteScreen() {
       {segment === "challenges" ? (
         <View style={styles.challengesSubOuter}>
           <TouchableOpacity
-            style={[
-              styles.challengesSubPill,
-              rp && isDark && challengesSubTab === "missions" ? { backgroundColor: rp.accentTint, borderRadius: 10 } : null,
-            ]}
+            style={styles.challengesSubPill}
             onPress={() => setChallengesSubTab("missions")}
             activeOpacity={0.6}
             accessibilityRole="button"
@@ -2060,8 +2057,11 @@ export default function CompeteScreen() {
               style={[
                 styles.challengesSubText,
                 {
+                  // Selected state is just this text taking the same color as the
+                  // Join button (rp.accent) — no pill/background fill, in dark or
+                  // light, at the user's explicit direction.
                   color: rp
-                    ? challengesSubTab === "missions" ? (isDark ? rp.textPrimary : rp.accent) : rp.textSecondary
+                    ? challengesSubTab === "missions" ? rp.accent : rp.textSecondary
                     : challengesSubTab === "missions" ? theme.colors.indigo[600] : theme.colors.textSecondary,
                   fontWeight: challengesSubTab === "missions" ? "800" : "600",
                 },
@@ -2073,10 +2073,7 @@ export default function CompeteScreen() {
           </TouchableOpacity>
           <View style={[styles.challengesSubDivider, { backgroundColor: rp ? rp.border : theme.colors.border }]} />
           <TouchableOpacity
-            style={[
-              styles.challengesSubPill,
-              rp && isDark && challengesSubTab === "invites" ? { backgroundColor: rp.accentTint, borderRadius: 10 } : null,
-            ]}
+            style={styles.challengesSubPill}
             onPress={() => setChallengesSubTab("invites")}
             activeOpacity={0.6}
             accessibilityRole="button"
@@ -2088,7 +2085,7 @@ export default function CompeteScreen() {
                   styles.challengesSubText,
                   {
                     color: rp
-                      ? challengesSubTab === "invites" ? (isDark ? rp.textPrimary : rp.accent) : rp.textSecondary
+                      ? challengesSubTab === "invites" ? rp.accent : rp.textSecondary
                       : challengesSubTab === "invites" ? theme.colors.indigo[600] : theme.colors.textSecondary,
                     fontWeight: challengesSubTab === "invites" ? "800" : "600",
                   },
