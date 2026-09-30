@@ -9,8 +9,13 @@ import { countUnreadNotificationsCached } from "../lib/groupChallengesApi";
 import { useHabitStore } from "../store/habitStore";
 import { AnimatedSplashOverlay } from "./AnimatedSplashOverlay";
 
-const MIN_DISPLAY_MS = 2400; // Logo lockup + daily wisdom have time to read before handoff.
-const MAX_DISPLAY_MS = 3900;
+// The infinity-mark animation (SplashInfinityMark) runs a fixed 5.0s
+// timeline (see splashInfinityMotion.ts's SPLASH_CUES). MIN must clear that
+// plus enough of a beat that the wisdom panel (which starts fading in at
+// SPLASH_CUES.Hold, i.e. ~4.4s) is actually visible for a moment before the
+// splash can dismiss — not just technically mounted mid-fade.
+const MIN_DISPLAY_MS = 5700;
+const MAX_DISPLAY_MS = 7200;
 const HOME_NOTIFICATION_COUNT_TTL_MS = 30_000;
 
 type Props = { children: React.ReactNode };

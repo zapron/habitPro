@@ -4,33 +4,27 @@ import {
   AccessibilityInfo,
   Animated,
   Easing,
-  Image,
   StyleSheet,
   View,
   type LayoutChangeEvent,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import {
-  SPLASH_BACKGROUND_COLOR,
-  SPLASH_WORDMARK_PRO_COLOR,
-} from "../constants/splash";
+import { SPLASH_BACKGROUND_COLOR } from "../constants/splash";
 import { useTheme } from "../context/ThemeContext";
 import { quotes } from "../data/quotes";
 import { withAlpha } from "../styles/theme";
+import { SPLASH_CUES } from "../lib/splashInfinityMotion";
+import { SplashInfinityMark } from "./SplashInfinityMark";
 
 const AnimatedText = Animated.createAnimatedComponent(Text);
 
-const STAGE_WIDTH = 312;
-const STAGE_HEIGHT = 190;
-const LOGO_START_SIZE = 168;
-const LOGO_FINAL_SIZE = 40;
-const LOGO_FINAL_TRANSLATE_X = 88;
-const LOGO_FINAL_TRANSLATE_Y = 4;
-const WORDMARK_FONT_SIZE = 48;
-const WORDMARK_LINE_HEIGHT = 62;
-const WORDMARK_GAP = 6;
-const ROTATION_DURATION_MS = 18_000;
-const WISDOM_INTRO_DELAY_MS = 1280;
+// The infinity-mark animation reaches its final Hold position at
+// SPLASH_CUES.Hold seconds — the wisdom panel waits until just after that
+// so it never competes with the wordmark/tagline settling in, but starts
+// close enough behind it that it's fully visible for a real beat before
+// SplashGate's MIN_DISPLAY_MS makes the overlay eligible to dismiss.
+const WISDOM_INTRO_DELAY_MS = (SPLASH_CUES.Hold + 0.05) * 1000;
 const WISDOM_INTRO_DURATION_MS = 560;
 
 function dailyQuoteIndex(date = new Date()): number {
@@ -50,9 +44,8 @@ type Props = {
 
 export function AnimatedSplashOverlay({ onFirstLayout, dismiss, onDismissed }: Props) {
   const { theme, isDark } = useTheme();
+  const insets = useSafeAreaInsets();
   const layoutReported = useRef(false);
-  const spinProgress = useRef(new Animated.Value(0)).current;
-  const lockupProgress = useRef(new Animated.Value(0)).current;
   const wisdomProgress = useRef(new Animated.Value(0)).current;
   const overlayOpacity = useRef(new Animated.Value(1)).current;
   const [reduceMotion, setReduceMotion] = useState(false);
@@ -63,47 +56,6 @@ export function AnimatedSplashOverlay({ onFirstLayout, dismiss, onDismissed }: P
     const sub = AccessibilityInfo.addEventListener("reduceMotionChanged", setReduceMotion);
     return () => sub.remove();
   }, []);
-
-  useEffect(() => {
-    if (reduceMotion) return;
-    const loop = Animated.loop(
-      Animated.timing(spinProgress, {
-        toValue: 1,
-        duration: ROTATION_DURATION_MS,
-        easing: Easing.linear,
-        useNativeDriver: true,
-        isInteraction: false,
-      }),
-    );
-    loop.start();
-    return () => {
-      loop.stop();
-      spinProgress.setValue(0);
-    };
-  }, [reduceMotion, spinProgress]);
-
-  useEffect(() => {
-    if (reduceMotion) {
-      lockupProgress.setValue(1);
-      return;
-    }
-
-    lockupProgress.setValue(0);
-    const intro = Animated.sequence([
-      Animated.delay(460),
-      Animated.timing(lockupProgress, {
-        toValue: 1,
-        duration: 820,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-        isInteraction: false,
-      }),
-    ]);
-    intro.start();
-    return () => {
-      intro.stop();
-    };
-  }, [lockupProgress, reduceMotion]);
 
   useEffect(() => {
     if (reduceMotion) {
@@ -140,30 +92,6 @@ export function AnimatedSplashOverlay({ onFirstLayout, dismiss, onDismissed }: P
     });
   }, [dismiss, onDismissed, overlayOpacity]);
 
-  const rotate = spinProgress.interpolate({
-    inputRange: [0, 1],
-    outputRange: ["0deg", "360deg"],
-  });
-  const logoScale = lockupProgress.interpolate({
-    inputRange: [0, 1],
-    outputRange: [1, LOGO_FINAL_SIZE / LOGO_START_SIZE],
-  });
-  const logoTranslateX = lockupProgress.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, LOGO_FINAL_TRANSLATE_X],
-  });
-  const logoTranslateY = lockupProgress.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, LOGO_FINAL_TRANSLATE_Y],
-  });
-  const wordmarkOpacity = lockupProgress.interpolate({
-    inputRange: [0, 0.42, 1],
-    outputRange: [0, 0, 1],
-  });
-  const wordmarkTranslateX = lockupProgress.interpolate({
-    inputRange: [0, 1],
-    outputRange: [-26, 0],
-  });
   const wisdomOpacity = wisdomProgress.interpolate({
     inputRange: [0, 1],
     outputRange: [0, 1],
@@ -172,7 +100,6 @@ export function AnimatedSplashOverlay({ onFirstLayout, dismiss, onDismissed }: P
     inputRange: [0, 1],
     outputRange: [12, 0],
   });
-  const wordmarkHabitColor = isDark ? theme.colors.slate[400] : theme.colors.textSecondary;
   const wisdomPanelBg = isDark ? "rgba(15, 23, 42, 0.42)" : "rgba(255, 255, 255, 0.62)";
   const wisdomBorder = isDark ? withAlpha(theme.colors.indigo[400], 16) : withAlpha(theme.colors.indigo[500], 14);
 
@@ -194,52 +121,22 @@ export function AnimatedSplashOverlay({ onFirstLayout, dismiss, onDismissed }: P
       ]}
       onLayout={handleLayout}
     >
+      {/* Fills the whole screen — the mark's viewBox is a full 1080x1920 portrait
+       * canvas (it was designed as the entire splash screen, not a small centered
+       * logo box), so it needs the full frame to land in the right proportions. */}
       <View
-        style={styles.stage}
+        style={StyleSheet.absoluteFillObject}
         accessible
         accessibilityRole="image"
         accessibilityLabel={`habitPro loading. Daily wisdom. ${quote}`}
       >
-        <AnimatedText
-          style={[
-            styles.wordmark,
-            {
-              opacity: wordmarkOpacity,
-              transform: [{ translateX: wordmarkTranslateX }],
-            },
-          ]}
-          accessibilityElementsHidden
-          importantForAccessibility="no-hide-descendants"
-        >
-          <Text style={[styles.wordmarkHabit, { color: wordmarkHabitColor }]}>habit</Text>
-          <Text style={[styles.wordmarkPro, { color: SPLASH_WORDMARK_PRO_COLOR }]}>Pr</Text>
-        </AnimatedText>
-        <Animated.View
-          style={[
-            styles.logoWrap,
-            {
-              transform: [
-                { translateX: logoTranslateX },
-                { translateY: logoTranslateY },
-                { scale: logoScale },
-              ],
-            },
-          ]}
-        >
-          <Animated.View style={[styles.logoSpin, { transform: [{ rotate }] }]}>
-            <Image
-              source={require("../../assets/habitpro-logo-transparent-v3.png")}
-              style={styles.logo}
-              resizeMode="contain"
-              accessibilityIgnoresInvertColors
-            />
-          </Animated.View>
-        </Animated.View>
+        <SplashInfinityMark isDark={isDark} showWordmark keepCore={false} />
       </View>
       <Animated.View
         style={[
           styles.wisdomPanel,
           {
+            bottom: Math.max(insets.bottom, 24) + 160,
             opacity: wisdomOpacity,
             backgroundColor: wisdomPanelBg,
             borderColor: wisdomBorder,
@@ -265,59 +162,15 @@ const styles = StyleSheet.create({
     backgroundColor: SPLASH_BACKGROUND_COLOR,
     zIndex: 9999,
     elevation: 9999,
-    justifyContent: "center",
-    alignItems: "center",
-    paddingHorizontal: 24,
-  },
-  stage: {
-    width: STAGE_WIDTH,
-    height: STAGE_HEIGHT,
-  },
-  logoWrap: {
-    position: "absolute",
-    left: (STAGE_WIDTH - LOGO_START_SIZE) / 2,
-    top: (STAGE_HEIGHT - LOGO_START_SIZE) / 2,
-    width: LOGO_START_SIZE,
-    height: LOGO_START_SIZE,
-  },
-  logo: {
-    width: "100%",
-    height: "100%",
-  },
-  logoSpin: {
-    width: "100%",
-    height: "100%",
-  },
-  wordmark: {
-    position: "absolute",
-    left: 0,
-    top: (STAGE_HEIGHT - WORDMARK_LINE_HEIGHT) / 2,
-    width:
-      STAGE_WIDTH / 2 +
-      LOGO_FINAL_TRANSLATE_X -
-      LOGO_FINAL_SIZE / 2 -
-      WORDMARK_GAP,
-    fontSize: WORDMARK_FONT_SIZE,
-    lineHeight: WORDMARK_LINE_HEIGHT,
-    fontWeight: "700",
-    letterSpacing: 0,
-    textAlign: "right",
-  },
-  wordmarkHabit: {
-    fontWeight: "700",
-  },
-  wordmarkPro: {
-    color: SPLASH_WORDMARK_PRO_COLOR,
-    fontWeight: "700",
   },
   wisdomPanel: {
-    width: "100%",
-    maxWidth: 390,
+    position: "absolute",
+    left: 24,
+    right: 24,
     borderRadius: 20,
     borderWidth: 1,
     paddingVertical: 16,
     paddingHorizontal: 18,
-    marginTop: 8,
   },
   wisdomLabel: {
     fontSize: 10,
