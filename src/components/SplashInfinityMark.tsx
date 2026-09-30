@@ -253,11 +253,11 @@ export function SplashInfinityMark({ isDark, showWordmark = true, keepCore = fal
   const coreFireProps = useAnimatedProps(() => ({ r: Math.max(0.01, coreR.value) }));
 
   const wordmarkProps = useAnimatedProps(() => ({
-    y: 185 + 24 * (1 - wordOp.value),
+    y: -205 + 24 * (1 - wordOp.value),
     opacity: wordOp.value,
   }));
   const taglineProps = useAnimatedProps(() => ({
-    y: 248 + 16 * (1 - tagOp.value),
+    y: -142 + 16 * (1 - tagOp.value),
     opacity: tagOp.value,
   }));
 
