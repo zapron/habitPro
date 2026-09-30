@@ -838,6 +838,19 @@ export default function Home() {
     }, []),
   );
 
+  // miniNow has no interval running while backgrounded/unfocused (the interval
+  // below only starts once something is already live), so without this it can
+  // sit stale long enough that a mission whose timer has genuinely run out
+  // still reads as live on return — mirrors the missionNow refresh above.
+  useFocusEffect(
+    useCallback(() => {
+      const task = InteractionManager.runAfterInteractions(() => {
+        setMiniNow(Date.now());
+      });
+      return () => task.cancel();
+    }, []),
+  );
+
   const refreshColors = useMemo(() => [theme.colors.indigo[400]], [theme.colors.indigo]);
   const notifRefreshControl = useMemo(() => (
     <RefreshControl
