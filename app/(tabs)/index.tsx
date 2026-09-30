@@ -1203,7 +1203,7 @@ export default function Home() {
                   size={28}
                 />
               ) : (
-                <Bolt size={18} color={rp ? (isDark ? theme.colors.textMuted : rp.accentDark) : theme.colors.yellow[400]} />
+                <Bolt size={18} color={rp ? (isDark ? "#8E1D33" : rp.accentDark) : theme.colors.yellow[400]} />
               )}
             </View>
             <View style={{ marginLeft: 10 }}>
