@@ -4,6 +4,9 @@ export type LiveMiniParticipantRole = "creator" | "member";
 
 export type LiveMiniParticipantStatus =
   | "invited"
+  /** Self-requested via a shared link, awaiting creator approval — distinct
+   * from "invited" (creator-initiated, no approval step needed). */
+  | "link_requested"
   | "expired"
   | "declined"
   | "joined"
@@ -71,4 +74,18 @@ export type LiveMiniSquadSnapshot = {
   squad: LiveMiniSquadRow;
   participants: LiveMiniParticipantRow[];
   profiles: Record<string, LiveMiniProfileLabel>;
+};
+
+/** What a non-participant sees before deciding whether to request joining via
+ * a shared link — deliberately minimal, same shape/purpose as
+ * ChallengePublicPreview (groupChallengesApi.ts). */
+export type LiveMiniPublicPreview = {
+  squadId: string;
+  title: string;
+  objective: string | null;
+  status: LiveMiniSquadStatus;
+  creatorUsername: string | null;
+  creatorDisplayName: string | null;
+  participantCount: number;
+  myStatus: "creator" | LiveMiniParticipantStatus | "none";
 };

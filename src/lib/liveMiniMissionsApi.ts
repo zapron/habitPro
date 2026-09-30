@@ -3,6 +3,7 @@ import type {
   LiveMiniParticipantRow,
   LiveMiniParticipantStatus,
   LiveMiniProfileLabel,
+  LiveMiniPublicPreview,
   LiveMiniSquadRow,
   LiveMiniSquadSnapshot,
 } from "../types/liveMiniMission";
@@ -206,6 +207,92 @@ export async function declineLiveMiniInvite(squadId: string): Promise<LiveMiniAc
   if (!supabase) return { ok: false, error: "Supabase not configured" };
   const { error } = await supabase.rpc("rpc_decline_live_mini_invite", {
     p_squad_id: squadId,
+  });
+  if (error) return actionError(error);
+  return { ok: true };
+}
+
+/** What a non-participant sees before requesting to join via a shared link —
+ * works even though RLS otherwise hides the squad entirely from them. */
+export async function fetchLiveMiniPublicPreview(squadId: string): Promise<LiveMiniPublicPreview | null> {
+  const supabase = getSupabase();
+  if (!supabase) return null;
+  const { data, error } = await supabase
+    .rpc("rpc_live_mini_public_preview_v1", { p_squad_id: squadId })
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  const row = data as Record<string, unknown>;
+  return {
+    squadId: row.squad_id as string,
+    title: row.title as string,
+    objective: (row.objective as string | null) ?? null,
+    status: row.status as LiveMiniPublicPreview["status"],
+    creatorUsername: (row.creator_username as string | null) ?? null,
+    creatorDisplayName: (row.creator_display_name as string | null) ?? null,
+    participantCount: row.participant_count as number,
+    myStatus: row.my_status as LiveMiniPublicPreview["myStatus"],
+  };
+}
+
+/** Self-serve join via a shared link — lands as "link_requested", not an
+ * active participant, until the creator approves it. */
+export async function requestToJoinLiveMiniSquad(input: {
+  squadId: string;
+  localMiniMissionId: string;
+  plannedMinutes: number;
+}): Promise<LiveMiniActionResult> {
+  const supabase = getSupabase();
+  if (!supabase) return { ok: false, error: "Supabase not configured" };
+  const { error } = await supabase.rpc("rpc_request_join_live_mini_squad_v1", {
+    p_squad_id: input.squadId,
+    p_local_mini_mission_id: input.localMiniMissionId,
+    p_planned_minutes: input.plannedMinutes,
+  });
+  if (error) return actionError(error);
+  return { ok: true };
+}
+
+/** Creator-only: approve a pending link-based join request. */
+export async function approveLiveMiniJoinRequest(
+  squadId: string,
+  userId: string,
+): Promise<LiveMiniActionResult> {
+  const supabase = getSupabase();
+  if (!supabase) return { ok: false, error: "Supabase not configured" };
+  const { error } = await supabase.rpc("rpc_approve_live_mini_join_request_v1", {
+    p_squad_id: squadId,
+    p_user_id: userId,
+  });
+  if (error) return actionError(error);
+  return { ok: true };
+}
+
+/** Creator-only: decline a pending link-based join request. */
+export async function declineLiveMiniJoinRequest(
+  squadId: string,
+  userId: string,
+): Promise<LiveMiniActionResult> {
+  const supabase = getSupabase();
+  if (!supabase) return { ok: false, error: "Supabase not configured" };
+  const { error } = await supabase.rpc("rpc_decline_live_mini_join_request_v1", {
+    p_squad_id: squadId,
+    p_user_id: userId,
+  });
+  if (error) return actionError(error);
+  return { ok: true };
+}
+
+/** Creator-only: remove an active participant from the squad ("cancelled"). */
+export async function removeLiveMiniParticipant(
+  squadId: string,
+  targetUserId: string,
+): Promise<LiveMiniActionResult> {
+  const supabase = getSupabase();
+  if (!supabase) return { ok: false, error: "Supabase not configured" };
+  const { error } = await supabase.rpc("rpc_remove_live_mini_participant_v1", {
+    p_squad_id: squadId,
+    p_target_user_id: targetUserId,
   });
   if (error) return actionError(error);
   return { ok: true };
