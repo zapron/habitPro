@@ -216,8 +216,16 @@ export function SplashInfinityMark({ isDark, showWordmark = true, keepCore = fal
   const coreGroupProps = useAnimatedProps(() => ({
     opacity: coreR.value > 0.1 ? coreOp.value : 0,
   }));
-  const coreGlowProps = useAnimatedProps(() => ({ r: coreR.value * 1.5 }));
-  const coreFireProps = useAnimatedProps(() => ({ r: coreR.value }));
+  // Both circles below are filled with a RadialGradient. coreR animates from
+  // 0 for the first few seconds (before the Core cue fires) — on Android,
+  // react-native-svg's RadialGradient throws ("ending radius must be > 0")
+  // the instant a gradient-filled shape's radius hits exactly 0, crashing
+  // the app on the very first frame; iOS silently no-ops on the same case.
+  // The group's own opacity already goes to 0 whenever coreR<=0.1, so this
+  // floor is invisible — it only exists to keep Android's renderer from
+  // ever seeing a zero radius.
+  const coreGlowProps = useAnimatedProps(() => ({ r: Math.max(0.01, coreR.value * 1.5) }));
+  const coreFireProps = useAnimatedProps(() => ({ r: Math.max(0.01, coreR.value) }));
 
   const wordmarkProps = useAnimatedProps(() => ({
     y: 185 + 24 * (1 - wordOp.value),
