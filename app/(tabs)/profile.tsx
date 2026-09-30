@@ -42,7 +42,7 @@ import {
   User,
   X,
   Zap,
-  Crown,
+  Gem,
 } from "lucide-react-native";
 import * as ImagePicker from "expo-image-picker";
 import { Screen } from "../../src/components/Screen";
@@ -1225,7 +1225,10 @@ export default function ProfileScreen() {
         title: "Momentum",
         value: profileMath.momentumScore,
         weight: weights.momentum,
-        color: theme.colors.indigo[400],
+        // Deliberately not theme.colors.indigo — under the Minimalist dark pack that
+        // resolves to a deep maroon, which washes this entire card (background, bar,
+        // score number) in a color that reads as a warning rather than a neutral stat.
+        color: theme.colors.green[500],
         detail: `${profileMath.weeklyDelta >= 0 ? "+" : ""}${profileMath.weeklyDelta} points vs last week.`,
       },
       {
@@ -1257,7 +1260,8 @@ export default function ProfileScreen() {
         title: "Focus load",
         value: profileMath.focusLoadScore,
         weight: weights.focus,
-        color: theme.colors.indigo[500],
+        // Same reasoning as Momentum above — kept off the pack-dependent indigo alias.
+        color: theme.colors.cyan[500],
         detail: `${profileMath.loadLabel} load with ${profileMath.miniLiveTotal} open minis.`,
       },
     ];
@@ -1272,7 +1276,7 @@ export default function ProfileScreen() {
       });
     }
     return cards;
-  }, [profileMath, theme.colors.amber, theme.colors.cyan, theme.colors.green, theme.colors.indigo]);
+  }, [profileMath, theme.colors.amber, theme.colors.cyan, theme.colors.green]);
 
   const rawStatTiles = useMemo(
     () => [
@@ -1584,7 +1588,7 @@ export default function ProfileScreen() {
               activeOpacity={0.85}
               accessibilityLabel="Membership"
             >
-              <Crown size={20} color={theme.colors.indigo[400]} />
+              <Gem size={20} color={theme.colors.indigo[400]} />
             </TouchableOpacity>
           ) : null}
           <TouchableOpacity
@@ -1854,14 +1858,15 @@ export default function ProfileScreen() {
             </View>
           </View>
           <View style={[styles.progressTrack, { backgroundColor: isDark ? withAlpha(theme.colors.sheen, 9) : withAlpha(theme.colors.sheen, 8) }]}>
-            <View
-              style={[
-                styles.progressFill,
-                {
-                  width: `${profileMath.growthScore}%`,
-                  backgroundColor: theme.colors.indigo[500],
-                },
-              ]}
+            {/* The two brand colors in one fill, not just whichever theme pack's accent
+                happens to be active — this bar is the single most important number on
+                the screen, so it gets its own deliberate identity instead of following
+                the pack alias (which reads as flat maroon under Minimalist). */}
+            <LinearGradient
+              colors={isDark ? [theme.colors.maroon[500], theme.colors.green[500]] : [theme.colors.maroon[600], theme.colors.green[600]]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={[styles.progressFill, { width: `${profileMath.growthScore}%` }]}
             />
           </View>
           <Text style={[styles.formulaLine, { color: theme.colors.textMuted }]}>
