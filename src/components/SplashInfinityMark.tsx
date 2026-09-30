@@ -301,7 +301,7 @@ export function SplashInfinityMark({ isDark, showWordmark = true, keepCore = fal
        * screen, leaving a big dead zone above and crowding the wisdom panel
        * below. This is a plain translate, so it doesn't touch any of the
        * relative math between the mark and the wordmark/tagline. */}
-      <G transform="translate(0 -400)">
+      <G transform="translate(0 -205)">
       <AnimatedG animatedProps={groupProps}>
         {/* infinity loop: forest-green base, maroon wipe trailing the pulse across the right lobe, darker crossing under the drawing tip */}
         <AnimatedPath d={SPLASH_PATH_D} fill="none" stroke={FOREST} strokeWidth={22} strokeLinecap="round" animatedProps={baseLoopProps} />
