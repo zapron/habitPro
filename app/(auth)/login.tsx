@@ -21,6 +21,7 @@ import { useTheme } from "../../src/context/ThemeContext";
 import { useAuth } from "../../src/context/AuthContext";
 import { Button } from "../../src/components/Button";
 import { GoogleGIcon } from "../../src/components/GoogleGIcon";
+import { HabitProMark } from "../../src/components/HabitProMark";
 import { SPLASH_WORDMARK_PRO_COLOR } from "../../src/constants/splash";
 import { showAppAlert } from "../../src/context/AppDialogContext";
 import { withAlpha } from "../../src/styles/theme";
@@ -213,17 +214,13 @@ export default function LoginScreen() {
                 style={[
                   styles.logoWrapper,
                   {
-                    backgroundColor: isDark ? "rgba(255, 255, 255, 0.03)" : "rgba(108, 114, 255, 0.05)",
-                    borderColor: isDark ? "rgba(255, 255, 255, 0.08)" : "rgba(108, 114, 255, 0.12)",
+                    backgroundColor: isDark ? "rgba(255, 255, 255, 0.03)" : "rgba(34, 197, 94, 0.05)",
+                    borderColor: isDark ? "rgba(255, 255, 255, 0.08)" : "rgba(34, 197, 94, 0.12)",
                   },
                 ]}
+                accessibilityLabel="habitPro brand logo"
               >
-                <Image
-                  source={require("../../assets/habitpro-logo-transparent-v3.png")}
-                  style={styles.brandLogo}
-                  resizeMode="contain"
-                  accessibilityLabel="habitPro brand logo"
-                />
+                <HabitProMark size={36} />
               </View>
               <Text style={styles.titleWordmark}>
                 <Text style={{ color: wordmarkHabitColor, fontWeight: "900" }}>habit</Text>
@@ -571,15 +568,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#6c72ff",
+    shadowColor: "#22c55e",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
     shadowRadius: 10,
     elevation: 4,
-  },
-  brandLogo: {
-    width: 36,
-    height: 36,
   },
   titleWordmark: {
     fontSize: 40,

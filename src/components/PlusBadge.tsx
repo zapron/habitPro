@@ -1,8 +1,7 @@
 import { Text } from "./AppText";
-import { Image, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { useTheme } from "../context/ThemeContext";
-
-const COMMUNITY_MARK = require("../../assets/habitpro-logo-transparent-v3.png");
+import { HabitProMark } from "./HabitProMark";
 
 type Props = {
   /**
@@ -19,9 +18,9 @@ type Props = {
 
 export function PlusBadge({ label, size = "sm", withFlame = false }: Props) {
   const { theme, isDark } = useTheme();
-  const bg = isDark ? "rgba(167, 139, 250, 0.12)" : "rgba(124, 58, 237, 0.08)";
-  const border = isDark ? "rgba(167, 139, 250, 0.32)" : "rgba(124, 58, 237, 0.24)";
-  const fg = isDark ? "#c4b5fd" : "#7c3aed";
+  const bg = isDark ? "rgba(74, 222, 128, 0.12)" : "rgba(22, 163, 74, 0.08)";
+  const border = isDark ? "rgba(74, 222, 128, 0.32)" : "rgba(22, 163, 74, 0.24)";
+  const fg = isDark ? "#86efac" : "#16a34a";
 
   const cfg =
     size === "md"
@@ -57,14 +56,7 @@ export function PlusBadge({ label, size = "sm", withFlame = false }: Props) {
         },
       ]}
     >
-      {withFlame ? (
-        <Image
-          source={COMMUNITY_MARK}
-          style={{ width: cfg.mark, height: cfg.mark }}
-          resizeMode="contain"
-          accessibilityIgnoresInvertColors
-        />
-      ) : null}
+      {withFlame ? <HabitProMark size={cfg.mark} /> : null}
       <Text
         style={[
           styles.text,

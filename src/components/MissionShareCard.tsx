@@ -4,6 +4,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import QRCode from "react-native-qrcode-svg";
 import { Text } from "./AppText";
 import { getHabitProWebUrl } from "../lib/env";
+import { HabitProMark } from "./HabitProMark";
 
 const CARD_WIDTH = 320;
 const CARD_HEIGHT = 400;
@@ -150,11 +151,7 @@ export const MissionShareCard = forwardRef<View, Props>(function MissionShareCar
         />
         <View style={styles.inner}>
           <View style={styles.brandRow}>
-            <Image
-              source={require("../../assets/habitpro-logo-transparent-v3.png")}
-              style={styles.logo}
-              resizeMode="contain"
-            />
+            <HabitProMark size={24} />
             <Text style={[styles.brandText, styles.textOnPhoto]}>HabitPro</Text>
           </View>
           <View style={styles.bottomBlock}>
@@ -175,11 +172,7 @@ export const MissionShareCard = forwardRef<View, Props>(function MissionShareCar
     <View ref={ref} collapsable={false} style={[styles.card, styles.cardPlain]}>
       <View style={styles.inner}>
         <View style={styles.brandRow}>
-          <Image
-            source={require("../../assets/habitpro-logo-transparent-v3.png")}
-            style={styles.logo}
-            resizeMode="contain"
-          />
+          <HabitProMark size={24} />
           <Text style={[styles.brandText, styles.textPlainPrimary]}>HabitPro</Text>
         </View>
         <View style={styles.rule} />
@@ -216,10 +209,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-  },
-  logo: {
-    width: 24,
-    height: 24,
   },
   brandText: {
     fontSize: 14,
