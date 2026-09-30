@@ -215,7 +215,7 @@ export default function LoginScreen() {
                   styles.logoWrapper,
                   {
                     backgroundColor: "transparent",
-                    borderColor: "rgba(22, 101, 52, 0.5)",
+                    borderColor: isDark ? "rgba(74, 222, 128, 0.75)" : "rgba(142, 29, 51, 0.5)",
                   },
                 ]}
                 accessibilityLabel="habitPro brand logo"
