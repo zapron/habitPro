@@ -1,6 +1,6 @@
 {
   "name": "habitpro",
-  "version": "1.1.36",
+  "version": "1.1.37",
   "main": "index.js",
   "scripts": {
     "prestart": "node scripts/sync-local-supabase-ip.mjs",
