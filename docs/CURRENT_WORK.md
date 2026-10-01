@@ -1,6 +1,19 @@
 # HabitPro Current Work
 
-Last updated: 2026-09-30 — Live Squad missed-timer memory loss fixed (below, at top). Previous entries follow after it.
+Last updated: 2026-10-01 — app version now drifts across 5 places (app.json x4 fields, package.json, package-lock.json, android/app/build.gradle); a sync script replaces hand-editing. See entry below.
+
+## Session Handoff (2026-10-01 — app version bump drifted twice; fixed with a sync script)
+
+**What happened**: during the 1.1.37 release, two separate version-sync gaps were found and fixed live, in the same session, despite `agent.md` already documenting the four files that need to move together:
+
+1. `android/app/build.gradle` got missed after an `app.json` bump — invisible via `git diff` because that file is gitignored (`.easignore` still uploads it to EAS for Android builds, so it's the file that actually determines what ships, not just a local artifact).
+2. `package.json`/`package-lock.json` were left at the *old* version after a later bump only touched `app.json` + Gradle — caught when asked directly "what exactly did you update."
+
+A third, related gap surfaced in the same window: Android's actual launcher icon files (`android/app/src/main/res/mipmap-*/ic_launcher*.webp`) were stale from before the rebrand — `app.json`'s `icon`/`adaptiveIcon.foregroundImage` pointed at the new mark, but nobody had re-run a prebuild to regenerate the real Android resource files, so installed Android builds kept shipping the old pre-rebrand logo (iOS was unaffected — it always regenerates fresh from `app.json` at build time; Android doesn't). Fixed by regenerating all 15 density/variant files by hand from the current source assets, then verified live via a local `expo run:android` build on an emulator before trusting it.
+
+**The real fix, not just another checklist entry**: `scripts/sync-app-version.mjs` (new) updates `app.json` (version/runtimeVersion/iOS buildNumber/Android versionCode), `package.json`, `package-lock.json`, and `android/app/build.gradle` in one invocation — `npm run version:sync -- --version X.Y.Z [--android-code N] [--ios-build N] [--no-runtime]`. Tested against copies of the real files (not live) for a full bump, an Android-only versionCode bump, and a `--no-runtime` decoupled bump (new semver label without moving `runtimeVersion`, for when only one platform needs a new native build and the other shouldn't lose its current OTA channel). `agent.md`'s "Production version bumps" section now points to this script as the primary method, manual file list kept only as fallback reference.
+
+**Use this script for every future version bump.** Full detail, including why the drift happened each time: `agent.md` and the `project-android-gradle-version-gitignored` memory note.
 
 ## Session Handoff (2026-09-30 — Live Squad: captured moments no longer lost when a participant misses the timer)
 

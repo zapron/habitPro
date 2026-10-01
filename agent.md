@@ -20,11 +20,27 @@
 
 ## Production version bumps
 
-When the user asks to bump the app version for a production build, update all release-version sources together:
+**Use `npm run version:sync -- --version X.Y.Z [--android-code N] [--ios-build N] [--no-runtime]`
+instead of hand-editing these files.** Written 2026-10-01 after the manual checklist below
+was followed *and still* drifted twice in one session: `android/app/build.gradle` was missed
+after an app.json bump (that file is gitignored — `git diff` never flags it as a reminder),
+and separately `package.json`/`package-lock.json` were left stale after a later bump that only
+touched `app.json` + Gradle. The script updates all of these atomically from one invocation —
+see the comment block at the top of `scripts/sync-app-version.mjs` for full usage, including
+the Android-only (`--android-code` alone, e.g. a native-asset fix needing a new Play Console
+upload with no semver change) and decoupled (`--no-runtime`, bump the semver label without
+moving `runtimeVersion` — use when only one platform needs a new native build and the other
+shouldn't be cut off from OTA updates on its current runtime) cases.
 
-- `app.json`: Expo `version` and Android `android.versionCode`
+What it keeps in sync, for reference (manual fallback only if the script can't run):
+
+- `app.json`: Expo `version`, `runtimeVersion`, `ios.buildNumber`, `android.versionCode`
 - `package.json`: package `version`
 - `package-lock.json`: root package `version` and `packages[""].version`
 - `android/app/build.gradle`: native Android `versionCode` and `versionName`
 
-The `android/` folder may be ignored by Git, but still check and update `android/app/build.gradle` because local/native production builds can read from it.
+The `android/` folder is ignored by Git, but `.easignore` deliberately still uploads it to EAS
+for Android cloud builds — so `android/app/build.gradle` (and any other Android-native asset,
+e.g. launcher icons under `android/app/src/main/res/mipmap-*`) must actually be correct on
+disk, not just correct in `app.json`, or an Android build silently ships stale content with
+nothing in `git diff` to catch it.

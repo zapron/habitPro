@@ -5,6 +5,7 @@
   "scripts": {
     "prestart": "node scripts/sync-local-supabase-ip.mjs",
     "start": "expo start",
+    "version:sync": "node scripts/sync-app-version.mjs",
     "db:link": "npx supabase link",
     "predb:push": "npm run db:reset",
     "db:push": "npx supabase db push",
