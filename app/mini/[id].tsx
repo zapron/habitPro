@@ -2972,7 +2972,12 @@ export default function MiniMissionDetail() {
           {mission.status === "in_progress" && !isTimerUpState && (
             <>
               <Button
-                title="Mark Complete"
+                title={
+                  mission.captureMode === "freeform" &&
+                  (!mission.draftMemories || mission.draftMemories.length === 0)
+                    ? "Add a Moment"
+                    : "Mark Complete"
+                }
                 onPress={handleMarkComplete}
               />
               {allowReserveFuel ? (
