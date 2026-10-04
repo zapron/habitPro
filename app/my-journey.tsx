@@ -152,9 +152,15 @@ function storyProgressValue(post: CommunityPlayerStoryPost): number {
 }
 
 function compareJourneyProgress(a: CommunityPlayerStoryPost, b: CommunityPlayerStoryPost): number {
-  const progress = storyProgressValue(a) - storyProgressValue(b);
+  // Descending — newest day first, oldest last. The fetch/merge order feeding
+  // this (fetchCommunityPlayerMissionJourneyPage's `created_at desc`, then
+  // mergeStoryPosts' own descending re-sort) is already newest-first; an
+  // ascending sort here inverted that, so "Load more" (which only ever
+  // fetches older pages) kept landing its results above what was already on
+  // screen instead of appending them at the bottom.
+  const progress = storyProgressValue(b) - storyProgressValue(a);
   if (progress !== 0) return progress;
-  return sortTime(a.createdAt) - sortTime(b.createdAt);
+  return sortTime(b.createdAt) - sortTime(a.createdAt);
 }
 
 function estimateGalleryCardHeight(post: CommunityPlayerStoryPost, width: number): number {

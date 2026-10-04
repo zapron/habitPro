@@ -842,6 +842,16 @@ export default function MiniMissionsScreen() {
                     </LinearGradient>
                   </TouchableOpacity>
                 </View>
+              ) : tab === "completed" || tab === "failed" ? (
+                // Paginated tabs only — "active"/"queued" always show their full live
+                // set, so an end-of-list marker there would be meaningless. A plain
+                // muted label, not a disabled-looking copy of the button above — it
+                // should read as "nothing more exists," not as another control.
+                <View style={styles.endOfListWrap}>
+                  <Text style={[styles.endOfListText, { color: theme.colors.textMuted }]}>
+                    Everything loaded
+                  </Text>
+                </View>
               ) : null
             }
           />
@@ -943,6 +953,8 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   loadMoreText: { fontSize: 12, lineHeight: 16, fontWeight: "900" },
+  endOfListWrap: { paddingTop: 16, paddingBottom: 8, alignItems: "center" },
+  endOfListText: { fontSize: 12, lineHeight: 16, fontWeight: "700", letterSpacing: 0.2 },
   rowDivider: { height: StyleSheet.hairlineWidth },
   // Card styles — flat list rows, no chip/border/shadow chrome (divider comes from the list's own ItemSeparatorComponent)
   card: { paddingVertical: 14 },
