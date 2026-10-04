@@ -34,9 +34,7 @@ import { useTheme } from "../../src/context/ThemeContext";
 import { useToast } from "../../src/context/ToastContext";
 import {
   acceptLiveMiniInvite,
-  approveLiveMiniJoinRequest,
   declineLiveMiniInvite,
-  declineLiveMiniJoinRequest,
   fetchLiveMiniPublicPreview,
   fetchLiveMiniSquad,
   getCachedLiveMiniSquad,
@@ -890,6 +888,8 @@ export default function LiveMiniSquadScreen() {
   const addMiniMission = useHabitStore((s) => s.addMiniMission);
   const startMiniMission = useHabitStore((s) => s.startMiniMission);
   const deleteMiniMission = useHabitStore((s) => s.deleteMiniMission);
+  const setMiniMissionLiveSquad = useHabitStore((s) => s.setMiniMissionLiveSquad);
+  const setMiniMissionVisibility = useHabitStore((s) => s.setMiniMissionVisibility);
   const miniMissions = useHabitStore((s) => s.miniMissions);
 
   // Seed from the in-memory snapshot cache so revisits paint instantly instead of
@@ -1117,6 +1117,11 @@ export default function LiveMiniSquadScreen() {
   const squad = snapshot?.squad ?? null;
   /** Lets an invitee see what they're committing to before accepting, not just after tapping Mark Complete. */
   const invitedTaskChecklist = useMemo(() => parseTaskChecklist(squad?.task_checklist), [squad?.task_checklist]);
+  /** Same, for a link-join visitor who isn't a participant yet — sourced from the public preview instead of the full snapshot. */
+  const publicTaskChecklist = useMemo(
+    () => parseTaskChecklist(publicPreview?.taskChecklist),
+    [publicPreview?.taskChecklist],
+  );
   const participants = useMemo(() => {
     const rows = snapshot?.participants ?? [];
     return rows.map((p) => {
@@ -1289,6 +1294,9 @@ export default function LiveMiniSquadScreen() {
     }
   };
 
+  // Joining via a shared link is an open invitation, not a request — no
+  // approval step, same as handleAccept above: pick a timer, join, start
+  // immediately. The creator's only moderation lever is removal afterward.
   const handleRequestToJoin = async () => {
     if (!squadId || !publicPreview || requestJoinBusy) return;
     setRequestJoinBusy(true);
@@ -1298,6 +1306,7 @@ export default function LiveMiniSquadScreen() {
 
       const minutes = clampMinutes(selectedMinutes);
       const localId = createMiniMissionId();
+      const startedAt = new Date().toISOString();
 
       const res = await traceAsync(
         "liveMini.requestJoin",
@@ -1308,87 +1317,60 @@ export default function LiveMiniSquadScreen() {
         showToast(res.error, "error");
         return;
       }
-      // Not started yet — the timer only begins once the creator approves
-      // (watched below, via the myParticipant status-transition effect).
       addMiniMission({
         id: localId,
         title: publicPreview.title,
         objective: publicPreview.objective ?? undefined,
         estimatedMinutes: minutes,
-        startMode: "later",
-        createdAt: new Date().toISOString(),
+        startMode: "now",
+        createdAt: startedAt,
+        startedAt,
         liveSquadId: squadId,
         liveSquadRole: "member",
-        // Same inheritance as handleAccept above — a link-join requester
-        // can't see the full RLS-gated snapshot yet, so this has to come
-        // from the public preview instead. See
+        // A link-join joiner can't see the full RLS-gated snapshot yet (no
+        // participant row existed until the call above), so this has to
+        // come from the public preview instead. See
         // 20261004130000_live_mini_public_preview_tasks.sql.
         taskChecklist: parseTaskChecklist(publicPreview.taskChecklist),
         captureMode: publicPreview.captureMode === "freeform" ? "freeform" : undefined,
       });
-      showToast("Request sent — waiting for the creator to approve.", "success");
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      showToast("Joined. Timer started.", "success");
+      router.push(`/mini/${localId}`);
       await load(true, { force: true });
     } finally {
       setRequestJoinBusy(false);
     }
   };
 
-  // My own participant row flipping link_requested -> in_progress means the
-  // creator just approved: start the local timer that was created (but not
-  // started) at request time. Flipping to declined/cancelled means it's time
-  // to drop that now-pointless local mission instead of leaving it stranded
-  // in "later" mode forever.
+  // My own participant row flipping to 'cancelled' means the creator just
+  // removed me. Live Squad has no server-side table for the local mission
+  // itself (unlike habits/challenges, where a kick-out RPC can detach the
+  // habit row directly) — so this is the one place that can ever notice and
+  // react, the next time this screen is open. Detach, don't delete: any
+  // moments already captured stay, it just keeps running as a fully
+  // standalone personal mission from here, same as the habit-kickout
+  // precedent (rpc_remove_challenge_member_v1) preserves the habit instead
+  // of erasing it.
   const myPrevStatusRef = useRef<LiveMiniParticipantStatus | null>(null);
   useEffect(() => {
     const prev = myPrevStatusRef.current;
     const current = myParticipant?.status ?? null;
-    if (prev === "link_requested" && current === "in_progress" && localLiveMission) {
-      startMiniMission(localLiveMission.id);
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      showToast("You're in! Timer started.", "success");
-      router.push(`/mini/${localLiveMission.id}`);
-    } else if (
-      prev === "link_requested" &&
-      (current === "declined" || current === "cancelled") &&
-      localLiveMission &&
-      localLiveMission.status !== "in_progress" &&
-      localLiveMission.status !== "completed"
+    if (
+      prev &&
+      prev !== "cancelled" &&
+      prev !== "declined" &&
+      prev !== "expired" &&
+      current === "cancelled" &&
+      localLiveMission
     ) {
-      deleteMiniMission(localLiveMission.id);
+      setMiniMissionLiveSquad(localLiveMission.id, null, null);
+      setMiniMissionVisibility(localLiveMission.id, "solo");
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      showToast("You were removed from this Live Squad. Your mission keeps running on its own.", "info");
     }
     myPrevStatusRef.current = current;
-  }, [deleteMiniMission, localLiveMission, myParticipant?.status, router, showToast, startMiniMission]);
-
-  const handleApproveJoinRequest = async (targetUserId: string) => {
-    if (!squadId || moderationBusyId) return;
-    setModerationBusyId(targetUserId);
-    try {
-      const res = await approveLiveMiniJoinRequest(squadId, targetUserId);
-      if (res.ok === false) {
-        showToast(res.error, "error");
-        return;
-      }
-      showToast("Approved.", "success");
-      await load(true, { force: true });
-    } finally {
-      setModerationBusyId(null);
-    }
-  };
-
-  const handleDeclineJoinRequest = async (targetUserId: string) => {
-    if (!squadId || moderationBusyId) return;
-    setModerationBusyId(targetUserId);
-    try {
-      const res = await declineLiveMiniJoinRequest(squadId, targetUserId);
-      if (res.ok === false) {
-        showToast(res.error, "error");
-        return;
-      }
-      await load(true, { force: true });
-    } finally {
-      setModerationBusyId(null);
-    }
-  };
+  }, [localLiveMission, myParticipant?.status, setMiniMissionLiveSquad, setMiniMissionVisibility, showToast]);
 
   const handleRemoveParticipant = async (targetUserId: string, label: string) => {
     if (!squadId || moderationBusyId) return;
@@ -1494,11 +1476,38 @@ export default function LiveMiniSquadScreen() {
             ) : null}
             <View style={[styles.acceptCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, ...theme.shadow.card }]}>
               <GlassTopHighlight radius={18} />
-              <Text style={[styles.acceptTitle, { color: theme.colors.textPrimary }]}>Request to join</Text>
+              <Text style={[styles.acceptTitle, { color: theme.colors.textPrimary }]}>Pick your timer</Text>
               <Text style={[styles.acceptBody, { color: theme.colors.textSecondary }]}>
-                {publicPreview.creatorUsername ?? "The creator"} needs to approve your request before your timer
-                starts. {publicPreview.participantCount} already in.
+                Your timer starts as soon as you join. {publicPreview.participantCount} already in.
               </Text>
+
+              {publicTaskChecklist && publicTaskChecklist.length > 0 ? (
+                <View
+                  style={[
+                    styles.inviteChecklistCard,
+                    { backgroundColor: theme.colors.surfaceElevated, borderColor: theme.colors.border },
+                  ]}
+                >
+                  <View style={styles.inviteChecklistHeader}>
+                    <ListChecks size={15} color={theme.colors.cyan[400]} />
+                    <Text style={[styles.inviteChecklistTitle, { color: theme.colors.textPrimary }]}>
+                      {publicTaskChecklist.length} task{publicTaskChecklist.length === 1 ? "" : "s"} in this mission
+                    </Text>
+                  </View>
+                  {publicTaskChecklist.map((task) => (
+                    <View key={task.id} style={styles.inviteChecklistRow}>
+                      <Check size={12} color={theme.colors.textMuted} />
+                      <Text style={[styles.inviteChecklistLabel, { color: theme.colors.textSecondary }]} numberOfLines={1}>
+                        {task.label}
+                      </Text>
+                    </View>
+                  ))}
+                  <Text style={[styles.inviteChecklistHint, { color: theme.colors.textMuted }]}>
+                    Pick enough time to log all of these before you join.
+                  </Text>
+                </View>
+              ) : null}
+
               <FuelQuickMinutesStrip
                 presets={QUICK_MINUTES}
                 selectedMinutes={selectedMinutes}
@@ -1535,7 +1544,7 @@ export default function LiveMiniSquadScreen() {
                 ]}
               />
               <Button
-                title="Request to Join"
+                title="Join & Start"
                 variant="primary"
                 loading={requestJoinBusy}
                 onPress={() => void handleRequestToJoin()}
@@ -1545,22 +1554,6 @@ export default function LiveMiniSquadScreen() {
               />
             </View>
           </ScrollView>
-        ) : publicPreview && publicPreview.myStatus === "link_requested" ? (
-          <View style={styles.centerState}>
-            <Users size={36} color={theme.colors.textMuted} />
-            <Text style={[styles.centerTitle, { color: theme.colors.textPrimary }]}>Request sent</Text>
-            <Text style={[styles.centerText, { color: theme.colors.textSecondary }]}>
-              Waiting for {publicPreview.creatorUsername ?? "the creator"} to approve you into "{publicPreview.title}".
-            </Text>
-          </View>
-        ) : publicPreview && publicPreview.myStatus === "declined" ? (
-          <View style={styles.centerState}>
-            <Users size={36} color={theme.colors.textMuted} />
-            <Text style={[styles.centerTitle, { color: theme.colors.textPrimary }]}>Request declined</Text>
-            <Text style={[styles.centerText, { color: theme.colors.textSecondary }]}>
-              The creator didn't approve this request.
-            </Text>
-          </View>
         ) : publicPreview && publicPreview.status !== "active" ? (
           <View style={styles.centerState}>
             <Users size={36} color={theme.colors.textMuted} />
@@ -1672,52 +1665,6 @@ export default function LiveMiniSquadScreen() {
 
           {myParticipant?.role === "creator" ? (
             <>
-              {participants.filter((p) => p.status === "link_requested").length > 0 ? (
-                <View
-                  style={[
-                    styles.moderationCard,
-                    { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
-                  ]}
-                >
-                  <Text style={[styles.moderationTitle, { color: theme.colors.textPrimary }]}>
-                    Join requests
-                  </Text>
-                  {participants
-                    .filter((p) => p.status === "link_requested")
-                    .map((p) => {
-                      const label = shortDisplayName(snapshot?.profiles[p.user_id]);
-                      const rowBusy = moderationBusyId === p.user_id;
-                      return (
-                        <View key={p.id} style={styles.moderationRow}>
-                          <Text style={[styles.moderationName, { color: theme.colors.textPrimary }]} numberOfLines={1}>
-                            {label}
-                          </Text>
-                          <View style={styles.moderationActions}>
-                            <TouchableOpacity
-                              onPress={() => void handleDeclineJoinRequest(p.user_id)}
-                              disabled={rowBusy}
-                              style={[styles.moderationBtn, { borderColor: theme.colors.border }]}
-                            >
-                              <Text style={[styles.moderationBtnText, { color: theme.colors.textMuted }]}>Decline</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                              onPress={() => void handleApproveJoinRequest(p.user_id)}
-                              disabled={rowBusy}
-                              style={[styles.moderationBtn, { borderColor: theme.colors.cyan[400] }]}
-                            >
-                              {rowBusy ? (
-                                <ActivityIndicator size="small" color={theme.colors.cyan[400]} />
-                              ) : (
-                                <Text style={[styles.moderationBtnText, { color: theme.colors.cyan[400] }]}>Approve</Text>
-                              )}
-                            </TouchableOpacity>
-                          </View>
-                        </View>
-                      );
-                    })}
-                </View>
-              ) : null}
-
               {participants.filter((p) => p.role !== "creator" && !isTerminalLiveMiniStatus(p.status) && p.status !== "link_requested").length > 0 ? (
                 <View
                   style={[

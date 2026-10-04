@@ -129,6 +129,17 @@ function buildMessage(
         data,
       };
     }
+    case "live_mini_link_joined": {
+      const requester =
+        typeof payload.requester_username === "string" ? payload.requester_username : "Someone";
+      const title =
+        typeof payload.mini_mission_title === "string" ? payload.mini_mission_title : "your Live Squad";
+      return {
+        title: "Live Squad",
+        body: `@${String(requester).toLowerCase()} joined "${title}" via your link`,
+        data,
+      };
+    }
     case "live_mini_join_approved": {
       const title =
         typeof payload.mini_mission_title === "string" ? payload.mini_mission_title : "the Live Squad";

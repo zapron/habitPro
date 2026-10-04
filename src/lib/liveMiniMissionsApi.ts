@@ -237,8 +237,9 @@ export async function fetchLiveMiniPublicPreview(squadId: string): Promise<LiveM
   };
 }
 
-/** Self-serve join via a shared link — lands as "link_requested", not an
- * active participant, until the creator approves it. */
+/** Self-serve join via a shared link — open invitation, no approval step:
+ * joins and starts immediately, same as accepting a direct invite. The
+ * creator's only moderation lever afterward is removal. */
 export async function requestToJoinLiveMiniSquad(input: {
   squadId: string;
   localMiniMissionId: string;
@@ -250,36 +251,6 @@ export async function requestToJoinLiveMiniSquad(input: {
     p_squad_id: input.squadId,
     p_local_mini_mission_id: input.localMiniMissionId,
     p_planned_minutes: input.plannedMinutes,
-  });
-  if (error) return actionError(error);
-  return { ok: true };
-}
-
-/** Creator-only: approve a pending link-based join request. */
-export async function approveLiveMiniJoinRequest(
-  squadId: string,
-  userId: string,
-): Promise<LiveMiniActionResult> {
-  const supabase = getSupabase();
-  if (!supabase) return { ok: false, error: "Supabase not configured" };
-  const { error } = await supabase.rpc("rpc_approve_live_mini_join_request_v1", {
-    p_squad_id: squadId,
-    p_user_id: userId,
-  });
-  if (error) return actionError(error);
-  return { ok: true };
-}
-
-/** Creator-only: decline a pending link-based join request. */
-export async function declineLiveMiniJoinRequest(
-  squadId: string,
-  userId: string,
-): Promise<LiveMiniActionResult> {
-  const supabase = getSupabase();
-  if (!supabase) return { ok: false, error: "Supabase not configured" };
-  const { error } = await supabase.rpc("rpc_decline_live_mini_join_request_v1", {
-    p_squad_id: squadId,
-    p_user_id: userId,
   });
   if (error) return actionError(error);
   return { ok: true };

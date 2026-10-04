@@ -193,6 +193,8 @@ function notificationTitle(type: string, payload?: Record<string, unknown>): str
       return "Live mini completed";
     case "live_mini_join_request":
       return "Live Squad join request";
+    case "live_mini_link_joined":
+      return "Live Squad";
     case "live_mini_join_approved":
       return "Join request approved";
     case "live_mini_join_declined":
@@ -259,6 +261,15 @@ function notificationSubtitle(n: NotificationRow): string | null {
         ? p.mini_mission_title.trim()
         : "your Live Squad";
       return `${who} wants to join "${title}" · Tap to review`;
+    }
+    case "live_mini_link_joined": {
+      const who = typeof p.requester_username === "string" && p.requester_username.trim().length > 0
+        ? `@${p.requester_username.trim().toLowerCase()}`
+        : "Someone";
+      const title = typeof p.mini_mission_title === "string" && p.mini_mission_title.trim().length > 0
+        ? p.mini_mission_title.trim()
+        : "your Live Squad";
+      return `${who} joined "${title}" via your link`;
     }
     case "live_mini_join_approved": {
       const title = typeof p.mini_mission_title === "string" && p.mini_mission_title.trim().length > 0
@@ -388,6 +399,7 @@ function notificationVisual(n: NotificationRow): { Icon: LucideIcon; tone: Notif
     case "live_mini_completed":
       return { Icon: Trophy, tone: "positive" };
     case "live_mini_join_request":
+    case "live_mini_link_joined":
       return { Icon: UserPlus, tone: "social" };
     case "live_mini_join_approved":
       return { Icon: Check, tone: "positive" };
@@ -697,6 +709,7 @@ export default function NotificationsScreen() {
       n.type === "live_mini_declined" ||
       n.type === "live_mini_completed" ||
       n.type === "live_mini_join_request" ||
+      n.type === "live_mini_link_joined" ||
       n.type === "live_mini_join_approved" ||
       n.type === "live_mini_join_declined" ||
       n.type === "live_mini_removed"

@@ -2,6 +2,10 @@
 
 This is a concise chronological log for future sessions. Keep secrets out of this file.
 
+## 2026-10-04, second entry (Live Squad: direct link-join, removal detaches instead of zombie-linking, RLS leak closed)
+
+Full detail in `docs/CURRENT_WORK.md`. Triggered by a real 2-user production test of the link-join feature shipped earlier today, which surfaced: an unwanted approval gate (removed — joining via link now joins and starts immediately, like the existing username-invite accept flow), a real RLS leak (`user_is_live_mini_participant()` ignored participant status, so a removed/`cancelled` person could still read the board — fixed to exclude `cancelled`/`declined`/`expired`), and a removed participant's local mission never detaching (now clears `liveSquadId`/role and forces `visibility: "solo"` client-side on next screen open, mirroring the challenge-kickout "detach and preserve" precedent — not deleted, moments kept). Also added a task-checklist preview to the join screen itself. One new migration (`20261005120000_live_mini_direct_link_join.sql`), tested locally via `db:reset` + a live RPC verification script. **Not committed, not pushed, not OTA'd** — holding for the user's go-ahead.
+
 ## 2026-10-04 (Live Squad link-join task fix, cohort pagination visibility fix, Mini Missions visual pass, Load More end-state + journey ordering fix)
 
 Full detail in `docs/CURRENT_WORK.md`. Two new migrations, both tested locally via `db:reset`, **neither pushed to production** — user runs `db:push`. `supabase/functions/notify-push/index.ts` also changed, needs a separate `supabase functions deploy notify-push`. **OTA'd to production** (`npm run update:production -- --auto`, commit `9cdee10`, update group `0c14aa1a-ffd8-496f-9014-70182ba8cc90`, runtime 1.1.37, android+ios) at the user's explicit request, including the still-not-device-verified duration-picker/mission-detail/live-timer visual changes.
