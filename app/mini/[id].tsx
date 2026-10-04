@@ -39,11 +39,11 @@ import {
   Flame,
   Camera,
   Info,
-  Maximize2,
   Minimize2,
   Radio,
   Users,
   Share2,
+  TreePine,
 } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
@@ -2810,33 +2810,39 @@ export default function MiniMissionDetail() {
           </>
         )}
 
-        {mission.status === "completed" && mission.liveSquadId ? (
-          <TouchableOpacity
-            style={[
-              styles.liveMiniEntry,
-              {
-                borderRadius: theme.radius.md,
-                borderColor: isDark ? withAlpha(theme.colors.cyan[400], 35) : withAlpha(theme.colors.cyan[500], 26),
-                backgroundColor: isDark ? withAlpha(theme.colors.cyan[400], 9) : withAlpha(theme.colors.cyan[500], 7),
-              },
-            ]}
-            activeOpacity={0.86}
-            onPress={openLiveSquadBoard}
-            accessibilityRole="button"
-            accessibilityLabel="Open Live Squad board"
-          >
-            <View style={styles.liveMiniEntryIcon}>
-              <Radio size={19} color={theme.colors.cyan[400]} />
+        {mission.status === "completed" && earlyFinishMs > 0 ? (
+          <View style={[styles.rewardCard, { borderRadius: theme.radius.lg }]}>
+            <LinearGradient
+              pointerEvents="none"
+              colors={
+                isDark
+                  ? ["rgba(245, 158, 11, 0.30)", "rgba(217, 119, 6, 0.06)"]
+                  : ["rgba(253, 230, 138, 0.85)", "rgba(254, 243, 199, 0.3)"]
+              }
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={StyleSheet.absoluteFill}
+            />
+            <View style={styles.rewardIconBadge}>
+              <Flame size={24} color="#f59e0b" fill="#fde68a" />
             </View>
-            <View style={styles.liveMiniEntryText}>
-              <Text style={[styles.liveMiniEntryTitle, { color: theme.colors.textPrimary }]} numberOfLines={1}>
-                Live Squad
+            <View style={styles.rewardTextCol}>
+              <Text style={[styles.rewardTitle, { color: theme.colors.yellow[400] }]}>
+                Early Finish Reward
               </Text>
-              <Text style={[styles.liveMiniEntryBody, { color: theme.colors.textSecondary }]} numberOfLines={2}>
-                See who joined, finished, or missed this run.
-              </Text>
+              <View style={styles.rewardRow}>
+                <Trophy size={15} color={theme.colors.yellow[400]} />
+                <Text
+                  style={[
+                    styles.rewardText,
+                    { color: isDark ? "#fde68a" : theme.colors.amber[500] },
+                  ]}
+                >
+                  You beat your estimate by {formatDuration(earlyFinishMs)}.
+                </Text>
+              </View>
             </View>
-          </TouchableOpacity>
+          </View>
         ) : null}
 
         {!isPureWaiting && mission.status !== "completed" ? (
@@ -2868,83 +2874,79 @@ export default function MiniMissionDetail() {
           </View>
         )}
 
-        {mission.status === "in_progress" && !isTimerUpState ? (
-          <TouchableOpacity
-            style={[
-              styles.focusLauncher,
-              {
-                borderRadius: theme.radius.md,
-                borderColor: isDark ? withAlpha(theme.colors.cyan[400], 35) : withAlpha(theme.colors.cyan[500], 28),
-                backgroundColor: isDark ? withAlpha(theme.colors.cyan[400], 10) : withAlpha(theme.colors.cyan[500], 8),
-              },
-            ]}
-            activeOpacity={0.86}
-            onPress={() => {
-              void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              setFocusModeOpen(true);
-            }}
-            accessibilityRole="button"
-            accessibilityLabel="Open focus mode"
-          >
-            <Maximize2 size={18} color={theme.colors.cyan[400]} />
-            <Text style={[styles.focusLauncherText, { color: theme.colors.textPrimary }]}>
-              Focus Mode
-            </Text>
-          </TouchableOpacity>
-        ) : null}
+        {(mission.status === "in_progress" && !isTimerUpState) ||
+        (mission.status !== "completed" &&
+          mission.status !== "missed" &&
+          mission.status !== "cancelled" &&
+          !isTimerCheckInSoloMode) ? (
+          <View style={styles.brandActionsRow}>
+            {mission.status === "in_progress" && !isTimerUpState ? (
+              <TouchableOpacity
+                style={[
+                  styles.brandAction,
+                  {
+                    borderRadius: theme.radius.md,
+                    borderColor: theme.colors.green[isDark ? 500 : 600],
+                    backgroundColor: isDark ? theme.colors.green[500] : "transparent",
+                  },
+                ]}
+                activeOpacity={0.86}
+                onPress={() => {
+                  void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setFocusModeOpen(true);
+                }}
+                accessibilityRole="button"
+                accessibilityLabel="Open focus mode"
+              >
+                <TreePine size={18} color={isDark ? "#ffffff" : theme.colors.green[600]} />
+                <Text
+                  style={[
+                    styles.brandActionText,
+                    { color: isDark ? "#ffffff" : theme.colors.green[600] },
+                  ]}
+                >
+                  Focus Mode
+                </Text>
+              </TouchableOpacity>
+            ) : null}
 
-        {mission.status !== "completed" &&
-        mission.status !== "missed" &&
-        mission.status !== "cancelled" &&
-        !isTimerCheckInSoloMode ? (
-          <TouchableOpacity
-            style={[
-              styles.liveMiniEntry,
-              {
-                borderRadius: theme.radius.md,
-                borderColor: mission.liveSquadId
-                  ? isDark ? withAlpha(theme.colors.cyan[400], 35) : withAlpha(theme.colors.cyan[500], 26)
-                  : theme.colors.border,
-                backgroundColor: mission.liveSquadId
-                  ? isDark ? withAlpha(theme.colors.cyan[400], 9) : withAlpha(theme.colors.cyan[500], 7)
-                  : theme.colors.surface,
-              },
-            ]}
-            activeOpacity={0.86}
-            onPress={openLiveSquadEntry}
-            accessibilityRole="button"
-            accessibilityLabel={
-              mission.liveSquadId
-                ? isLiveMiniCreator
-                  ? "Invite more people to Live Squad"
-                  : "Open Live Squad board"
-                : "Start Live Squad"
-            }
-          >
-            <View style={styles.liveMiniEntryIcon}>
-              {mission.liveSquadId ? (
-                <Radio size={19} color={theme.colors.cyan[400]} />
-              ) : (
-                <Users size={19} color={theme.colors.indigo[400]} />
-              )}
-            </View>
-            <View style={styles.liveMiniEntryText}>
-              <Text style={[styles.liveMiniEntryTitle, { color: theme.colors.textPrimary }]} numberOfLines={1}>
-                {mission.liveSquadId
-                  ? isLiveMiniCreator
-                    ? "Invite more people"
-                    : "Live Squad is on"
-                  : "Do it with others?"}
-              </Text>
-              <Text style={[styles.liveMiniEntryBody, { color: theme.colors.textSecondary }]} numberOfLines={2}>
-                {mission.liveSquadId
-                  ? isLiveMiniCreator
-                    ? "Live Squad is on. Search by username and send more invites."
-                    : "Open the board to see who joined, finished, or missed."
-                  : "Invite people by username. They pick their own timer."}
-              </Text>
-            </View>
-          </TouchableOpacity>
+            {!isTimerCheckInSoloMode ? (
+              <TouchableOpacity
+                style={[
+                  styles.brandAction,
+                  {
+                    borderRadius: theme.radius.md,
+                    borderColor: theme.colors.maroon[500],
+                    backgroundColor: isDark ? theme.colors.maroon[500] : "transparent",
+                  },
+                ]}
+                activeOpacity={0.86}
+                onPress={openLiveSquadEntry}
+                accessibilityRole="button"
+                accessibilityLabel={
+                  mission.liveSquadId
+                    ? isLiveMiniCreator
+                      ? "Invite more people to Live Squad"
+                      : "Open Live Squad board"
+                    : "Start Live Squad"
+                }
+              >
+                <Users size={18} color={isDark ? "#ffffff" : theme.colors.maroon[500]} />
+                <Text
+                  style={[
+                    styles.brandActionText,
+                    { color: isDark ? "#ffffff" : theme.colors.maroon[500] },
+                  ]}
+                >
+                  {mission.liveSquadId
+                    ? isLiveMiniCreator
+                      ? "Invite More"
+                      : "View Squad"
+                    : "Invite Others"}
+                </Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
         ) : null}
 
         {mission.status === "completed" ? (
@@ -2972,12 +2974,7 @@ export default function MiniMissionDetail() {
           {mission.status === "in_progress" && !isTimerUpState && (
             <>
               <Button
-                title={
-                  mission.captureMode === "freeform" &&
-                  (!mission.draftMemories || mission.draftMemories.length === 0)
-                    ? "Add a Moment"
-                    : "Mark Complete"
-                }
+                title={mission.captureMode === "freeform" ? "Add a Moment" : "Mark Complete"}
                 onPress={handleMarkComplete}
               />
               {allowReserveFuel ? (
@@ -3088,41 +3085,6 @@ export default function MiniMissionDetail() {
 
           {mission.status === "completed" && (
             <>
-              {earlyFinishMs > 0 && (
-                <View style={[styles.rewardCard, { borderRadius: theme.radius.lg }]}>
-                  <LinearGradient
-                    pointerEvents="none"
-                    colors={
-                      isDark
-                        ? ["rgba(245, 158, 11, 0.30)", "rgba(217, 119, 6, 0.06)"]
-                        : ["rgba(253, 230, 138, 0.85)", "rgba(254, 243, 199, 0.3)"]
-                    }
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={StyleSheet.absoluteFill}
-                  />
-                  <View style={styles.rewardIconBadge}>
-                    <Flame size={24} color="#f59e0b" fill="#fde68a" />
-                  </View>
-                  <View style={styles.rewardTextCol}>
-                    <Text style={[styles.rewardTitle, { color: theme.colors.yellow[400] }]}>
-                      Early Finish Reward
-                    </Text>
-                    <View style={styles.rewardRow}>
-                      <Trophy size={15} color={theme.colors.yellow[400]} />
-                      <Text
-                        style={[
-                          styles.rewardText,
-                          { color: isDark ? "#fde68a" : theme.colors.amber[500] },
-                        ]}
-                      >
-                        You beat your estimate by {formatDuration(earlyFinishMs)}.
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-              )}
-
               {/* Moment captured */}
               {(mission.completionMemory?.imageUrl ||
                 mission.completionMemory?.imageUri ||
@@ -3220,6 +3182,25 @@ export default function MiniMissionDetail() {
             </View>
           )}
         </View>
+
+        {mission.status === "completed" && mission.liveSquadId ? (
+          <TouchableOpacity
+            style={[
+              styles.liveSquadCta,
+              {
+                borderRadius: theme.radius.md,
+                backgroundColor: theme.colors.maroon[500],
+              },
+            ]}
+            activeOpacity={0.88}
+            onPress={openLiveSquadBoard}
+            accessibilityRole="button"
+            accessibilityLabel="Open Live Squad board"
+          >
+            <Radio size={19} color="#fff" />
+            <Text style={styles.liveSquadCtaText}>Take me to my spot</Text>
+          </TouchableOpacity>
+        ) : null}
 
         {/* Motivational quotes — glass card at the bottom, only while timer is running */}
         {mission.status === "in_progress" && !isTimerUpState && !completeSheetOpen && (
@@ -3368,6 +3349,12 @@ const styles = StyleSheet.create({
   centered: { flex: 1, alignItems: "center", justifyContent: "center" },
   notFound: { marginBottom: 12 },
   scroll: { flex: 1 },
+  // Plain "center" with no offset — Yoga has no real baseline for a
+  // non-text icon node (tried alignItems:"baseline" first; it resolves the
+  // icon's baseline to its own top edge, not its bottom, which dropped it
+  // well below the text instead of lining it up). Title's lineHeight is
+  // tight (1.12x font size) so centering against the full line box lands
+  // close to the glyphs' own center without needing a hand-tuned nudge.
   titleRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -3378,11 +3365,10 @@ const styles = StyleSheet.create({
   },
   title: { flexShrink: 1, fontWeight: "800" },
   infoButton: {
-    width: 24,
-    height: 24,
+    width: 20,
+    height: 20,
     justifyContent: "center",
     alignItems: "center",
-    transform: [{ translateY: 3 }],
   },
   readyCard: {
     borderWidth: 1,
@@ -3443,41 +3429,46 @@ const styles = StyleSheet.create({
   metaText: { fontWeight: "700" },
   actions: { gap: 10 },
   progressBarWrap: { marginBottom: 14 },
-  focusLauncher: {
-    marginBottom: 18,
-    borderWidth: 1,
-    paddingVertical: 13,
-    paddingHorizontal: 14,
+  // Focus Mode / Invite Others — a matched brand-colored pair, side by
+  // side. Light theme keeps them outlined (transparent fill, colored
+  // border+text); dark theme switches to a solid fill of the same color,
+  // since an outline reads weaker against a near-black background.
+  brandActionsRow: {
     flexDirection: "row",
+    gap: 10,
+    marginBottom: 16,
+  },
+  brandAction: {
+    flex: 1,
+    borderWidth: 1.6,
+    paddingVertical: 13,
+    paddingHorizontal: 10,
     alignItems: "center",
     justifyContent: "center",
-    gap: 9,
+    gap: 6,
   },
-  focusLauncherText: {
-    fontSize: 15,
+  brandActionText: {
+    fontSize: 13.5,
     fontWeight: "800",
   },
-  liveMiniEntry: {
-    minHeight: 74,
-    borderWidth: 1,
-    paddingVertical: 13,
-    paddingHorizontal: 14,
+  // Filled forest->maroon gradient CTA — the brand-colors treatment, as a
+  // solid fill rather than the thin ring used for duration-picker selection
+  // elsewhere, since this is a primary call to action, not a selected state.
+  liveSquadCta: {
+    minHeight: 54,
+    marginTop: 4,
     marginBottom: 16,
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
-  },
-  liveMiniEntryIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 9999,
-    alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(74, 222, 128, 0.12)",
+    gap: 10,
+    overflow: "hidden",
   },
-  liveMiniEntryText: { flex: 1, minWidth: 0 },
-  liveMiniEntryTitle: { fontSize: 15, fontWeight: "900", marginBottom: 3 },
-  liveMiniEntryBody: { fontSize: 12, lineHeight: 17, fontWeight: "600" },
+  liveSquadCtaText: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#fff",
+  },
   failedRow: {
     flexDirection: "row",
     alignItems: "flex-start",
@@ -3578,6 +3569,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     padding: 16,
     marginTop: 2,
+    marginBottom: 16,
   },
   rewardIconBadge: {
     width: 46,

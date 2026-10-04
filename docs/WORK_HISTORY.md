@@ -2,6 +2,17 @@
 
 This is a concise chronological log for future sessions. Keep secrets out of this file.
 
+## 2026-10-04 (Live Squad link-join task fix, cohort pagination visibility fix, Mini Missions visual pass)
+
+Full detail in `docs/CURRENT_WORK.md`. Two new migrations, both tested locally via `db:reset`, **neither pushed to production** — user runs `db:push`. `supabase/functions/notify-push/index.ts` also changed, needs a separate `supabase functions deploy notify-push`. Nothing in this entry OTA'd yet.
+
+- **Live Squad invite-link task fix**: a Mini Mission's checklist/freeform tasks never reached someone who joined via a shareable link while not yet a participant (as opposed to an in-app username invite, which worked) — `rpc_live_mini_public_preview_v1` never returned `task_checklist`/`capture_mode`, so `handleRequestToJoin` built a bare mission. Fixed by extending that RPC (`20261004130000_live_mini_public_preview_tasks.sql`, drop+recreate for the new return columns) and copying the two fields client-side, same as the working `handleAccept` path already does. Verified via a live RPC call as a genuinely separate non-participant account; not yet checked end-to-end on a device.
+- **Cohort zero-activity visibility fix**: `rpc_challenge_streak_members_page_v1` (`20261004120000_cohort_zero_activity_always_visible.sql`) could bury a brand-new joiner indefinitely behind streak-ranked pagination. Now always includes zero-activity members in full on the first page. Pure backend change, no client code needed.
+- **Mini Missions duration-picker visual pass**: forest→maroon gradient ring + glow replacing the old cyan selected-state, 16h ceiling, fixed a tile-size-appears-to-change-on-selection bug via a fixed-size clipped outer shell (`FuelTimePresetButton.tsx`, `FuelQuickMinutesStrip.tsx`, `app/mini/create.tsx`). Only verified via the user's screenshots, not on-device by the agent.
+- **Mini Mission detail screen reorder**: Early Finish Reward moved up to where the old "Live Squad" info banner sat; Live Squad itself became a filled maroon "Take me to my spot" button at the bottom (`app/mini/[id].tsx`).
+- **Live timer screen refresh**: fixed the title/info-icon misalignment (an `alignItems:"baseline"` attempt made it worse — RN has no real baseline for a non-text icon — reverted to plain centered, not yet re-confirmed); Focus Mode + Invite Others became a side-by-side brand-colored pair (`TreePine`/`Users` icons, outlined in light theme, solid fill in dark). The countup/countdown timer-toggle part of the original ask is still not implemented.
+- Also in the working tree from earlier this session: a header "Open group mission" shortcut on the habit detail screen, Live Squad join notification copy/push payloads, an Android share-image fix (`useInternalStorage: true`, `FileProvider` allowlist mismatch), and a community-feed long-name wrap fix.
+
 ## 2026-09-27 (manual moderation: deleted one squad custom-note message)
 
 No code change. User asked to remove a message sent in a squad's Activity

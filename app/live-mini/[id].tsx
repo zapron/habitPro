@@ -1319,6 +1319,12 @@ export default function LiveMiniSquadScreen() {
         createdAt: new Date().toISOString(),
         liveSquadId: squadId,
         liveSquadRole: "member",
+        // Same inheritance as handleAccept above — a link-join requester
+        // can't see the full RLS-gated snapshot yet, so this has to come
+        // from the public preview instead. See
+        // 20261004130000_live_mini_public_preview_tasks.sql.
+        taskChecklist: parseTaskChecklist(publicPreview.taskChecklist),
+        captureMode: publicPreview.captureMode === "freeform" ? "freeform" : undefined,
       });
       showToast("Request sent — waiting for the creator to approve.", "success");
       await load(true, { force: true });
@@ -1508,6 +1514,7 @@ export default function LiveMiniSquadScreen() {
                     active={selectedMinutes === p.minutes}
                     onPress={() => setMinutes(p.minutes)}
                     isDark={isDark}
+                    maxMinutes={480}
                   />
                 ))}
               </View>
@@ -1801,6 +1808,7 @@ export default function LiveMiniSquadScreen() {
                     active={selectedMinutes === p.minutes}
                     onPress={() => setMinutes(p.minutes)}
                     isDark={isDark}
+                    maxMinutes={480}
                   />
                 ))}
               </View>
@@ -2039,7 +2047,7 @@ const styles = StyleSheet.create({
   inviteChecklistRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   inviteChecklistLabel: { flex: 1, minWidth: 0, fontSize: 13, fontWeight: "600" },
   inviteChecklistHint: { fontSize: 11, lineHeight: 15, fontWeight: "600", marginTop: 4 },
-  longPresetWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8, justifyContent: "space-between" },
+  longPresetWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8, justifyContent: "flex-start" },
   minutesInput: { borderWidth: 1, borderRadius: 14, paddingVertical: 12, paddingHorizontal: 14, fontSize: 20, fontWeight: "900", textAlign: "center" },
   acceptActions: { flexDirection: "row", gap: 10 },
   declineButton: { flex: 1, minHeight: 50, borderWidth: 1, borderRadius: 16, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 6 },

@@ -18,7 +18,7 @@ import { withAlpha } from "../../src/styles/theme";
 type StartMode = "now" | "later";
 
 const MIN_FUEL_MINUTES = 1;
-const MAX_FUEL_MINUTES = 480;
+const MAX_FUEL_MINUTES = 960; // 16h
 
 /** Sub-hour — compact strip */
 const QUICK_MINUTES: { label: string; minutes: number }[] = [
@@ -28,14 +28,20 @@ const QUICK_MINUTES: { label: string; minutes: number }[] = [
   { label: "45m", minutes: 45 },
 ];
 
-/** 1h+ — tank tiles */
+/** 1h+ — mark-trace tiles. Six items lay out as two even, full-width rows of
+ * three (see longPresetRows below) — under-4h on top, 4h-and-up on bottom —
+ * rather than wrapping unevenly. Must stay in sync with MAX_FUEL_MINUTES
+ * above and FuelTimePresetButton's own default ceiling (both the duration
+ * max and the fill-ratio normalization move together). */
 const LONG_PRESETS: { label: string; minutes: number }[] = [
   { label: "1h", minutes: 60 },
-  { label: "90m", minutes: 90 },
   { label: "2h", minutes: 120 },
   { label: "4h", minutes: 240 },
   { label: "8h", minutes: 480 },
+  { label: "12h", minutes: 720 },
+  { label: "16h", minutes: 960 },
 ];
+const LONG_PRESET_ROWS = [LONG_PRESETS.slice(0, 3), LONG_PRESETS.slice(3, 6)];
 
 function clampTotal(minutes: number): number {
   return Math.max(MIN_FUEL_MINUTES, Math.min(MAX_FUEL_MINUTES, Math.round(minutes)));
@@ -436,16 +442,22 @@ export default function CreateMiniMission() {
           />
 
           <Text style={[styles.presetSectionLabel, { color: theme.colors.textSecondary, marginTop: 4 }]}>1 hour or more</Text>
-          <View style={styles.presetWrap}>
-            {LONG_PRESETS.map((p) => (
-              <FuelTimePresetButton
-                key={p.minutes}
-                label={p.label}
-                minutes={p.minutes}
-                active={totalMinutes === p.minutes}
-                onPress={() => setTotalMinutes(p.minutes)}
-                isDark={isDark}
-              />
+          <View style={styles.presetGrid}>
+            {LONG_PRESET_ROWS.map((row, rowIndex) => (
+              <View key={rowIndex} style={styles.presetRow}>
+                {row.map((p) => (
+                  <FuelTimePresetButton
+                    key={p.minutes}
+                    label={p.label}
+                    minutes={p.minutes}
+                    active={totalMinutes === p.minutes}
+                    onPress={() => setTotalMinutes(p.minutes)}
+                    isDark={isDark}
+                    maxMinutes={MAX_FUEL_MINUTES}
+                    fillRow
+                  />
+                ))}
+              </View>
             ))}
           </View>
 
@@ -690,7 +702,11 @@ const styles = StyleSheet.create({
   finishModeTagText: { fontSize: 9, lineHeight: 11, fontWeight: "900", letterSpacing: 0.8 },
   finishBody: { marginTop: 2, fontSize: 12, lineHeight: 16, fontWeight: "600" },
   presetSectionLabel: { fontSize: 11, fontWeight: "700", letterSpacing: 0.3, textTransform: "uppercase" },
-  presetWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8, justifyContent: "space-between" },
+  // Two explicit rows of three equal-width tiles — stretched (fillRow) to
+  // span the same full width as the "under 1 hour" strip above, instead of
+  // fixed-width tiles trailing off short of that row's right edge.
+  presetGrid: { gap: 8 },
+  presetRow: { flexDirection: "row", gap: 8 },
   minutesLabel: { fontSize: 12, fontWeight: "600", marginTop: 4 },
   minutesInput: {
     borderWidth: 1,

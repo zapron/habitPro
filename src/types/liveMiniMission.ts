@@ -88,4 +88,12 @@ export type LiveMiniPublicPreview = {
   creatorDisplayName: string | null;
   participantCount: number;
   myStatus: "creator" | LiveMiniParticipantStatus | "none";
+  /** Snapshot of the creator mission's task checklist, same as
+   * LiveMiniSquadRow.task_checklist — raw jsonb, parse with
+   * parseTaskChecklist. Present so a link-join requester (who can't see the
+   * full RLS-gated snapshot yet) still inherits the creator's tasks. */
+  taskChecklist: unknown;
+  /** Snapshot of the creator mission's captureMode, same as
+   * LiveMiniSquadRow.capture_mode. */
+  captureMode: string | null;
 };

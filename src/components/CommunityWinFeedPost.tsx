@@ -976,7 +976,7 @@ const styles = StyleSheet.create({
   postAvatarPhoto: { width: 34, height: 34 },
   playerTextCol: { flex: 1, minWidth: 0 },
   playerNameLeagueRow: { flexDirection: "row", alignItems: "center", gap: 6, minWidth: 0 },
-  playerName: { fontSize: 15, lineHeight: 19, fontWeight: "900" },
+  playerName: { flexShrink: 1, minWidth: 0, fontSize: 15, lineHeight: 19, fontWeight: "900" },
   playerHandle: { flexShrink: 1, minWidth: 0, fontSize: 12, lineHeight: 16, fontWeight: "800" },
   playerLeague: {
     flexShrink: 0,

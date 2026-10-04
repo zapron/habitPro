@@ -191,6 +191,14 @@ function notificationTitle(type: string, payload?: Record<string, unknown>): str
       return "Live mini declined";
     case "live_mini_completed":
       return "Live mini completed";
+    case "live_mini_join_request":
+      return "Live Squad join request";
+    case "live_mini_join_approved":
+      return "Join request approved";
+    case "live_mini_join_declined":
+      return "Join request declined";
+    case "live_mini_removed":
+      return "Removed from Live Squad";
     case "challenge_invite_accepted":
       return "Invite accepted";
     case "challenge_invite_declined":
@@ -242,6 +250,33 @@ function notificationSubtitle(n: NotificationRow): string | null {
       const who =
         typeof u === "string" && u.trim().length > 0 ? u.trim().toLowerCase() : "Someone";
       return `${who} completed the live mini mission`;
+    }
+    case "live_mini_join_request": {
+      const who = typeof p.requester_username === "string" && p.requester_username.trim().length > 0
+        ? `@${p.requester_username.trim().toLowerCase()}`
+        : "Someone";
+      const title = typeof p.mini_mission_title === "string" && p.mini_mission_title.trim().length > 0
+        ? p.mini_mission_title.trim()
+        : "your Live Squad";
+      return `${who} wants to join "${title}" · Tap to review`;
+    }
+    case "live_mini_join_approved": {
+      const title = typeof p.mini_mission_title === "string" && p.mini_mission_title.trim().length > 0
+        ? p.mini_mission_title.trim()
+        : "the Live Squad";
+      return `You're in — "${title}" has started · Tap to open`;
+    }
+    case "live_mini_join_declined": {
+      const title = typeof p.mini_mission_title === "string" && p.mini_mission_title.trim().length > 0
+        ? p.mini_mission_title.trim()
+        : "that Live Squad";
+      return `Your request to join "${title}" was declined`;
+    }
+    case "live_mini_removed": {
+      const title = typeof p.mini_mission_title === "string" && p.mini_mission_title.trim().length > 0
+        ? p.mini_mission_title.trim()
+        : "a Live Squad";
+      return `You were removed from "${title}"`;
     }
     case "challenge_invite_accepted":
       return `${inviteeLabel(p)} joined your group mission · Tap to open`;
@@ -352,6 +387,14 @@ function notificationVisual(n: NotificationRow): { Icon: LucideIcon; tone: Notif
       return { Icon: X, tone: "muted" };
     case "live_mini_completed":
       return { Icon: Trophy, tone: "positive" };
+    case "live_mini_join_request":
+      return { Icon: UserPlus, tone: "social" };
+    case "live_mini_join_approved":
+      return { Icon: Check, tone: "positive" };
+    case "live_mini_join_declined":
+      return { Icon: X, tone: "muted" };
+    case "live_mini_removed":
+      return { Icon: UserMinus, tone: "muted" };
     case "challenge_nudge": {
       const kind = p.kind;
       if (kind === "fire") return { Icon: Flame, tone: "urgent" };
@@ -652,7 +695,11 @@ export default function NotificationsScreen() {
       n.type === "live_mini_invite" ||
       n.type === "live_mini_accepted" ||
       n.type === "live_mini_declined" ||
-      n.type === "live_mini_completed"
+      n.type === "live_mini_completed" ||
+      n.type === "live_mini_join_request" ||
+      n.type === "live_mini_join_approved" ||
+      n.type === "live_mini_join_declined" ||
+      n.type === "live_mini_removed"
     ) {
       const sid =
         typeof p.live_mini_squad_id === "string"

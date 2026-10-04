@@ -232,6 +232,8 @@ export async function fetchLiveMiniPublicPreview(squadId: string): Promise<LiveM
     creatorDisplayName: (row.creator_display_name as string | null) ?? null,
     participantCount: row.participant_count as number,
     myStatus: row.my_status as LiveMiniPublicPreview["myStatus"],
+    taskChecklist: row.task_checklist,
+    captureMode: (row.capture_mode as string | null) ?? null,
   };
 }
 

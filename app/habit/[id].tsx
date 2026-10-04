@@ -1983,6 +1983,16 @@ export default function HabitDetail() {
                     <ArrowLeft size={theme.icon.xl} color={theme.colors.textPrimary} />
                 </TouchableOpacity>
                 <View style={styles.headerActions}>
+                    {isGroupMission && habit.challengeGroupId ? (
+                        <TouchableOpacity
+                            style={[styles.iconButton, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}
+                            onPress={() => router.push(`/challenge/${habit.challengeGroupId}`)}
+                            accessibilityRole="button"
+                            accessibilityLabel="Open group mission"
+                        >
+                            <Users size={theme.icon.xl} color={theme.colors.textMuted} />
+                        </TouchableOpacity>
+                    ) : null}
                     <TouchableOpacity
                         style={[styles.iconButton, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}
                         onPress={handleShareIconPress}

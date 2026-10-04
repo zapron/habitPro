@@ -63,6 +63,14 @@ export function ShareWinModal({ visible, onClose, title, photoUri, tagLabel, day
         url: dataUri,
         message: `${title} — completed on HabitPro. Get the app: ${webUrl}`,
         failOnCancel: false,
+        // Android only: without this, react-native-share decodes the data URI into
+        // the app's EXTERNAL cache dir, but its bundled FileProvider config only
+        // declares the internal cache dir (plus the public Download folder) as
+        // shareable roots — so wrapping that file for the share Intent throws, and
+        // every Android share failed with "couldn't create the share image" while
+        // iOS (no FileProvider allowlist) was unaffected. Forcing internal storage
+        // keeps the temp file inside the one root the library actually declares.
+        useInternalStorage: true,
       });
     } catch {
       showToast("Couldn't create the share image.", "error");

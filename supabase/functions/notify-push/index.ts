@@ -118,6 +118,44 @@ function buildMessage(
         data,
       };
     }
+    case "live_mini_join_request": {
+      const requester =
+        typeof payload.requester_username === "string" ? payload.requester_username : "Someone";
+      const title =
+        typeof payload.mini_mission_title === "string" ? payload.mini_mission_title : "your Live Squad";
+      return {
+        title: "Live Squad join request",
+        body: `@${String(requester).toLowerCase()} wants to join "${title}"`,
+        data,
+      };
+    }
+    case "live_mini_join_approved": {
+      const title =
+        typeof payload.mini_mission_title === "string" ? payload.mini_mission_title : "the Live Squad";
+      return {
+        title: "Join request approved",
+        body: `You're in — "${title}" has started`,
+        data,
+      };
+    }
+    case "live_mini_join_declined": {
+      const title =
+        typeof payload.mini_mission_title === "string" ? payload.mini_mission_title : "the Live Squad";
+      return {
+        title: "Join request declined",
+        body: `Your request to join "${title}" was declined`,
+        data,
+      };
+    }
+    case "live_mini_removed": {
+      const title =
+        typeof payload.mini_mission_title === "string" ? payload.mini_mission_title : "the Live Squad";
+      return {
+        title: "Removed from Live Squad",
+        body: `You were removed from "${title}"`,
+        data,
+      };
+    }
     case "challenge_invite_accepted": {
       const u = typeof payload.invitee_username === "string" ? payload.invitee_username : "Someone";
       return {

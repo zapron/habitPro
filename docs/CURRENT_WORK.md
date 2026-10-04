@@ -1,6 +1,57 @@
 # HabitPro Current Work
 
-Last updated: 2026-10-01 — app version now drifts across 5 places (app.json x4 fields, package.json, package-lock.json, android/app/build.gradle); a sync script replaces hand-editing. See entry below.
+Last updated: 2026-10-04 — Live Squad invite-links silently dropped checklist/freeform tasks for a brand-new (non-participant) requester; fixed. Plus a cohort-pagination visibility fix, and a Mini Missions duration-picker + mission-detail + live-timer visual pass. See entry below.
+
+## Session Handoff (2026-10-04 — Live Squad link-join task propagation fix, cohort zero-activity visibility fix, Mini Missions visual pass)
+
+**State: `npx tsc --noEmit` clean. Two new migrations written and tested locally (`db:reset` succeeded); NEITHER pushed to production yet — the user runs `npm run db:push` themselves, per `pre_migration.md`. `supabase/functions/notify-push/index.ts` also changed and needs a separate `supabase functions deploy notify-push` — not run by this session. Nothing in this entry has been OTA'd yet. Several of the UI changes below were only checked via screenshots the user sent mid-session, not a live on-device pass by the agent — flagged per-item below.**
+
+### 1. Live Squad invite-link task-checklist/captureMode propagation fix
+
+**User report**: a Mini Mission with multiple tasks (checklist or freeform) invited via in-app username search correctly carries its tasks to the invitee. Invited via a shareable Live Squad link, when the recipient doesn't have the app yet, installs it, and opens it — the tasks never show up.
+
+**Root cause, confirmed by code investigation**: the in-app accept path (`handleAccept`, `app/live-mini/[id].tsx:1254,1257`) already copies `task_checklist`/`capture_mode` onto the invitee's local mission — but only because it reads from the full RLS-gated snapshot (`rpc_live_mini_snapshot_v1`), which requires an existing `live_mini_participants` row. A stranger who hasn't joined yet can't use that snapshot, so the link-join path falls back to `rpc_live_mini_public_preview_v1` — which was scoped "deliberately minimal" (title/objective/status/creator/participant-count only) and never selected those two columns. `handleRequestToJoin` then built the invitee's mission straight from that stripped preview, so it permanently landed with no tasks and no freeform mode.
+
+**Fix** (3 coordinated, small changes, no schema change — the columns already existed on `live_mini_squads`):
+- `supabase/migrations/20261004130000_live_mini_public_preview_tasks.sql` — drops and recreates `rpc_live_mini_public_preview_v1` to also return `task_checklist`/`capture_mode` (a return-shape change needs drop+recreate, `create or replace` can't do it).
+- `src/types/liveMiniMission.ts` — added `taskChecklist`/`captureMode` to `LiveMiniPublicPreview`.
+- `src/lib/liveMiniMissionsApi.ts` — `fetchLiveMiniPublicPreview` maps the two new columns through.
+- `app/live-mini/[id].tsx` — `handleRequestToJoin` now copies them onto the new local mission, same as `handleAccept` already does.
+
+**Verified**: `npm run db:reset` succeeded locally; then ran a throwaway script (service-role insert of a squad with a real 2-item `task_checklist` + `capture_mode: "freeform"`, signed in as the *other* seeded dev account (`requester@example.com`, genuinely not a participant) and called `rpc_live_mini_public_preview_v1` directly — confirmed both fields now come back correctly. **Not yet verified end-to-end on-device** (open a real invite link as a brand-new account, request to join, have the creator approve, confirm tasks appear once the mission starts) — recommended before/after this ships.
+
+Flagged, not fixed: group challenges have the same public-preview-vs-full-snapshot split (`rpc_challenge_public_preview_v1`); if challenge templates carry similar task/note/photo requirements, the same class of bug may exist there too. Out of scope for this pass.
+
+### 2. Cohort/challenge screen: zero-activity members no longer hidden by pagination
+
+`supabase/migrations/20261004120000_cohort_zero_activity_always_visible.sql` — `rpc_challenge_streak_members_page_v1` previously ranked members purely by streak/completed-count, so a brand-new joiner (zero streak, zero check-ins, sometimes no habit row yet) always sorted last and could stay permanently off-screen behind the "Load more" pagination (initial page is only 3 rows), even though the participant-count header already counted them. Explicit product call: a joined member should never be hidden just for having no activity yet. Fix splits the ranked pool into a paginated "active" pool (unchanged behavior) and a "zero-activity" pool that's always included in full on the first page only (never resent on subsequent pages). No client change needed — the existing pagination logic already treats offset 0 as the initial load. Pure backend RPC change, tested via local `db:reset`.
+
+### 3. Mini Missions duration-picker visual pass (`FuelTimePresetButton.tsx`, `FuelQuickMinutesStrip.tsx`, `app/mini/create.tsx`)
+
+Multi-round polish on the "selected" state of the sub-hour strip and hour+ preset tiles:
+- Raised the hour+ presets' ceiling to 16h (`maxMinutes` prop, Mini Missions passes 960; Live Squad still passes its real 480/8h cap — unaffected).
+- Replaced the leftover cyan/blue selected-ring (`AVIATION_HUD`/`PETROL`, a pre-rebrand theme remnant) with a forest-green→maroon gradient ring + soft glow, built the standard RN way (no native gradient-border support): an outer `LinearGradient` whose own padding is the ring thickness, an opaque inset pressable inside it.
+- **Dual-container sizing fix**: the glow initially bled outward via negative insets, which doesn't change actual flex layout size but visually read as the tile "growing" on selection. Restructured so a fixed-size outer shell (`outerShell`/`segmentOuter`, same size whether idle or active, `overflow:"hidden"`) is the one thing that decides the tile's footprint; the glow fills that shell edge-to-edge and is physically clipped at its boundary, so it can never visually exceed it.
+- `app/mini/create.tsx`: hour+ presets now render as explicit 3-column `flex:1` rows (`fillRow` prop) instead of a wrapping flex grid, fixing an uneven last-row + width-mismatch against the strip above.
+
+**Not verified on-device by the agent** — confirmed only via the user's own screenshots each round; last round (dual-container fix) hasn't had a screenshot check yet.
+
+### 4. Mini Mission detail screen reorder + brand CTA (`app/mini/[id].tsx`, completed-mission state)
+
+Reordered per user request: pills → Early Finish Reward card (moved up from inside the actions block, where the Live Squad banner used to sit) → Public/Solo toggle → "Your moment" → a new filled maroon **"Take me to my spot"** button at the very bottom (was a flat tinted-cyan "Live Squad" info banner at the top, easy to miss and not obviously tappable). Reuses the existing `openLiveSquadBoard` navigation. **Not verified on-device.**
+
+### 5. Live timer (in-progress) screen refresh (`app/mini/[id].tsx`)
+
+- **Info icon baseline**: `titleRow` was `alignItems:"center"` (centers against the whole, possibly two-line, text block) plus a hardcoded `translateY:3` fudge tuned for one title length. First attempt switched to `alignItems:"baseline"` — made it worse (RN has no real baseline for a non-text icon node; it resolved to the icon's top edge, dropping it well below the text). Reverted to plain `alignItems:"center"`, no transform — title's line-height is tight (1.12×) so this should land close to the glyphs' own center. **User has seen the baseline attempt (confirmed wrong); the current plain-center revert has not yet been re-checked.**
+- **Focus Mode + Invite Others**: were a strong outlined "Focus Mode" button and a separate, easy-to-miss flat "Do it with others?" card. Now a matched side-by-side brand pair (`brandActionsRow`/`brandAction`): light theme outlined (transparent fill, colored border+text), dark theme solid fill — per explicit user choice. Focus Mode icon changed `Maximize2` → `TreePine` (forest green); Invite Others icon changed to `Users` (the same "community" icon already used elsewhere), colored maroon. Label adapts ("Invite Others" / "Invite More" / "View Squad") but always calls the existing `openLiveSquadEntry` handler.
+- **Not yet done** (still open from the user's original 4-item list, explored via an artifact mockup but not implemented): a tap-to-toggle countdown/countup on the timer face itself, porting the convention from the main-habit `Timer.tsx` component (cross-fade + corner arrow). `IsolatedFlightCountdown` (`app/mini/[id].tsx:1074-1137`) is still purely one-directional.
+
+### Also present in the working tree from earlier in this session (not this entry's focus, noting for completeness)
+
+- `app/habit/[id].tsx`: added an "Open group mission" icon button in the header when a habit belongs to a challenge group.
+- `app/notifications.tsx` + `supabase/functions/notify-push/index.ts`: notification copy/push payloads for the Live Squad link-join feature's four statuses (`live_mini_join_request`/`approved`/`declined`/`removed`) — the RPCs/migration for that feature were already logged in the 2026-09-30 entry below, but this notification-surface wiring was still outstanding until now.
+- `src/components/ShareWinModal.tsx`: Android share-image fix — forces `useInternalStorage: true` for `react-native-share`, since its bundled `FileProvider` config only declares the internal cache dir + public Downloads as shareable roots, and the default external cache dir isn't in that allowlist.
+- `src/components/CommunityWinFeedPost.tsx`: small `flexShrink`/`minWidth` fix so a long player name wraps/truncates instead of pushing league badges off-screen.
 
 ## Session Handoff (2026-10-01 — app version bump drifted twice; fixed with a sync script)
 
