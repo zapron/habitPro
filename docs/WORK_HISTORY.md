@@ -2,6 +2,16 @@
 
 This is a concise chronological log for future sessions. Keep secrets out of this file.
 
+## 2026-10-05 (Focus Mode Forest theme, brand action-button trio, tap-to-toggle timer, freeform check-in + habit day-anchoring fixes)
+
+Full detail in `docs/CURRENT_WORK.md`. Pure client-side round, no migration. Committed (`bb9aeac`), pushed, OTA'd (update group `b8912aba-607a-4b94-a86c-2fc25663adc9`) at the user's request.
+
+- Focus Mode gained a new "Forest" palette: brand green active cells, a blinking maroon→amber boundary cell, a final-30s full-grid color inversion (also manually tap-triggerable), and a compact Basic/Forest radio toggle in the header defaulting to Forest. Fixed a digit-count flicker in the countdown label along the way.
+- Focus Mode / Invite Others / Mark Complete are now three distinctly colored actions (green/maroon/amber) instead of two landing on maroon — root cause was the default `Button` fill aliasing to maroon on the Minimalist theme pack. Same recolor applied to the "Time is up" Complete/Retry/Fail trio; `ConfirmDialog` actions gained an optional style override.
+- Mini-mission timer can now be tapped to flip between remaining and elapsed, porting the habit screen's `Timer` component convention onto the one timer every mission type shares.
+- Fixed a shared-helper gap (`isMiniMissionAwaitingCheckIn`) that disagreed with the mini-mission detail screen about whether an expired freeform mission should still be completable — list/tabs/counters now agree with the detail screen.
+- Fixed a real data-integrity bug in habit day-numbering: a creation day with real logged content now stays permanently anchored to its actual date instead of silently sliding forward and becoming unreachable after a missed rollover. Verified with isolated scenario tests against the real logic before trusting it. Retroactive for already-affected users — nothing was ever lost, only mis-mapped at read time.
+
 ## 2026-10-04, second entry (Live Squad: direct link-join, removal detaches instead of zombie-linking, RLS leak closed)
 
 Full detail in `docs/CURRENT_WORK.md`. Triggered by a real 2-user production test of the link-join feature shipped earlier today, which surfaced: an unwanted approval gate (removed — joining via link now joins and starts immediately, like the existing username-invite accept flow), a real RLS leak (`user_is_live_mini_participant()` ignored participant status, so a removed/`cancelled` person could still read the board — fixed to exclude `cancelled`/`declined`/`expired`), and a removed participant's local mission never detaching (now clears `liveSquadId`/role and forces `visibility: "solo"` client-side on next screen open, mirroring the challenge-kickout "detach and preserve" precedent — not deleted, moments kept). Also added a task-checklist preview to the join screen itself. One new migration (`20261005120000_live_mini_direct_link_join.sql`), tested locally via `db:reset` + a live RPC verification script. **Not committed, not pushed, not OTA'd** — holding for the user's go-ahead.
