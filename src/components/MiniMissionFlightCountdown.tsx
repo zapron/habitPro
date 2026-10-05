@@ -1,6 +1,9 @@
-import { StyleSheet,
+import { Animated,
+  StyleSheet,
+  TouchableOpacity,
   View,
 } from "react-native";
+import { ArrowDown, ArrowUp } from "lucide-react-native";
 import { useTheme } from "../context/ThemeContext";
 import {
   SplitFlapTimeDisplay,
@@ -34,12 +37,26 @@ type MiniMissionFlightCountdownProps = {
   display: string;
   phase: ProgressivePhase;
   tone: MiniMissionFlightTone;
+  /** Tap the digits to flip between remaining and elapsed — same cross-fade
+   * + corner-arrow convention as the habit screen's `Timer`. Omit to leave
+   * this non-interactive (no arrow, not tappable), e.g. once the timer's
+   * already up. */
+  onToggle?: () => void;
+  /** Which of the two the caller is currently showing — drives the corner
+   * arrow's direction (down = remaining, up = elapsed), same as `Timer`. */
+  showingRemaining?: boolean;
+  /** Drives the 110ms-out/110ms-in cross-fade on toggle; the caller owns it
+   * since it also has to coordinate the actual display swap mid-fade. */
+  fadeAnim?: Animated.Value;
 };
 
 export function MiniMissionFlightCountdown({
   display,
   phase,
   tone,
+  onToggle,
+  showingRemaining,
+  fadeAnim,
 }: MiniMissionFlightCountdownProps) {
   const { theme } = useTheme();
   const safeDisplay = display || fallbackDisplay(phase);
@@ -75,6 +92,8 @@ export function MiniMissionFlightCountdown({
             textShadowRadius: 6,
           };
 
+  const canToggle = Boolean(onToggle);
+
   return (
     <View
       style={[
@@ -87,17 +106,37 @@ export function MiniMissionFlightCountdown({
         },
       ]}
     >
-      <View style={styles.contentContainer}>
-        <SplitFlapTimeDisplay
-          display={safeDisplay}
-          phase={phase}
-          timeColor={timeColor}
-          size="large"
-          unitLabels={LEGEND_BY_PHASE[phase]}
-          unitColor={theme.colors.textMuted}
-          digitTextShadow={digitTextShadow}
-        />
-      </View>
+      {canToggle ? (
+        <View style={styles.cornerArrow} pointerEvents="none">
+          {showingRemaining ? (
+            <ArrowDown size={13} color={theme.colors.textMuted} strokeWidth={2.4} />
+          ) : (
+            <ArrowUp size={13} color={theme.colors.textMuted} strokeWidth={2.4} />
+          )}
+        </View>
+      ) : null}
+      <TouchableOpacity
+        onPress={canToggle ? onToggle : undefined}
+        disabled={!canToggle}
+        activeOpacity={0.7}
+        accessibilityRole={canToggle ? "button" : undefined}
+        accessibilityLabel={
+          canToggle ? (showingRemaining ? "Show time elapsed" : "Show time left") : undefined
+        }
+        style={styles.contentContainer}
+      >
+        <Animated.View style={fadeAnim ? { opacity: fadeAnim } : undefined}>
+          <SplitFlapTimeDisplay
+            display={safeDisplay}
+            phase={phase}
+            timeColor={timeColor}
+            size="large"
+            unitLabels={LEGEND_BY_PHASE[phase]}
+            unitColor={theme.colors.textMuted}
+            digitTextShadow={digitTextShadow}
+          />
+        </Animated.View>
+      </TouchableOpacity>
     </View>
   );
 }
@@ -113,5 +152,11 @@ const styles = StyleSheet.create({
   contentContainer: {
     width: "100%",
     minWidth: 0,
+  },
+  cornerArrow: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    opacity: 0.55,
   },
 });

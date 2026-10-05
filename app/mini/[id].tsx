@@ -339,7 +339,27 @@ type FocusGridPalette = {
     label: string;
     border: string;
   };
+  /** Forest-only: instead of every active cell sharing one static color, the
+   * single cell currently at the depletion edge blinks — red out at the
+   * spiral's outer rim, shifting to amber as the edge nears the center. */
+  blinkBoundary?: boolean;
 };
+
+/** Linear RGB lerp between two "#rrggbb" colors. Used only for the Forest
+ * palette's boundary-cell red->amber shift as it spirals toward center. */
+function lerpHexColor(from: string, to: string, t: number): string {
+  const clamped = Math.max(0, Math.min(1, t));
+  const parse = (hex: string) => [
+    parseInt(hex.slice(1, 3), 16),
+    parseInt(hex.slice(3, 5), 16),
+    parseInt(hex.slice(5, 7), 16),
+  ];
+  const [r1, g1, b1] = parse(from);
+  const [r2, g2, b2] = parse(to);
+  const mix = (a: number, b: number) => Math.round(a + (b - a) * clamped);
+  const toHex = (v: number) => v.toString(16).padStart(2, "0");
+  return `#${toHex(mix(r1, r2))}${toHex(mix(g1, g2))}${toHex(mix(b1, b2))}`;
+}
 
 const FOCUS_GRID_PALETTES: FocusGridPalette[] = [
   {
@@ -447,7 +467,27 @@ const FOCUS_GRID_PALETTES: FocusGridPalette[] = [
       border: "rgba(220, 38, 38, 0.18)",
     },
   },
+  {
+    name: "Forest",
+    blinkBoundary: true,
+    dark: {
+      cell: "#22c55e",
+      shadow: "#4ade80",
+      label: "rgba(134, 239, 172, 0.8)",
+      border: "rgba(34, 197, 94, 0.24)",
+    },
+    light: {
+      cell: "#15803d",
+      shadow: "#22c55e",
+      label: "rgba(15, 93, 43, 0.78)",
+      border: "rgba(21, 128, 61, 0.2)",
+    },
+  },
 ];
+
+// Jumped to directly from the Basic/Forest header toggle, instead of making
+// people cycle through the other 7 colors by tapping the grid to find it.
+const FOCUS_FOREST_PALETTE_INDEX = FOCUS_GRID_PALETTES.findIndex((p) => p.name === "Forest");
 
 type FocusSecondCellProps = {
   active: boolean;
@@ -456,6 +496,9 @@ type FocusSecondCellProps = {
   shadowColor: string;
   animate: boolean;
   glow: boolean;
+  /** Forest palette only: this is the single cell currently at the
+   * depletion edge — blink it instead of rendering it static. */
+  blink?: boolean;
 };
 
 const FocusSecondCell = memo(function FocusSecondCell({
@@ -465,8 +508,10 @@ const FocusSecondCell = memo(function FocusSecondCell({
   shadowColor,
   animate,
   glow,
+  blink = false,
 }: FocusSecondCellProps) {
   const visibility = useRef(new Animated.Value(active ? 1 : 0)).current;
+  const blinkOpacity = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     if (!animate) {
@@ -481,10 +526,37 @@ const FocusSecondCell = memo(function FocusSecondCell({
     }).start();
   }, [active, animate, visibility]);
 
-  const opacity = visibility.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0.16, 0.9],
-  });
+  useEffect(() => {
+    if (!blink) {
+      blinkOpacity.setValue(1);
+      return;
+    }
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(blinkOpacity, {
+          toValue: 0.3,
+          duration: 420,
+          easing: Easing.inOut(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.timing(blinkOpacity, {
+          toValue: 1,
+          duration: 420,
+          easing: Easing.inOut(Easing.quad),
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [blink, blinkOpacity]);
+
+  const opacity = blink
+    ? blinkOpacity
+    : visibility.interpolate({
+        inputRange: [0, 1],
+        outputRange: [0.16, 0.9],
+      });
   const scale = visibility.interpolate({
     inputRange: [0, 1],
     outputRange: [0.72, 1],
@@ -534,13 +606,33 @@ function FocusSecondsMatrix({
 }: FocusSecondsMatrixProps) {
   const { isDark } = useTheme();
   const { width, height } = useWindowDimensions();
-  const [paletteIndex, setPaletteIndex] = useState(0);
+  const [paletteIndex, setPaletteIndex] = useState(() =>
+    FOCUS_FOREST_PALETTE_INDEX >= 0 ? FOCUS_FOREST_PALETTE_INDEX : 0,
+  );
+  // Forest only: a manual override that mirrors the same flip the last-30s
+  // auto-flip does (below) — tapping the grid flips it immediately, any
+  // time, independent of the timer. XORed with the automatic flip rather
+  // than replacing it, so tapping during the real last-30s auto-flip
+  // correctly flips it *back* to the normal look instead of doing nothing.
+  const [forestManualFlip, setForestManualFlip] = useState(false);
   const remainingSeconds = Math.max(0, Math.ceil(countdownMs / 1000));
   const palette = FOCUS_GRID_PALETTES[paletteIndex % FOCUS_GRID_PALETTES.length];
   const paletteColors = isDark ? palette.dark : palette.light;
   const cycleFocusPalette = useCallback(() => {
     void Haptics.selectionAsync();
     setPaletteIndex((current) => (current + 1) % FOCUS_GRID_PALETTES.length);
+  }, []);
+  // Explicit Basic/Forest shortcut, next to the clock — jumps straight
+  // there instead of making people tap the grid repeatedly to cycle past
+  // the other 7 colors to find it. Grid tap-to-cycle keeps working
+  // unchanged for picking among the "Basic" set.
+  const selectBasicPalette = useCallback(() => {
+    void Haptics.selectionAsync();
+    setPaletteIndex(0);
+  }, []);
+  const selectForestPalette = useCallback(() => {
+    void Haptics.selectionAsync();
+    setPaletteIndex(FOCUS_FOREST_PALETTE_INDEX >= 0 ? FOCUS_FOREST_PALETTE_INDEX : 0);
   }, []);
   // Keep the grid as the original mission container. Reserve fuel refills
   // vanished dots instead of adding new cells or changing the layout.
@@ -554,14 +646,30 @@ function FocusSecondsMatrix({
     matrixSeconds,
     totalCells,
   );
+  // Real brand maroon — flat per theme (no separate shade ramp), same tokens
+  // used everywhere else for "the other brand color" alongside forest green.
+  const MAROON = isDark ? "#8E1D33" : "#6E1727";
+  const isForestPalette = Boolean(palette.blinkBoundary);
+  // Forest's own final-stretch inversion: in the last 30s, swap roles
+  // entirely instead of going flat red/amber like every other palette —
+  // active cells turn maroon, and the boundary cell (below) blinks
+  // green->amber instead of maroon->amber. XORed with the manual tap-flip
+  // (above) so a tap during the real last-30s window flips it back, and a
+  // tap any other time flips it forward — same mirror, two triggers.
+  const forestAutoFlip = isForestPalette && !isTimerUp && remainingSeconds <= 30;
+  const forestFinalStretch = isForestPalette && forestAutoFlip !== forestManualFlip;
   const cellColor = isTimerUp
     ? isDark
       ? "#ef4444"
       : "#dc2626"
-    : remainingSeconds <= 10
-      ? isDark
-        ? "#fb7185"
-        : "#e11d48"
+    : isForestPalette
+      ? forestFinalStretch
+        ? MAROON
+        : paletteColors.cell
+      : remainingSeconds <= 10
+        ? isDark
+          ? "#fb7185"
+          : "#e11d48"
         : remainingSeconds <= 30
           ? isDark
             ? "#f59e0b"
@@ -632,17 +740,35 @@ function FocusSecondsMatrix({
     [rows, columns, totalCells],
   );
   const elapsedCells = totalCells - activeCells;
+  // Forest only: the single cell at the depletion edge (the next one about
+  // to go inactive) blinks maroon->amber, shifting as that edge nears the
+  // center. In the final-stretch inversion (above), it blinks the other way
+  // — green->amber — matching the rest of the grid's flip.
+  const boundaryRank = elapsedCells;
+  const hasBoundaryCell = palette.blinkBoundary && boundaryRank < totalCells;
+  const boundaryColor = hasBoundaryCell
+    ? lerpHexColor(
+        forestFinalStretch ? paletteColors.cell : MAROON,
+        isDark ? "#f59e0b" : "#d97706",
+        totalCells > 1 ? boundaryRank / (totalCells - 1) : 1,
+      )
+    : cellColor;
   const cellSize = gridLayout.cellSize;
   const glowCells = totalCells <= 240 && cellSize >= 5;
   const displaySeconds = Math.max(1, totalMissionSeconds);
-  const remainingLabel =
-    displaySeconds <= 999
-      ? `${remainingSeconds}`
-      : `${Math.ceil(remainingSeconds / 60)}m`;
   const totalLabel =
     displaySeconds <= 999
       ? `${displaySeconds}`
       : `${Math.ceil(displaySeconds / 60)}m`;
+  // Zero-padded to totalLabel's own digit count so the countdown's rendered
+  // width never changes as the digit count shrinks (100 -> 99 -> ... -> 9) —
+  // that reflow was shoving the header's Basic/Forest toggle and the MIN
+  // column sideways every time a digit dropped off.
+  const rawRemainingLabel =
+    displaySeconds <= 999
+      ? `${remainingSeconds}`
+      : `${Math.ceil(remainingSeconds / 60)}m`;
+  const remainingLabel = rawRemainingLabel.padStart(totalLabel.length, "0");
   const cardColors = isDark
     ? {
         bg: "#0b1f27",
@@ -651,7 +777,7 @@ function FocusSecondsMatrix({
         detail: "rgba(203, 213, 225, 0.72)",
         detailValue: "#e2e8f0",
         valueMuted: "rgba(203, 213, 225, 0.52)",
-        shadow: paletteColors.shadow,
+        shadow: forestFinalStretch ? MAROON : paletteColors.shadow,
       }
     : {
         bg: "#ffffff",
@@ -660,7 +786,7 @@ function FocusSecondsMatrix({
         detail: "rgba(71, 85, 105, 0.72)",
         detailValue: "#334155",
         valueMuted: "rgba(71, 85, 105, 0.45)",
-        shadow: paletteColors.shadow,
+        shadow: forestFinalStretch ? MAROON : paletteColors.shadow,
       };
 
   return (
@@ -674,7 +800,18 @@ function FocusSecondsMatrix({
       ]}
     >
       <View style={focusStyles.secondsHeader}>
-        <View style={focusStyles.secondsTitleCol}>
+        <View
+          style={[
+            focusStyles.secondsTitleCol,
+            // Reserved at the widest this column will ever need to be (both
+            // labels are now the same digit count throughout the countdown,
+            // via the zero-padding above) so this box's own width never
+            // changes — the fix for the flicker isn't the padding alone,
+            // it's that nothing to the right can shift once this box can't
+            // resize, regardless of any remaining per-digit width variance.
+            { minWidth: (totalLabel.length * 2 + 1) * 15 },
+          ]}
+        >
           <Text style={[focusStyles.secondsKicker, { color: cardColors.label }]}>
             Time
           </Text>
@@ -682,6 +819,46 @@ function FocusSecondsMatrix({
             <Text style={{ color: cellColor }}>{remainingLabel}</Text>
             <Text style={{ color: cardColors.valueMuted }}>/{totalLabel}</Text>
           </Text>
+        </View>
+        <View style={focusStyles.themeRadioCol}>
+          <TouchableOpacity
+            onPress={selectForestPalette}
+            activeOpacity={0.7}
+            accessibilityRole="radio"
+            accessibilityState={{ checked: isForestPalette }}
+            accessibilityLabel="Forest color grid"
+            style={focusStyles.themeRadioRow}
+          >
+            <View
+              style={[
+                focusStyles.themeRadioDot,
+                {
+                  borderColor: MAROON,
+                  backgroundColor: isForestPalette ? MAROON : "transparent",
+                },
+              ]}
+            />
+            <Text style={[focusStyles.themeRadioLabel, { color: cardColors.detail }]}>Forest</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={selectBasicPalette}
+            activeOpacity={0.7}
+            accessibilityRole="radio"
+            accessibilityState={{ checked: !isForestPalette }}
+            accessibilityLabel="Basic color grid"
+            style={focusStyles.themeRadioRow}
+          >
+            <View
+              style={[
+                focusStyles.themeRadioDot,
+                {
+                  borderColor: cardColors.valueMuted,
+                  backgroundColor: !isForestPalette ? cardColors.valueMuted : "transparent",
+                },
+              ]}
+            />
+            <Text style={[focusStyles.themeRadioLabel, { color: cardColors.detail }]}>Basic</Text>
+          </TouchableOpacity>
         </View>
         <View style={focusStyles.secondsMeta}>
           <View style={focusStyles.secondsMetaItem}>
@@ -714,8 +891,23 @@ function FocusSecondsMatrix({
       </View>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={`Change focus grid color. Current color ${palette.name}.`}
-        onPress={cycleFocusPalette}
+        accessibilityLabel={
+          isForestPalette
+            ? "Flip Forest colors"
+            : `Change focus grid color. Current color ${palette.name}.`
+        }
+        onPress={() => {
+          // Forest: tapping the grid flips its colors (mirrors the same
+          // last-30s auto-flip, manually, any time) instead of cycling to
+          // the next Basic color — that's what the Basic/Forest toggle
+          // above is for now.
+          if (isForestPalette) {
+            void Haptics.selectionAsync();
+            setForestManualFlip((v) => !v);
+            return;
+          }
+          cycleFocusPalette();
+        }}
         style={[focusStyles.secondsGrid, { width: gridLayout.width }]}
       >
         {Array.from({ length: rows }, (_, row) => (
@@ -749,11 +941,12 @@ function FocusSecondsMatrix({
                 >
                   <FocusSecondCell
                     active={spiralRanks[index] >= elapsedCells}
-                    color={cellColor}
+                    color={hasBoundaryCell && spiralRanks[index] === boundaryRank ? boundaryColor : cellColor}
                     size={cellSize}
                     shadowColor={cardColors.shadow}
                     animate={animateCells}
                     glow={glowCells}
+                    blink={hasBoundaryCell && spiralRanks[index] === boundaryRank}
                   />
                 </View>
               );
@@ -1087,6 +1280,11 @@ const IsolatedFlightCountdown = memo(({
   onTimerExpired: () => void;
 }) => {
   const [now, setNow] = useState(Date.now());
+  // Tap-to-toggle between remaining and elapsed — same cross-fade + corner
+  // arrow convention as the habit screen's `Timer`, ported here since this
+  // screen's timer only ever showed remaining before.
+  const [showRemaining, setShowRemaining] = useState(true);
+  const fadeAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     if (status !== "in_progress" || completeSheetOpen) return;
@@ -1119,19 +1317,35 @@ const IsolatedFlightCountdown = memo(({
     };
   }, [startedAt, totalMinutes, status, completeSheetOpen, onTimerExpired]);
 
-  const countdown = Math.max(0, new Date(startedAt).getTime() + totalMinutes * 60 * 1000 - (completeSheetOpen && timerFrozenAtMs !== null ? timerFrozenAtMs : now));
+  const effectiveNow = completeSheetOpen && timerFrozenAtMs !== null ? timerFrozenAtMs : now;
+  const startMs = new Date(startedAt).getTime();
+  const countdown = Math.max(0, startMs + totalMinutes * 60 * 1000 - effectiveNow);
+  const elapsed = Math.max(0, effectiveNow - startMs);
   const isTimerUp = status === "in_progress" && countdown === 0;
 
-  const flightProgressive = remainingMsToProgressiveCountdown(countdown);
+  const remainingProgressive = remainingMsToProgressiveCountdown(countdown);
+  const elapsedProgressive = remainingMsToProgressiveCountdown(elapsed);
+  const activeProgressive = showRemaining ? remainingProgressive : elapsedProgressive;
   const flightTone = isTimerUp ? "danger" as const : "countdown" as const;
+
+  const handleToggle = useCallback(() => {
+    Animated.sequence([
+      Animated.timing(fadeAnim, { toValue: 0, duration: 110, useNativeDriver: true }),
+      Animated.timing(fadeAnim, { toValue: 1, duration: 110, useNativeDriver: true }),
+    ]).start();
+    setTimeout(() => setShowRemaining((prev) => !prev), 110);
+  }, [fadeAnim]);
 
   if (isTimerUp) return null;
 
   return (
     <MiniMissionFlightCountdown
-      display={flightProgressive.display}
-      phase={flightProgressive.phase}
+      display={activeProgressive.display}
+      phase={activeProgressive.phase}
       tone={flightTone}
+      onToggle={handleToggle}
+      showingRemaining={showRemaining}
+      fadeAnim={fadeAnim}
     />
   );
 });
@@ -1521,17 +1735,12 @@ export default function MiniMissionDetail() {
       : null;
   const isTimerCheckInSoloMode =
     Boolean(mission && mission.completionMode === "timer_check_in" && !mission.liveSquadId);
-  // A timed-out freeform mission gets the same "did you complete this?" review as
-  // Timer Check-In mode, instead of failing automatically — a fixed timer doesn't fit
-  // freeform capture well (you're logging moments as they happen, not racing a single
-  // deadline), so the user gets a chance to mark it complete with whatever was
-  // captured. Live Squad missions are excluded — those use the shared squad board's
-  // own missed/retry semantics, not this local single-player flow.
+  // Freeform's "gets the review treatment too" exception now lives inside
+  // isMiniMissionAwaitingCheckIn itself (miniMissionTime.ts) — every screen
+  // that calls it (this one included) agrees on the same answer, instead of
+  // this screen alone compensating for a gap in the shared helper.
   const isTimerCheckInReview = Boolean(
-    mission &&
-      isTimerUpState &&
-      (isMiniMissionAwaitingCheckIn(mission, Date.now()) ||
-        (mission.captureMode === "freeform" && !mission.liveSquadId)),
+    mission && isTimerUpState && isMiniMissionAwaitingCheckIn(mission, Date.now()),
   );
   const isMiniMissionFailed = Boolean(mission && (mission.status === "missed" || (isTimerUpState && !isTimerCheckInReview)));
   const timerCheckInPromptKey =
@@ -2430,9 +2639,21 @@ export default function MiniMissionDetail() {
         title="Time is up"
         message="Did you complete this mini mission? You can save it now and add a memory if you want."
         actions={[
-          { label: "Complete", onPress: handleMarkComplete },
+          {
+            label: "Complete",
+            onPress: handleMarkComplete,
+            style: {
+              backgroundColor: theme.colors.green[isDark ? 500 : 600],
+              borderColor: theme.colors.green[isDark ? 500 : 600],
+            },
+          },
           { label: "Retry", variant: "secondary", onPress: handleRetryFailed },
-          { label: "Fail", variant: "danger", onPress: handleFailMiniMission },
+          {
+            label: "Fail",
+            variant: "danger",
+            onPress: handleFailMiniMission,
+            style: { backgroundColor: theme.colors.maroon[500], borderColor: theme.colors.maroon[500] },
+          },
         ]}
       />
 
@@ -2976,6 +3197,19 @@ export default function MiniMissionDetail() {
               <Button
                 title={mission.captureMode === "freeform" ? "Add a Moment" : "Mark Complete"}
                 onPress={handleMarkComplete}
+                // Third color in the brand trio below Focus Mode (green) /
+                // Invite Others (maroon) — amber, so all three read as
+                // distinct actions instead of two of them both landing on
+                // maroon. theme.colors.amber is the same pack-independent
+                // token used for the flame/reward accents elsewhere, not
+                // the default Button "primary" fill (theme.colors.indigo),
+                // which aliases to maroon specifically on the Minimalist
+                // pack — that alias is exactly why this button was
+                // rendering maroon before.
+                style={{
+                  backgroundColor: theme.colors.amber[500],
+                  borderColor: theme.colors.amber[500],
+                }}
               />
               {allowReserveFuel ? (
                 reserveFull || !reserveCanAdd ? (
@@ -3046,9 +3280,21 @@ export default function MiniMissionDetail() {
                   </Text>
                 </View>
               </View>
-              <Button title="Complete" onPress={handleMarkComplete} />
+              <Button
+                title="Complete"
+                onPress={handleMarkComplete}
+                style={{
+                  backgroundColor: theme.colors.green[isDark ? 500 : 600],
+                  borderColor: theme.colors.green[isDark ? 500 : 600],
+                }}
+              />
               <Button title="Retry" variant="secondary" onPress={handleRetryFailed} />
-              <Button title="Fail" variant="danger" onPress={handleFailMiniMission} />
+              <Button
+                title="Fail"
+                variant="danger"
+                onPress={handleFailMiniMission}
+                style={{ backgroundColor: theme.colors.maroon[500], borderColor: theme.colors.maroon[500] }}
+              />
             </>
           )}
 
@@ -3802,6 +4048,27 @@ const focusStyles = StyleSheet.create({
     width: 1,
     height: 24,
     opacity: 0.8,
+  },
+  themeRadioCol: {
+    flexDirection: "row",
+    gap: 12,
+    alignItems: "center",
+  },
+  themeRadioRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  themeRadioDot: {
+    width: 9,
+    height: 9,
+    borderRadius: 5,
+    borderWidth: 1.4,
+  },
+  themeRadioLabel: {
+    fontSize: 9.5,
+    fontWeight: "800",
+    letterSpacing: 0.2,
   },
   secondsGrid: {
     alignSelf: "center",

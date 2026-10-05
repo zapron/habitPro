@@ -19,7 +19,19 @@ export function isMiniMissionTimerDepleted(m: MiniMission, now: number): boolean
 
 export function isMiniMissionAwaitingCheckIn(m: MiniMission, now: number): boolean {
   return (
-    getMiniMissionCompletionMode(m) === "timer_check_in" &&
+    // A timed-out freeform mission gets the same "did you complete this?"
+    // review as Timer Check-In mode, instead of failing automatically — a
+    // fixed timer doesn't fit freeform capture well (you're logging moments
+    // as they happen, not racing a single deadline), so the user gets a
+    // chance to mark it complete with whatever was captured. Live Squad
+    // missions are excluded — those use the shared squad board's own
+    // missed/retry semantics, not this local single-player flow. This was
+    // previously only patched into app/mini/[id].tsx's own local check, not
+    // here — every other screen that calls this helper directly (the mini
+    // missions list/tabs, missed-counters) kept showing an expired freeform
+    // mission as "Failed" with a Retry-only action, even though the detail
+    // screen still correctly offered a working Complete path underneath.
+    (getMiniMissionCompletionMode(m) === "timer_check_in" || m.captureMode === "freeform") &&
     !m.liveSquadId &&
     isMiniMissionTimerDepleted(m, now)
   );

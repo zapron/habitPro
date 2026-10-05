@@ -55,12 +55,52 @@ function creationDayCompleted(habit: Habit, creationKey: string): boolean {
   return (habit.completedDates ?? []).includes(creationKey);
 }
 
+/**
+ * Any real logged content for the creation day — a classic note/photo, a
+ * "just mark done" check-in, or any checklist task entries at all (even if
+ * none of them are individually marked done yet). Checklist missions let
+ * you log several tasks across a day without that alone completing it —
+ * the original single-note-per-day habits had no such gap, since logging
+ * the one photo/note *was* completing the day, so this case never used to
+ * exist. See `creationDayAnchored` below for why this matters.
+ */
+function creationDayHasLoggedContent(habit: Habit, creationKey: string): boolean {
+  const memory = habit.streakMemories?.[creationKey];
+  if (!memory) return false;
+  return Boolean(
+    memory.note ||
+      memory.imageUri ||
+      memory.imageUrl ||
+      memory.checkInOnly ||
+      (memory.tasks && memory.tasks.length > 0),
+  );
+}
+
+/**
+ * Whether the creation day should stay permanently "Day 1", rather than
+ * being eligible for the one-time late-joiner grace rollover (below) that
+ * shifts Day 1 forward to the next calendar date.
+ *
+ * The grace rollover exists to protect a genuine no-show — e.g. joining a
+ * mission at 11:40pm and never touching it that day shouldn't cost someone
+ * their whole Day 1 twenty minutes later. It was never meant to sweep away
+ * *real* logged content just because "Mark Day Complete" wasn't tapped —
+ * before checklist missions existed, that case couldn't happen (logging
+ * the day's one photo/note completed it in the same action), so nobody
+ * had to consider it. `creationDayHasLoggedContent` closes that gap: once
+ * anything is actually logged, the day is anchored and the rollover never
+ * fires for it, so nothing already captured can ever become unreachable.
+ */
+function creationDayAnchored(habit: Habit, creationKey: string): boolean {
+  return creationDayCompleted(habit, creationKey) || creationDayHasLoggedContent(habit, creationKey);
+}
+
 export function isHabitCreationGraceDay(habit: Habit, nowMs: number): boolean {
   if (!usesCalendarDayMission(habit)) return false;
   const tz = getHabitMissionTimeZone(habit);
   const createdKey = creationDateKey(habit, tz);
   const todayKey = calendarDateKeyForTimestamp(nowMs, tz);
-  return todayKey === createdKey && !creationDayCompleted(habit, createdKey);
+  return todayKey === createdKey && !creationDayAnchored(habit, createdKey);
 }
 
 export function getHabitActiveMissionDaySlot(habit: Habit, nowMs: number): number | null {
@@ -74,12 +114,12 @@ export function getHabitActiveMissionDaySlot(habit: Habit, nowMs: number): numbe
   const todayKey = calendarDateKeyForTimestamp(nowMs, tz);
   if (todayKey < createdKey) return null;
 
-  const createdCompleted = creationDayCompleted(habit, createdKey);
+  // Anchored (completed, or already has real content) or still same-day —
+  // both resolve to the identical "days between creation and today" count,
+  // since that's 0 on the creation day itself either way.
   let slot: number;
-  if (createdCompleted) {
+  if (creationDayAnchored(habit, createdKey) || todayKey === createdKey) {
     slot = calendarDaysBetween(createdKey, todayKey) + 1;
-  } else if (todayKey === createdKey) {
-    slot = 1;
   } else {
     const firstRequiredKey = addCalendarDaysToDateKey(createdKey, 1);
     slot = calendarDaysBetween(firstRequiredKey, todayKey) + 1;
@@ -101,10 +141,8 @@ export function calendarDateForHabitMissionDayIndex(
   const tz = getHabitMissionTimeZone(habit);
   const createdKey = creationDateKey(habit, tz);
   const todayKey = calendarDateKeyForTimestamp(nowMs, tz);
-  const createdCompleted = creationDayCompleted(habit, createdKey);
-  const creationDayIsCurrentGrace = todayKey === createdKey && !createdCompleted;
   const offset =
-    createdCompleted || creationDayIsCurrentGrace
+    creationDayAnchored(habit, createdKey) || todayKey === createdKey
       ? dayIndexZeroBased
       : dayIndexZeroBased + 1;
   return addCalendarDaysToDateKey(createdKey, offset);

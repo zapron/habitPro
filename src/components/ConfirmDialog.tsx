@@ -6,6 +6,8 @@ import {
   Pressable,
   StyleSheet,
   View,
+  type StyleProp,
+  type ViewStyle,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "../context/ThemeContext";
@@ -19,6 +21,11 @@ export type ConfirmDialogAction = {
   onPress: () => void;
   /** Default `primary`. Use `secondary` for Cancel-style, `danger` for destructive. */
   variant?: "primary" | "secondary" | "danger";
+  /** Overrides the variant's own color only — e.g. a brand color instead of
+   * the variant's default fill, while keeping its press/haptic behavior
+   * (a `danger` action still gets the warning haptic even with a custom
+   * background). */
+  style?: StyleProp<ViewStyle>;
 };
 
 export type ConfirmDialogProps = {
@@ -121,6 +128,7 @@ export function ConfirmDialog({
                 title={a.label}
                 variant={a.variant ?? "primary"}
                 onPress={a.onPress}
+                style={a.style}
               />
             ))}
           </View>
