@@ -1,4 +1,5 @@
 import type { MiniMission } from "../types/habit";
+import { calendarDayEndUtcMsForTimestamp, getMissionCalendarTimeZone } from "./missionCalendarKeys";
 
 export function getMiniMissionCompletionMode(m: MiniMission) {
   return m.completionMode === "timer_check_in" ? "timer_check_in" : "manual";
@@ -52,6 +53,22 @@ export function isMiniMissionOpen(m: MiniMission, now: number): boolean {
     isMiniMissionRunning(m, now) ||
     isMiniMissionAwaitingCheckIn(m, now)
   );
+}
+
+/**
+ * A completed mission can still be published (or re-published) to Community
+ * up through midnight of the calendar day it was completed on — after that,
+ * the squad board it would have appeared "live" alongside has moved past
+ * that day, so publishing stops making sense. This replaces an old
+ * permanent lock (set the instant you declined to publish at completion, or
+ * got interrupted — e.g. a sandboxed payment gateway — with no way back)
+ * with a same-day window, same day-boundary math the streak-repair window
+ * already uses.
+ */
+export function isMiniMissionPublishWindowOpen(m: MiniMission, now: number): boolean {
+  if (!m.completedAt) return false;
+  const cutoffMs = calendarDayEndUtcMsForTimestamp(new Date(m.completedAt).getTime(), getMissionCalendarTimeZone());
+  return now <= cutoffMs;
 }
 
 export type MiniMissionDisplayStatus = "active" | "queued" | "done" | "review" | "failed" | "cancelled";

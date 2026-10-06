@@ -62,6 +62,15 @@ export function CohortParticipantTimelineLegend({
         <View
           style={[
             styles.legendSwatch,
+            { backgroundColor: withAlpha(theme.colors.green[500], 20), borderColor: theme.colors.green[600], borderWidth: 1.8, borderStyle: "dashed" },
+          ]}
+        />
+        <Text style={[styles.legendLabel, { color: theme.colors.textMuted }]}>Logged, not checked in</Text>
+      </View>
+      <View style={styles.legendItem}>
+        <View
+          style={[
+            styles.legendSwatch,
             { backgroundColor: theme.colors.surfaceElevated, borderColor: theme.colors.red[900], borderWidth: 1.8, borderStyle: "dashed" },
           ]}
         />
@@ -378,23 +387,31 @@ export const CohortPeerStreakDots = memo(function CohortPeerStreakDots({
       const isPublic = (habit.visibility ?? "solo") === "public";
       const marker = habit.streakMemoryMarkers?.[dateStr];
       const memoryTasks = memory?.tasks ?? [];
-      const hasPhoto =
-        completed &&
+      // Content presence is independent of `completed` — a day logged late, or
+      // simply never tapped "mark complete", can still carry a real photo/note.
+      // A public mission's squad should be able to see that regardless; only
+      // the completed/not-completed *styling* below (and the streak count)
+      // still cares whether the day was actually checked in.
+      const hasPhotoContent =
         isPublic &&
         Boolean(marker?.hasPhoto || memory?.imageUrl || memory?.imageUri || memoryTasks.some((t) => t.proofUrls[0]));
-      const hasNoteOnly =
-        completed &&
+      const hasNoteContent =
         isPublic &&
-        !hasPhoto &&
+        !hasPhotoContent &&
         Boolean(marker?.hasNote || memory?.note?.trim() || memoryTasks.some((t) => t.note?.trim()));
-      const hasMemory = hasPhoto || hasNoteOnly;
-      const isCheckInOnly = completed && isPublic && !hasMemory;
-      const tappable = completed;
+      const hasMemoryContent = hasPhotoContent || hasNoteContent;
+      const isCheckInOnly = completed && isPublic && !hasMemoryContent;
+      const hasMemoryNotCompleted = !completed && hasMemoryContent;
+      const tappable = completed || hasMemoryNotCompleted;
 
       // Mirrors the habit detail screen's day-grid: a single solid dull-green
       // circle for completed days (camera/note icon stacked above a thin white
       // number), a dashed dull-red outline for the current day, plain/neutral
       // otherwise — instead of the old indigo-tinted dot + floating corner badge.
+      // A fourth state sits between "completed" and "current day": a memory
+      // exists but the day was never marked done — shown as a dashed green
+      // ring over a lightly-tinted (not fully solid) green fill, so it reads
+      // as "something's there, just not a full checked-in day."
       let dotBg = theme.colors.surfaceElevated;
       let dotBorder = theme.colors.border;
       let dotText = theme.colors.textMuted;
@@ -406,6 +423,12 @@ export const CohortPeerStreakDots = memo(function CohortPeerStreakDots({
         dotBorder = dotBg;
         dotText = isDark ? COMPLETED_DOT_ICON_GRAY : COMPLETED_DOT_TEXT_LIGHT;
         dotBorderWidth = 0;
+      } else if (hasMemoryNotCompleted) {
+        dotBg = withAlpha(theme.colors.green[500], isDark ? 28 : 20);
+        dotBorder = theme.colors.green[isDark ? 500 : 600];
+        dotText = theme.colors.green[isDark ? 500 : 600];
+        dotBorderWidth = 1.8;
+        dotBorderStyle = "dashed";
       } else if (isCurrentSlot) {
         dotBorder = theme.colors.red[900];
         dotText = theme.colors.textPrimary;
@@ -417,11 +440,11 @@ export const CohortPeerStreakDots = memo(function CohortPeerStreakDots({
       return (
         <Pressable
           onPress={() => {
-            if (!completed || isPending) return;
+            if (!tappable || isPending) return;
             if (!isPublic) {
               setOpen({ dateStr, dayNum, isPrivate: true });
-            } else if (hasMemory) {
-              void openRemoteMemory(dateStr, dayNum, memory, hasPhoto ? "photo" : "text");
+            } else if (hasMemoryContent) {
+              void openRemoteMemory(dateStr, dayNum, memory, hasPhotoContent ? "photo" : "text");
             } else if (isCheckInOnly) {
               setOpen({ dateStr, dayNum, isCheckInOnly: true });
             }
@@ -442,9 +465,9 @@ export const CohortPeerStreakDots = memo(function CohortPeerStreakDots({
             <ActivityIndicator size="small" color={dotText} />
           ) : (
             <View style={styles.dotContent}>
-              {isPublic && hasPhoto ? (
+              {hasPhotoContent ? (
                 <Camera size={10} color={dotText} strokeWidth={2.4} />
-              ) : isPublic && hasNoteOnly ? (
+              ) : hasNoteContent ? (
                 <MessageSquare size={10} color={dotText} strokeWidth={2.4} />
               ) : null}
               <Text

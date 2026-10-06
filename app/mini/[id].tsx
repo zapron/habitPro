@@ -112,7 +112,7 @@ import { backOrReplace } from "../../src/lib/navigation";
 import { showAppAlert } from "../../src/context/AppDialogContext";
 import { startJsStallProbe, traceSync } from "../../src/lib/jsThreadProbe";
 import { waitForHabitPersistIdle } from "../../src/lib/chunkedHabitPersistStorage";
-import { isMiniMissionAwaitingCheckIn } from "../../src/utils/miniMissionTime";
+import { isMiniMissionAwaitingCheckIn, isMiniMissionPublishWindowOpen } from "../../src/utils/miniMissionTime";
 import { maybeRequestStoreReview } from "../../src/lib/reviewPrompt";
 import {
   playMiniMissionCompletedSound,
@@ -2044,12 +2044,15 @@ export default function MiniMissionDetail() {
       );
     }
 
-    /** Solo at completion (or can’t publish) locks Community; successful publish sets public afterward. */
-    const lockCommunity = !canPublish;
-
+    /**
+     * Solo at completion (or can't publish right now, e.g. a sandboxed payment
+     * gateway interrupting the flow) no longer locks Community forever — the
+     * MiniVisibilityRow toggle stays available until midnight of this
+     * calendar day (isMiniMissionPublishWindowOpen), so the user can still
+     * come back and publish later today.
+     */
     useHabitStore.getState().completeMiniMission(mission.id, memoryToSave, {
       visibility: "solo",
-      communityFeedRevoked: lockCommunity,
       completedAt,
     });
     playMiniMissionCompletedSound();
@@ -2210,11 +2213,11 @@ export default function MiniMissionDetail() {
         openUpsell("community_publish");
       }
 
-      const lockCommunity = !canPublish;
-
+      // Not published now (or couldn't be) no longer locks Community forever — the
+      // MiniVisibilityRow toggle stays available until midnight of this calendar day
+      // (isMiniMissionPublishWindowOpen), so the user can still publish later today.
       useHabitStore.getState().completeMiniMission(mission.id, completionMemory, {
         visibility: "solo",
-        communityFeedRevoked: lockCommunity,
         completedAt,
       });
       playMiniMissionCompletedSound();
@@ -2373,11 +2376,11 @@ export default function MiniMissionDetail() {
         openUpsell("community_publish");
       }
 
-      const lockCommunity = !canPublish;
-
+      // Not published now (or couldn't be) no longer locks Community forever — the
+      // MiniVisibilityRow toggle stays available until midnight of this calendar day
+      // (isMiniMissionPublishWindowOpen), so the user can still publish later today.
       useHabitStore.getState().completeMiniMission(mission.id, completionMemory, {
         visibility: "solo",
-        communityFeedRevoked: lockCommunity,
         completedAt,
       });
       playMiniMissionCompletedSound();
@@ -2441,9 +2444,12 @@ export default function MiniMissionDetail() {
     if (prev === next) return;
 
     if (prev === "public" && next === "solo") {
+      const canRepublishToday = isMiniMissionPublishWindowOpen(mission, Date.now());
       showAppAlert(
         "Remove from Community?",
-        "This removes your win from the feed. You won’t be able to publish this mission to Community again.",
+        canRepublishToday
+          ? "This removes your win from the feed. You can publish it again before midnight today, but not after."
+          : "This removes your win from the feed. You won’t be able to publish this mission to Community again.",
         [
           { text: "Cancel", style: "cancel" },
           {
@@ -2465,12 +2471,12 @@ export default function MiniMissionDetail() {
         );
         return;
       }
-  
+
       if (prev === "solo" && next === "public") {
-        if (mission.communityFeedRevoked) {
+        if (!isMiniMissionPublishWindowOpen(mission, Date.now())) {
           showAppAlert(
             "Can’t publish to Community",
-            "This mission stays private. Community sharing was turned off when you completed it, or you removed it from the feed.",
+            "The window to publish this mission closed at midnight on the day you completed it.",
             [{ text: "OK" }],
           );
           return;
@@ -2530,6 +2536,7 @@ export default function MiniMissionDetail() {
             return;
           }
           useHabitStore.getState().setMiniMissionVisibility(mission.id, "public");
+          useHabitStore.getState().setMiniMissionCommunityFeedRevoked(mission.id, false);
           lastVisibilityRef.current = null;
         })();
       }
@@ -3178,7 +3185,7 @@ export default function MiniMissionDetail() {
             showToggle={
               !(
                 (mission.visibility ?? "solo") === "solo" &&
-                mission.communityFeedRevoked
+                !isMiniMissionPublishWindowOpen(mission, Date.now())
               )
             }
           />
