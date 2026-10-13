@@ -1910,6 +1910,22 @@ export default function MyJourneyScreen() {
       missionBeforeCommentsRef.current = null;
     }
   }, []);
+  // Keeps this screen's own card badge in sync the instant a comment is posted/
+  // deleted, instead of waiting for the next full refetch — same reason the
+  // main feed's cheer toggle updates cheerCount locally rather than reloading.
+  const handleCommentsCountChange = useCallback((winId: string, count: number) => {
+    setPublicStory((current) => {
+      if (!current) return current;
+      return {
+        ...current,
+        miniPosts: current.miniPosts.map((p) => (p.id === winId ? { ...p, commentCount: count } : p)),
+        missionStories: current.missionStories.map((story) => ({
+          ...story,
+          posts: story.posts.map((p) => (p.id === winId ? { ...p, commentCount: count } : p)),
+        })),
+      };
+    });
+  }, []);
   const [listWidth, setListWidth] = useState(0);
   const { xp, username, avatarUrl, habits, miniMissions, mergeFetchedHabit, mergeFetchedMiniMission } = useHabitStore(
     useShallow((s) => ({
@@ -2645,6 +2661,9 @@ export default function MyJourneyScreen() {
         winOwnerUserId={userId}
         sessionUserId={userId}
         onClose={closeComments}
+        onCountChange={(count) => {
+          if (commentsPost) handleCommentsCountChange(commentsPost.id, count);
+        }}
       />
     </Screen>
   );

@@ -459,6 +459,11 @@ export function CommunityWinsFeed({
         winOwnerUserId={commentsSheet?.winOwnerUserId ?? null}
         sessionUserId={session?.user?.id}
         onClose={() => setCommentsSheet(null)}
+        onCountChange={(count) => {
+          const winId = commentsSheet?.winId;
+          if (!winId) return;
+          setItems((prev) => prev.map((w) => (w.id === winId ? { ...w, commentCount: count } : w)));
+        }}
       />
       <CommunityWinCheerersModal
         visible={cheerersSheet !== null}

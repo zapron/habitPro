@@ -430,6 +430,7 @@ export default function JourneyMomentScreen() {
         winOwnerUserId={moment.user_id}
         sessionUserId={session?.user?.id}
         onClose={() => setCommentsOpen(false)}
+        onCountChange={(count) => setMoment((current) => (current ? { ...current, commentCount: count } : current))}
       />
     </Screen>
   );

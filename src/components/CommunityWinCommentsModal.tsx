@@ -52,9 +52,21 @@ type Props = {
   winOwnerUserId: string | null;
   sessionUserId: string | null | undefined;
   onClose: () => void;
+  /** Lets the screen behind this sheet (feed card, journey tile, etc.) keep its own
+   * comment-count badge in sync without waiting for its own next refetch — same
+   * reason CommunityWinsFeed's handleCheer updates cheerCount locally instead of
+   * relying on a reload. Fires with the true count after every load/post/delete. */
+  onCountChange?: (count: number) => void;
 };
 
-export function CommunityWinCommentsModal({ visible, winId, winOwnerUserId, sessionUserId, onClose }: Props) {
+export function CommunityWinCommentsModal({
+  visible,
+  winId,
+  winOwnerUserId,
+  sessionUserId,
+  onClose,
+  onCountChange,
+}: Props) {
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
   const { theme, isDark } = useTheme();
@@ -78,6 +90,7 @@ export function CommunityWinCommentsModal({ visible, winId, winOwnerUserId, sess
       setItems([]);
     } else {
       setItems(res.items);
+      onCountChange?.(res.items.length);
     }
     setLoading(false);
   };
@@ -127,7 +140,11 @@ export function CommunityWinCommentsModal({ visible, winId, winOwnerUserId, sess
           style: "destructive",
           onPress: () => {
             void (async () => {
-              setItems((prev) => prev.filter((c) => c.id !== comment.id));
+              setItems((prev) => {
+                const next = prev.filter((c) => c.id !== comment.id);
+                onCountChange?.(next.length);
+                return next;
+              });
               const res = await deleteCommunityWinComment(comment.id);
               if (res.ok === false) {
                 Alert.alert("Couldn't remove comment", res.error, [{ text: "OK" }]);
