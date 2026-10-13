@@ -41,7 +41,6 @@ import {
   TrendingUp,
   User,
   X,
-  Zap,
   Gem,
 } from "lucide-react-native";
 import * as ImagePicker from "expo-image-picker";
@@ -1768,14 +1767,13 @@ export default function ProfileScreen() {
               )}
             </View>
             <View style={styles.xpLine}>
-              <Zap size={16} color={theme.colors.yellow[400]} fill={theme.colors.yellow[400]} />
               <Text style={[styles.xpBig, { color: theme.colors.textPrimary }]}>
                 {xpInLevel} / {XP_PER_LEVEL} <Text style={{ color: theme.colors.textMuted, fontWeight: "600" }}>XP</Text>
               </Text>
               <Text style={[styles.totalXpInline, { color: theme.colors.textMuted }]}>· {xp} total</Text>
             </View>
             {showAccount && username ? (
-              <Text style={[styles.handle, { color: theme.colors.cyan[400] }]} numberOfLines={1}>
+              <Text style={[styles.handle, { color: theme.colors.amber[500] }]} numberOfLines={1}>
                 {username}
               </Text>
             ) : showAccount && session?.user && !accountHydrating && !cloudSyncBlocked ? (

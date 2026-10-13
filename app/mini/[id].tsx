@@ -3,6 +3,7 @@ import {
   memo,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState } from "react";
@@ -912,7 +913,9 @@ function FocusSecondsMatrix({
       >
         {Array.from({ length: rows }, (_, row) => (
           <View
-            key={row}
+            // Row position, not a stable identity — fine on its own, but
+            // see the cell key below for why that matters here.
+            key={`row-${row}`}
             style={[
               focusStyles.secondsGridRow,
               row < rows - 1 ? { marginBottom: gap } : null,
@@ -923,7 +926,7 @@ function FocusSecondsMatrix({
               if (index >= totalCells) {
                 return (
                   <View
-                    key={column}
+                    key={`empty-${column}`}
                     style={[
                       {
                         width: cellSize,
@@ -934,19 +937,34 @@ function FocusSecondsMatrix({
                   />
                 );
               }
+              // Keyed by spiral rank (this cell's fixed position in the
+              // depletion sequence), not by row/column screen position.
+              // `gridLayout` can legitimately recompute a different
+              // columns/rows split if the available space changes mid-session
+              // (observed on Android: the system nav bar auto-hiding/
+              // reappearing during Focus Mode's fullscreen, hidden-status-bar
+              // presentation changes the window height useWindowDimensions
+              // reports). When that happens, index = row*columns+column shifts
+              // which logical cell lands at a given screen position — keying
+              // by row/column let React reuse a cell's animated state at the
+              // new position for what is now a *different* rank, which is
+              // exactly what read as "squares reappearing"/a scrambled
+              // pattern. Rank is independent of columns/rows, so identity
+              // survives a reshape correctly either way.
+              const rank = spiralRanks[index];
               return (
                 <View
-                  key={column}
+                  key={rank}
                   style={column < columns - 1 ? { marginRight: gap } : null}
                 >
                   <FocusSecondCell
-                    active={spiralRanks[index] >= elapsedCells}
-                    color={hasBoundaryCell && spiralRanks[index] === boundaryRank ? boundaryColor : cellColor}
+                    active={rank >= elapsedCells}
+                    color={hasBoundaryCell && rank === boundaryRank ? boundaryColor : cellColor}
                     size={cellSize}
                     shadowColor={cardColors.shadow}
                     animate={animateCells}
                     glow={glowCells}
-                    blink={hasBoundaryCell && spiralRanks[index] === boundaryRank}
+                    blink={hasBoundaryCell && rank === boundaryRank}
                   />
                 </View>
               );
@@ -1002,7 +1020,16 @@ function FocusMissionControlModal({
 
   const [now, setNow] = useState(Date.now());
 
-  useEffect(() => {
+  // Layout effect, not a plain effect: this sheet mounts fresh each time
+  // Focus Mode opens (LazyMount unmountOnExit), so `now`'s initial useState
+  // snapshot is taken right as the sheet's entrance transition starts. A
+  // plain useEffect doesn't re-sync `now` until after that first frame is
+  // already painted and visible, so the countdown briefly shows the
+  // mount-time snapshot before jumping to the real elapsed time once the
+  // effect catches up — exactly the "shaky digits on entry" symptom. Layout
+  // effects run before the browser/RN commits that first paint, so the
+  // correction lands before anything is shown instead of as a visible jump.
+  useLayoutEffect(() => {
     if (!visible || status !== "in_progress" || completeSheetOpen) return;
     let cancelled = false;
     let timeout: ReturnType<typeof setTimeout> | null = null;
@@ -3102,20 +3129,28 @@ export default function MiniMissionDetail() {
           </View>
         )}
 
-        {(mission.status === "in_progress" && !isTimerUpState) ||
-        (mission.status !== "completed" &&
-          mission.status !== "missed" &&
-          mission.status !== "cancelled" &&
-          !isTimerCheckInSoloMode) ? (
+        {(() => {
+          const focusModeVisible = mission.status === "in_progress" && !isTimerUpState;
+          const inviteOthersVisible = !isTimerCheckInSoloMode;
+          if (!focusModeVisible && !inviteOthersVisible) return null;
+          // Side-by-side (both buttons) keeps the icon stacked above the
+          // label — that's the compact pairing already settled on. Alone
+          // (solo missions, no Invite Others), the button spans full width,
+          // so the icon sits to the left of the label instead of floating
+          // above it with all that extra horizontal space unused.
+          const bothVisible = focusModeVisible && inviteOthersVisible;
+          const brandActionLayout = { flexDirection: bothVisible ? ("column" as const) : ("row" as const) };
+          return (
           <View style={styles.brandActionsRow}>
-            {mission.status === "in_progress" && !isTimerUpState ? (
+            {focusModeVisible ? (
               <TouchableOpacity
                 style={[
                   styles.brandAction,
+                  brandActionLayout,
                   {
                     borderRadius: theme.radius.md,
                     borderColor: theme.colors.green[isDark ? 500 : 600],
-                    backgroundColor: isDark ? theme.colors.green[500] : "transparent",
+                    backgroundColor: theme.colors.green[isDark ? 500 : 600],
                   },
                 ]}
                 activeOpacity={0.86}
@@ -3126,11 +3161,11 @@ export default function MiniMissionDetail() {
                 accessibilityRole="button"
                 accessibilityLabel="Open focus mode"
               >
-                <TreePine size={18} color={isDark ? "#ffffff" : theme.colors.green[600]} />
+                <TreePine size={18} color="#ffffff" />
                 <Text
                   style={[
                     styles.brandActionText,
-                    { color: isDark ? "#ffffff" : theme.colors.green[600] },
+                    { color: "#ffffff" },
                   ]}
                 >
                   Focus Mode
@@ -3138,14 +3173,15 @@ export default function MiniMissionDetail() {
               </TouchableOpacity>
             ) : null}
 
-            {!isTimerCheckInSoloMode ? (
+            {inviteOthersVisible ? (
               <TouchableOpacity
                 style={[
                   styles.brandAction,
+                  brandActionLayout,
                   {
                     borderRadius: theme.radius.md,
                     borderColor: theme.colors.maroon[500],
-                    backgroundColor: isDark ? theme.colors.maroon[500] : "transparent",
+                    backgroundColor: theme.colors.maroon[500],
                   },
                 ]}
                 activeOpacity={0.86}
@@ -3159,11 +3195,11 @@ export default function MiniMissionDetail() {
                     : "Start Live Squad"
                 }
               >
-                <Users size={18} color={isDark ? "#ffffff" : theme.colors.maroon[500]} />
+                <Users size={18} color="#ffffff" />
                 <Text
                   style={[
                     styles.brandActionText,
-                    { color: isDark ? "#ffffff" : theme.colors.maroon[500] },
+                    { color: "#ffffff" },
                   ]}
                 >
                   {mission.liveSquadId
@@ -3175,7 +3211,8 @@ export default function MiniMissionDetail() {
               </TouchableOpacity>
             ) : null}
           </View>
-        ) : null}
+          );
+        })()}
 
         {mission.status === "completed" ? (
           <MiniVisibilityRow
@@ -3683,9 +3720,11 @@ const styles = StyleSheet.create({
   actions: { gap: 10 },
   progressBarWrap: { marginBottom: 14 },
   // Focus Mode / Invite Others — a matched brand-colored pair, side by
-  // side. Light theme keeps them outlined (transparent fill, colored
-  // border+text); dark theme switches to a solid fill of the same color,
-  // since an outline reads weaker against a near-black background.
+  // side. Solid fill with white icon/text in both themes, matching the
+  // "Time is up" Complete/Fail trio's filled treatment elsewhere in this
+  // file — green gets a theme-adjusted shade (lighter in dark mode,
+  // slightly deeper for contrast on white), maroon stays flat since it
+  // has no tonal range either way.
   brandActionsRow: {
     flexDirection: "row",
     gap: 10,
