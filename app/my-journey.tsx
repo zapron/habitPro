@@ -34,6 +34,7 @@ import {
   Image as ImageIcon,
   Info,
   LockKeyhole,
+  MessageCircle,
   ThumbsUp,
   Trophy,
   User,
@@ -44,6 +45,7 @@ import { useShallow } from "zustand/react/shallow";
 
 import { Screen } from "../src/components/Screen";
 import { Button } from "../src/components/Button";
+import { CommunityWinCommentsModal } from "../src/components/CommunityWinCommentsModal";
 import { AnimatedCountText } from "../src/components/AnimatedCountText";
 import { LevelXpRing } from "../src/components/LevelXpRing";
 import { GlassTopHighlight } from "../src/components/GlassTopHighlight";
@@ -312,6 +314,7 @@ function privatePostFromMemory(input: {
     liveSquadId: null,
     cheerCount: 0,
     viewerHasCheered: false,
+    commentCount: 0,
     repairSource: input.memory.repairSource ?? null,
   };
 }
@@ -1083,6 +1086,7 @@ const MiniPostCard = memo(function MiniPostCard({
   isDark,
   imagesEnabled,
   onOpenImage,
+  onOpenComments,
   journeyMode,
   index,
 }: {
@@ -1094,6 +1098,7 @@ const MiniPostCard = memo(function MiniPostCard({
   isDark: boolean;
   imagesEnabled: boolean;
   onOpenImage: (slides: CommunityMemoryGalleryItem[], initialIndex?: number) => void;
+  onOpenComments: (post: CommunityPlayerStoryPost) => void;
   journeyMode: JourneyMode;
   index: number;
 }) {
@@ -1223,6 +1228,19 @@ const MiniPostCard = memo(function MiniPostCard({
             {note}
           </Text>
         ) : null}
+        {showLikeBadge ? (
+          <Pressable
+            style={styles.miniCommentsRow}
+            onPress={() => onOpenComments(post)}
+            accessibilityRole="button"
+            accessibilityLabel="View comments"
+          >
+            <MessageCircle size={12} color={theme.colors.textMuted} />
+            <Text style={[styles.miniCommentsText, { color: theme.colors.textMuted }]}>
+              {post.commentCount > 0 ? `${post.commentCount} comment${post.commentCount === 1 ? "" : "s"}` : "Comments"}
+            </Text>
+          </Pressable>
+        ) : null}
       </View>
     </Animated.View>
   );
@@ -1234,6 +1252,7 @@ function GalleryMomentCard({
   theme,
   imagesEnabled,
   onOpenImage,
+  onOpenComments,
   journeyMode,
 }: {
   post: CommunityPlayerStoryPost;
@@ -1241,6 +1260,7 @@ function GalleryMomentCard({
   theme: AppTheme;
   imagesEnabled: boolean;
   onOpenImage: (slides: CommunityMemoryGalleryItem[], initialIndex?: number) => void;
+  onOpenComments: (post: CommunityPlayerStoryPost) => void;
   journeyMode: JourneyMode;
 }) {
   const note = post.memoryNote?.trim() ?? "";
@@ -1250,6 +1270,7 @@ function GalleryMomentCard({
     ? "rgba(8, 145, 178, 0.1)"
     : theme.colors.surface;
   const cardBorder = isSquadSave ? theme.colors.cyan[500] : theme.colors.border;
+  const isPrivate = isPrivateStoryPost(post);
   return (
     <View style={[styles.galleryMomentCard, { width, borderColor: cardBorder, backgroundColor: cardBg }]}>
       {post.memoryImageUrl ? (
@@ -1275,6 +1296,19 @@ function GalleryMomentCard({
         <Text style={[styles.galleryMomentNote, { color: theme.colors.textPrimary }]}>
           {note || "Visual proof saved for this moment."}
         </Text>
+        {!isPrivate ? (
+          <Pressable
+            style={styles.miniCommentsRow}
+            onPress={() => onOpenComments(post)}
+            accessibilityRole="button"
+            accessibilityLabel="View comments"
+          >
+            <MessageCircle size={12} color={theme.colors.textMuted} />
+            <Text style={[styles.miniCommentsText, { color: theme.colors.textMuted }]}>
+              {post.commentCount > 0 ? `${post.commentCount} comment${post.commentCount === 1 ? "" : "s"}` : "Comments"}
+            </Text>
+          </Pressable>
+        ) : null}
       </View>
     </View>
   );
@@ -1288,6 +1322,7 @@ function MissionGalleryModal({
   imagesEnabled,
   onClose,
   onOpenImage,
+  onOpenComments,
   journeyMode,
 }: {
   mission: CommunityPlayerMissionStory | null;
@@ -1297,6 +1332,7 @@ function MissionGalleryModal({
   imagesEnabled: boolean;
   onClose: () => void;
   onOpenImage: (slides: CommunityMemoryGalleryItem[], initialIndex?: number) => void;
+  onOpenComments: (post: CommunityPlayerStoryPost) => void;
   journeyMode: JourneyMode;
 }) {
   const { width } = useWindowDimensions();
@@ -1479,6 +1515,7 @@ function MissionGalleryModal({
                       theme={theme}
                       imagesEnabled={imagesEnabled}
                       onOpenImage={onOpenImage}
+                      onOpenComments={onOpenComments}
                       journeyMode={journeyMode}
                     />
                   ))}
@@ -1851,6 +1888,28 @@ export default function MyJourneyScreen() {
       missionBeforeLightboxRef.current = null;
     }
   }, []);
+  const [commentsPost, setCommentsPost] = useState<CommunityPlayerStoryPost | null>(null);
+  const openComments = useCallback((post: CommunityPlayerStoryPost) => setCommentsPost(post), []);
+  // Same "close the fullScreen Modal before opening a second one" choreography
+  // as openLightbox/closeLightbox above — MissionGalleryModal is itself a
+  // fullScreen Modal, and stacking CommunityWinCommentsModal's Modal on top of
+  // it hits the same documented iOS Modal-stacking issue.
+  const missionBeforeCommentsRef = useRef<CommunityPlayerMissionStory | null>(null);
+  const openCommentsFromGallery = useCallback(
+    (post: CommunityPlayerStoryPost) => {
+      missionBeforeCommentsRef.current = selectedMission;
+      if (selectedMission) setSelectedMission(null);
+      setCommentsPost(post);
+    },
+    [selectedMission],
+  );
+  const closeComments = useCallback(() => {
+    setCommentsPost(null);
+    if (missionBeforeCommentsRef.current) {
+      setSelectedMission(missionBeforeCommentsRef.current);
+      missionBeforeCommentsRef.current = null;
+    }
+  }, []);
   const [listWidth, setListWidth] = useState(0);
   const { xp, username, avatarUrl, habits, miniMissions, mergeFetchedHabit, mergeFetchedMiniMission } = useHabitStore(
     useShallow((s) => ({
@@ -2213,12 +2272,13 @@ export default function MyJourneyScreen() {
           isDark={isDark}
           imagesEnabled={imagesEnabled}
           onOpenImage={openLightbox}
+          onOpenComments={openComments}
           journeyMode={journeyMode}
           index={index}
         />
       );
     },
-    [imagesEnabled, isDark, journeyMode, miniGridGap, miniTileWidth, missionPreviewPhotoSize, theme],
+    [imagesEnabled, isDark, journeyMode, miniGridGap, miniTileWidth, missionPreviewPhotoSize, openComments, theme],
   );
 
   const listHeader = useMemo(() => (
@@ -2568,6 +2628,7 @@ export default function MyJourneyScreen() {
         imagesEnabled={imagesEnabled}
         onClose={() => setSelectedMission(null)}
         onOpenImage={openLightbox}
+        onOpenComments={openCommentsFromGallery}
         journeyMode={journeyMode}
       />
 
@@ -2576,6 +2637,14 @@ export default function MyJourneyScreen() {
         slides={lightboxSlides}
         initialIndex={lightboxIndex}
         onClose={closeLightbox}
+      />
+
+      <CommunityWinCommentsModal
+        visible={commentsPost !== null}
+        winId={commentsPost?.id ?? null}
+        winOwnerUserId={userId}
+        sessionUserId={userId}
+        onClose={closeComments}
       />
     </Screen>
   );
@@ -2820,6 +2889,8 @@ const styles = StyleSheet.create({
   miniBody: { paddingHorizontal: 8, paddingVertical: 8, gap: 5 },
   miniTitle: { fontSize: 13, lineHeight: 17, fontWeight: "900" },
   miniNote: { fontSize: 11, lineHeight: 15, fontWeight: "700" },
+  miniCommentsRow: { flexDirection: "row", alignItems: "center", gap: 4, alignSelf: "flex-start" },
+  miniCommentsText: { fontSize: 10.5, fontWeight: "700" },
   loadMoreWrap: { paddingTop: 12, paddingBottom: 4, alignItems: "center" },
   loadMoreButton: {
     minHeight: 38,

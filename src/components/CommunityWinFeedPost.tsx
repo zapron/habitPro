@@ -25,7 +25,7 @@ import {
   Radio,
   ThumbsUp,
   Images,
-  ListChecks,
+  MessageCircle,
 } from "lucide-react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { habitIdFromHabitStreakMiniMissionId, type CommunityWinFeedItem } from "../lib/communityWinsApi";
@@ -96,6 +96,8 @@ type Props = {
   /** Returns whether the cheer API succeeded (optimistic list update in parent). */
   onCheer: (win: CommunityWinFeedItem) => Promise<boolean>;
   onOpenCheerers?: (win: CommunityWinFeedItem) => void;
+  /** POC: opens the comments sheet for this win. */
+  onOpenComments?: (win: CommunityWinFeedItem) => void;
   /** When false, cheering others' wins is off (browse-only). Default true. */
   canCheer?: boolean;
   /** Optional; parent may already handle via `onCheer`. Used for accessibility copy. */
@@ -254,6 +256,7 @@ export const CommunityWinFeedPost = memo(function CommunityWinFeedPost({
   onOpenMission,
   onCheer,
   onOpenCheerers,
+  onOpenComments,
   canCheer = true,
   onCheerBlocked,
 }: Props) {
@@ -749,7 +752,14 @@ export const CommunityWinFeedPost = memo(function CommunityWinFeedPost({
 
       {activeGalleryItem?.label ? (
         <View style={[styles.taskNameRow, isFeed ? styles.padHFeed : styles.padCardInner]}>
-          <ListChecks size={13} color={theme.colors.textMuted} />
+          <View style={styles.taskDot}>
+            <LinearGradient
+              colors={[theme.colors.green[500], theme.colors.maroon[500]]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.taskDotFill}
+            />
+          </View>
           <Text style={[styles.taskNameText, { color: theme.colors.textPrimary }]} numberOfLines={1}>
             {activeGalleryItem.label}
           </Text>
@@ -813,6 +823,18 @@ export const CommunityWinFeedPost = memo(function CommunityWinFeedPost({
               </Text>
             </Pressable>
           </View>
+          <Pressable
+            onPress={() => onOpenComments?.(win)}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            style={styles.commentIconRow}
+            accessibilityRole="button"
+            accessibilityLabel={win.commentCount < 1 ? "No comments yet" : `Open ${win.commentCount} comments`}
+          >
+            <MessageCircle size={20} color={theme.colors.textMuted} strokeWidth={2} />
+            {win.commentCount > 0 ? (
+              <Text style={[styles.cheerCount, { color: theme.colors.textMuted }]}>{win.commentCount}</Text>
+            ) : null}
+          </Pressable>
           <Text style={[styles.timeInline, { color: theme.colors.textMuted }]}>
             {formatRelativeTime(win.created_at)}
           </Text>
@@ -865,9 +887,19 @@ const styles = StyleSheet.create({
   taskNameRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 7,
     paddingTop: 10,
     paddingBottom: 2,
+  },
+  taskDot: {
+    width: 9,
+    height: 9,
+    borderRadius: 4.5,
+    overflow: "hidden",
+    opacity: 0.55,
+  },
+  taskDotFill: {
+    flex: 1,
   },
   taskNameText: {
     fontSize: 13,
@@ -1012,6 +1044,7 @@ const styles = StyleSheet.create({
   padHFeed: { paddingHorizontal: 16 },
   padCardInner: { paddingHorizontal: 16 },
   cheerIconRow: { flexDirection: "row", alignItems: "center", gap: 5 },
+  commentIconRow: { flexDirection: "row", alignItems: "center", gap: 5, marginRight: "auto" },
   timeInline: {
     fontSize: 12,
     fontWeight: "600",

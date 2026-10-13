@@ -38,8 +38,10 @@ import { CommunityWinFeedPost } from "./CommunityWinFeedPost";
 import { CommunityWinFeedSkeletonRow } from "./CommunityWinFeedSkeleton";
 import { CommunityWinImageLightbox, type CommunityLightboxSlide } from "./CommunityWinImageLightbox";
 import { CommunityWinCheerersModal } from "./CommunityWinCheerersModal";
+import { CommunityWinCommentsModal } from "./CommunityWinCommentsModal";
 
 type CheerersSheetState = { winId: string; totalLikes: number };
+type CommentsSheetState = { winId: string; winOwnerUserId: string };
 
 type Props = {
   contentPaddingBottom?: number;
@@ -83,6 +85,7 @@ export function CommunityWinsFeed({
   const [lightboxSlides, setLightboxSlides] = useState<CommunityLightboxSlide[]>([]);
   const [lightboxIndex, setLightboxIndex] = useState(0);
   const [cheerersSheet, setCheerersSheet] = useState<CheerersSheetState | null>(null);
+  const [commentsSheet, setCommentsSheet] = useState<CommentsSheetState | null>(null);
   const itemsRef = useRef<CommunityWinFeedItem[]>([]);
   const initialLoadInFlight = useRef(false);
   const loadMoreInFlight = useRef(false);
@@ -363,6 +366,7 @@ export function CommunityWinsFeed({
           onOpenMission={openMissionFromFeed}
           onCheer={handleCheer}
           onOpenCheerers={(w) => setCheerersSheet({ winId: w.id, totalLikes: w.cheerCount })}
+          onOpenComments={(w) => setCommentsSheet({ winId: w.id, winOwnerUserId: w.user_id })}
           canCheer={canCheer}
           onCheerBlocked={onCheerBlocked}
         />
@@ -448,6 +452,13 @@ export function CommunityWinsFeed({
         slides={lightboxSlides}
         initialIndex={lightboxIndex}
         onClose={() => setLightboxSlides([])}
+      />
+      <CommunityWinCommentsModal
+        visible={commentsSheet !== null}
+        winId={commentsSheet?.winId ?? null}
+        winOwnerUserId={commentsSheet?.winOwnerUserId ?? null}
+        sessionUserId={session?.user?.id}
+        onClose={() => setCommentsSheet(null)}
       />
       <CommunityWinCheerersModal
         visible={cheerersSheet !== null}

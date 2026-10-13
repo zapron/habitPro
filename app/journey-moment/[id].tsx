@@ -9,9 +9,10 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { ArrowLeft, Camera, ChevronRight, Clock3, Globe, Image as ImageIcon, Radio, RefreshCw, ThumbsUp, User } from "lucide-react-native";
+import { ArrowLeft, Camera, ChevronRight, Clock3, Globe, Image as ImageIcon, MessageCircle, Radio, RefreshCw, ThumbsUp, User } from "lucide-react-native";
 import { Text } from "../../src/components/AppText";
 import { CommunityWinCheerersModal } from "../../src/components/CommunityWinCheerersModal";
+import { CommunityWinCommentsModal } from "../../src/components/CommunityWinCommentsModal";
 import { CommunityWinImageLightbox, type CommunityLightboxSlide } from "../../src/components/CommunityWinImageLightbox";
 import { Screen } from "../../src/components/Screen";
 import { useAuth } from "../../src/context/AuthContext";
@@ -83,6 +84,7 @@ export default function JourneyMomentScreen() {
   const [lightboxSlides, setLightboxSlides] = useState<CommunityLightboxSlide[]>([]);
   const [cheerBusy, setCheerBusy] = useState(false);
   const [cheerersOpen, setCheerersOpen] = useState(false);
+  const [commentsOpen, setCommentsOpen] = useState(false);
 
   const imageHeight = useMemo(() => Math.min(430, Math.max(300, width * 0.8)), [width]);
   const imageUri = useMemo(
@@ -128,6 +130,15 @@ export default function JourneyMomentScreen() {
   useEffect(() => {
     void load("initial");
   }, [load]);
+
+  // Lets a "someone commented on your post" notification deep-link straight
+  // into the comments sheet, e.g. /journey-moment/[id]?openComments=1.
+  useEffect(() => {
+    if (paramString(params.openComments) === "1") {
+      setCommentsOpen(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleToggleCheer = useCallback(async () => {
     if (!moment || cheerBusy || isOwnMoment) return;
@@ -365,6 +376,17 @@ export default function JourneyMomentScreen() {
             <Text style={[styles.noteText, { color: theme.colors.textPrimary }]}>
               {note || "Visual proof saved for this moment."}
             </Text>
+            <Pressable
+              style={styles.commentsRow}
+              onPress={() => setCommentsOpen(true)}
+              accessibilityRole="button"
+              accessibilityLabel="View comments"
+            >
+              <MessageCircle size={16} color={muted} />
+              <Text style={[styles.commentsRowText, { color: muted }]}>
+                {moment.commentCount > 0 ? `${moment.commentCount} comment${moment.commentCount === 1 ? "" : "s"}` : "Comments"}
+              </Text>
+            </Pressable>
           </View>
         </View>
 
@@ -401,6 +423,13 @@ export default function JourneyMomentScreen() {
         winId={moment.id}
         totalLikes={moment.cheerCount}
         onClose={() => setCheerersOpen(false)}
+      />
+      <CommunityWinCommentsModal
+        visible={commentsOpen}
+        winId={moment.id}
+        winOwnerUserId={moment.user_id}
+        sessionUserId={session?.user?.id}
+        onClose={() => setCommentsOpen(false)}
       />
     </Screen>
   );
@@ -626,6 +655,17 @@ const styles = StyleSheet.create({
     fontSize: 17,
     lineHeight: 24,
     fontWeight: "800",
+  },
+  commentsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 12,
+    alignSelf: "flex-start",
+  },
+  commentsRowText: {
+    fontSize: 13,
+    fontWeight: "700",
   },
   journeyButton: {
     borderRadius: 25,

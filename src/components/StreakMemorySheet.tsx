@@ -24,7 +24,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as ImagePicker from "expo-image-picker";
-import { Camera, Flag, Globe, ImageIcon, Lock, Quote, Square, Users, X } from "lucide-react-native";
+import { Camera, Flag, Globe, ImageIcon, Lock, MessageCircle, Quote, Square, Users, X } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import { useTheme } from "../context/ThemeContext";
 import type { StreakMemory } from "../types/habit";
@@ -79,6 +79,8 @@ type StreakMemorySheetProps = {
     pendingPublish?: boolean;
     onChange: (next: boolean) => void | Promise<void>;
   };
+  /** view + habit, only when habitViewCommunity.posted: opens the comments sheet for this day's win. */
+  onOpenComments?: () => void;
   /** view only */
   viewMemory?: StreakMemory | null;
   /** create only (habit): in-context mission visibility toggle for squad/cohort sharing */
@@ -122,6 +124,7 @@ export const StreakMemorySheet = React.memo(function StreakMemorySheet({
   habitPublishAvailable,
   plusCommunityOk,
   habitViewCommunity,
+  onOpenComments,
   viewMemory,
   squadShare,
   prefill,
@@ -750,6 +753,17 @@ export const StreakMemorySheet = React.memo(function StreakMemorySheet({
                         )}
                       </View>
                     ) : null}
+                    {!isMini && habitViewCommunity?.posted && onOpenComments ? (
+                      <Pressable
+                        style={[styles.streakCommentsRow, { borderColor: theme.colors.border }]}
+                        onPress={onOpenComments}
+                        accessibilityRole="button"
+                        accessibilityLabel="View comments"
+                      >
+                        <MessageCircle size={16} color={theme.colors.textMuted} />
+                        <Text style={[styles.streakCommentsText, { color: theme.colors.textMuted }]}>Comments</Text>
+                      </Pressable>
+                    ) : null}
                   </ScrollView>
                 </>
               ) : (
@@ -1333,6 +1347,17 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1,
   },
+  streakCommentsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+  },
+  streakCommentsText: { fontSize: 13.5, fontWeight: "700" },
   communityPublishRowMini: {
     marginTop: 0,
     marginBottom: 14,

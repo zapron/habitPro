@@ -1,7 +1,7 @@
 import { Text } from "./AppText";
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Check, ChevronRight, Eye, EyeOff, Share2, X } from "lucide-react-native";
+import { Check, ChevronRight, Eye, EyeOff, MessageCircle, Share2, X } from "lucide-react-native";
 import { useTheme } from "../context/ThemeContext";
 import type { StreakMemoryTaskEntry, TaskChecklistItem } from "../types/habit";
 
@@ -25,6 +25,8 @@ type Props = {
   onMarkComplete: () => void;
   onShare: () => void;
   onUnshare: () => void;
+  /** Present only when alreadyShared && !revoked — opens the comments sheet for this day's win. */
+  onOpenComments?: () => void;
   onClose: () => void;
 };
 
@@ -59,6 +61,7 @@ export function ChecklistDaySheet({
   onMarkComplete,
   onShare,
   onUnshare,
+  onOpenComments,
   onClose,
 }: Props) {
   const { theme } = useTheme();
@@ -265,6 +268,18 @@ export function ChecklistDaySheet({
               </Text>
             </Pressable>
           ) : null}
+
+          {alreadyShared && !revoked && onOpenComments ? (
+            <Pressable
+              style={[styles.commentsRow, { borderColor: theme.colors.border }]}
+              onPress={onOpenComments}
+              accessibilityRole="button"
+              accessibilityLabel="View comments"
+            >
+              <MessageCircle size={16} color={theme.colors.textMuted} />
+              <Text style={[styles.commentsRowText, { color: theme.colors.textMuted }]}>Comments</Text>
+            </Pressable>
+          ) : null}
         </View>
       </View>
     </Modal>
@@ -359,6 +374,17 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   unshareLinkText: { fontSize: 12, fontWeight: "700" },
+  commentsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingVertical: 10,
+    marginTop: 8,
+  },
+  commentsRowText: { fontSize: 13, fontWeight: "700" },
   revokedNote: {
     fontSize: 12,
     fontWeight: "600",

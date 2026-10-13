@@ -66,6 +66,7 @@ import { isMissionGridFull } from '../../src/utils/habitDerived';
 import { shouldShowMainMissionTimer } from '../../src/utils/mainMissionUi';
 import { getEligibleStreakRepair } from "../../src/utils/streakRepairEligibility";
 import { StreakMemorySheet } from '../../src/components/StreakMemorySheet';
+import { CommunityWinCommentsModal } from '../../src/components/CommunityWinCommentsModal';
 import { StreakMemoryGallery } from '../../src/components/StreakMemoryGallery';
 import { GroupChallengeSheet } from '../../src/components/GroupChallengeSheet';
 import { MissionDetailsSheet } from '../../src/components/MissionDetailsSheet';
@@ -593,9 +594,38 @@ export default function HabitDetail() {
         | { kind: 'view'; memory: StreakMemory; dateStr: string; day: number }
         | null;
     const [memoryUi, setMemoryUi] = useState<MemoryUiState>(null);
+    // Comments for a day's Community win — same close-before-open/restore-after
+    // choreography as the "Remove from Community?" confirm above: StreakMemorySheet
+    // is itself a Modal, and iOS can't reliably stack a second one over it.
+    const [commentsWinId, setCommentsWinId] = useState<string | null>(null);
+    const viewBeforeCommentsRef = useRef<MemoryUiState>(null);
+    const openHabitComments = useCallback(() => {
+        if (!habit || !memoryUi || memoryUi.kind !== 'view') return;
+        viewBeforeCommentsRef.current = memoryUi;
+        setMemoryUi(null);
+        setCommentsWinId(habitStreakCommunityWinId(habit.id, memoryUi.dateStr));
+    }, [habit, memoryUi]);
+    const checklistViewBeforeCommentsRef = useRef<{ dateStr: string; day: number; dayIndex: number } | null>(null);
+    const closeHabitComments = useCallback(() => {
+        setCommentsWinId(null);
+        if (viewBeforeCommentsRef.current) {
+            setMemoryUi(viewBeforeCommentsRef.current);
+            viewBeforeCommentsRef.current = null;
+        }
+        if (checklistViewBeforeCommentsRef.current) {
+            setChecklistDayUi(checklistViewBeforeCommentsRef.current);
+            checklistViewBeforeCommentsRef.current = null;
+        }
+    }, []);
     // Checklist missions (docs/CATALOG_ARCHITECTURE.md Phase 2) — day tap opens this
     // instead of memoryUi when habit.taskChecklist is present and non-empty.
     const [checklistDayUi, setChecklistDayUi] = useState<{ dateStr: string; day: number; dayIndex: number } | null>(null);
+    const openChecklistDayComments = useCallback(() => {
+        if (!habit || !checklistDayUi) return;
+        checklistViewBeforeCommentsRef.current = checklistDayUi;
+        setChecklistDayUi(null);
+        setCommentsWinId(habitStreakCommunityWinId(habit.id, checklistDayUi.dateStr));
+    }, [habit, checklistDayUi]);
     type TaskMemoryUiState =
         | {
               kind: 'create';
@@ -2116,6 +2146,7 @@ export default function HabitDetail() {
                     plusCommunityOk={!socialLocked}
                     squadShare={squadShareProp}
                     habitViewCommunity={habitViewCommunityProp}
+                    onOpenComments={openHabitComments}
                     requireNote={effectiveRequireNote}
                     requirePhoto={effectiveRequirePhoto}
                     onClose={() => {
@@ -2125,6 +2156,14 @@ export default function HabitDetail() {
                     onCommit={memoryUi?.kind !== 'view' ? handleMemoryCommit : undefined}
                 />
             </LazyMount>
+
+            <CommunityWinCommentsModal
+                visible={commentsWinId !== null}
+                winId={commentsWinId}
+                winOwnerUserId={session?.user?.id ?? null}
+                sessionUserId={session?.user?.id}
+                onClose={closeHabitComments}
+            />
 
             {habit.taskChecklist && habit.taskChecklist.length > 0 ? (
                 <>
@@ -2158,6 +2197,7 @@ export default function HabitDetail() {
                             if (!checklistDayUi) return;
                             handleChecklistDayUnshare(checklistDayUi.dateStr);
                         }}
+                        onOpenComments={openChecklistDayComments}
                         onToggleTaskInclusion={(taskId) => {
                             if (!checklistDayUi) return;
                             handleToggleTaskInclusion(checklistDayUi.dateStr, taskId);
