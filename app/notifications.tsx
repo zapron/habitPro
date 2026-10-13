@@ -29,6 +29,7 @@ import {
   Flag,
   Flame,
   Heart,
+  MessageCircle,
   MessageSquare,
   Trophy,
   UserMinus,
@@ -50,7 +51,7 @@ import {
   setCachedUnreadNotificationCount,
 } from "../src/lib/groupChallengesApi";
 import { challengeMemoryRouteParamsFromPayload } from "../src/lib/challengeMemoryDetail";
-import { parseCommunityWinCheerPayload } from "../src/lib/notificationPayloads";
+import { parseCommunityWinCheerPayload, parseCommunityWinCommentPayload } from "../src/lib/notificationPayloads";
 import { backOrReplace } from "../src/lib/navigation";
 import type { ChallengeNudgeKind, NotificationRow } from "../src/types/groupChallenge";
 import { ShimmerBlock } from "../src/components/ShimmerBlock";
@@ -214,6 +215,8 @@ function notificationTitle(type: string, payload?: Record<string, unknown>): str
       if (fs === "habit_streak") return "Love for your streak";
       return "Cheer on your win";
     }
+    case "community_win_comment":
+      return "New comment on your win";
     case "streak_repair_request":
       return "Streak repair request";
     case "streak_repair_result":
@@ -330,6 +333,19 @@ function notificationSubtitle(n: NotificationRow): string | null {
       }
       return `${who} cheered “${title}” · Tap to view`;
     }
+    case "community_win_comment": {
+      const parsed = parseCommunityWinCommentPayload(p);
+      if (!parsed) return "Someone commented on your Community win · Tap to view";
+      const who =
+        parsed.from_username && parsed.from_username !== "someone"
+          ? parsed.from_username.toLowerCase()
+          : "Someone";
+      const body = parsed.body.trim();
+      const preview = body.length > 80 ? `${body.slice(0, 77)}...` : body;
+      return preview.length > 0
+        ? `${who}: "${preview}" · Tap to view`
+        : `${who} commented on “${parsed.mini_mission_title}” · Tap to view`;
+    }
     case "streak_window_reminder": {
       return streakReminderSubtitle(p);
     }
@@ -418,6 +434,8 @@ function notificationVisual(n: NotificationRow): { Icon: LucideIcon; tone: Notif
       return { Icon: Users, tone: "social" };
     case "community_win_cheer":
       return { Icon: Heart, tone: "positive" };
+    case "community_win_comment":
+      return { Icon: MessageCircle, tone: "social" };
     case "streak_repair_request":
       return { Icon: Wrench, tone: "social" };
     case "streak_repair_result":
@@ -784,6 +802,17 @@ export default function NotificationsScreen() {
       const winId = parsed?.win_id ?? (typeof p.win_id === "string" ? p.win_id : "");
       if (winId) {
         router.push(`/journey-moment/${winId}`);
+      } else {
+        router.push({ pathname: "/(tabs)/community" });
+      }
+      return;
+    }
+
+    if (n.type === "community_win_comment") {
+      const parsed = parseCommunityWinCommentPayload(p);
+      const winId = parsed?.win_id ?? (typeof p.win_id === "string" ? p.win_id : "");
+      if (winId) {
+        router.push({ pathname: "/journey-moment/[id]", params: { id: winId, openComments: "1" } });
       } else {
         router.push({ pathname: "/(tabs)/community" });
       }

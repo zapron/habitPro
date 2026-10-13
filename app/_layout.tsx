@@ -131,6 +131,16 @@ function RootLayoutNav() {
         return;
       }
 
+      if (type === "community_win_comment") {
+        const winId = typeof data.win_id === "string" ? data.win_id : "";
+        if (winId) {
+          router.push({ pathname: "/journey-moment/[id]", params: { id: winId, openComments: "1" } });
+        } else {
+          router.push({ pathname: "/(tabs)/community" });
+        }
+        return;
+      }
+
       if (type === "challenge_squad_checkin") {
         const challengeId = typeof data.challenge_id === "string" ? data.challenge_id : "";
         const notificationId = typeof data.notification_id === "string" ? data.notification_id : undefined;

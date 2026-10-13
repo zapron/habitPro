@@ -35,6 +35,50 @@ export type CommunityWinCheerPayload = {
   created_at?: string;
 };
 
+/** community_win_comment — someone commented on your published win */
+export type CommunityWinCommentPayload = {
+  schema: typeof NOTIFICATION_SCHEMA;
+  kind: "community_win_comment";
+  win_id: string;
+  comment_id: string;
+  from_user_id: string;
+  from_username: string;
+  mini_mission_title: string;
+  body: string;
+  created_at?: string;
+};
+
+export function parseCommunityWinCommentPayload(
+  raw: Record<string, unknown>,
+): CommunityWinCommentPayload | null {
+  const looksLikeComment = raw.kind === "community_win_comment";
+  if (!looksLikeComment) return null;
+  const win_id = typeof raw.win_id === "string" ? raw.win_id : "";
+  const comment_id = typeof raw.comment_id === "string" ? raw.comment_id : "";
+  const from_user_id = typeof raw.from_user_id === "string" ? raw.from_user_id : "";
+  const from_username =
+    typeof raw.from_username === "string" && raw.from_username.length > 0
+      ? raw.from_username
+      : "someone";
+  const mini_mission_title =
+    typeof raw.mini_mission_title === "string" && raw.mini_mission_title.length > 0
+      ? raw.mini_mission_title
+      : "Mini mission";
+  const body = typeof raw.body === "string" ? raw.body : "";
+  if (!win_id || !comment_id || !from_user_id) return null;
+  return {
+    schema: NOTIFICATION_SCHEMA,
+    kind: "community_win_comment",
+    win_id,
+    comment_id,
+    from_user_id,
+    from_username,
+    mini_mission_title,
+    body,
+    ...(typeof raw.created_at === "string" ? { created_at: raw.created_at } : {}),
+  };
+}
+
 export function parseCommunityWinCheerPayload(
   raw: Record<string, unknown>,
 ): CommunityWinCheerPayload | null {
