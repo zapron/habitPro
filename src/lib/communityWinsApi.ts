@@ -58,6 +58,7 @@ export type CommunityWinFeedItem = CommunityWinRow & {
   xp: number;
   cheerCount: number;
   viewerHasCheered: boolean;
+  commentCount: number;
 };
 
 export type CommunityPlayerRecentWin = {
@@ -99,6 +100,7 @@ export type CommunityPlayerStoryPost = {
   liveSquadId: string | null;
   cheerCount: number;
   viewerHasCheered: boolean;
+  commentCount: number;
   repairSource?: "squad" | "solo" | null;
 };
 
@@ -334,6 +336,7 @@ type CommunityFeedRpcItem = {
   } | null;
   cheerCount?: number | null;
   viewerHasCheered?: boolean | null;
+  commentCount?: number | null;
 };
 
 function normalizeRpcCommunityWinItem(item: CommunityFeedRpcItem): CommunityWinFeedItem | null {
@@ -374,6 +377,10 @@ function normalizeRpcCommunityWinItem(item: CommunityFeedRpcItem): CommunityWinF
         ? Math.max(0, item.cheerCount)
         : 0,
     viewerHasCheered: Boolean(item.viewerHasCheered),
+    commentCount:
+      typeof item.commentCount === "number" && Number.isFinite(item.commentCount)
+        ? Math.max(0, item.commentCount)
+        : 0,
   };
 }
 
@@ -418,9 +425,10 @@ async function enrichWinsWithProfilesAndCheers(
   const winIds = wins.map((w) => w.id);
   const userIds = [...new Set(wins.map((w) => w.user_id))];
 
-  const [{ data: profiles }, { data: allCheers }] = await Promise.all([
+  const [{ data: profiles }, { data: allCheers }, commentCountByWin] = await Promise.all([
     supabase.from("profiles").select("id, username, display_name, avatar_url, xp").in("id", userIds),
     supabase.from("community_win_cheers").select("win_id, user_id").in("win_id", winIds),
+    fetchCommentCountByWin(supabase, winIds),
   ]);
 
   const profileByUserId = new Map<
@@ -465,6 +473,7 @@ async function enrichWinsWithProfilesAndCheers(
       xp: prof?.xp ?? 0,
       cheerCount: countByWin.get(row.id) ?? 0,
       viewerHasCheered: viewerCheered.has(row.id),
+      commentCount: commentCountByWin.get(row.id) ?? 0,
     };
   });
 }
@@ -638,6 +647,7 @@ function normalizeStoryPost(
   row: CommunityWinRow,
   cheerCount: number,
   viewerHasCheered: boolean,
+  commentCount: number = 0,
 ): CommunityPlayerStoryPost {
   return {
     id: row.id,
@@ -653,7 +663,24 @@ function normalizeStoryPost(
     liveSquadId: row.live_squad_id ?? null,
     cheerCount,
     viewerHasCheered,
+    commentCount,
   };
+}
+
+/** Batches a `win_id -> comment count` map the same way cheer counts are batched. */
+async function fetchCommentCountByWin(
+  supabase: NonNullable<ReturnType<typeof getSupabase>>,
+  winIds: string[],
+): Promise<Map<string, number>> {
+  const commentCountByWin = new Map<string, number>();
+  if (winIds.length === 0) return commentCountByWin;
+  const { data: commentsRaw } = await supabase.from("community_win_comments").select("win_id").in("win_id", winIds);
+  for (const comment of commentsRaw ?? []) {
+    const winId = (comment as { win_id?: unknown }).win_id;
+    if (typeof winId !== "string") continue;
+    commentCountByWin.set(winId, (commentCountByWin.get(winId) ?? 0) + 1);
+  }
+  return commentCountByWin;
 }
 
 function habitStoryKey(row: CommunityWinRow): string {
@@ -914,12 +941,18 @@ export async function fetchCommunityPlayerMissionJourneyPage(input: {
       viewerCheered.add(winId);
     }
   }
+  const commentCountByWin = await fetchCommentCountByWin(supabase, winIds);
 
   return {
     ok: true,
     page: {
       posts: pageRows.map((row) =>
-        normalizeStoryPost(row, cheerCountByWin.get(row.id) ?? 0, viewerCheered.has(row.id)),
+        normalizeStoryPost(
+          row,
+          cheerCountByWin.get(row.id) ?? 0,
+          viewerCheered.has(row.id),
+          commentCountByWin.get(row.id) ?? 0,
+        ),
       ),
       hasMore,
     },
@@ -998,9 +1031,15 @@ export async function fetchCommunityPlayerStoryPage(input: {
     cheerCountByWin.set(winId, (cheerCountByWin.get(winId) ?? 0) + 1);
     if (typeof cheerUserId === "string" && user?.id === cheerUserId) viewerCheered.add(winId);
   }
+  const commentCountByWin = await fetchCommentCountByWin(supabase, winIds);
 
   const posts = pageRows.map((row) =>
-    normalizeStoryPost(row, cheerCountByWin.get(row.id) ?? 0, viewerCheered.has(row.id)),
+    normalizeStoryPost(
+      row,
+      cheerCountByWin.get(row.id) ?? 0,
+      viewerCheered.has(row.id),
+      commentCountByWin.get(row.id) ?? 0,
+    ),
   );
   const postsById = new Map(posts.map((post) => [post.id, post]));
   const missionStories = await enrichMissionStoriesWithDescriptions(input.userId, groupMissionStories(pageRows, postsById));
@@ -1251,4 +1290,105 @@ export async function listCommunityWinCheerers(
   });
 
   return { ok: true, items };
+}
+
+/**
+ * POC: comments on a Community win. Mirrors listCommunityWinCheerers/toggleCheer's
+ * shape exactly — direct table calls, RLS does the enforcement, no RPC.
+ */
+export type CommunityWinComment = {
+  id: string;
+  winId: string;
+  authorId: string;
+  username: string | null;
+  avatarUrl: string | null;
+  body: string;
+  createdAt: string;
+};
+
+export async function fetchCommunityWinComments(
+  winId: string,
+  limit = 100,
+): Promise<{ ok: true; items: CommunityWinComment[] } | { ok: false; error: string }> {
+  const supabase = getSupabase();
+  if (!supabase) return { ok: false, error: "Cloud sync not configured." };
+
+  const { data: comments, error } = await supabase
+    .from("community_win_comments")
+    .select("id, win_id, author_id, body, created_at")
+    .eq("win_id", winId)
+    .order("created_at", { ascending: true })
+    .limit(limit);
+
+  if (error) return { ok: false, error: error.message };
+
+  const authorIds = [...new Set((comments ?? []).map((c) => c.author_id as string).filter(Boolean))];
+  const profileById = new Map<string, { username: string | null; avatarUrl: string | null }>();
+  if (authorIds.length > 0) {
+    const { data: profiles, error: profilesErr } = await supabase
+      .from("profiles")
+      .select("id, username, avatar_url")
+      .in("id", authorIds);
+    if (profilesErr) return { ok: false, error: profilesErr.message };
+    for (const p of profiles ?? []) {
+      const id = p.id as string;
+      const u = p.username;
+      const av = p.avatar_url;
+      profileById.set(id, {
+        username: typeof u === "string" && u.trim().length > 0 ? u.trim().toLowerCase() : null,
+        avatarUrl: typeof av === "string" && av.trim().length > 0 ? av : null,
+      });
+    }
+  }
+
+  const items: CommunityWinComment[] = (comments ?? []).map((c) => {
+    const authorId = c.author_id as string;
+    const prof = profileById.get(authorId);
+    return {
+      id: c.id as string,
+      winId: c.win_id as string,
+      authorId,
+      username: prof?.username ?? null,
+      avatarUrl: prof?.avatarUrl ?? null,
+      body: c.body as string,
+      createdAt: c.created_at as string,
+    };
+  });
+
+  return { ok: true, items };
+}
+
+export async function postCommunityWinComment(
+  winId: string,
+  body: string,
+): Promise<CommunityActionResult> {
+  const supabase = getSupabase();
+  if (!supabase) return { ok: false, error: "Cloud sync not configured." };
+
+  const trimmed = body.trim();
+  if (!trimmed) return { ok: false, error: "Comment can't be empty." };
+  if (trimmed.length > 500) return { ok: false, error: "Comment is too long (500 characters max)." };
+
+  const {
+    data: { user },
+    error: userErr,
+  } = await supabase.auth.getUser();
+  if (userErr || !user) return { ok: false, error: "Sign in to comment.", reason: "auth_required" };
+
+  const { error } = await supabase
+    .from("community_win_comments")
+    .insert({ win_id: winId, author_id: user.id, body: trimmed });
+
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
+/** Succeeds for the comment's own author, or the win's owner moderating their own post — enforced by RLS. */
+export async function deleteCommunityWinComment(commentId: string): Promise<CommunityActionResult> {
+  const supabase = getSupabase();
+  if (!supabase) return { ok: false, error: "Cloud sync not configured." };
+
+  const { error } = await supabase.from("community_win_comments").delete().eq("id", commentId);
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
 }
