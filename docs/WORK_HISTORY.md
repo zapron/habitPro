@@ -2,6 +2,18 @@
 
 This is a concise chronological log for future sessions. Keep secrets out of this file.
 
+## 2026-10-13 (Community comments extended app-wide, denormalized comment counts, notification pipeline, UI polish)
+
+Full detail in `docs/CURRENT_WORK.md`. **Nothing committed.** Three new migrations, verified locally only (`db:reset` + direct SQL) — not pushed to production. `package.json`/`package-lock.json` carry an unrelated, also-uncommitted `react-native-purchases` native-module bump from an earlier iOS-build-fix investigation this session — flagged as **not OTA-safe**, must be excluded from this push and shipped only with a real native build. Everything else is pure JS/TSX and OTA-eligible.
+
+- Comments on a Community win (built earlier this session) extended to every surface that was missing it: main feed, My Journey (Minis tab + Missions/habit-streak gallery drill-down), the single-win detail page, and both habit day-view variants (plain streak-memory + checklist). All reuse one shared `CommunityWinCommentsModal` component and its existing RLS-backed delete permissions (author or post-owner).
+- Found and fixed a real bug live on-device: the delete-comment confirm dialog's buttons stopped responding to taps because it stacked a second custom `Modal`-based `showAppAlert` on top of the comments sheet's own `Modal` — switched that one confirm to the native `Alert.alert`, which doesn't have the stacking conflict.
+- Denormalized `community_wins.comment_count` (new migration, mirrors the existing `cheer_count` denormalization exactly) so the main feed's RPC can expose `commentCount` without a per-row live count; My Journey and the feed's client-side fallback path use a batched live-join count instead, matching how cheer counts already work in those same two code paths.
+- `community_win_comment` notifications went from a complete dead end (DB emitted the row, client never rendered or routed it) to fully wired: title/subtitle-with-preview/icon in the notifications list, and tap-routing from both the in-app list and a push-notification tap, landing on the single-win detail page with the comments sheet auto-opened.
+- Two more migrations from the comments feature's original build this session: the `community_win_comments` table itself (RLS, notify trigger), and a fix for both the cheer and comment notify triggers skipping the notification (not the underlying action) when the recipient has no local `auth.users` row — a real latent bug, pre-existing in the already-shipped cheer trigger too, found via testing against production-snapshot seed data.
+- Three UI polish items, user-requested: a translucent green→maroon gradient dot replacing the `ListChecks` icon in the Community feed's multi-task catalog view; a small date badge on each habit-detail "moments" hex (position computed from the hex's actual tapered geometry, not a fixed corner); and a persisted "Show dates" toggle next to that section's header, global across the app.
+- Live on-device verification: the comment-delete fix, three rounds of the hex date badge (position/side/size), and the Show-dates toggle (size + cross-screen persistence). Not yet walked through live: comment counts rendering in the main feed/journey-moment/My Journey missions tab, the habit-detail Comments button itself, a real notification tap, and the task-dot change.
+
 ## 2026-10-05 (Focus Mode Forest theme, brand action-button trio, tap-to-toggle timer, freeform check-in + habit day-anchoring fixes)
 
 Full detail in `docs/CURRENT_WORK.md`. Pure client-side round, no migration. Committed (`bb9aeac`), pushed, OTA'd (update group `b8912aba-607a-4b94-a86c-2fc25663adc9`) at the user's request.

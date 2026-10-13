@@ -505,8 +505,9 @@ If the user asks for production OTA:
 
 1. Use the HabitPro deployment guard.
 2. Run validation first.
-3. Use `npm run update:production -- --message "<message>"` or `npx eas update --channel production --environment production --message "<message>"`.
-4. Confirm the EAS output says production environment variables were loaded.
+3. **Check `git diff package.json package-lock.json` before committing/pushing.** OTA only ships the JS/asset bundle, never native code — a version bump to ANY package with a native module (react-native-purchases, reanimated, any Expo native module, etc.) changes the JS side only; the native binary already in production users' hands keeps running the old native code. Shipping new JS that expects a newer native API via OTA reproduces exactly this: `TurboModule method "X" called with N arguments (expected argument count: M)` — a real crash hit on 2026-10-13 testing a `react-native-purchases` 10.0.0→10.12.2 bump on Android. If such a diff exists and wasn't the point of this OTA, exclude it from the commit/push entirely and let it ship only with the next real native build.
+4. Use `npm run update:production -- --message "<message>"` or `npx eas update --channel production --environment production --message "<message>"`.
+5. Confirm the EAS output says production environment variables were loaded.
 
 If the user reports internet/offline behavior:
 
