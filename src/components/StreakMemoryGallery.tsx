@@ -9,14 +9,17 @@ import {
   ScrollView,
   StyleSheet,
   Modal,
+  Switch,
   useWindowDimensions,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
   type StyleProp,
   type ViewStyle,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { FlashList } from "@shopify/flash-list";
 import { Bookmark, Share2, Wrench, X } from "lucide-react-native";
+import { LinearGradient } from "expo-linear-gradient";
 import Svg, { ClipPath, Defs, Image as SvgImage, Path } from "react-native-svg";
 import { useTheme } from "../context/ThemeContext";
 import { useReducedMotion } from "../hooks/useReducedMotion";
@@ -26,6 +29,7 @@ import {
   REPAIR_MEMORY_NOTE_SQUAD,
 } from "../utils/repairStreakMemoryMerge";
 import { formatDateDisplay } from "../utils/dateDisplay";
+import { withAlpha } from "../styles/theme";
 import { playMemoryFormationHaptics } from "../utils/hapticFeedback";
 import { storageThumbnailUri } from "../utils/imageThumbnail";
 import { traceSync } from "../lib/jsThreadProbe";
@@ -56,6 +60,7 @@ type StreakMemoryGalleryProps = {
   onShare?: (entry: Entry, activeTaskId?: string) => void;
 };
 
+const HEX_SHOW_DATES_STORAGE_KEY = "@habitpro_hex_show_dates";
 const HONEYCOMB_ROWS = 2;
 const HONEYCOMB_BUILD_STAGGER_MS = 58;
 const HONEYCOMB_BUILD_STAGGER_CAP_MS = 580;
@@ -68,6 +73,24 @@ function uriLoadsForRemoteViewer(uri: string | undefined): boolean {
 
 function clamp(n: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, n));
+}
+
+const HEX_DATE_MONTHS = [
+  "JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC",
+] as const;
+
+/**
+ * `dateStr` is always a "YYYY-MM-DD" calendar-day key in this app — parsed by hand
+ * (not `new Date(dateStr)`) to avoid the timezone-shift pitfalls that key format
+ * invites, same caution as `formatDateDisplay`'s own parsing.
+ */
+function hexDateParts(dateStr: string): { day: string; month: string } | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr.trim());
+  if (!match) return null;
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+  return { day: String(day), month: HEX_DATE_MONTHS[month - 1] };
 }
 
 function roundedHexPath(width: number, height: number, radius: number): string {
@@ -179,6 +202,23 @@ export function StreakMemoryGallery({
   const [viewerImageAspect, setViewerImageAspect] = useState<number | null>(null);
   const formationHapticKeyRef = useRef<string | null>(null);
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+
+  // "Show dates" toggle — a standing user preference, not per-visit state, so it's
+  // persisted and restored on every app open rather than defaulting back each time.
+  const [showDates, setShowDates] = useState(true);
+  useEffect(() => {
+    let cancelled = false;
+    AsyncStorage.getItem(HEX_SHOW_DATES_STORAGE_KEY).then((saved) => {
+      if (!cancelled && saved !== null) setShowDates(saved === "1");
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const toggleShowDates = (next: boolean) => {
+    setShowDates(next);
+    AsyncStorage.setItem(HEX_SHOW_DATES_STORAGE_KEY, next ? "1" : "0").catch(() => {});
+  };
 
   const tileW = clamp((windowWidth - 42) / 3.06, 94, 122);
   const tileH = tileW * 1.12;
@@ -309,6 +349,17 @@ export function StreakMemoryGallery({
         <View style={styles.sectionHead}>
           <Bookmark size={16} color={theme.colors.amber[500]} strokeWidth={2} />
           <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>{sectionTitle}</Text>
+          <View style={styles.showDatesToggle}>
+            <Text style={[styles.showDatesLabel, { color: theme.colors.textMuted }]}>Show dates</Text>
+            <Switch
+              value={showDates}
+              onValueChange={toggleShowDates}
+              trackColor={{ false: theme.colors.border, true: theme.colors.green[600] }}
+              thumbColor={theme.colors.white}
+              ios_backgroundColor={theme.colors.border}
+              style={styles.showDatesSwitch}
+            />
+          </View>
         </View>
         <Text style={[styles.sectionHint, { color: theme.colors.textMuted }]}>{sectionHint}</Text>
 
@@ -370,6 +421,7 @@ export function StreakMemoryGallery({
 
               const dayLabel =
                 typeof missionDay === "number" && missionDay > 0 ? `D${missionDay}` : null;
+              const dateParts = hexDateParts(dateStr);
               const left = row === 1 ? middleRowOffset : 0;
               const top = 2 + row * tileYStep;
               const clipId = clipIdForDate(dateStr, index);
@@ -408,6 +460,34 @@ export function StreakMemoryGallery({
                       )}
                       <Path d={hexPath} fill="transparent" stroke={memoryBorder} strokeWidth={1.8} />
                     </Svg>
+
+                    {dateParts && showDates ? (
+                      // Positioned inline (not in the static stylesheet) because it must
+                      // land inside the hex's own slanted silhouette: the hex tapers to a
+                      // point at the top (see roundedHexPath — y=0 is the apex, the sides
+                      // only reach full width from y≈25% down to y≈75%), so a fixed
+                      // top/right offset would sit outside the visible shape near the point.
+                      <View
+                        style={[
+                          styles.hexDateBadge,
+                          { top: tileH * 0.27, right: Math.max(6, tileW * 0.05) },
+                        ]}
+                        pointerEvents="none"
+                      >
+                        <LinearGradient
+                          colors={[withAlpha(theme.colors.green[600], 68), withAlpha(theme.colors.maroon[600], 68)]}
+                          start={{ x: 0, y: 0 }}
+                          end={{ x: 1, y: 1 }}
+                          style={StyleSheet.absoluteFillObject}
+                        />
+                        <Text style={styles.hexDateDay} numberOfLines={1}>
+                          {dateParts.day}
+                        </Text>
+                        <Text style={styles.hexDateMonth} numberOfLines={1}>
+                          {dateParts.month}
+                        </Text>
+                      </View>
+                    ) : null}
 
                     {isSquadRepair ? (
                       <View style={styles.hexOverlay} pointerEvents="none">
@@ -668,6 +748,11 @@ export function StreakMemoryGallery({
 const styles = StyleSheet.create({
   section: { marginBottom: 28 },
   sectionHead: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 6 },
+  showDatesToggle: { flexDirection: "row", alignItems: "center", gap: 4, marginLeft: "auto" },
+  showDatesLabel: { fontSize: 12, fontWeight: "700" },
+  // transform:scale doesn't shrink the Switch's own layout box, so it's pulled in
+  // on both sides to cancel the leftover empty margin that scaling alone leaves.
+  showDatesSwitch: { transform: [{ scale: 0.72 }], marginHorizontal: -6 },
   sectionTitle: { fontSize: 17, fontWeight: "800" },
   sectionHint: { fontSize: 12, marginBottom: 10, lineHeight: 17 },
   honeycombColumn: {
@@ -705,6 +790,33 @@ const styles = StyleSheet.create({
     lineHeight: 12,
     fontWeight: "600",
     textAlign: "center",
+  },
+  hexDateBadge: {
+    position: "absolute",
+    width: 21,
+    height: 21,
+    borderRadius: 6.5,
+    overflow: "hidden",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 4,
+  },
+  hexDateDay: {
+    color: "#ffffff",
+    fontSize: 9,
+    lineHeight: 11,
+    fontWeight: "800",
+    textShadowColor: "rgba(0,0,0,0.35)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 1.5,
+  },
+  hexDateMonth: {
+    color: "#ffffff",
+    fontSize: 5,
+    lineHeight: 6,
+    fontWeight: "700",
+    letterSpacing: 0.3,
+    opacity: 0.92,
   },
   /** Plain caption, not a pill — layout, not a sticker on the photo. */
   hexDayCaption: {
