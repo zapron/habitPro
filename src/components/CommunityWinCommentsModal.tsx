@@ -168,12 +168,7 @@ export function CommunityWinCommentsModal({
           accessibilityLabel="Dismiss"
           accessibilityRole="button"
         />
-        <KeyboardAvoidingView
-          behavior="padding"
-          keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 12}
-          pointerEvents="box-none"
-          style={[styles.kav, { paddingTop: insets.top }]}
-        >
+        <View style={[styles.kav, { paddingTop: insets.top }]} pointerEvents="box-none">
           <View
             style={[
               styles.sheet,
@@ -210,6 +205,18 @@ export function CommunityWinCommentsModal({
               </Text>
             </View>
 
+            {/* Scoped to just the list+composer, not the whole sheet: the sheet
+                and its header stay put when the keyboard opens, and only this
+                area shrinks/pads to make room, with the composer tracking the
+                keyboard — the standard chat-composer pattern. Wrapping the
+                entire sheet (the previous structure) translated the fixed-height
+                sheet upward as one rigid block instead, shoving the header and
+                the first few comments off-screen. */}
+            <KeyboardAvoidingView
+              behavior="padding"
+              keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 12}
+              style={styles.listAndComposer}
+            >
             <View style={[styles.listShell, { borderTopColor: theme.colors.border }]}>
               {loading ? (
                 <View style={[styles.center, { paddingVertical: theme.spacing.lg }]}>
@@ -325,8 +332,9 @@ export function CommunityWinCommentsModal({
                 )}
               </Pressable>
             </View>
+            </KeyboardAvoidingView>
           </View>
-        </KeyboardAvoidingView>
+        </View>
       </View>
     </Modal>
   );
@@ -343,6 +351,7 @@ const styles = StyleSheet.create({
   closeBtn: { width: 40, height: 40, borderRadius: 20, borderWidth: 1, alignItems: "center", justifyContent: "center", flexShrink: 0 },
   headerRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingBottom: 10 },
   headerTitle: { fontWeight: "800", fontSize: 15 },
+  listAndComposer: { flex: 1 },
   listShell: { flex: 1, borderTopWidth: StyleSheet.hairlineWidth },
   listScroll: { flex: 1 },
   center: { paddingHorizontal: 16, alignItems: "center", justifyContent: "center" },
