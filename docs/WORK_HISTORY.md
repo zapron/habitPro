@@ -2,6 +2,16 @@
 
 This is a concise chronological log for future sessions. Keep secrets out of this file.
 
+## 2026-10-14 (Comments on the other-player journey screen; keyboard, jitter, and tab-icon fixes)
+
+Full detail in `docs/CURRENT_WORK.md`. No migration this round. Committed (`4d63ed1`, `30eda7b`) and OTA'd to production at the user's request.
+
+- Extended Community win comments to `app/community-player/[id].tsx` (viewing someone else's journey) — a separate file with its own gallery/tile components that got missed when comments-everywhere shipped the day before.
+- Fixed a real bug, not just a cosmetic one: the comment composer's `KeyboardAvoidingView` had no keyboard-avoiding behavior at all on Android (`behavior: undefined`), so typed text was simply hidden behind the keyboard. Third occurrence of this exact mistake in the app — switched to the already-proven `behavior="padding"` + `keyboardVerticalOffset` pattern used elsewhere, which also avoids Android's `"height"`-mode jitter.
+- Fixed the Journey screen's open-time jitter: the "views" counter was animating from a fake placeholder `0` to the real count the instant real data loaded, reflowing its row mid-animation. Now skips the animated counter entirely until real data has actually arrived.
+- Removed the Flame/Zap icons from the Missions/Minis tab toggle.
+- Not yet verified live on-device by the agent — flagged for a manual pass, Android specifically for the keyboard fix.
+
 ## 2026-10-13 (Community comments extended app-wide, denormalized comment counts, notification pipeline, UI polish)
 
 Full detail in `docs/CURRENT_WORK.md`. **Nothing committed.** Three new migrations, verified locally only (`db:reset` + direct SQL) — not pushed to production. `package.json`/`package-lock.json` carry an unrelated, also-uncommitted `react-native-purchases` native-module bump from an earlier iOS-build-fix investigation this session — flagged as **not OTA-safe**, must be excluded from this push and shipped only with a real native build. Everything else is pure JS/TSX and OTA-eligible.
