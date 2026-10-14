@@ -2,6 +2,15 @@
 
 This is a concise chronological log for future sessions. Keep secrets out of this file.
 
+## 2026-10-14, third entry (Comment composer rebuilt as a decoupled floating layer)
+
+Full detail in `docs/CURRENT_WORK.md`. No migration. Committed (`fa00459`) and OTA'd to production at the user's request.
+
+- The prior fix (nested `KeyboardAvoidingView` inside the sheet) still capped available space at the sheet's fixed height — a tall enough keyboard could still cover the composer with nowhere left to shrink to.
+- Rebuilt at the user's direction, describing Instagram's actual pattern: composer is now a fully independent floating layer (its own `KeyboardAvoidingView`, absolutely positioned) on top of a sheet that never reacts to the keyboard at all. List's bottom padding reserves the composer's real measured height so the last comment is never hidden, even at rest.
+- Confirmed this doesn't touch the documented iOS "second Modal" bug class — still exactly one `<Modal>` in the component; the new layer is a `KeyboardAvoidingView`, not a `Modal`.
+- Not verified live on-device by the agent.
+
 ## 2026-10-14, second entry (Comment-composer keyboard UX fix)
 
 Full detail in `docs/CURRENT_WORK.md`. No migration. Committed (`ebedea0`) and OTA'd to production at the user's request.

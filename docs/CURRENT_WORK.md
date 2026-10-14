@@ -1,6 +1,18 @@
 # HabitPro Current Work
 
-Last updated: 2026-10-14 (second entry) — Comments extended to the "view someone else's journey" screen, three bug fixes (comment-composer keyboard coverage, Journey-open jitter, tab icons), then a follow-up fix to the keyboard-composer UX itself (the sheet no longer translates as a rigid block when the keyboard opens). Committed (`4d63ed1`, `30eda7b`, `ebedea0`) and OTA'd to production. The three comments-feature migrations from 2026-10-13 are still local-only — not pushed to production yet. See newest entry below.
+Last updated: 2026-10-14 (third entry) — Comment composer restructured a second time: it's now a fully decoupled floating layer (Instagram-style) with its own `KeyboardAvoidingView`, instead of sharing layout with the sheet above it. Committed (`fa00459`) and OTA'd to production. The three comments-feature migrations from 2026-10-13 are still local-only — not pushed to production yet. See newest entry below.
+
+## Session Handoff (2026-10-14, third entry — comment composer as a decoupled floating layer)
+
+**State: `npx tsc --noEmit` clean. No migration. Committed (`fa00459`) and OTA'd to production at the user's request.**
+
+The second keyboard-composer fix this round (nesting `KeyboardAvoidingView` inside the sheet, wrapping only list+composer) stopped the sheet from translating as a rigid block, but the sheet's own fixed height still capped how much room was available to redistribute — once keyboard height + header + minimum composer height exceeded that budget, the composer had nowhere left to go and ended up covered again. Reported live: "the view doesn't go up, but... the keyboard is sometimes covering."
+
+**Fix** (`src/components/CommunityWinCommentsModal.tsx`), at the user's explicit direction (describing Instagram's actual pattern): the composer is now a fully independent floating layer — its own `KeyboardAvoidingView`, `position: "absolute"` at the bottom of the modal, sitting on top of a sheet that is now a completely static block with no keyboard-reactive behavior at all. Only the composer lifts when focused; the sheet/list never resizes or moves. The comment list's bottom padding now reserves exactly the composer's real measured height (via `onLayout`, seeded with a same-ballpark estimate to avoid a first-layout jump) so the last comment is never hidden behind the composer, even at rest — this was the one trade-off of the decoupled-layer approach, solved per the user's own suggestion.
+
+Confirmed this still has exactly one native `<Modal>` in the component (grepped directly) — the composer layer is a `KeyboardAvoidingView`, not a second `Modal`, so it does not touch the documented iOS "second Modal silently fails to present" bug class (`app-architecture.md`) at all, despite looking superficially similar (another "layer" being added).
+
+**Not verified live on-device by the agent** (can't trigger the keyboard without tapping) — needs a real check on both platforms: type with existing comments present, confirm the sheet never moves, only the composer lifts, and the last comment is never hidden either at rest or with the keyboard open.
 
 ## Session Handoff (2026-10-14, second entry — keyboard-composer UX fix)
 
