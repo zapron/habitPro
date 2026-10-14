@@ -2,6 +2,15 @@
 
 This is a concise chronological log for future sessions. Keep secrets out of this file.
 
+## 2026-10-14, second entry (Comment-composer keyboard UX fix)
+
+Full detail in `docs/CURRENT_WORK.md`. No migration. Committed (`ebedea0`) and OTA'd to production at the user's request.
+
+- The earlier `behavior="padding"` fix solved the keyboard hiding the composer, but `KeyboardAvoidingView` wrapped the whole fixed-height comments sheet, so opening the keyboard translated the entire sheet upward as one block, shoving the header and top comments off-screen.
+- Moved `KeyboardAvoidingView` to wrap only the list+composer area instead, nested inside the sheet after the header — the sheet and header now stay fixed, only the list shrinks, composer tracks the keyboard. Standard chat-composer pattern.
+- Also committed an `app-architecture.md` doc note that had been accidentally left out of the prior commit.
+- Not verified live on-device by the agent.
+
 ## 2026-10-14 (Comments on the other-player journey screen; keyboard, jitter, and tab-icon fixes)
 
 Full detail in `docs/CURRENT_WORK.md`. No migration this round. Committed (`4d63ed1`, `30eda7b`) and OTA'd to production at the user's request.

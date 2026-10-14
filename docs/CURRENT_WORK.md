@@ -1,6 +1,18 @@
 # HabitPro Current Work
 
-Last updated: 2026-10-14 — Comments extended to the "view someone else's journey" screen (`community-player/[id].tsx`), plus three bug fixes: the comment composer's keyboard-avoiding view had no Android behavior at all (comment text was invisible while typing), the Journey screen's "views" counter animated from a fake placeholder zero on every open (reflow jitter), and the Missions/Minis tab toggle's Flame/Zap icons removed. Committed (`4d63ed1`, `30eda7b`) and OTA'd to production. The three comments-feature migrations from 2026-10-13 are still local-only — not pushed to production yet. See newest entry below.
+Last updated: 2026-10-14 (second entry) — Comments extended to the "view someone else's journey" screen, three bug fixes (comment-composer keyboard coverage, Journey-open jitter, tab icons), then a follow-up fix to the keyboard-composer UX itself (the sheet no longer translates as a rigid block when the keyboard opens). Committed (`4d63ed1`, `30eda7b`, `ebedea0`) and OTA'd to production. The three comments-feature migrations from 2026-10-13 are still local-only — not pushed to production yet. See newest entry below.
+
+## Session Handoff (2026-10-14, second entry — keyboard-composer UX fix)
+
+**State: `npx tsc --noEmit` clean. No migration. Committed (`ebedea0`) and OTA'd to production at the user's request.**
+
+The Android keyboard-coverage fix earlier today (switching to `behavior="padding"`) worked, but surfaced a second, more structural problem: `KeyboardAvoidingView` wrapped the *entire* comments sheet (header + list + composer), and since that sheet has a fixed height, opening the keyboard translated the whole thing upward as one rigid block — shoving the header and the first few existing comments off-screen instead of just making room for the keyboard.
+
+**Fix** (`src/components/CommunityWinCommentsModal.tsx`): moved `KeyboardAvoidingView` to wrap only the list+composer area, nested *inside* the sheet, after the header. The sheet and its header now stay fixed in place; only the comment list's visible height shrinks, with the composer tracking the keyboard directly above it — the standard chat-composer pattern (iMessage/WhatsApp-style), not a custom animation.
+
+Also committed `app-architecture.md`'s "third instance" note for the earlier Android-keyboard-behavior bug, which should have shipped in the prior docs commit but was accidentally left out of that `git add`.
+
+**Not verified live on-device by the agent** (can't trigger the keyboard without tapping) — needs a real check: open a post with several existing comments, tap the input, confirm the header and top comments stay put while only the list area shrinks.
 
 ## Session Handoff (2026-10-14 — comments on the other-player journey screen, keyboard/jitter/icon fixes)
 
