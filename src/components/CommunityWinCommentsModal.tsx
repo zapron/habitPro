@@ -169,7 +169,8 @@ export function CommunityWinCommentsModal({
           accessibilityRole="button"
         />
         <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          behavior="padding"
+          keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 12}
           pointerEvents="box-none"
           style={[styles.kav, { paddingTop: insets.top }]}
         >

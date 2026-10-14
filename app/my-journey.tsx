@@ -716,7 +716,6 @@ function TabButton({
       ]}
     >
       <View style={styles.segmentLabelRow}>
-        {kind === "missions" ? <Flame size={15} color={active ? accent : theme.colors.textMuted} /> : <Zap size={15} color={active ? accent : theme.colors.textMuted} />}
         <Text style={[styles.segmentLabel, { color }]} numberOfLines={1}>
           {label}
         </Text>
@@ -2357,10 +2356,23 @@ export default function MyJourneyScreen() {
                 style={styles.viewsMetric}
                 accessibilityLabel={`${shownProfile?.journeyViews ?? 0} public journey views`}
               >
-                <AnimatedCountText
-                  value={shownProfile?.journeyViews ?? 0}
-                  style={[styles.viewsMetricNumber, { color: theme.colors.textSecondary }]}
-                />
+                {/* publicStory (not shownProfile, which has an always-non-null
+                    placeholder with journeyViews: 0) is the real "has data
+                    loaded yet" signal. Rendering AnimatedCountText only once
+                    real data exists means it mounts fresh with the correct
+                    value already in place — no animate-from-a-fake-zero
+                    count-up, which was reflowing this row on every journey
+                    open as the digit count changed mid-animation. */}
+                {publicStory ? (
+                  <AnimatedCountText
+                    value={shownProfile?.journeyViews ?? 0}
+                    style={[styles.viewsMetricNumber, { color: theme.colors.textSecondary }]}
+                  />
+                ) : (
+                  <Text style={[styles.viewsMetricNumber, { color: theme.colors.textSecondary }]} numberOfLines={1}>
+                    {shownProfile?.journeyViews ?? 0}
+                  </Text>
+                )}
                 <Text style={[styles.viewsMetricLabel, { color: theme.colors.textMuted }]} numberOfLines={1}>
                   views
                 </Text>
