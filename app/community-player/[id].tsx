@@ -28,6 +28,7 @@ import {
   Globe,
   Image as ImageIcon,
   Info,
+  MessageCircle,
   Radio,
   ThumbsUp,
   Trophy,
@@ -40,6 +41,7 @@ import Svg, { Path, Rect } from "react-native-svg";
 import { Screen } from "../../src/components/Screen";
 import { Button } from "../../src/components/Button";
 import { GlassTopHighlight } from "../../src/components/GlassTopHighlight";
+import { CommunityWinCommentsModal } from "../../src/components/CommunityWinCommentsModal";
 import { useListCardEntrance } from "../../src/hooks/useListCardEntrance";
 import { useCardMaterialize } from "../../src/hooks/useCardMaterialize";
 import { useReducedMotion } from "../../src/hooks/useReducedMotion";
@@ -508,6 +510,7 @@ function GalleryMomentCard({
   imagesEnabled,
   onOpenImage,
   onToggleCheer,
+  onOpenComments,
   isOwn,
   cheerPending,
   pillTone,
@@ -519,6 +522,7 @@ function GalleryMomentCard({
   imagesEnabled: boolean;
   onOpenImage: (slides: CommunityLightboxSlide[], initialIndex?: number) => void;
   onToggleCheer: (post: CommunityPlayerStoryPost) => void;
+  onOpenComments: (post: CommunityPlayerStoryPost) => void;
   isOwn: boolean;
   cheerPending: boolean;
   pillTone: string;
@@ -565,13 +569,24 @@ function GalleryMomentCard({
           {post.cheerCount}
         </Text>
       </Pressable>
-      {note ? (
-        <View style={styles.galleryMomentBody}>
+      <View style={styles.galleryMomentBody}>
+        {note ? (
           <Text style={[styles.galleryMomentNote, { color: theme.colors.textSecondary }]}>
             {note}
           </Text>
-        </View>
-      ) : null}
+        ) : null}
+        <Pressable
+          style={styles.galleryCommentsRow}
+          onPress={() => onOpenComments(post)}
+          accessibilityRole="button"
+          accessibilityLabel="View comments"
+        >
+          <MessageCircle size={12} color={theme.colors.textMuted} />
+          <Text style={[styles.galleryCommentsText, { color: theme.colors.textMuted }]}>
+            {post.commentCount > 0 ? `${post.commentCount} comment${post.commentCount === 1 ? "" : "s"}` : "Comments"}
+          </Text>
+        </Pressable>
+      </View>
     </View>
   );
 }
@@ -846,6 +861,7 @@ function MissionGalleryModal({
   imagesEnabled,
   onClose,
   onOpenImage,
+  onOpenComments,
 }: {
   mission: CommunityPlayerMissionStory | null;
   userId: string | null;
@@ -855,6 +871,7 @@ function MissionGalleryModal({
   imagesEnabled: boolean;
   onClose: () => void;
   onOpenImage: (slides: CommunityLightboxSlide[], initialIndex?: number) => void;
+  onOpenComments: (post: CommunityPlayerStoryPost) => void;
 }) {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
@@ -1111,6 +1128,7 @@ function MissionGalleryModal({
                       imagesEnabled={imagesEnabled}
                       onOpenImage={onOpenImage}
                       onToggleCheer={handleGalleryCheer}
+                      onOpenComments={onOpenComments}
                       isOwn={viewerOwnsJourney}
                       cheerPending={cheeringIds.has(post.id)}
                       pillTone={pillTone}
@@ -1235,6 +1253,7 @@ function MiniPostTile({
   isDark,
   onOpenImage,
   onToggleCheer,
+  onOpenComments,
   isOwn,
   cheerPending,
   imagesEnabled,
@@ -1246,6 +1265,7 @@ function MiniPostTile({
   isDark: boolean;
   onOpenImage: (slides: CommunityLightboxSlide[], initialIndex?: number) => void;
   onToggleCheer: (post: CommunityPlayerStoryPost) => void;
+  onOpenComments: (post: CommunityPlayerStoryPost) => void;
   isOwn: boolean;
   cheerPending: boolean;
   imagesEnabled: boolean;
@@ -1376,6 +1396,17 @@ function MiniPostTile({
         <Text style={[styles.miniTitle, { color: theme.colors.textPrimary }]} numberOfLines={2}>
           {post.title}
         </Text>
+        <Pressable
+          style={styles.miniCommentsRow}
+          onPress={() => onOpenComments(post)}
+          accessibilityRole="button"
+          accessibilityLabel="View comments"
+        >
+          <MessageCircle size={12} color={theme.colors.textMuted} />
+          <Text style={[styles.miniCommentsText, { color: theme.colors.textMuted }]}>
+            {post.commentCount > 0 ? `${post.commentCount} comment${post.commentCount === 1 ? "" : "s"}` : "Comments"}
+          </Text>
+        </Pressable>
       </View>
     </Animated.View>
   );
@@ -1454,6 +1485,43 @@ export default function CommunityPlayerStoryScreen() {
       setSelectedMission(missionBeforeLightboxRef.current);
       missionBeforeLightboxRef.current = null;
     }
+  }, []);
+  const [commentsPost, setCommentsPost] = useState<CommunityPlayerStoryPost | null>(null);
+  const openComments = useCallback((post: CommunityPlayerStoryPost) => setCommentsPost(post), []);
+  // Same close-the-Modal-before-opening-a-second-one choreography as
+  // openLightbox/closeLightbox above — MissionGalleryModal is itself a
+  // fullScreen Modal, and stacking CommunityWinCommentsModal's Modal on top
+  // of it hits the same documented iOS Modal-stacking issue.
+  const missionBeforeCommentsRef = useRef<CommunityPlayerMissionStory | null>(null);
+  const openCommentsFromGallery = useCallback(
+    (post: CommunityPlayerStoryPost) => {
+      missionBeforeCommentsRef.current = selectedMission;
+      if (selectedMission) setSelectedMission(null);
+      setCommentsPost(post);
+    },
+    [selectedMission],
+  );
+  const closeComments = useCallback(() => {
+    setCommentsPost(null);
+    if (missionBeforeCommentsRef.current) {
+      setSelectedMission(missionBeforeCommentsRef.current);
+      missionBeforeCommentsRef.current = null;
+    }
+  }, []);
+  // Keeps this screen's own card badge in sync the instant a comment is
+  // posted/deleted, same reason handleMiniCheer updates cheerCount locally.
+  const handleCommentsCountChange = useCallback((winId: string, count: number) => {
+    setStory((current) => {
+      if (!current) return current;
+      return {
+        ...current,
+        miniPosts: current.miniPosts.map((p) => (p.id === winId ? { ...p, commentCount: count } : p)),
+        missionStories: current.missionStories.map((ms) => ({
+          ...ms,
+          posts: ms.posts.map((p) => (p.id === winId ? { ...p, commentCount: count } : p)),
+        })),
+      };
+    });
   }, []);
   const [imagesEnabled, setImagesEnabled] = useState(false);
   const [miniCheeringIds, setMiniCheeringIds] = useState<Set<string>>(() => new Set());
@@ -2093,6 +2161,7 @@ export default function CommunityPlayerStoryScreen() {
                   imagesEnabled={imagesEnabled}
                   onOpenImage={openLightbox}
                   onToggleCheer={handleMiniCheer}
+                  onOpenComments={openComments}
                   isOwn={viewerOwnsProfile}
                   cheerPending={miniCheeringIds.has(post.id)}
                   index={index}
@@ -2173,6 +2242,7 @@ export default function CommunityPlayerStoryScreen() {
         imagesEnabled={imagesEnabled}
         onClose={() => setSelectedMission(null)}
         onOpenImage={openLightbox}
+        onOpenComments={openCommentsFromGallery}
       />
 
       <CommunityWinImageLightbox
@@ -2180,6 +2250,17 @@ export default function CommunityPlayerStoryScreen() {
         slides={lightboxSlides}
         initialIndex={lightboxIndex}
         onClose={closeLightbox}
+      />
+
+      <CommunityWinCommentsModal
+        visible={commentsPost !== null}
+        winId={commentsPost?.id ?? null}
+        winOwnerUserId={userId}
+        sessionUserId={session?.user?.id}
+        onClose={closeComments}
+        onCountChange={(count) => {
+          if (commentsPost) handleCommentsCountChange(commentsPost.id, count);
+        }}
       />
     </Screen>
   );
@@ -2429,8 +2510,10 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   liveBadgeText: { fontSize: 9, lineHeight: 12, fontWeight: "900" },
-  miniBody: { paddingHorizontal: 10, paddingVertical: 9 },
+  miniBody: { paddingHorizontal: 10, paddingVertical: 9, gap: 5 },
   miniTitle: { fontSize: 13, lineHeight: 17, fontWeight: "900" },
+  miniCommentsRow: { flexDirection: "row", alignItems: "center", gap: 4, alignSelf: "flex-start" },
+  miniCommentsText: { fontSize: 10.5, fontWeight: "700" },
   miniImageCheerButton: {
     position: "absolute",
     right: 8,
@@ -2580,8 +2663,11 @@ const styles = StyleSheet.create({
   galleryMomentBody: {
     paddingHorizontal: 9,
     paddingVertical: 8,
+    gap: 6,
   },
   galleryMomentNote: { fontSize: 12, lineHeight: 17, fontWeight: "700" },
+  galleryCommentsRow: { flexDirection: "row", alignItems: "center", gap: 4, alignSelf: "flex-start" },
+  galleryCommentsText: { fontSize: 10.5, fontWeight: "700" },
   galleryStatusRow: {
     minHeight: 42,
     marginTop: 14,
