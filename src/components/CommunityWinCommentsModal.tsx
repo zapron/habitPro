@@ -79,6 +79,13 @@ export function CommunityWinCommentsModal({
 
   const bottomPad = Math.max(insets.bottom, theme.spacing.md);
   const sheetMaxPx = windowHeight * SHEET_MAX_SCREEN_RATIO;
+  // The composer is its own floating layer (not part of the sheet's flex
+  // layout — see the Modal markup below), so the list needs to reserve
+  // exactly its height as bottom padding or the last comment sits behind
+  // it. Seeded with a same-ballpark estimate (not 0) so there's no visible
+  // jump on the very first layout pass, then corrected via onLayout once
+  // the real height is known (font scale, multiline growth, etc.).
+  const [composerHeight, setComposerHeight] = useState(56 + bottomPad);
 
   const load = async () => {
     if (!winId) return;
@@ -168,6 +175,12 @@ export function CommunityWinCommentsModal({
           accessibilityLabel="Dismiss"
           accessibilityRole="button"
         />
+        {/* Instagram-style split: the sheet (header + list) is a static block
+            that never reacts to the keyboard at all. The composer below is a
+            separate floating layer with its own KeyboardAvoidingView, so only
+            it lifts when focused — the list never resizes or jumps. The list's
+            own bottom padding reserves exactly the composer's height (measured
+            via onLayout) so the last comment never sits behind it, even at rest. */}
         <View style={[styles.kav, { paddingTop: insets.top }]} pointerEvents="box-none">
           <View
             style={[
@@ -176,7 +189,6 @@ export function CommunityWinCommentsModal({
                 backgroundColor: theme.colors.surface,
                 borderColor: theme.colors.border,
                 paddingTop: theme.spacing.xs,
-                maxHeight: sheetMaxPx,
                 height: sheetMaxPx,
                 ...theme.shadow.card,
               },
@@ -205,18 +217,6 @@ export function CommunityWinCommentsModal({
               </Text>
             </View>
 
-            {/* Scoped to just the list+composer, not the whole sheet: the sheet
-                and its header stay put when the keyboard opens, and only this
-                area shrinks/pads to make room, with the composer tracking the
-                keyboard — the standard chat-composer pattern. Wrapping the
-                entire sheet (the previous structure) translated the fixed-height
-                sheet upward as one rigid block instead, shoving the header and
-                the first few comments off-screen. */}
-            <KeyboardAvoidingView
-              behavior="padding"
-              keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 12}
-              style={styles.listAndComposer}
-            >
             <View style={[styles.listShell, { borderTopColor: theme.colors.border }]}>
               {loading ? (
                 <View style={[styles.center, { paddingVertical: theme.spacing.lg }]}>
@@ -238,7 +238,7 @@ export function CommunityWinCommentsModal({
                   style={styles.listScroll}
                   contentContainerStyle={[
                     styles.list,
-                    { paddingBottom: theme.spacing.sm, paddingHorizontal: theme.spacing.md + 4 },
+                    { paddingBottom: composerHeight + theme.spacing.sm, paddingHorizontal: theme.spacing.md + 4 },
                   ]}
                   keyboardShouldPersistTaps="handled"
                 >
@@ -291,59 +291,74 @@ export function CommunityWinCommentsModal({
                 </ScrollView>
               )}
             </View>
-
-            <View
-              style={[
-                styles.composer,
-                { borderTopColor: theme.colors.border, paddingBottom: bottomPad, paddingHorizontal: theme.spacing.md + 4 },
-              ]}
-            >
-              <TextInput
-                value={draft}
-                onChangeText={setDraft}
-                placeholder="Add a comment…"
-                placeholderTextColor={theme.colors.textMuted}
-                style={[
-                  styles.input,
-                  {
-                    color: theme.colors.textPrimary,
-                    backgroundColor: theme.colors.surfaceElevated,
-                    borderColor: theme.colors.border,
-                  },
-                ]}
-                multiline
-                maxLength={500}
-                editable={!posting}
-              />
-              <Pressable
-                onPress={handleSend}
-                disabled={posting || !draft.trim()}
-                style={[
-                  styles.sendBtn,
-                  { backgroundColor: draft.trim() ? theme.colors.green[500] : theme.colors.surfaceElevated },
-                ]}
-                accessibilityRole="button"
-                accessibilityLabel="Post comment"
-              >
-                {posting ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <Send size={16} color={draft.trim() ? "#fff" : theme.colors.textMuted} />
-                )}
-              </Pressable>
-            </View>
-            </KeyboardAvoidingView>
           </View>
         </View>
+
+        <KeyboardAvoidingView
+          behavior="padding"
+          keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 12}
+          style={styles.composerLayer}
+          pointerEvents="box-none"
+        >
+          <View
+            onLayout={(e) => setComposerHeight(e.nativeEvent.layout.height)}
+            style={[
+              styles.composer,
+              {
+                backgroundColor: theme.colors.surface,
+                borderTopColor: theme.colors.border,
+                paddingBottom: bottomPad,
+                paddingHorizontal: theme.spacing.md + 4,
+              },
+            ]}
+          >
+            <TextInput
+              value={draft}
+              onChangeText={setDraft}
+              placeholder="Add a comment…"
+              placeholderTextColor={theme.colors.textMuted}
+              style={[
+                styles.input,
+                {
+                  color: theme.colors.textPrimary,
+                  backgroundColor: theme.colors.surfaceElevated,
+                  borderColor: theme.colors.border,
+                },
+              ]}
+              multiline
+              maxLength={500}
+              editable={!posting}
+            />
+            <Pressable
+              onPress={handleSend}
+              disabled={posting || !draft.trim()}
+              style={[
+                styles.sendBtn,
+                { backgroundColor: draft.trim() ? theme.colors.green[500] : theme.colors.surfaceElevated },
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Post comment"
+            >
+              {posting ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Send size={16} color={draft.trim() ? "#fff" : theme.colors.textMuted} />
+              )}
+            </Pressable>
+          </View>
+        </KeyboardAvoidingView>
       </View>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  modalRoot: { flex: 1, justifyContent: "flex-end" },
+  modalRoot: { flex: 1, justifyContent: "flex-end", position: "relative" },
   kav: { flex: 1, justifyContent: "flex-end", maxHeight: "100%" },
   sheet: { borderTopLeftRadius: 20, borderTopRightRadius: 20, borderWidth: 1 },
+  // Floating independently of the sheet above — see the comment at the top
+  // of the Modal markup for why. Anchored to modalRoot (position: relative).
+  composerLayer: { position: "absolute", left: 0, right: 0, bottom: 0 },
   grabberHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 4 },
   grabberHeaderSide: { width: 40, height: 40 },
   grabberWrap: { flex: 1, alignItems: "center", justifyContent: "center", paddingBottom: 4 },
@@ -351,7 +366,6 @@ const styles = StyleSheet.create({
   closeBtn: { width: 40, height: 40, borderRadius: 20, borderWidth: 1, alignItems: "center", justifyContent: "center", flexShrink: 0 },
   headerRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingBottom: 10 },
   headerTitle: { fontWeight: "800", fontSize: 15 },
-  listAndComposer: { flex: 1 },
   listShell: { flex: 1, borderTopWidth: StyleSheet.hairlineWidth },
   listScroll: { flex: 1 },
   center: { paddingHorizontal: 16, alignItems: "center", justifyContent: "center" },
