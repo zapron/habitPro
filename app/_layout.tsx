@@ -9,6 +9,7 @@ import { Stack, usePathname, useRouter } from "expo-router";
 
 WebBrowser.maybeCompleteAuthSession();
 import { ThemeProvider } from "../src/context/ThemeContext";
+import { ThemeWaveProvider } from "../src/components/ThemeWaveTransition";
 import { AppDialogProvider } from "../src/context/AppDialogContext";
 import { ToastHost, ToastProvider } from "../src/context/ToastContext";
 import { AuthProvider, useAuth } from "../src/context/AuthContext";
@@ -397,29 +398,31 @@ export default function Layout() {
 
   return (
     <ThemeProvider>
-      <AppDialogProvider>
-        <ToastProvider>
-          <AuthProvider>
-            <InviteBadgeProvider>
-              <UsernameGateProvider>
-                <NotificationGateProvider>
-                  <BillingProvider>
-                    <PremiumProvider>
-                      <PlusUpsellProvider>
-                        <AppVersionProvider>
-                          <SplashGate>
-                            <RootLayoutNav />
-                          </SplashGate>
-                        </AppVersionProvider>
-                      </PlusUpsellProvider>
-                    </PremiumProvider>
-                  </BillingProvider>
-                </NotificationGateProvider>
-              </UsernameGateProvider>
-            </InviteBadgeProvider>
-          </AuthProvider>
-        </ToastProvider>
-      </AppDialogProvider>
+      <ThemeWaveProvider>
+        <AppDialogProvider>
+          <ToastProvider>
+            <AuthProvider>
+              <InviteBadgeProvider>
+                <UsernameGateProvider>
+                  <NotificationGateProvider>
+                    <BillingProvider>
+                      <PremiumProvider>
+                        <PlusUpsellProvider>
+                          <AppVersionProvider>
+                            <SplashGate>
+                              <RootLayoutNav />
+                            </SplashGate>
+                          </AppVersionProvider>
+                        </PlusUpsellProvider>
+                      </PremiumProvider>
+                    </BillingProvider>
+                  </NotificationGateProvider>
+                </UsernameGateProvider>
+              </InviteBadgeProvider>
+            </AuthProvider>
+          </ToastProvider>
+        </AppDialogProvider>
+      </ThemeWaveProvider>
     </ThemeProvider>
   );
 }

@@ -39,6 +39,8 @@ import {
   Bell,
   Flame,
   Download,
+  Sun,
+  Moon,
 } from "lucide-react-native";
 import { useHabitStore } from "../../src/store/habitStore";
 import { useShallow } from "zustand/react/shallow";
@@ -61,6 +63,7 @@ import { withAlpha } from "../../src/styles/theme";
 import { useReducedMotion } from "../../src/hooks/useReducedMotion";
 import { useUnseenReports } from "../../src/hooks/useUnseenReports";
 import { MissionOutcomeCard } from "../../src/components/MissionOutcomeCard";
+import { useThemeWave } from "../../src/components/ThemeWaveTransition";
 import type { MissionReport } from "../../src/types/habit";
 import { AnimatedFire } from "../../src/components/AnimatedFire";
 import { FireLottie, FIRE_LOTTIE_URI } from "../../src/components/FireLottie";
@@ -310,6 +313,18 @@ export default function Home() {
   const cloudSyncBlocked = Boolean(showAccount && session?.user && syncError);
 
   const emptyIconScale = useRef(new Animated.Value(1)).current;
+
+  // Light/dark toggle — the liquid spreads out from the centre of this button.
+  const { toggleThemeWithWave } = useThemeWave();
+  const themeToggleRef = useRef<View>(null);
+  const onThemeTogglePress = useCallback(() => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    const btn = themeToggleRef.current;
+    if (!btn) return;
+    btn.measureInWindow((x, y, w, h) => {
+      toggleThemeWithWave({ x: x + w / 2, y: y + h / 2 });
+    });
+  }, [toggleThemeWithWave]);
 
   useEffect(() => {
     if (reduceMotion) return;
@@ -843,74 +858,92 @@ export default function Home() {
             },
           ]}
         >
-          <Text
-            style={[
-              styles.headerEyebrow,
-              { color: rp ? (isDark ? rp.textMuted : rp.accent) : theme.colors.cyan[400] },
-              rp ? { fontFamily: fontFamily.manropeBold } : null,
-            ]}
-          >
-            MISSION CONTROL
-          </Text>
-          <View style={styles.headerGreetingRow}>
-            <Text
-              style={[
-                styles.headerTitle,
-                {
-                  color: rp ? rp.textPrimary : theme.colors.textPrimary,
-                  letterSpacing: theme.letterSpacing.tight,
-                },
-                rp ? { fontFamily: fontFamily.manropeExtraBold } : null,
-              ]}
-              numberOfLines={2}
-            >
-              {greetingText}
-            </Text>
+          <View style={styles.headerRow}>
+            <View style={styles.headerTextCol}>
+              <Text
+                style={[
+                  styles.headerEyebrow,
+                  { color: rp ? (isDark ? rp.textMuted : rp.accent) : theme.colors.cyan[400] },
+                  rp ? { fontFamily: fontFamily.manropeBold } : null,
+                ]}
+              >
+                MISSION CONTROL
+              </Text>
+              <Text
+                style={[
+                  styles.headerTitle,
+                  {
+                    color: rp ? rp.textPrimary : theme.colors.textPrimary,
+                    letterSpacing: theme.letterSpacing.tight,
+                  },
+                  rp ? { fontFamily: fontFamily.manropeExtraBold } : null,
+                ]}
+                numberOfLines={2}
+              >
+                {greetingText}
+              </Text>
+            </View>
             <View style={styles.headerRightCluster}>
-              {showAccount && session?.user ? (
-                <View style={styles.bellWrap}>
+              {/* Theme + notifications share one pill, so the header reads as two
+                  objects (utility pill · level badge) instead of three loose ones. */}
+              <View
+                style={[
+                  styles.headerPill,
+                  {
+                    backgroundColor: rp ? rp.screenBg : theme.colors.surface,
+                    borderColor: rp ? rp.border : theme.colors.border,
+                  },
+                ]}
+              >
+                <TouchableOpacity
+                  ref={themeToggleRef}
+                  onPress={onThemeTogglePress}
+                  style={styles.headerPillBtn}
+                  activeOpacity={0.6}
+                  accessibilityRole="button"
+                  accessibilityLabel={isDark ? "Switch to light mode" : "Switch to dark mode"}
+                >
+                  {isDark ? (
+                    <Sun size={19} color={rp ? rp.textPrimary : theme.colors.textPrimary} />
+                  ) : (
+                    <Moon size={18} color={rp ? rp.textPrimary : theme.colors.textPrimary} />
+                  )}
+                </TouchableOpacity>
+                {showAccount && session?.user ? (
+                  <>
+                    <View style={[styles.headerPillDivider, { backgroundColor: rp ? rp.border : theme.colors.border }]} />
                     <TouchableOpacity
                       onPress={() => router.push("/notifications")}
-                      style={[
-                        styles.headerIconBtn,
-                        {
-                          backgroundColor: rp ? rp.screenBg : theme.colors.surface,
-                          borderColor: rp ? rp.border : theme.colors.border,
-                        },
-                      ]}
-                      activeOpacity={0.85}
+                      style={styles.headerPillBtn}
+                      activeOpacity={0.6}
                       accessibilityLabel={
                         unreadNotifCount > 0
                           ? `Notifications, ${unreadNotifCount} unread`
                           : "Notifications"
                       }
                     >
-                      <Bell size={20} color={rp ? rp.textPrimary : theme.colors.textPrimary} />
+                      <Bell size={19} color={rp ? rp.textPrimary : theme.colors.textPrimary} />
                     </TouchableOpacity>
-                  {unreadNotifCount > 0 ? (
-                    <View
-                      style={[
-                        styles.notifBadge,
-                        {
-                          borderColor: rp ? rp.screenBg : theme.colors.background,
-                          backgroundColor: rp ? NOTIF_DOT_MUTED : theme.colors.red[500],
-                        },
-                      ]}
-                      accessibilityElementsHidden
-                      importantForAccessibility="no-hide-descendants"
-                    >
-                      <Text
-                        style={[
-                          styles.notifBadgeText,
-                          { color: theme.colors.white },
-                        ]}
-                      >
-                        {unreadNotifCount > 99 ? "99+" : String(unreadNotifCount)}
-                      </Text>
-                    </View>
-                  ) : null}
-                </View>
-              ) : null}
+                  </>
+                ) : null}
+                {showAccount && session?.user && unreadNotifCount > 0 ? (
+                  <View
+                    style={[
+                      styles.notifBadge,
+                      {
+                        borderColor: rp ? rp.screenBg : theme.colors.background,
+                        backgroundColor: rp ? NOTIF_DOT_MUTED : theme.colors.red[500],
+                      },
+                    ]}
+                    accessibilityElementsHidden
+                    importantForAccessibility="no-hide-descendants"
+                  >
+                    <Text style={[styles.notifBadgeText, { color: theme.colors.white }]}>
+                      {unreadNotifCount > 99 ? "99+" : String(unreadNotifCount)}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
               <View
                 style={[
                   styles.headerBadge,
@@ -1394,14 +1427,10 @@ const styles = StyleSheet.create({
   },
   rootCol: { flex: 1, minHeight: 0 },
   header: { marginBottom: HEADER_BOTTOM_GAP },
-  headerGreetingRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
-    gap: 10,
-    marginTop: 2,
-    minHeight: 44,
-  },
+  // Text column + controls on one row, controls centred against eyebrow and
+  // greeting together, so the 46pt level badge doesn't leave a gap under the title.
+  headerRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  headerTextCol: { flex: 1, minWidth: 0, gap: 2 },
   headerRightCluster: {
     flexDirection: "row",
     alignItems: "center",
@@ -1410,13 +1439,10 @@ const styles = StyleSheet.create({
   },
   headerEyebrow: { fontSize: 10, fontWeight: "700", letterSpacing: 1.25 },
   headerTitle: {
-    flex: 1,
-    minWidth: 0,
     fontSize: 20,
     fontWeight: "800",
     lineHeight: 24,
   },
-  bellWrap: { position: "relative" },
   notifBadge: {
     position: "absolute",
     top: -2,
@@ -1435,14 +1461,16 @@ const styles = StyleSheet.create({
     fontVariant: ["tabular-nums"],
     lineHeight: 12,
   },
-  headerIconBtn: {
-    width: 42,
+  headerPill: {
+    flexDirection: "row",
+    alignItems: "center",
     height: 42,
     borderRadius: 9999,
-    alignItems: "center",
-    justifyContent: "center",
     borderWidth: 1,
+    paddingHorizontal: 3,
   },
+  headerPillBtn: { width: 36, height: 40, alignItems: "center", justifyContent: "center" },
+  headerPillDivider: { width: 1, height: 18 },
   headerBadge: {
     width: 46,
     height: 46,
