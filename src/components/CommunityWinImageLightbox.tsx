@@ -4,6 +4,7 @@ import { FlatList, Modal, Pressable, Image, View, StyleSheet, useWindowDimension
 import type { NativeSyntheticEvent, NativeScrollEvent } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { X } from "lucide-react-native";
+import { PageDots } from "./PageDots";
 
 /** One carousel slide — a photo, a note, or both. `imageUrl` null renders a text-only card. */
 export type CommunityLightboxSlide = {
@@ -105,12 +106,7 @@ export function CommunityWinImageLightbox({ visible, slides, initialIndex = 0, o
         />
         {slides.length > 1 ? (
           <View pointerEvents="none" style={[styles.dotsRow, { bottom: Math.max(insets.bottom, 12) + 8 }]}>
-            {slides.map((_, i) => (
-              <View
-                key={i}
-                style={[styles.dot, { backgroundColor: i === activeIndex ? "#fff" : "rgba(255,255,255,0.4)" }]}
-              />
-            ))}
+            <PageDots count={slides.length} index={activeIndex} />
           </View>
         ) : null}
       </View>
@@ -198,10 +194,5 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     gap: 5,
-  },
-  dot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
   },
 });

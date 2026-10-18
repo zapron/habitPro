@@ -324,7 +324,9 @@ export async function uploadHabitStreakTaskMemoryImage(
 
   const { data: pub } = supabase.storage.from(BUCKET).getPublicUrl(path);
   if (!pub?.publicUrl) throw new Error("No public URL");
-  return pub.publicUrl;
+  // Fixed path + `upsert: true`: a replaced photo would otherwise keep the same
+  // URL, so caches (and Community posts re-shared with it) show the old image.
+  return `${pub.publicUrl}?t=${Date.now()}`;
 }
 
 export type UploadMiniStreakImageParams = {
@@ -361,7 +363,9 @@ export async function uploadMiniStreakMemoryImage(
 
   const { data: pub } = supabase.storage.from(BUCKET).getPublicUrl(path);
   if (!pub?.publicUrl) throw new Error("No public URL");
-  return pub.publicUrl;
+  // Fixed path + `upsert: true`: a replaced photo would otherwise keep the same
+  // URL, so caches (and Community posts re-shared with it) show the old image.
+  return `${pub.publicUrl}?t=${Date.now()}`;
 }
 
 export type UploadMiniStreakTaskImageParams = {
@@ -403,7 +407,9 @@ export async function uploadMiniStreakTaskMemoryImage(
 
   const { data: pub } = supabase.storage.from(BUCKET).getPublicUrl(path);
   if (!pub?.publicUrl) throw new Error("No public URL");
-  return pub.publicUrl;
+  // Fixed path + `upsert: true`: a replaced photo would otherwise keep the same
+  // URL, so caches (and Community posts re-shared with it) show the old image.
+  return `${pub.publicUrl}?t=${Date.now()}`;
 }
 
 async function currentStorageUserPrefix(): Promise<string | null> {

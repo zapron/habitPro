@@ -616,6 +616,12 @@ export default function ChallengeDetailScreen() {
   const [nonMemberPreviewLoading, setNonMemberPreviewLoading] = useState(false);
   const [joinRequestBusy, setJoinRequestBusy] = useState(false);
   const [pendingJoinRequests, setPendingJoinRequests] = useState<ChallengeJoinRequestRow[]>([]);
+  // A request stays pending until enough members approve it, but once *you*
+  // have voted there's nothing left for you to do — so it leaves your screen.
+  const actionableJoinRequests = useMemo(
+    () => pendingJoinRequests.filter((req) => !req.myVote),
+    [pendingJoinRequests],
+  );
   const [joinRequestVoteBusyId, setJoinRequestVoteBusyId] = useState<string | null>(null);
 
   const myHabit = useHabitStore(
@@ -2173,7 +2179,7 @@ export default function ChallengeDetailScreen() {
             />
           }
         >
-          {pendingJoinRequests.length > 0 ? (
+          {actionableJoinRequests.length > 0 ? (
             <View
               style={[
                 styles.card,
@@ -2186,9 +2192,9 @@ export default function ChallengeDetailScreen() {
               ]}
             >
               <Text style={{ fontSize: 12, fontWeight: "900", letterSpacing: 0.4, color: theme.colors.textMuted, marginBottom: 10 }}>
-                {pendingJoinRequests.length} PENDING TO JOIN
+                {actionableJoinRequests.length} PENDING TO JOIN
               </Text>
-              {pendingJoinRequests.map((req) => (
+              {actionableJoinRequests.map((req) => (
                 <View
                   key={req.id}
                   style={{
@@ -2204,15 +2210,11 @@ export default function ChallengeDetailScreen() {
                       @{req.requesterUsername ?? "someone"}
                     </Text>
                     <Text style={{ fontSize: 12, fontWeight: "600", color: theme.colors.textMuted, marginTop: 2 }}>
-                      {req.myVote
-                        ? `You voted ${req.myVote}`
-                        : `${req.approveCount}/${req.approvalsRequired} approvals`}
+                      {`${req.approveCount}/${req.approvalsRequired} approvals`}
                     </Text>
                   </View>
-                  {req.myVote || joinRequestVoteBusyId === req.id ? (
-                    joinRequestVoteBusyId === req.id ? (
-                      <ActivityIndicator color={theme.colors.indigo[400]} size="small" />
-                    ) : null
+                  {joinRequestVoteBusyId === req.id ? (
+                    <ActivityIndicator color={theme.colors.indigo[400]} size="small" />
                   ) : (
                     <View style={{ flexDirection: "row", gap: 8 }}>
                       <TouchableOpacity

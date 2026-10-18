@@ -47,12 +47,6 @@ type Props = {
   contentPaddingBottom?: number;
   /** `feed` = full-width photo, edge-to-edge; `cards` = bordered cards. */
   variant?: "feed" | "cards";
-  /** When false, cheering is disabled (e.g. non–HabitPro Community browse mode). Default true. */
-  canCheer?: boolean;
-  /** Called when the viewer tries to cheer while `canCheer` is false. */
-  onCheerBlocked?: () => void;
-  /** Optional fresh entitlement check before sending the cheer API call. */
-  validateCheerAccess?: () => Promise<boolean>;
   listHeaderComponent?: ReactElement | null;
 };
 
@@ -65,9 +59,6 @@ const COMMUNITY_FOCUS_RELOAD_TTL_MS = 45_000;
 export function CommunityWinsFeed({
   contentPaddingBottom = 24,
   variant = "feed",
-  canCheer = true,
-  onCheerBlocked,
-  validateCheerAccess,
   listHeaderComponent,
 }: Props) {
   const { theme, isDark } = useTheme();
@@ -241,10 +232,6 @@ export function CommunityWinsFeed({
   const handleCheer = useCallback(
     async (win: CommunityWinFeedItem): Promise<boolean> => {
       if (!session?.user) return false;
-      if (!canCheer) {
-        onCheerBlocked?.();
-        return false;
-      }
       const ok = await requireUsername("community_like");
       if (!ok) return false;
       setItems((prev) =>
@@ -258,22 +245,11 @@ export function CommunityWinsFeed({
             : w,
         ),
       );
-      const firstResult = await traceAsync(
+      const finalResult = await traceAsync(
         "community.cheer.toggle",
         () => toggleCheer(win.id, win.viewerHasCheered),
         { slowMs: 800 },
       );
-      let finalResult = firstResult;
-      if (firstResult.ok === false && firstResult.reason === "premium_required" && validateCheerAccess) {
-        const allowed = await validateCheerAccess();
-        if (allowed) {
-          finalResult = await traceAsync(
-            "community.cheer.retryAfterPremium",
-            () => toggleCheer(win.id, win.viewerHasCheered),
-            { slowMs: 800 },
-          );
-        }
-      }
       if (finalResult.ok === false) {
         setItems((prev) =>
           prev.map((w) =>
@@ -286,16 +262,12 @@ export function CommunityWinsFeed({
               : w,
           ),
         );
-        if (finalResult.reason === "premium_required") {
-          onCheerBlocked?.();
-        } else {
-          showToast(finalResult.error, "error");
-        }
+        showToast(finalResult.error, "error");
         return false;
       }
       return true;
     },
-    [session?.user, canCheer, onCheerBlocked, requireUsername, showToast, validateCheerAccess],
+    [session?.user, requireUsername, showToast],
   );
 
   const openPlayerStory = useCallback((win: CommunityWinFeedItem) => {
@@ -367,8 +339,6 @@ export function CommunityWinsFeed({
           onCheer={handleCheer}
           onOpenCheerers={(w) => setCheerersSheet({ winId: w.id, totalLikes: w.cheerCount })}
           onOpenComments={(w) => setCommentsSheet({ winId: w.id, winOwnerUserId: w.user_id })}
-          canCheer={canCheer}
-          onCheerBlocked={onCheerBlocked}
         />
       );
     },
@@ -381,8 +351,6 @@ export function CommunityWinsFeed({
       toggleExpanded,
       handleCheer,
       reduceMotion,
-      canCheer,
-      onCheerBlocked,
       openPlayerStory,
     ],
   );

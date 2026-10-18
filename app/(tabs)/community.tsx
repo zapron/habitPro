@@ -35,13 +35,6 @@ export default function CommunityScreen() {
     }, [refreshPremiumAccess]),
   );
 
-  const validateCheerAccess = useCallback(async () => {
-    const serverPremium = await refreshPremiumAccess({ serverOnly: true, cachedAccessOk: true });
-    if (serverPremium === true) return true;
-    openUpsell("community");
-    return false;
-  }, [openUpsell, refreshPremiumAccess]);
-
   const header = (
     <View style={[styles.introInner, { paddingHorizontal: theme.spacing.sm }]}>
       <Text
@@ -90,7 +83,7 @@ export default function CommunityScreen() {
           onPress={() => openUpsell("community")}
           activeOpacity={0.88}
           accessibilityRole="button"
-          accessibilityLabel="Browse Community. Cheering and posting are HabitPro Community. Tap to learn more."
+          accessibilityLabel="Browse Community. Posting wins and commenting are HabitPro Community. Tap to learn more."
         >
           <Text
             style={[
@@ -106,8 +99,8 @@ export default function CommunityScreen() {
               { color: theme.colors.textSecondary },
             ]}
           >
-            Cheering and posting wins are HabitPro Community. Tap to see what's
-            included.
+            Cheer anyone for free. Posting wins and commenting are HabitPro
+            Community. Tap to see what's included.
           </Text>
         </TouchableOpacity>
       ) : null}
@@ -124,9 +117,6 @@ export default function CommunityScreen() {
         <CommunityWinsFeed
           contentPaddingBottom={bottomPad}
           variant="feed"
-          canCheer={!socialLocked}
-          onCheerBlocked={() => openUpsell("community")}
-          validateCheerAccess={validateCheerAccess}
           listHeaderComponent={header}
         />
       </View>

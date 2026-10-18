@@ -102,6 +102,7 @@ import {
   deleteCommunityWin,
   deleteAllCommunityWinsForHabit,
   habitStreakCommunityWinId,
+  fetchHabitStreakWinUuid,
 } from '../../src/lib/communityWinsApi';
 import { getMyStreakRepairStatusForDay } from "../../src/lib/streakRepairApi";
 import { requestRemoteSync } from "../../src/lib/syncQueue";
@@ -599,12 +600,19 @@ export default function HabitDetail() {
     // is itself a Modal, and iOS can't reliably stack a second one over it.
     const [commentsWinId, setCommentsWinId] = useState<string | null>(null);
     const viewBeforeCommentsRef = useRef<MemoryUiState>(null);
-    const openHabitComments = useCallback(() => {
+    // Comments key off the post's real uuid, so resolve it from the day's mission key
+    // before swapping sheets; if the post can't be found, stay on the day sheet.
+    const openHabitComments = useCallback(async () => {
         if (!habit || !memoryUi || memoryUi.kind !== 'view') return;
+        const winId = await fetchHabitStreakWinUuid(habit.id, memoryUi.dateStr);
+        if (!winId) {
+            showToast("Couldn't find this day's Community post.", 'error');
+            return;
+        }
         viewBeforeCommentsRef.current = memoryUi;
         setMemoryUi(null);
-        setCommentsWinId(habitStreakCommunityWinId(habit.id, memoryUi.dateStr));
-    }, [habit, memoryUi]);
+        setCommentsWinId(winId);
+    }, [habit, memoryUi, showToast]);
     const checklistViewBeforeCommentsRef = useRef<{ dateStr: string; day: number; dayIndex: number } | null>(null);
     const closeHabitComments = useCallback(() => {
         setCommentsWinId(null);
@@ -620,12 +628,17 @@ export default function HabitDetail() {
     // Checklist missions (docs/CATALOG_ARCHITECTURE.md Phase 2) — day tap opens this
     // instead of memoryUi when habit.taskChecklist is present and non-empty.
     const [checklistDayUi, setChecklistDayUi] = useState<{ dateStr: string; day: number; dayIndex: number } | null>(null);
-    const openChecklistDayComments = useCallback(() => {
+    const openChecklistDayComments = useCallback(async () => {
         if (!habit || !checklistDayUi) return;
+        const winId = await fetchHabitStreakWinUuid(habit.id, checklistDayUi.dateStr);
+        if (!winId) {
+            showToast("Couldn't find this day's Community post.", 'error');
+            return;
+        }
         checklistViewBeforeCommentsRef.current = checklistDayUi;
         setChecklistDayUi(null);
-        setCommentsWinId(habitStreakCommunityWinId(habit.id, checklistDayUi.dateStr));
-    }, [habit, checklistDayUi]);
+        setCommentsWinId(winId);
+    }, [habit, checklistDayUi, showToast]);
     type TaskMemoryUiState =
         | {
               kind: 'create';

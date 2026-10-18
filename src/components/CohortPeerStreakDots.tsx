@@ -27,6 +27,7 @@ import type { Habit, StreakMemory, StreakMemoryTaskEntry } from "../types/habit"
 import { formatDateDisplay } from "../utils/dateDisplay";
 import { calendarDateForHabitMissionDayIndex, getHabitActiveMissionDaySlot } from "../utils/missionDaySlots";
 import { withAlpha } from "../styles/theme";
+import { PageDots } from "./PageDots";
 
 const DOT_SIZE = 36;
 const DOT_GAP = 8;
@@ -195,12 +196,7 @@ function DotViewerCarousel({
       />
       {slides.length > 1 ? (
         <View pointerEvents="none" style={styles.carouselDotsRow}>
-          {slides.map((_, i) => (
-            <View
-              key={i}
-              style={[styles.carouselDot, { backgroundColor: i === activeIndex ? "#fff" : "rgba(255,255,255,0.4)" }]}
-            />
-          ))}
+          <PageDots count={slides.length} index={activeIndex} showCounter />
         </View>
       ) : null}
     </View>
@@ -759,11 +755,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     gap: 5,
-  },
-  carouselDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
   },
   textSlide: {
     height: "100%",

@@ -141,7 +141,7 @@ export default function JourneyMomentScreen() {
   }, []);
 
   const handleToggleCheer = useCallback(async () => {
-    if (!moment || cheerBusy || isOwnMoment) return;
+    if (!moment || cheerBusy) return;
     if (!session?.user) {
       showToast("Sign in to like this moment.", "error");
       return;
@@ -161,13 +161,9 @@ export default function JourneyMomentScreen() {
     setCheerBusy(false);
     if (res.ok === false) {
       setMoment(before);
-      if (res.reason === "premium_required") {
-        openUpsell("community");
-      } else {
-        showToast("error" in res ? res.error : "Could not update like.", "error");
-      }
+      showToast("error" in res ? res.error : "Could not update like.", "error");
     }
-  }, [cheerBusy, isOwnMoment, moment, openUpsell, requireUsername, session?.user, showToast]);
+  }, [cheerBusy, moment, requireUsername, session?.user, showToast]);
 
   const openJourney = useCallback(() => {
     if (!moment) return;
@@ -347,12 +343,14 @@ export default function JourneyMomentScreen() {
                     : isDark ? withAlpha(theme.colors.scrim, 82) : withAlpha(theme.colors.scrim, 72),
                 },
               ]}
-              onPress={isOwnMoment ? (moment.cheerCount > 0 ? () => setCheerersOpen(true) : undefined) : handleToggleCheer}
-              disabled={isOwnMoment ? moment.cheerCount <= 0 : cheerBusy}
+              onPress={handleToggleCheer}
+              onLongPress={moment.cheerCount > 0 ? () => setCheerersOpen(true) : undefined}
+              disabled={cheerBusy}
               accessibilityRole="button"
-              accessibilityLabel={isOwnMoment ? "View likes" : moment.viewerHasCheered ? "Unlike this moment" : "Like this moment"}
+              accessibilityLabel={moment.viewerHasCheered ? "Unlike this moment" : "Like this moment"}
+              accessibilityHint={moment.cheerCount > 0 ? "Long-press to see who liked it" : undefined}
             >
-              {cheerBusy && !isOwnMoment ? (
+              {cheerBusy ? (
                 <ActivityIndicator size="small" color="#fff" />
               ) : (
                 <ThumbsUp size={15} color="#fff" fill={moment.viewerHasCheered ? "#fff" : "transparent"} />

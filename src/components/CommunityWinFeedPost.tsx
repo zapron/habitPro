@@ -39,6 +39,7 @@ import { storageThumbnailUri } from "../utils/imageThumbnail";
 import { avatarIdentityFor } from "../utils/avatarIdentity";
 import { withAlpha } from "../styles/theme";
 import { CohortStreakPill } from "./CohortStreakPill";
+import { PageDots } from "./PageDots";
 
 function initialsFromDisplay(name: string): string {
   const trimmed = name.replace(/^@/, "").trim();
@@ -98,10 +99,6 @@ type Props = {
   onOpenCheerers?: (win: CommunityWinFeedItem) => void;
   /** POC: opens the comments sheet for this win. */
   onOpenComments?: (win: CommunityWinFeedItem) => void;
-  /** When false, cheering others' wins is off (browse-only). Default true. */
-  canCheer?: boolean;
-  /** Optional; parent may already handle via `onCheer`. Used for accessibility copy. */
-  onCheerBlocked?: () => void;
 };
 
 function CheerBurstOverlay({
@@ -227,15 +224,7 @@ function PhotoCarousel({
       />
       {images.length > 1 ? (
         <View pointerEvents="none" style={styles.dotsRow}>
-          {images.map((_, i) => (
-            <View
-              key={i}
-              style={[
-                styles.dot,
-                { backgroundColor: i === activeIndex ? "#fff" : "rgba(255,255,255,0.4)" },
-              ]}
-            />
-          ))}
+          <PageDots count={images.length} index={activeIndex} />
         </View>
       ) : null}
     </View>
@@ -257,11 +246,8 @@ export const CommunityWinFeedPost = memo(function CommunityWinFeedPost({
   onCheer,
   onOpenCheerers,
   onOpenComments,
-  canCheer = true,
-  onCheerBlocked,
 }: Props) {
   const { width: windowWidth } = useWindowDimensions();
-  const isOwn = sessionUserId === win.user_id;
   const handle = win.username ? win.username : "Someone";
   const displayName = win.displayName?.trim() || null;
   const normalizedDisplayName = displayName?.replace(/^@/, "").trim().toLowerCase();
@@ -419,22 +405,14 @@ export const CommunityWinFeedPost = memo(function CommunityWinFeedPost({
       if (delta > 0 && delta < DOUBLE_TAP_GAP_MS) {
         clearLightboxTimer();
         lastTapRef.current = 0;
-        if (!isOwn) {
-          if (!canCheer) {
-            onCheerBlocked?.();
-            return;
-          }
-          if (!reduceMotion) setBurstKey((k) => k + 1);
-          void runCheer();
-        } else if (!reduceMotion) {
-          setBurstKey((k) => k + 1);
-        }
+        if (!reduceMotion) setBurstKey((k) => k + 1);
+        void runCheer();
         return;
       }
 
       if (uri) scheduleLightbox();
     },
-    [clearLightboxTimer, scheduleLightbox, isOwn, reduceMotion, runCheer, canCheer, onCheerBlocked],
+    [clearLightboxTimer, scheduleLightbox, reduceMotion, runCheer],
   );
 
   const photoFrameStyle: StyleProp<ViewStyle> = isFeed
@@ -453,12 +431,11 @@ export const CommunityWinFeedPost = memo(function CommunityWinFeedPost({
   const cheerButton = (
     <Pressable
       onPress={() => void runCheer()}
-      disabled={isOwn}
-      style={({ pressed }) => [styles.cheerTap, { opacity: isOwn ? 0.55 : pressed ? 0.7 : 1 }]}
+      style={({ pressed }) => [styles.cheerTap, { opacity: pressed ? 0.7 : 1 }]}
       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
       accessibilityRole="button"
-      accessibilityLabel={isOwn ? "Cheer" : win.viewerHasCheered ? "Unlike, remove cheer" : "Cheer"}
-      accessibilityState={{ disabled: isOwn, selected: win.viewerHasCheered }}
+      accessibilityLabel={win.viewerHasCheered ? "Unlike, remove cheer" : "Cheer"}
+      accessibilityState={{ selected: win.viewerHasCheered }}
     >
       <Animated.View style={{ transform: [{ scale: cheerScale }] }}>
         <ThumbsUp
@@ -631,7 +608,7 @@ export const CommunityWinFeedPost = memo(function CommunityWinFeedPost({
             style={[styles.galleryCountBadgeText, { color: "#fff" }]}
             numberOfLines={1}
           >
-            {galleryImages.length}
+            {galleryImages.length > 5 ? `${activeGalleryIndex + 1} / ${galleryImages.length}` : galleryImages.length}
           </Text>
         </View>
         {streakDayLabel ? (
@@ -659,11 +636,7 @@ export const CommunityWinFeedPost = memo(function CommunityWinFeedPost({
     <Pressable
       onPress={() => onImageAreaPress(win.memory_image_url)}
       accessibilityRole="imagebutton"
-      accessibilityLabel={
-        !isOwn && !canCheer
-          ? "Photo: tap to view full screen. Cheering is HabitPro Community."
-          : "Photo: double-tap to cheer, tap to view full screen"
-      }
+      accessibilityLabel="Photo: double-tap to cheer, tap to view full screen"
     >
       <View style={photoFrameStyle}>
         {!imageLoaded ? (
@@ -732,11 +705,8 @@ export const CommunityWinFeedPost = memo(function CommunityWinFeedPost({
   ) : (
     <Pressable
       onPress={() => onImageAreaPress(null)}
-      disabled={isOwn}
       accessibilityRole="button"
-      accessibilityLabel={
-        isOwn ? "No photo on your win" : !canCheer ? "No photo. Cheering is HabitPro Community." : "Double-tap to cheer"
-      }
+      accessibilityLabel="Double-tap to cheer"
     >
       <View style={[photoFrameStyle, styles.photoPlaceholder, { backgroundColor: isDark ? withAlpha(theme.colors.sheen, 6) : withAlpha(theme.colors.sheen, 6) }]}>
         <Camera size={36} color={theme.colors.textMuted} strokeWidth={1.8} />
@@ -878,11 +848,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     gap: 5,
-  },
-  dot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
   },
   taskNameRow: {
     flexDirection: "row",

@@ -33,6 +33,7 @@ import { withAlpha } from "../styles/theme";
 import { playMemoryFormationHaptics } from "../utils/hapticFeedback";
 import { storageThumbnailUri } from "../utils/imageThumbnail";
 import { traceSync } from "../lib/jsThreadProbe";
+import { PageDots } from "./PageDots";
 
 export type StreakMemoryGalleryEntry = { dateStr: string; memory: StreakMemory; missionDay?: number | null };
 type Entry = StreakMemoryGalleryEntry;
@@ -619,15 +620,7 @@ export function StreakMemoryGallery({
                 </ScrollView>
                 {openTasks.length > 1 ? (
                   <View pointerEvents="none" style={styles.viewerDotsRow}>
-                    {openTasks.map((task, i) => (
-                      <View
-                        key={task.taskId}
-                        style={[
-                          styles.viewerDot,
-                          { backgroundColor: i === clampedGalleryIndex ? "#fff" : "rgba(255,255,255,0.4)" },
-                        ]}
-                      />
-                    ))}
+                    <PageDots count={openTasks.length} index={clampedGalleryIndex} />
                   </View>
                 ) : null}
               </View>
@@ -868,7 +861,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 6,
   },
-  viewerDot: { width: 6, height: 6, borderRadius: 3 },
   viewerTaskLabel: { fontSize: 14, fontWeight: "800", flex: 1 },
   viewerTaskCount: { fontSize: 11, fontWeight: "700", fontVariant: ["tabular-nums"] },
   viewerTextOnlyHero: {

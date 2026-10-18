@@ -18,7 +18,6 @@ import {
   ScrollView,
   InteractionManager,
   Linking,
-  ActivityIndicator,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -42,8 +41,6 @@ import {
   Download,
 } from "lucide-react-native";
 import { useHabitStore } from "../../src/store/habitStore";
-import { fetchHabitsHistoryPage } from "../../src/lib/habitsHistoryApi";
-import { HOT_WINDOW_HISTORY_PAGE_SIZE } from "../../src/lib/sync";
 import { useShallow } from "zustand/react/shallow";
 import { useAuth } from "../../src/context/AuthContext";
 import { useAppVersion } from "../../src/context/AppVersionContext";
@@ -62,6 +59,9 @@ import { Screen } from "../../src/components/Screen";
 import { useTheme } from "../../src/context/ThemeContext";
 import { withAlpha } from "../../src/styles/theme";
 import { useReducedMotion } from "../../src/hooks/useReducedMotion";
+import { useUnseenReports } from "../../src/hooks/useUnseenReports";
+import { MissionOutcomeCard } from "../../src/components/MissionOutcomeCard";
+import type { MissionReport } from "../../src/types/habit";
 import { AnimatedFire } from "../../src/components/AnimatedFire";
 import { FireLottie, FIRE_LOTTIE_URI } from "../../src/components/FireLottie";
 import { ConfettiBurst } from "../../src/components/ConfettiBurst";
@@ -161,7 +161,7 @@ const HEADER_BOTTOM_GAP = 6;
 
 type HomeSpark =
   | { kind: "lead" | "chase"; title: string; body: string; challengeId: string }
-  | { kind: "mini" | "xp" | "reports"; title: string; body: string };
+  | { kind: "mini" | "xp"; title: string; body: string };
 
 const ShimmerTile = memo(function ShimmerTile({
   theme,
@@ -285,88 +285,14 @@ export default function Home() {
   const { softUpdateAvailable, latestVersion, softUpdateUrl, softUpdateMessage } = useAppVersion();
   const reduceMotion = useReducedMotion();
   const { showToast } = useToast();
-  const { habits, cohortPeerHabits, miniMissions, xp, mergeFetchedHabit } = useHabitStore(
+  const { habits, cohortPeerHabits, miniMissions, xp } = useHabitStore(
     useShallow((s) => ({
       habits: isFocused ? s.habits : EMPTY_HABITS,
       cohortPeerHabits: isFocused ? s.cohortPeerHabits : EMPTY_HABITS,
       miniMissions: isFocused ? s.miniMissions : EMPTY_MINI_MISSIONS,
       xp: isFocused ? s.xp : 0,
-      mergeFetchedHabit: s.mergeFetchedHabit,
     })),
   );
-  const [activeTab, setActiveTab] = useState<"missions" | "reports">(
-    "missions",
-  );
-  const [tabTrackWidth, setTabTrackWidth] = useState(0);
-  const tabIndicatorX = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    const toValue = activeTab === "missions" ? 0 : 1;
-    if (reduceMotion) {
-      tabIndicatorX.setValue(toValue);
-      return;
-    }
-    Animated.spring(tabIndicatorX, {
-      toValue,
-      useNativeDriver: true,
-      friction: 10,
-      tension: 90,
-    }).start();
-  }, [activeTab, reduceMotion, tabIndicatorX]);
-  const [reportsSegment, setReportsSegment] = useState<
-    "pending" | "accomplished" | "failed"
-  >("pending");
-  // Load More for the accomplished/failed reports segments — inert until now (Phase D's
-  // hot window is the first phase where the local store doesn't already hold full
-  // habit history by default). Fetched items are merged into the global store
-  // (mergeFetchedHabit) so they stay available afterward instead of being re-fetched.
-  //
-  // fetchedCount/hasMore use an "override" pattern rather than seeding a plain
-  // useState at mount: the store hasn't necessarily hydrated/synced yet on first
-  // render, so a one-time initializer can freeze at an empty-array snapshot and never
-  // update again. Before any explicit Load More tap, these stay null and the values
-  // below are derived live from `habits` (so they track real data as it streams in);
-  // after the first tap, the override holds the server's authoritative answer.
-  const [accomplishedFetchedOverride, setAccomplishedFetchedOverride] = useState<number | null>(null);
-  const [accomplishedHasMoreOverride, setAccomplishedHasMoreOverride] = useState<boolean | null>(null);
-  const [failedReportsFetchedOverride, setFailedReportsFetchedOverride] = useState<number | null>(null);
-  const [failedReportsHasMoreOverride, setFailedReportsHasMoreOverride] = useState<boolean | null>(null);
-  const [loadingMoreReports, setLoadingMoreReports] = useState(false);
-
-  const accomplishedCountInStore = useMemo(() => habits.filter((h) => h.missionReport === "accomplished").length, [habits]);
-  const failedReportsCountInStore = useMemo(() => habits.filter((h) => h.missionReport === "failed").length, [habits]);
-  // Deliberately NOT `?? countInStore`: the local array can already contain items
-  // that arrived via the old full sync (pre-dating this feature) rather than via this
-  // paginated RPC, so its length isn't a reliable pagination offset. Before any real
-  // fetch, start from 0 — a safe, server-confirmed anchor — and let the override (set
-  // from the RPC's own authoritative response) take over from there.
-  const accomplishedFetchedCount = accomplishedFetchedOverride ?? 0;
-  const failedReportsFetchedCount = failedReportsFetchedOverride ?? 0;
-  const accomplishedHasMore = accomplishedHasMoreOverride ?? accomplishedCountInStore >= HOT_WINDOW_HISTORY_PAGE_SIZE;
-  const failedReportsHasMore = failedReportsHasMoreOverride ?? failedReportsCountInStore >= HOT_WINDOW_HISTORY_PAGE_SIZE;
-  const reportsSegmentHasMore =
-    reportsSegment === "accomplished" ? accomplishedHasMore : reportsSegment === "failed" ? failedReportsHasMore : false;
-
-  const loadMoreReportsSegment = useCallback(async () => {
-    if (loadingMoreReports || reportsSegment === "pending") return;
-    setLoadingMoreReports(true);
-    try {
-      const status = reportsSegment;
-      const offset = status === "accomplished" ? accomplishedFetchedCount : failedReportsFetchedCount;
-      const page = await fetchHabitsHistoryPage({ offset, limit: HOT_WINDOW_HISTORY_PAGE_SIZE, status });
-      if (page) {
-        for (const item of page.items) mergeFetchedHabit(item);
-        if (status === "accomplished") {
-          setAccomplishedFetchedOverride(offset + page.items.length);
-          setAccomplishedHasMoreOverride(page.hasMore);
-        } else {
-          setFailedReportsFetchedOverride(offset + page.items.length);
-          setFailedReportsHasMoreOverride(page.hasMore);
-        }
-      }
-    } finally {
-      setLoadingMoreReports(false);
-    }
-  }, [accomplishedFetchedCount, failedReportsFetchedCount, loadingMoreReports, mergeFetchedHabit, reportsSegment]);
   const [storeHydrated, setStoreHydrated] = useState(() =>
     useHabitStore.persist.hasHydrated(),
   );
@@ -413,18 +339,10 @@ export default function Home() {
   const xpInLevel = xpInCurrentLevel(xp);
   const xpProgress = xpProgressInCurrentLevel(xp);
 
-  const filteredHabits = useMemo(() => {
-    if (activeTab === "missions") {
-      return habits.filter((h) => isMainMissionPlayableOnHome(h, missionNow));
-    }
-    if (reportsSegment === "pending") {
-      return habits.filter((h) => needsMainMissionOutcome(h, missionNow));
-    }
-    if (reportsSegment === "accomplished") {
-      return habits.filter((h) => h.missionReport === "accomplished");
-    }
-    return habits.filter((h) => h.missionReport === "failed");
-  }, [habits, activeTab, reportsSegment, missionNow]);
+  const filteredHabits = useMemo(
+    () => habits.filter((h) => isMainMissionPlayableOnHome(h, missionNow)),
+    [habits, missionNow],
+  );
 
   const stats = useMemo(() => {
     let missionsCount = 0;
@@ -453,6 +371,45 @@ export default function Home() {
       hasIncomplete,
     };
   }, [habits, missionNow]);
+
+  // "Reports ›" is a quiet link on the Main Missions header row, with an amber
+  // dot while a finished mission is waiting for its outcome or a newly recorded
+  // report hasn't been opened yet (the Reports screen clears it on open).
+  const reportKeys = useMemo(
+    () =>
+      habits
+        .filter((h) => h.missionReport === "accomplished" || h.missionReport === "failed")
+        .map((h) => `${h.id}:${h.missionReport}`),
+    [habits],
+  );
+  const { unseenCount: unseenReports } = useUnseenReports(session?.user?.id, reportKeys);
+  const reportsNeedAction = stats.pending > 0;
+
+  // Missions whose window has ended get answered right here on Home; once
+  // answered they move into Reports (Accomplished / Failed).
+  const awaitingOutcome = useMemo(
+    () => habits.filter((h) => needsMainMissionOutcome(h, missionNow)),
+    [habits, missionNow],
+  );
+  const setMissionReport = useHabitStore((s) => s.setMissionReport);
+  const answerOutcome = useCallback(
+    (habit: Habit, report: MissionReport) => {
+      void Haptics.notificationAsync(
+        report === "accomplished"
+          ? Haptics.NotificationFeedbackType.Success
+          : Haptics.NotificationFeedbackType.Warning,
+      );
+      setMissionReport(habit.id, report);
+      showToast(
+        report === "accomplished"
+          ? "Mission accomplished · +100 XP. Find it later in Reports → Accomplished."
+          : "Saved. Find it later in Reports → Failed.",
+        "success",
+        4500,
+      );
+    },
+    [setMissionReport, showToast],
+  );
 
   const miniMissionStats = useMemo(() => {
     let live = 0;
@@ -565,16 +522,8 @@ export default function Home() {
       };
     }
 
-    if (stats.pending > 0) {
-      return {
-        kind: "reports",
-        title: stats.pending === 1 ? "One mission needs review" : `${stats.pending} missions need review`,
-        body: "Lock the outcome from Reports when you are ready.",
-      };
-    }
-
     return null;
-  }, [cohortPeersByChallengeId, habits, level, miniMissionStats.live, missionNow, stats.pending, xpInLevel]);
+  }, [cohortPeersByChallengeId, habits, level, miniMissionStats.live, missionNow, xpInLevel]);
 
   const prewarmedChallengeIdRef = useRef<string | null>(null);
 
@@ -607,11 +556,6 @@ export default function Home() {
     if (!homeSpark) return;
     if (homeSpark.kind === "lead" || homeSpark.kind === "chase") {
       router.push(`/challenge/${homeSpark.challengeId}`);
-      return;
-    }
-    if (homeSpark.kind === "reports") {
-      setActiveTab("reports");
-      setReportsSegment("pending");
       return;
     }
     router.push("/mini");
@@ -1251,6 +1195,16 @@ export default function Home() {
           </View>
         </TouchableOpacity>
 
+        {awaitingOutcome[0] ? (
+          <MissionOutcomeCard
+            key={awaitingOutcome[0].id}
+            habit={awaitingOutcome[0]}
+            position={1}
+            total={awaitingOutcome.length}
+            onAnswer={(report) => answerOutcome(awaitingOutcome[0], report)}
+          />
+        ) : null}
+
         <View style={styles.mainMissionsHeader}>
           <Text
             style={[
@@ -1259,128 +1213,37 @@ export default function Home() {
               rp ? { fontFamily: fontFamily.manropeBold } : null,
             ]}
           >
-            MAIN MISSIONS
+            MAIN MISSIONS{stats.missionsCount > 0 ? ` · ${stats.missionsCount}` : ""}
           </Text>
-        </View>
-
-        <View
-          style={[
-            styles.tabContainer,
-            {
-              backgroundColor: rp
-                ? (isDark ? rp.screenBg : rp.chipBg)
-                : (isDark ? theme.colors.surface : theme.colors.surfaceElevated),
-              borderColor: "transparent",
-            },
-          ]}
-          onLayout={(event) => {
-            const fullWidth = event.nativeEvent.layout.width;
-            const trackWidth = Math.max(0, fullWidth - 2 * 4 - 2 * 1);
-            setTabTrackWidth(trackWidth);
-          }}
-        >
-          {tabTrackWidth > 0 ? (
-            <Animated.View
-              pointerEvents="none"
-              style={[
-                styles.tabIndicator,
-                {
-                  width: tabTrackWidth / 2,
-                  backgroundColor: rp
-                    ? (isDark ? rp.chipBg : rp.screenBg)
-                    : (isDark ? theme.colors.surfaceElevated : theme.colors.surface),
-                  ...(rp ? null : theme.shadow.card),
-                  transform: [
-                    {
-                      translateX: tabIndicatorX.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: [0, tabTrackWidth / 2],
-                      }),
-                    },
-                  ],
-                },
-              ]}
-            />
-          ) : null}
-          {(
-            [
-              ["missions", "Main Missions", stats.missionsCount] as const,
-              ["reports", "Reports", stats.reportsCount] as const,
-            ] as const
-          ).map(([key, label, count]) => {
-            const selected = activeTab === key;
-            return (
-              <TouchableOpacity
-                key={key}
-                style={styles.tab}
-                onPress={() => setActiveTab(key)}
-                activeOpacity={0.8}
-              >
-                <Text
-                  style={[
-                    styles.tabText,
-                    { color: rp ? rp.textSecondary : theme.colors.textSecondary },
-                    rp ? { fontFamily: fontFamily.dmSansSemibold } : null,
-                    selected && { color: rp ? (isDark ? rp.textPrimary : rp.accent) : theme.colors.indigo[600] },
-                  ]}
-                >
-                  {label}
-                </Text>
-                {selected && count > 0 ? (
-                  <View
-                    style={[
-                      styles.tabCountBadge,
-                      { backgroundColor: rp ? rp.accent : theme.colors.indigo[600] },
-                    ]}
-                  >
-                    <Text style={styles.tabCountBadgeText}>{count}</Text>
-                  </View>
-                ) : null}
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-
-        {activeTab === "reports" ? (
-          <View
-            style={[styles.reportSegRow, { borderColor: rp ? rp.border : theme.colors.border }]}
+          <TouchableOpacity
+            style={styles.reportsLink}
+            onPress={() => router.push("/reports")}
+            activeOpacity={0.7}
+            hitSlop={{ top: 10, bottom: 10, left: 12, right: 8 }}
+            accessibilityRole="button"
+            accessibilityLabel={
+              reportsNeedAction
+                ? `Reports, ${stats.pending} waiting for your outcome`
+                : unseenReports > 0
+                  ? `Reports, ${unseenReports} new`
+                  : "Reports"
+            }
           >
-            {(
-              [
-                ["pending", "Pending", stats.pending] as const,
-                ["accomplished", "Accomplished", stats.accomplished] as const,
-                ["failed", "Failed", stats.failed] as const,
-              ] as const
-            ).map(([key, label, count]) => (
-              <TouchableOpacity
-                key={key}
-                style={[
-                  styles.reportSegBtn,
-                  reportsSegment === key && {
-                    backgroundColor: rp
-                      ? rp.accentTint
-                      : isDark ? withAlpha(theme.colors.indigo[500], 20) : withAlpha(theme.colors.indigo[600], 12),
-                  },
-                ]}
-                onPress={() => setReportsSegment(key)}
-                activeOpacity={0.85}
-              >
-                <Text
-                  style={[
-                    styles.reportSegText,
-                    { color: rp ? rp.textSecondary : theme.colors.textSecondary },
-                    rp ? { fontFamily: fontFamily.dmSansSemibold } : null,
-                    reportsSegment === key && { color: rp ? (isDark ? rp.textPrimary : rp.accentDark) : theme.colors.indigo[400] },
-                  ]}
-                  numberOfLines={1}
-                >
-                  {label}
-                  {count > 0 ? ` (${count})` : ""}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        ) : null}
+            {reportsNeedAction || unseenReports > 0 ? (
+              <View style={[styles.reportsDot, { backgroundColor: theme.colors.amber[500] }]} />
+            ) : null}
+            <Text
+              style={[
+                styles.reportsLinkText,
+                { color: rp ? rp.textSecondary : theme.colors.textSecondary },
+                rp ? { fontFamily: fontFamily.dmSansSemibold } : null,
+              ]}
+            >
+              Reports
+            </Text>
+            <ChevronRight size={15} color={rp ? rp.textMuted : theme.colors.textMuted} />
+          </TouchableOpacity>
+        </View>
 
         <View style={styles.listWrap}>
           {cloudSyncBlocked ? (
@@ -1445,15 +1308,7 @@ export default function Home() {
                     },
                   ]}
                 >
-                  {activeTab === "missions"
-                    ? habits.length === 0
-                      ? "No missions yet"
-                      : "Nothing in Missions"
-                    : reportsSegment === "pending"
-                      ? "Nothing pending"
-                      : reportsSegment === "accomplished"
-                        ? "No accomplished missions"
-                        : "No failed missions"}
+                  {habits.length === 0 ? "No missions yet" : "Nothing in Missions"}
                 </Text>
                 <Text
                   style={[
@@ -1461,17 +1316,11 @@ export default function Home() {
                     { color: theme.colors.textSecondary },
                   ]}
                 >
-                  {activeTab === "missions"
-                    ? habits.length === 0
-                      ? "Start your first mission and keep momentum daily."
-                      : "Active missions you can still check in on appear here. When the timer ends or the grid is full, move to Reports."
-                    : reportsSegment === "pending"
-                      ? "When the mission window ends or every day is checked in, open Reports → Pending to confirm if the mission is complete for you."
-                      : reportsSegment === "accomplished"
-                        ? "Missions you mark as complete in the review step are listed here."
-                        : "Missions you mark as not completed appear here."}
+                  {habits.length === 0
+                    ? "Start your first mission and keep momentum daily."
+                    : "Active missions you can still check in on appear here. Finished ones move to Reports."}
                 </Text>
-                {activeTab === "missions" && habits.length === 0 && (
+                {habits.length === 0 && (
                   <View style={styles.emptyActions}>
                     <Button
                       title="Start a Mission"
@@ -1506,41 +1355,6 @@ export default function Home() {
               keyExtractor={habitKeyExtractor}
               refreshControl={
                 showAccount && session?.user ? notifRefreshControl : undefined
-              }
-              ListFooterComponent={
-                activeTab === "reports" && reportsSegmentHasMore ? (
-                  <View style={styles.loadMoreWrap}>
-                    <TouchableOpacity
-                      onPress={loadMoreReportsSegment}
-                      disabled={loadingMoreReports}
-                      accessibilityRole="button"
-                      accessibilityLabel={`Load more ${reportsSegment} missions`}
-                      style={[
-                        styles.loadMoreButton,
-                        {
-                          borderColor: isDark ? withAlpha(theme.colors.indigo[400], 42) : withAlpha(theme.colors.indigo[600], 20),
-                          opacity: loadingMoreReports ? 0.78 : 1,
-                        },
-                      ]}
-                    >
-                      <LinearGradient
-                        colors={
-                          isDark
-                            ? (["rgba(21, 128, 61, 0.82)", "rgba(6, 182, 212, 0.62)"] as const)
-                            : ([theme.colors.indigo[500], theme.colors.cyan[500]] as const)
-                        }
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 1 }}
-                        style={styles.loadMoreGradient}
-                      >
-                        {loadingMoreReports ? <ActivityIndicator size="small" color={theme.colors.white} /> : null}
-                        <Text style={[styles.loadMoreText, { color: theme.colors.white }]}>
-                          {loadingMoreReports ? "Loading..." : `Load more ${reportsSegment}`}
-                        </Text>
-                      </LinearGradient>
-                    </TouchableOpacity>
-                  </View>
-                ) : null
               }
             />
           )}
@@ -1694,81 +1508,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     gap: 8,
-    marginBottom: 6,
-  },
-  tabContainer: {
-    flexDirection: "row",
-    borderRadius: 14,
-    padding: 4,
     marginBottom: 10,
-    borderWidth: 1,
   },
-  tab: {
-    flex: 1,
-    flexDirection: "row",
-    paddingVertical: 10,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    borderRadius: 10,
-    minHeight: 42,
-  },
-  tabIndicator: {
-    position: "absolute",
-    top: 4,
-    bottom: 4,
-    left: 4,
-    borderRadius: 10,
-  },
-  tabText: { fontWeight: "700" },
-  tabCountBadge: {
-    minWidth: 20,
-    height: 20,
-    paddingHorizontal: 5,
-    borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  tabCountBadgeText: { color: "#ffffff", fontSize: 11, fontWeight: "800" },
-  reportSegRow: {
-    flexDirection: "row",
-    borderRadius: 12,
-    borderWidth: 1,
-    padding: 3,
-    marginBottom: 10,
-    gap: 4,
-  },
-  reportSegBtn: {
-    flex: 1,
-    paddingVertical: 8,
-    paddingHorizontal: 4,
-    borderRadius: 9,
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: 36,
-  },
-  reportSegText: { fontSize: 11, fontWeight: "700", textAlign: "center" },
+  reportsLink: { flexDirection: "row", alignItems: "center", gap: 3, paddingVertical: 4 },
+  reportsLinkText: { fontSize: 13, fontWeight: "700" },
+  reportsDot: { width: 7, height: 7, borderRadius: 4, marginRight: 4 },
   listWrap: { flex: 1, minHeight: 0 },
   listContent: { paddingBottom: 40 },
-  loadMoreWrap: { paddingTop: 12, paddingBottom: 4, alignItems: "center" },
-  loadMoreButton: {
-    minHeight: 38,
-    borderRadius: 999,
-    borderWidth: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    overflow: "hidden",
-  },
-  loadMoreGradient: {
-    minHeight: 38,
-    paddingHorizontal: 18,
-    paddingVertical: 8,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-  },
-  loadMoreText: { fontSize: 12, lineHeight: 16, fontWeight: "900" },
   emptyScroll: { flex: 1 },
   emptyScrollContent: {
     flexGrow: 1,

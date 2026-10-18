@@ -15,8 +15,10 @@ import {
   View,
 } from "react-native";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { MessageCircle, Send, Trash2, X } from "lucide-react-native";
+import { Lock, MessageCircle, Send, Trash2, X } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { usePlusUpsell } from "../context/PlusUpsellContext";
+import { usePremium } from "../context/PremiumContext";
 import { useTheme } from "../context/ThemeContext";
 import { formatRelativeTime } from "../lib/communityWinFeedFormat";
 import {
@@ -70,6 +72,11 @@ export function CommunityWinCommentsModal({
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
   const { theme, isDark } = useTheme();
+  const { isPremium, loading: premiumLoading } = usePremium();
+  const { openUpsell } = usePlusUpsell();
+  // Anyone can read; posting is HabitPro Community. While access is still
+  // loading, show the normal box — the server has the final say anyway.
+  const canComment = isPremium || premiumLoading;
   const [loading, setLoading] = useState(false);
   const [items, setItems] = useState<CommunityWinComment[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -118,6 +125,13 @@ export function CommunityWinCommentsModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible, winId]);
 
+  // The upsell is its own Modal, and iOS can't present a second Modal over this
+  // one — so close the sheet first, then open the upsell once it's gone.
+  const openCommunityUpsell = () => {
+    onClose();
+    setTimeout(() => openUpsell("community"), 380);
+  };
+
   const handleSend = async () => {
     if (!winId || posting) return;
     const body = draft.trim();
@@ -126,6 +140,10 @@ export function CommunityWinCommentsModal({
     const res = await postCommunityWinComment(winId, body);
     setPosting(false);
     if (res.ok === false) {
+      if (res.reason === "premium_required") {
+        openCommunityUpsell();
+        return;
+      }
       Alert.alert("Couldn't post comment", res.error, [{ text: "OK" }]);
       return;
     }
@@ -312,39 +330,58 @@ export function CommunityWinCommentsModal({
               },
             ]}
           >
-            <TextInput
-              value={draft}
-              onChangeText={setDraft}
-              placeholder="Add a comment…"
-              placeholderTextColor={theme.colors.textMuted}
-              style={[
-                styles.input,
-                {
-                  color: theme.colors.textPrimary,
-                  backgroundColor: theme.colors.surfaceElevated,
-                  borderColor: theme.colors.border,
-                },
-              ]}
-              multiline
-              maxLength={500}
-              editable={!posting}
-            />
-            <Pressable
-              onPress={handleSend}
-              disabled={posting || !draft.trim()}
-              style={[
-                styles.sendBtn,
-                { backgroundColor: draft.trim() ? theme.colors.green[500] : theme.colors.surfaceElevated },
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel="Post comment"
-            >
-              {posting ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                <Send size={16} color={draft.trim() ? "#fff" : theme.colors.textMuted} />
-              )}
-            </Pressable>
+            {canComment ? (
+              <>
+                <TextInput
+                  value={draft}
+                  onChangeText={setDraft}
+                  placeholder="Add a comment…"
+                  placeholderTextColor={theme.colors.textMuted}
+                  style={[
+                    styles.input,
+                    {
+                      color: theme.colors.textPrimary,
+                      backgroundColor: theme.colors.surfaceElevated,
+                      borderColor: theme.colors.border,
+                    },
+                  ]}
+                  multiline
+                  maxLength={500}
+                  editable={!posting}
+                />
+                <Pressable
+                  onPress={handleSend}
+                  disabled={posting || !draft.trim()}
+                  style={[
+                    styles.sendBtn,
+                    { backgroundColor: draft.trim() ? theme.colors.green[500] : theme.colors.surfaceElevated },
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Post comment"
+                >
+                  {posting ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <Send size={16} color={draft.trim() ? "#fff" : theme.colors.textMuted} />
+                  )}
+                </Pressable>
+              </>
+            ) : (
+              <Pressable
+                onPress={openCommunityUpsell}
+                style={[
+                  styles.lockedComposer,
+                  { backgroundColor: theme.colors.surfaceElevated, borderColor: theme.colors.border },
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="Join HabitPro Community to comment"
+              >
+                <Lock size={15} color={theme.colors.textMuted} />
+                <Text style={[styles.lockedComposerText, { color: theme.colors.textSecondary }]}>
+                  Join <Text style={{ color: theme.colors.textPrimary, fontWeight: "800" }}>HabitPro Community</Text> to comment
+                </Text>
+              </Pressable>
+            )}
           </View>
         </KeyboardAvoidingView>
       </View>
@@ -382,6 +419,17 @@ const styles = StyleSheet.create({
   deleteBtn: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 4, alignSelf: "flex-start" },
   deleteLabel: { fontSize: 11.5, fontWeight: "700" },
   composer: { flexDirection: "row", alignItems: "flex-end", gap: 10, borderTopWidth: StyleSheet.hairlineWidth, paddingTop: 10 },
+  lockedComposer: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    minHeight: 44,
+    paddingHorizontal: 14,
+    borderRadius: 22,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  lockedComposerText: { flex: 1, fontSize: 13.5, fontWeight: "600" },
   input: { flex: 1, borderWidth: 1, borderRadius: 18, paddingHorizontal: 14, paddingVertical: 10, fontSize: 13.5, maxHeight: 90 },
   sendBtn: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center", flexShrink: 0 },
 });

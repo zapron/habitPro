@@ -8,6 +8,30 @@ export function habitStreakCommunityWinId(habitId: string, memoryDateStr: string
   return `habitwin:${habitId}:${memoryDateStr}`;
 }
 
+/**
+ * The real `community_wins.id` (uuid) of the signed-in user's post for a habit day, or
+ * null if that day isn't posted. `habitStreakCommunityWinId` returns the synthetic
+ * mini_mission_id, not this id — comments (and anything else keyed on win_id) need this one.
+ */
+export async function fetchHabitStreakWinUuid(habitId: string, memoryDateStr: string): Promise<string | null> {
+  const supabase = getSupabase();
+  if (!supabase) return null;
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+  const { data, error } = await supabase
+    .from("community_wins")
+    .select("id")
+    .eq("user_id", user.id)
+    .eq("mini_mission_id", habitStreakCommunityWinId(habitId, memoryDateStr))
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error || !data || typeof data.id !== "string") return null;
+  return data.id;
+}
+
 /** Inverse of `habitStreakCommunityWinId` — null for a real (non-synthetic) mini_mission_id. */
 export function habitIdFromHabitStreakMiniMissionId(miniMissionId: string): string | null {
   if (!miniMissionId.startsWith("habitwin:")) return null;
@@ -1379,7 +1403,13 @@ export async function postCommunityWinComment(
     .from("community_win_comments")
     .insert({ win_id: winId, author_id: user.id, body: trimmed });
 
-  if (error) return { ok: false, error: error.message };
+  if (error) {
+    return {
+      ok: false,
+      error: error.message,
+      reason: isPremiumPolicyError(error) ? "premium_required" : undefined,
+    };
+  }
   return { ok: true };
 }
 

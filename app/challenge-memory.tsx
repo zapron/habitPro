@@ -62,6 +62,7 @@ import type { AppTheme } from "../src/styles/theme";
 import type { PresetChallengeNudgeKind } from "../src/types/groupChallenge";
 import { formatDateDisplay } from "../src/utils/dateDisplay";
 import { withAlpha } from "../src/styles/theme";
+import { PageDots } from "../src/components/PageDots";
 
 const COMMUNITY_BADGE_BACKGROUND = "rgba(21, 128, 61, 0.9)";
 const COMMUNITY_PHOTO_ASPECT_RATIO = 0.9;
@@ -202,12 +203,7 @@ function MemoryPhotoCarousel({
       />
       {slides.length > 1 ? (
         <View pointerEvents="none" style={styles.carouselDotsRow}>
-          {slides.map((_, i) => (
-            <View
-              key={i}
-              style={[styles.carouselDot, { backgroundColor: i === activeIndex ? "#fff" : "rgba(255,255,255,0.4)" }]}
-            />
-          ))}
+          <PageDots count={slides.length} index={activeIndex} showCounter />
         </View>
       ) : null}
     </View>
@@ -459,18 +455,13 @@ export default function ChallengeMemoryScreen() {
 
   const handleToggleCommunityCheer = useCallback(async () => {
     const win = detail?.communityWin;
-    if (!detail || !win || cheerBusy || isOwnSubject) return;
+    if (!detail || !win || cheerBusy) return;
     if (!session?.user) {
       showToast("Sign in to cheer this moment.", "error");
       return;
     }
     const ok = await requireUsername("community_like");
     if (!ok) return;
-    const freshPremium = await refreshPremiumAccess({ serverOnly: true, cachedAccessOk: true });
-    if (freshPremium !== true) {
-      openUpsell("community");
-      return;
-    }
 
     const nextLiked = !win.viewerHasCheered;
     const nextWin = {
@@ -484,23 +475,9 @@ export default function ChallengeMemoryScreen() {
     setCheerBusy(false);
     if (result.ok === false) {
       setDetail((prev) => (prev?.communityWin?.id === win.id ? { ...prev, communityWin: win } : prev));
-      if (result.reason === "premium_required") {
-        await handleServerPremiumRequired("community");
-      } else {
-        showToast(result.error, "error");
-      }
+      showToast(result.error, "error");
     }
-  }, [
-    cheerBusy,
-    detail,
-    handleServerPremiumRequired,
-    isOwnSubject,
-    openUpsell,
-    refreshPremiumAccess,
-    requireUsername,
-    session?.user,
-    showToast,
-  ]);
+  }, [cheerBusy, detail, requireUsername, session?.user, showToast]);
 
   const StatusIcon = useMemo(
     () => statusIcon(detail?.status ?? "not_found", detail?.photoSyncState ?? "none"),
@@ -717,7 +694,7 @@ export default function ChallengeMemoryScreen() {
                     >
                       <Pressable
                         style={styles.inlineCheerIcon}
-                        disabled={cheerBusy || isOwnSubject}
+                        disabled={cheerBusy}
                         onPress={handleToggleCommunityCheer}
                         accessibilityRole="button"
                         accessibilityLabel={detail.communityWin.viewerHasCheered ? "Remove cheer" : "Cheer"}
@@ -1250,11 +1227,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     gap: 5,
-  },
-  carouselDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
   },
   textSlide: {
     height: "100%",

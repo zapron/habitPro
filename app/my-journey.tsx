@@ -81,6 +81,7 @@ import { levelFromTotalXp, xpInCurrentLevel } from "../src/utils/xpLevel";
 import { playerLeagueForLevel } from "../src/utils/playerLeague";
 import { storageThumbnailUri } from "../src/utils/imageThumbnail";
 import { withAlpha } from "../src/styles/theme";
+import { PageDots } from "../src/components/PageDots";
 
 type StoryTab = "missions" | "minis";
 type JourneyMode = "public" | "private";
@@ -1724,15 +1725,7 @@ function JourneyMemoryLightbox({
         />
         {slides.length > 1 ? (
           <View pointerEvents="none" style={[journeyLightboxStyles.dotsRow, { bottom: Math.max(insets.bottom, 12) + 8 }]}>
-            {slides.map((_, i) => (
-              <View
-                key={i}
-                style={[
-                  journeyLightboxStyles.dot,
-                  { backgroundColor: i === activeIndex ? "#fff" : "rgba(255,255,255,0.4)" },
-                ]}
-              />
-            ))}
+            <PageDots count={slides.length} index={activeIndex} />
           </View>
         ) : null}
       </View>
@@ -1822,11 +1815,6 @@ const journeyLightboxStyles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     gap: 5,
-  },
-  dot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
   },
 });
 

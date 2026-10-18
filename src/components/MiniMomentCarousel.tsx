@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import { useTheme } from "../context/ThemeContext";
 import type { StreakMemoryTaskEntry } from "../types/habit";
+import { PageDots } from "./PageDots";
 
 type Props = {
   tasks: StreakMemoryTaskEntry[];
@@ -93,12 +94,7 @@ export function MiniMomentCarousel({ tasks, onPressSlide, onIndexChange }: Props
         />
         {tasks.length > 1 ? (
           <View pointerEvents="none" style={styles.dotsRow}>
-            {tasks.map((_, i) => (
-              <View
-                key={i}
-                style={[styles.dot, { backgroundColor: i === activeIndex ? "#fff" : "rgba(255,255,255,0.4)" }]}
-              />
-            ))}
+            <PageDots count={tasks.length} index={activeIndex} showCounter />
           </View>
         ) : null}
       </View>
@@ -139,7 +135,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 6,
   },
-  dot: { width: 6, height: 6, borderRadius: 3 },
   captionBar: { borderTopWidth: StyleSheet.hairlineWidth, paddingHorizontal: 14, paddingVertical: 10, gap: 2 },
   captionLabel: { fontSize: 14, fontWeight: "800" },
   captionNote: { fontSize: 12, lineHeight: 17, fontWeight: "500" },
