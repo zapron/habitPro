@@ -58,6 +58,8 @@ import { isSupabaseConfigured } from "../../src/lib/env";
 import {
   listAccountDeletedMissionIds,
   listAccountSnapshotBackups,
+  getRecoveryDismissedAt,
+  setRecoveryDismissedAt,
   type AccountBackupSnapshot,
   type AccountDeletedMissionIds,
 } from "../../src/lib/accountBackup";
@@ -89,6 +91,7 @@ import { isMiniMissionOpen, isMiniMissionRunning } from "../../src/utils/miniMis
 import { PlusBadge } from "../../src/components/PlusBadge";
 import { useRefreshPremiumAccess } from "../../src/hooks/useRefreshPremiumAccess";
 import { formatDateTimeDisplay } from "../../src/utils/dateDisplay";
+import { isHabitMissionWindowClosed } from "../../src/utils/habitMissionWindow";
 import { XP_PER_LEVEL, levelFromTotalXp, xpInCurrentLevel } from "../../src/utils/xpLevel";
 import { showAppAlert } from "../../src/context/AppDialogContext";
 import { withAlpha } from "../../src/styles/theme";
@@ -142,14 +145,6 @@ function backupReasonLabel(reason: string): string {
 function backupSummary(backup: AccountBackupSnapshot): string {
   const level = levelFromTotalXp(backup.xp);
   return `${backup.habits.length} habits, ${backup.miniMissions.length} minis, Level ${level}`;
-}
-
-function countHabitCheckIns(habits: readonly Habit[]): number {
-  return habits.reduce((total, habit) => total + new Set(habit.completedDates ?? []).size, 0);
-}
-
-function countHabitMemoryEntries(habits: readonly Habit[]): number {
-  return habits.reduce((total, habit) => total + Object.keys(habit.streakMemories ?? {}).length, 0);
 }
 
 function formatOneDecimal(value: number): string {
@@ -293,29 +288,47 @@ function hasRecoverableMissionData(
   currentHabits: readonly Habit[],
   _currentMinis: readonly MiniMission[],
   deletedMissionIds: AccountDeletedMissionIds,
+  nowMs: number,
 ): boolean {
-  const deletedHabitIds = new Set(deletedMissionIds.habitIds);
-  const backupHabits = backup.habits.filter((habit) => !deletedHabitIds.has(habit.id));
   /**
-   * Completed/failed habits and completed mini missions are windowed on a
-   * normal pull (the hot-window cutoff: sign-in only eagerly loads the most
-   * recent HOT_WINDOW_HISTORY_PAGE_SIZE of each terminal bucket, unbounded
-   * for still-active missions only — see src/lib/sync.ts's
-   * pullWindowedFromSupabase). Comparing raw historical counts against an
-   * older, fuller local backup would flag ordinary pagination as
-   * "recoverable data" even though nothing was lost — the rest is one tap
-   * away via "Load More", not gone. Restrict this check to ACTIVE habits,
-   * which are never windowed, so a mismatch here is a real loss signal
-   * instead of a pagination artifact. Completed minis are dropped from this
-   * check entirely: a completed mini has no "active" fallback the way a
-   * habit does, and its count is inherently part of the windowed bucket.
+   * Only flag a backup when it holds check-ins or memories the device has
+   * genuinely lost — compared mission by mission (same habit id), never as
+   * account-wide totals:
+   *
+   * - Totals over "active" habits gave false alarms whenever a mission simply
+   *   finished: answering its outcome flips it to completed, so it left the
+   *   current active set while still counting as active in the older backup.
+   * - Completed/failed history is windowed on a normal pull (see
+   *   src/lib/sync.ts's pullWindowedFromSupabase), so a terminal habit that's
+   *   missing locally is a pagination artifact, not a loss.
+   * - The last ~2 days are ignored: a user un-checking today's check-in (the
+   *   only edit still allowed) is not data loss.
    */
-  const activeBackupHabits = backupHabits.filter((habit) => !habit.isCompleted);
-  const activeCurrentHabits = currentHabits.filter((habit) => !habit.isCompleted);
-  return (
-    countHabitCheckIns(activeBackupHabits) > countHabitCheckIns(activeCurrentHabits) ||
-    countHabitMemoryEntries(activeBackupHabits) > countHabitMemoryEntries(activeCurrentHabits)
-  );
+  const deletedHabitIds = new Set(deletedMissionIds.habitIds);
+  const recentCutoffKey = new Date(nowMs - 2 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const currentById = new Map(currentHabits.map((habit) => [habit.id, habit]));
+
+  for (const backupHabit of backup.habits) {
+    if (deletedHabitIds.has(backupHabit.id)) continue;
+    const current = currentById.get(backupHabit.id);
+    if (!current) {
+      // A still-running mission vanishing from the device is a real loss; a
+      // finished one is just outside the loaded history window.
+      if (!backupHabit.isCompleted && !isHabitMissionWindowClosed(backupHabit, nowMs)) return true;
+      continue;
+    }
+    const currentDates = new Set(current.completedDates ?? []);
+    const lostCheckIn = (backupHabit.completedDates ?? []).some(
+      (date) => date < recentCutoffKey && !currentDates.has(date),
+    );
+    if (lostCheckIn) return true;
+    const currentMemories = current.streakMemories ?? {};
+    const lostMemory = Object.keys(backupHabit.streakMemories ?? {}).some(
+      (date) => date < recentCutoffKey && !currentMemories[date],
+    );
+    if (lostMemory) return true;
+  }
+  return false;
 }
 
 function userContentScore(memory: StreakMemory | undefined): number {
@@ -910,6 +923,7 @@ export default function ProfileScreen() {
     miniMissionIds: [],
   });
   const [restoringBackupAt, setRestoringBackupAt] = useState<string | null>(null);
+  const [recoveryDismissedAt, setRecoveryDismissedAtState] = useState<string | null>(null);
   const { rawXp, rawUsername, rawAvatarUrl, rawHabits, rawMiniMissions, mergeFetchedHabit, mergeFetchedMiniMission } =
     useHabitStore(
       useShallow((s) => ({
@@ -976,12 +990,14 @@ export default function ProfileScreen() {
       setDeletedMissionIds({ habitIds: [], miniMissionIds: [] });
       return;
     }
-    const [nextBackups, nextDeletedIds] = await Promise.all([
+    const [nextBackups, nextDeletedIds, nextDismissedAt] = await Promise.all([
       listAccountSnapshotBackups(userId),
       listAccountDeletedMissionIds(userId),
+      getRecoveryDismissedAt(userId),
     ]);
     setBackups(nextBackups);
     setDeletedMissionIds(nextDeletedIds);
+    setRecoveryDismissedAtState(nextDismissedAt);
   }, [session?.user?.id]);
 
   const [lifetimeStats, setLifetimeStats] = useState<ProfileLifetimeStats | null>(null);
@@ -1029,10 +1045,12 @@ export default function ProfileScreen() {
   const recoveryBackups = useMemo(() => {
     if (!isFocused || accountHydrating) return [];
     if (cloudSyncBlocked) return backups.slice(0, 3);
+    const nowMs = Date.now();
     return backups
-      .filter((backup) => hasRecoverableMissionData(backup, rawHabits, rawMiniMissions, deletedMissionIds))
+      .filter((backup) => !recoveryDismissedAt || backup.savedAt > recoveryDismissedAt)
+      .filter((backup) => hasRecoverableMissionData(backup, rawHabits, rawMiniMissions, deletedMissionIds, nowMs))
       .slice(0, 3);
-  }, [accountHydrating, backups, cloudSyncBlocked, deletedMissionIds, isFocused, rawHabits, rawMiniMissions]);
+  }, [accountHydrating, backups, cloudSyncBlocked, deletedMissionIds, isFocused, rawHabits, rawMiniMissions, recoveryDismissedAt]);
   const showRecoveryBackups = Boolean(isFocused && showAccount && session?.user && recoveryBackups.length > 0);
 
   const restoreBackup = useCallback(
@@ -1069,6 +1087,15 @@ export default function ProfileScreen() {
     },
     [deletedMissionIds, loadBackups, rawHabits, rawXp, session?.user?.id, showToast, syncError, syncReady],
   );
+
+  const dismissRecoveryBackups = useCallback(() => {
+    const userId = session?.user?.id;
+    if (!userId || recoveryBackups.length === 0) return;
+    const latest = recoveryBackups.reduce((max, b) => (b.savedAt > max ? b.savedAt : max), recoveryBackups[0].savedAt);
+    setRecoveryDismissedAtState(latest);
+    void setRecoveryDismissedAt(userId, latest);
+    showToast("Hidden. It only comes back if a newer backup looks like something's missing.", "info", 4000);
+  }, [recoveryBackups, session?.user?.id, showToast]);
 
   const confirmRestoreBackup = useCallback(
     (backup: AccountBackupSnapshot) => {
@@ -1692,6 +1719,19 @@ export default function ProfileScreen() {
                 );
               })}
             </View>
+            {!cloudSyncBlocked ? (
+              <TouchableOpacity
+                onPress={dismissRecoveryBackups}
+                activeOpacity={0.7}
+                style={styles.recoveryDismiss}
+                accessibilityRole="button"
+                accessibilityLabel="No need, hide recovery snapshots"
+              >
+                <Text style={[styles.recoveryDismissText, { color: theme.colors.textSecondary }]}>
+                  No need, everything looks right
+                </Text>
+              </TouchableOpacity>
+            ) : null}
           </View>
           </Animated.View>
         ) : null}
@@ -2409,6 +2449,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   recoveryRestoreText: { color: "#fff", fontSize: 12, fontWeight: "900" },
+  recoveryDismiss: { alignSelf: "center", marginTop: 12, paddingVertical: 6, paddingHorizontal: 12 },
+  recoveryDismissText: { fontSize: 13, fontWeight: "700" },
   sectionLabel: {
     fontSize: 11,
     fontWeight: "800",

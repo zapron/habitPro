@@ -87,6 +87,31 @@ export async function listAccountSnapshotBackups(
   }
 }
 
+function recoveryDismissedKey(userId: string): string {
+  return `habitpro-account-recovery-dismissed:${userId}`;
+}
+
+/**
+ * "No need" on Profile's Recovery snapshots card: backups saved at or before
+ * this time stay hidden. A newer backup that looks like real loss shows again.
+ */
+export async function getRecoveryDismissedAt(userId: string | null | undefined): Promise<string | null> {
+  if (!userId) return null;
+  try {
+    return await AsyncStorage.getItem(recoveryDismissedKey(userId));
+  } catch {
+    return null;
+  }
+}
+
+export async function setRecoveryDismissedAt(userId: string, savedAt: string): Promise<void> {
+  try {
+    await AsyncStorage.setItem(recoveryDismissedKey(userId), savedAt);
+  } catch (e) {
+    if (__DEV__) console.warn("[habitPro] recovery dismiss save failed", e);
+  }
+}
+
 export async function listAccountDeletedMissionIds(
   userId: string | null | undefined,
 ): Promise<AccountDeletedMissionIds> {
