@@ -12,7 +12,7 @@ function getManifestExtra(): Record<string, unknown> | undefined {
   return undefined;
 }
 
-const DEFAULT_HABITPRO_WEB_URL = "https://habitpro-web.vercel.app";
+const DEFAULT_HABITPRO_WEB_URL = "https://www.habitpro.life";
 
 function normalizeOrigin(origin: string | null | undefined): string | null {
   if (!origin) return null;

@@ -20,7 +20,7 @@ This avoids leaving the app on the signup form with the password still visible/a
 Keep this as a stable fallback. Either is acceptable:
 
 - Current app fallback: `habitpro://`
-- Production website fallback: `https://habitpro-web.vercel.app`
+- Production website fallback: `https://www.habitpro.life`
 
 The app passes an explicit `emailRedirectTo`, so the signup confirmation URL does not depend only on Site URL.
 
@@ -30,7 +30,7 @@ Include at least:
 
 | URL | Purpose |
 |-----|---------|
-| `https://habitpro-web.vercel.app/auth/verified` | Signup email verified landing page |
+| `https://www.habitpro.life/auth/verified` | Signup email verified landing page |
 | `habitpro://**` | Standalone app deep links |
 | `habitpro://auth/callback` | Google PKCE return / legacy email callback support |
 | `habitpro://reset-password` | Password reset email (`resetPasswordForEmail`) |
