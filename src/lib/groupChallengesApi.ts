@@ -504,6 +504,19 @@ export async function listPendingInvitesForMe(): Promise<ChallengeInviteRow[]> {
 }
 
 /** All invites for the current user (pending, accepted, declined) — newest first within each group. */
+/**
+ * Pending group invites never expired on the server, so years-old ones kept the
+ * red dot lit. Now a pending invite counts (badge, Invites tab, Home card) only
+ * if it was sent on/after 2026-10-26 (IST) and is under 7 days old. Answered
+ * invites stay in the Invites history as before.
+ */
+const GROUP_INVITES_VISIBLE_SINCE_MS = Date.parse("2026-10-26T00:00:00+05:30");
+export const GROUP_INVITE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+
+export function groupInviteVisibleSinceIso(nowMs = Date.now()): string {
+  return new Date(Math.max(GROUP_INVITES_VISIBLE_SINCE_MS, nowMs - GROUP_INVITE_MAX_AGE_MS)).toISOString();
+}
+
 export async function countPendingInvitesForMe(): Promise<number> {
   const supabase = getSupabase();
   if (!supabase) return 0;
@@ -515,7 +528,8 @@ export async function countPendingInvitesForMe(): Promise<number> {
     .from("challenge_invites")
     .select("id", { count: "exact", head: true })
     .eq("invitee_id", user.id)
-    .eq("status", "pending");
+    .eq("status", "pending")
+    .gte("created_at", groupInviteVisibleSinceIso());
   if (error) throw error;
   return count ?? 0;
 }
@@ -558,6 +572,7 @@ export async function listInvitesForMePage(
     .from("challenge_invites")
     .select("*")
     .eq("invitee_id", user.id)
+    .or(`status.neq.pending,created_at.gte.${groupInviteVisibleSinceIso()}`)
     .order("created_at", { ascending: false })
     .range(offset, offset + limit);
   if (error) throw error;

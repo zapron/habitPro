@@ -54,6 +54,7 @@ import { usePremium } from "../../src/context/PremiumContext";
 import { usePlusUpsell } from "../../src/context/PlusUpsellContext";
 import { useNotificationGate } from "../../src/context/NotificationGateContext";
 import { useInviteBadge } from "../../src/context/InviteBadgeContext";
+import { PulsingBorder } from "../../src/components/PulsingBorder";
 import { isSupabaseConfigured } from "../../src/lib/env";
 import { avatarIdentityFor } from "../../src/utils/avatarIdentity";
 import {
@@ -755,7 +756,7 @@ export default function CompeteScreen() {
   const { openUpsell } = usePlusUpsell();
   const refreshPremiumAccess = useRefreshPremiumAccess();
   const { suggestNotifications } = useNotificationGate();
-  const { syncInviteBadgeCount } = useInviteBadge();
+  const { syncInviteBadgeCount, pendingInviteCount: badgeInviteCount } = useInviteBadge();
   /** True while we do not know premium yet — do not run accept API or open paywall. */
   const inviteAcceptPremiumUnknown = premiumLoading;
   /** Non-premium users see Accept → paywall instead of API (avoids RLS errors on accept). */
@@ -1622,6 +1623,9 @@ export default function CompeteScreen() {
       liveMiniInvites.filter((i) => isLiveMiniInviteActionable(i.participant)).length,
     [groupInvites, liveMiniInvites],
   );
+  // The invite list only loads once the Invites sub-tab opens; until then show the
+  // app-wide count (the same one behind the tab bar's red dot) instead of 0.
+  const inviteTabCount = lastInvitesLoadAtRef.current > 0 ? pendingInviteCount : badgeInviteCount;
   const invitesHasMore = groupInvitesNextOffset != null || liveMiniInvitesNextOffset != null;
   const handleContentScroll = useCallback(
     (event: {
@@ -2077,7 +2081,7 @@ export default function CompeteScreen() {
             onPress={() => setChallengesSubTab("invites")}
             activeOpacity={0.6}
             accessibilityRole="button"
-            accessibilityLabel={`Group invites, ${pendingInviteCount} pending`}
+            accessibilityLabel={`Group invites, ${inviteTabCount} pending`}
           >
             <View style={styles.invitesLabelRow}>
               <Text
@@ -2092,8 +2096,13 @@ export default function CompeteScreen() {
                   rp ? { fontFamily: fontFamily.dmSansSemibold } : null,
                 ]}
               >
-                Invites ({pendingInviteCount})
+                Invites ({inviteTabCount})
               </Text>
+              {inviteTabCount > 0 ? (
+                <PulsingBorder active color={theme.colors.red[500]} size={8}>
+                  <View style={[styles.invitesDot, { backgroundColor: theme.colors.red[500] }]} />
+                </PulsingBorder>
+              ) : null}
               {!isPremium ? <PlusBadge withFlame /> : null}
             </View>
           </TouchableOpacity>
@@ -2755,6 +2764,7 @@ const styles = StyleSheet.create({
     alignSelf: "stretch",
     marginVertical: 6,
   },
+  invitesDot: { width: 8, height: 8, borderRadius: 999 },
   invitesLabelRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   challengesSubPill: {
     flex: 1,

@@ -63,6 +63,9 @@ import { withAlpha } from "../../src/styles/theme";
 import { useReducedMotion } from "../../src/hooks/useReducedMotion";
 import { useUnseenReports } from "../../src/hooks/useUnseenReports";
 import { MissionOutcomeCard } from "../../src/components/MissionOutcomeCard";
+import { HomeInviteCard } from "../../src/components/HomeInviteCard";
+import { useInviteBadge } from "../../src/context/InviteBadgeContext";
+import { fetchHomeInvitePreviews, type HomeInvitePreview } from "../../src/lib/homeInvitePreview";
 import { useThemeWave } from "../../src/components/ThemeWaveTransition";
 import type { MissionReport } from "../../src/types/habit";
 import { AnimatedFire } from "../../src/components/AnimatedFire";
@@ -303,6 +306,33 @@ export default function Home() {
   const [notifRefreshBusy, setNotifRefreshBusy] = useState(false);
   const [miniNow, setMiniNow] = useState(() => Date.now());
   const [missionNow, setMissionNow] = useState(() => Date.now());
+  // Fresh invites for the Home card. Only fetched while the app-wide invite
+  // count says something is pending, so Home costs nothing extra otherwise.
+  const { pendingInviteCount } = useInviteBadge();
+  const [homeInvites, setHomeInvites] = useState<HomeInvitePreview[]>([]);
+  const isHomeFocused = useIsFocused();
+  useEffect(() => {
+    if (!isHomeFocused) return;
+    if (pendingInviteCount <= 0) {
+      setHomeInvites([]);
+      return;
+    }
+    let cancelled = false;
+    const task = InteractionManager.runAfterInteractions(() => {
+      void fetchHomeInvitePreviews().then((list) => {
+        if (!cancelled) setHomeInvites(list);
+      });
+    });
+    return () => {
+      cancelled = true;
+      task.cancel();
+    };
+  }, [isHomeFocused, pendingInviteCount]);
+  // A Live Squad invite can run out while Home is open.
+  const visibleHomeInvites = useMemo(
+    () => homeInvites.filter((i) => !i.expiresAt || new Date(i.expiresAt).getTime() > missionNow),
+    [homeInvites, missionNow],
+  );
   const [xpTrackWidth, setXpTrackWidth] = useState(0);
   const showAccount = isSupabaseConfigured();
   // On new devices, zustand can hydrate an "empty" store before Supabase hydrate completes.
@@ -1235,6 +1265,25 @@ export default function Home() {
             position={1}
             total={awaitingOutcome.length}
             onAnswer={(report) => answerOutcome(awaitingOutcome[0], report)}
+          />
+        ) : null}
+
+        {visibleHomeInvites[0] ? (
+          <HomeInviteCard
+            key={visibleHomeInvites[0].id}
+            invite={visibleHomeInvites[0]}
+            total={visibleHomeInvites.length}
+            nowMs={missionNow}
+            onOpen={() => {
+              const first = visibleHomeInvites[0];
+              router.push({
+                pathname: "/(tabs)/compete",
+                params:
+                  first.kind === "group" && visibleHomeInvites.length === 1
+                    ? { inviteId: first.id }
+                    : { focusInvites: "1" },
+              });
+            }}
           />
         ) : null}
 
