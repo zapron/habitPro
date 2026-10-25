@@ -724,7 +724,14 @@ Purpose:
 
 - Public feed of mini completions and public habit streak memories.
 - Supports pagination.
-- Supports likes/cheers.
+- Supports likes/cheers. **Gating (since 2026-10-18, migration
+  `20261018120000_free_cheers_premium_comments`): cheers are free for every
+  signed-in user, including on their own post (the notify triggers skip self);
+  inserting a comment requires `profile_is_premium()` (paid or an active
+  community grant), enforced by RLS.** The client mirrors this: no cheer
+  pre-checks, and a locked composer in `CommunityWinCommentsModal` that opens the
+  upsell. `postCommunityWinComment` returns `reason: "premium_required"` on an
+  RLS rejection.
 - Supports opening detail moments and public player journeys.
 - Multi-task catalog posts (`memory_gallery` on the `community_wins` row) render as
   an inline swipeable carousel (`PhotoCarousel`, defined inside

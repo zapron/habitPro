@@ -2,6 +2,30 @@
 
 This is a concise chronological log for future sessions. Keep secrets out of this file.
 
+## 2026-10-18 → 2026-10-25 (Social gating flip, Reports screen, liquid theme switch, website redesign + habitpro.life, promo videos)
+
+Full detail in `docs/CURRENT_WORK.md`.
+
+- **App:**
+  - Commits `2feb543`, `ee73dcb`, `93ea1d5`, `8f14467`. Two production OTAs (runtime 1.1.37).
+  - Migration `20261018120000_free_cheers_premium_comments` was tested locally with `db:reset`, then pushed by the user.
+  - Cheers are free and comments premium (RLS).
+  - Reports has its own screen with an amber-dot link; outcome card on Home; windowed `PageDots`.
+  - Photo-replace cache-bust fix; recovery-snapshot false alarm fixed, with a "No need" dismiss; liquid light/dark switch.
+- **Website** (habitPro-web `da93efe` … `9fd11ed`):
+  - Page-wide honeycomb with neon pulse; new "What is HabitPro?" words plus the Journey slide; constant height on phones.
+  - Hero phones no longer clipped; brand-colour drift on "mission".
+  - Custom domain www.habitpro.life: GoDaddy DNS → Vercel, Supabase redirect URLs, EAS web-URL variable, and DB image URLs all switched.
+- **Marketing:**
+  - Code-rendered promo reels v3–v7 in `marketing/videos/` (untracked). Playbook in the README; skill `habitpro-promo-video`.
+  - User's music preference: minimal warm beats; the synthesized Indian lo-fi was rejected.
+- **Validation:** `tsc` clean on both repos and `next build` clean. Production migrations were confirmed via the Supabase MCP `list_migrations`.
+- **Open:**
+  - device checks for the theme switch and the Reports screen;
+  - the user's pending feedback round;
+  - optional store privacy URLs and GoDaddy auto-renew;
+  - drop the old vercel redirect URL in a few weeks.
+
 ## 2026-10-14, third entry (Comment composer rebuilt as a decoupled floating layer)
 
 Full detail in `docs/CURRENT_WORK.md`. No migration. Committed (`fa00459`) and OTA'd to production at the user's request.

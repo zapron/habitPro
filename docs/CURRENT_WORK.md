@@ -1,6 +1,74 @@
 # HabitPro Current Work
 
-Last updated: 2026-10-14 (third entry) — Comment composer restructured a second time: it's now a fully decoupled floating layer (Instagram-style) with its own `KeyboardAvoidingView`, instead of sharing layout with the sheet above it. Committed (`fa00459`) and OTA'd to production. The three comments-feature migrations from 2026-10-13 are still local-only — not pushed to production yet. See newest entry below.
+Last updated: 2026-10-25 — Big multi-day session (2026-10-18 → 10-25), all committed and pushed. In it: free cheers + premium-only comments (migration live), a dedicated Reports screen, sliding photo dots, an outcome card on Home, a liquid light/dark switch, the recovery-snapshot false-alarm fix, a redesigned habitpro-web site (honeycomb + neon pulse), the move to the custom domain **www.habitpro.life**, and a code-rendered promo-video pipeline. Two app OTAs went to production. See the newest entry below.
+
+## Session Handoff (2026-10-18 → 2026-10-25 — social gating flip, Reports screen, liquid theme switch, website + domain, promo-video pipeline)
+
+**State:**
+- `npx tsc --noEmit` clean.
+- App `main` = `8f14467` and web `main` = `9fd11ed`, both pushed.
+- Latest production OTA: "Links, share cards and QR codes now use www.habitpro.life" (runtime 1.1.37).
+- Every Supabase migration through `20261018120000_free_cheers_premium_comments` is in production. Verified via `list_migrations`, which includes the 2026-10-09/10-12 comment migrations that the previous entry called local-only.
+
+### App commits (habitPro)
+
+- `2feb543` feat: free cheers + premium comments, Reports screen, sliding photo dots. OTA'd after the user ran `db:push`.
+  - **Social gating flipped.** Cheers/likes are free for everyone, including on your own post (the existing notify triggers already skip self). Commenting requires HabitPro Community.
+    - Enforced server-side by RLS: migration `20261018120000`, where comment insert requires `profile_is_premium()`.
+    - Non-members get a locked composer that opens the upsell (close the sheet, then 380ms delay, because of iOS's one-Modal rule).
+  - **Reports moved to its own screen**, `app/reports.tsx`, with Pending / Accomplished / Failed tabs and pagination.
+    - Home has a single "MAIN MISSIONS · N" row with a quiet "Reports ›" link. An amber dot shows when an outcome is pending or a new report is unseen (`src/hooks/useUnseenReports.ts`, per user in AsyncStorage).
+    - An infinite render loop in `markAllSeen` was fixed (it now no-ops when nothing is new).
+  - **`MissionOutcomeCard` on Home** answers ended missions inline, then shows a toast pointing to Reports.
+  - **`PageDots`:** Instagram-style windowed dots (max 5) plus an "i/n" counter for big photo carousels, used everywhere carousels appear.
+  - **Join requests:** a pending request disappears for a member once they've voted.
+  - **Fixed:** comments from the habit screen now resolve the real community-win uuid.
+  - **Fixed:** replaced task/mini photos kept the same storage URL, so caches and Community showed the old image. Task and mini uploads now cache-bust with `?t=`.
+- `ee73dcb` fix: recovery snapshots no longer flag finished missions as data loss.
+  - Backups are now compared per mission (same id). The last 2 days are ignored, and windowed-out finished missions are skipped.
+  - Root cause: answering an outcome flips a mission to completed, so it left the "active" totals.
+  - Added a persisted "No need, everything looks right" dismiss (`getRecoveryDismissedAt`/`setRecoveryDismissedAt` in `accountBackup.ts`). It isn't offered while cloud sync is blocked.
+- `93ea1d5` feat: liquid light/dark theme switch on Home.
+  - `src/components/ThemeWaveTransition.tsx` (`ThemeWaveProvider` wraps the app in `app/_layout.tsx`):
+    1. snapshot the app with view-shot;
+    2. switch the theme underneath;
+    3. reveal the new theme through a growing rippling SVG blob, using a pattern fill plus an even-odd hole animated by Reanimated.
+  - With Reduce Motion it does a crossfade instead.
+  - The toggle (sun/moon) shares one pill with the bell; the header is centred against the eyebrow plus greeting.
+- `8f14467` chore: point web links at www.habitpro.life. The default `getHabitProWebUrl()` changed and the auth doc was updated. OTA'd.
+
+### Website commits (habitPro-web, live on www.habitpro.life)
+
+- `da93efe`: page-wide honeycomb background with neon pulse; fuller moments card.
+- `c8268f4`: "What is HabitPro?" rotating words are habit tracker / memory logger / daily journal / self-motivation / journey, with a new Journey slide and the line "with the power of Community". Smoother pulse: only a width change rebuilds the field. Straight section divider lines removed.
+- `cdf367f`: canonical URL is `www.habitpro.life` (layout metadata, robots, sitemap).
+- `8315558`: hero phones are no longer cut off (`overflow-x: clip` behind `@supports`); the final CTA's "mission" drifts through the brand colours.
+- `9fd11ed`: the "What is HabitPro?" block keeps a constant height on phones (hidden copies of every item hold the tallest height).
+- `components/HexField.tsx` (formerly `HeroDotField`) is one page-wide honeycomb layer, used on home and invite. Its props are `clear` (headline/header) and `soften` (text, cards). Glows are blurred on phones.
+- Tried and reverted by the user: maroon and green section titles, and amber zigzag dividers.
+
+### Custom domain: www.habitpro.life (done)
+
+- **Domain:** bought at GoDaddy. DNS: A `@` → `216.198.79.1`, CNAME `www` → `f1a682ad14c60457.vercel-dns-017.com`. Vercel redirects the apex to www (308) and HTTPS works.
+- **Supabase:** Auth Redirect URLs now include `https://www.habitpro.life/auth/verified` and `https://www.habitpro.life/**`. `https://habitpro-web.vercel.app/**` is kept temporarily for not-yet-updated app installs; remove it in a few weeks. Site URL stays `habitpro://`.
+- **Database:** 5 `app_version_releases.image_url` rows were moved to the new domain via MCP.
+- **EAS:** `EXPO_PUBLIC_HABITPRO_WEB_URL` is set to `https://www.habitpro.life` for production, preview and development. Share cards, QR codes and invite links read it.
+- **Still the user's to do (optional):** the App Store Connect and Play Console privacy-policy URL → `https://www.habitpro.life/privacy` (the old URL still works); turn on GoDaddy auto-renew (habitpro.life expires 2027-10-06; raktim.info expires 2026-10-11).
+
+### Promo-video pipeline (local only, `marketing/` is untracked on purpose)
+
+- **How:** reels are rendered from code: `marketing/videos/source/reel.html` (frame = `render(t)`) → puppeteer-core with the system Chrome → ffmpeg. Soundtracks are synthesized by `music_minimal.py`.
+- **Latest:** `habitpro-reel-v7.mp4`, plus a `-silent` version.
+- **Playbook:** `marketing/videos/README.md`. It covers the versions, the user's preferences, the visual language, and the 3D phone recipe.
+- **New chats:** the project skill `.claude/skills/habitpro-promo-video/` loads it. Rule: never overwrite a video; version every render.
+- A local `.gitignore` in `marketing/videos/source/` hides `.venv/`, `node_modules/` and `frames/`.
+
+### Open / next
+
+- **Not yet verified on a real device:** the liquid theme switch on low-end Android, and the Reports screen and outcome card in normal use.
+- **User feedback round pending:** the user said "there is a good amount of feedback that we need to fix" but hasn't listed it yet.
+- **AI coach idea ("Ask HabitPro"):** discussed, phased roadmap given, not started. It needs an Anthropic key as a Supabase secret, a decision on gating and limits, and an opt-in consent for reading notes.
+- **Website first-visit logo intro:** discussed (logo animates into the nav), parked by the user.
 
 ## Session Handoff (2026-10-14, third entry — comment composer as a decoupled floating layer)
 

@@ -59,6 +59,19 @@ Read these in this order for future work:
 
 ## Recent Product Decisions
 
+### Social access, domain, Reports (2026-10-18 → 10-25)
+
+- **Social access:** cheers/likes are free for everyone; commenting needs HabitPro
+  Community. Server-side via RLS; see `app-architecture.md` (Community feed).
+- **Canonical website:** `https://www.habitpro.life` (Vercel; the apex redirects
+  to www). App links read the EAS variable `EXPO_PUBLIC_HABITPRO_WEB_URL` (set to
+  the new domain); `habitpro-web.vercel.app` still works.
+- **Reports:** Reports is its own screen (`app/reports.tsx`), reached from a quiet
+  "Reports ›" link on Home. Ended missions are answered on Home via
+  `MissionOutcomeCard`.
+- **Promo videos:** made from code in `marketing/videos/` (untracked). See its
+  README or the `habitpro-promo-video` skill.
+
 ### Daily Wisdom Launch
 
 - Daily Wisdom is no longer a mission detail card.
