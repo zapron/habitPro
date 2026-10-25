@@ -30,6 +30,7 @@ import { useTheme } from "../context/ThemeContext";
 import type { StreakMemory } from "../types/habit";
 import { showAppAlert } from "../context/AppDialogContext";
 import { withAlpha } from "../styles/theme";
+import { useAndroidKeyboardOverlap } from "../hooks/useAndroidKeyboardOverlap";
 
 const IOS_PICKER_PRESENT_DELAY_MS = 360;
 
@@ -147,6 +148,9 @@ export const StreakMemorySheet = React.memo(function StreakMemorySheet({
   const [publishToCommunity, setPublishToCommunity] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const photoPickerOpeningRef = useRef(false);
+  const backdropRef = useRef<View>(null);
+  const createScrollRef = useRef<ScrollView>(null);
+  const noteInputYRef = useRef(0);
   const [optimisticSquadPublic, setOptimisticSquadPublic] = useState(
     (squadShare?.visibility ?? "solo") === "public",
   );
@@ -441,6 +445,19 @@ export const StreakMemorySheet = React.memo(function StreakMemorySheet({
     submitting && publishToCommunity && canPublishCommunity && Boolean(imageUri);
   /** Streak memory capture (habit + mini): fixed height + flex scroll — same cap for both drawers. */
   const memoryCaptureSheetMaxHeight = Math.min(windowH * 0.78, windowH - insets.top - 8);
+  /** Android: lift the capture sheet above the keyboard and shrink it to the space left. */
+  const keyboardOverlap = useAndroidKeyboardOverlap(backdropRef, visible && !isView);
+  const captureSheetHeight = keyboardOverlap
+    ? Math.min(memoryCaptureSheetMaxHeight, windowH - insets.top - 8 - keyboardOverlap)
+    : memoryCaptureSheetMaxHeight;
+
+  useEffect(() => {
+    if (!keyboardOverlap) return;
+    const t = setTimeout(() => {
+      createScrollRef.current?.scrollTo({ y: Math.max(0, noteInputYRef.current - 12), animated: true });
+    }, 60);
+    return () => clearTimeout(t);
+  }, [keyboardOverlap]);
 
   const vm = viewMemory;
   const viewImageUri = vm?.imageUrl ?? vm?.imageUri;
@@ -463,7 +480,7 @@ export const StreakMemorySheet = React.memo(function StreakMemorySheet({
         if (!submitting) handleDismiss();
       }}
     >
-      <View style={[styles.backdrop, { backgroundColor: isDark ? withAlpha(theme.colors.scrim, 72) : withAlpha(theme.colors.scrim, 55) }]}>
+      <View ref={backdropRef} style={[styles.backdrop, { backgroundColor: isDark ? withAlpha(theme.colors.scrim, 72) : withAlpha(theme.colors.scrim, 55) }]}>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Dismiss"
@@ -489,8 +506,9 @@ export const StreakMemorySheet = React.memo(function StreakMemorySheet({
                         paddingBottom: Math.max(insets.bottom, 16),
                       }
                     : {
-                        height: memoryCaptureSheetMaxHeight,
-                        maxHeight: memoryCaptureSheetMaxHeight,
+                        height: captureSheetHeight,
+                        maxHeight: captureSheetHeight,
+                        marginBottom: keyboardOverlap,
                         paddingBottom: 0,
                       }),
                   backgroundColor: theme.colors.surfaceElevated,
@@ -769,6 +787,7 @@ export const StreakMemorySheet = React.memo(function StreakMemorySheet({
               ) : (
                 <View style={styles.createSheetColumn}>
                   <ScrollView
+                    ref={createScrollRef}
                     style={styles.createScroll}
                     contentContainerStyle={[
                       styles.createScrollContent,
@@ -882,6 +901,9 @@ export const StreakMemorySheet = React.memo(function StreakMemorySheet({
                     </View>
 
                     <TextInput
+                      onLayout={(event) => {
+                        noteInputYRef.current = event.nativeEvent.layout.y;
+                      }}
                       value={note}
                       onChangeText={setNote}
                       placeholder={

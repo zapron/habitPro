@@ -351,6 +351,7 @@ const AnimatedDayCell = React.memo(function AnimatedDayCell({
     isRepaired,
     checklistLogged,
     checklistTotal,
+    beforeJoin,
     onPress,
     optimizeForScroll,
 }: {
@@ -368,6 +369,8 @@ const AnimatedDayCell = React.memo(function AnimatedDayCell({
     /** Only set for the current mission day — tasks logged so far / total checklist tasks (0/0 for classic missions, or missions with a single task, where a ratio isn't meaningful). */
     checklistLogged?: number;
     checklistTotal?: number;
+    /** Group mission day from before this member joined — not theirs to have missed. */
+    beforeJoin?: boolean;
     onPress: (dayIndex: number, day: number) => void;
     optimizeForScroll: boolean;
 }) {
@@ -387,6 +390,7 @@ const AnimatedDayCell = React.memo(function AnimatedDayCell({
     const showProgressArc =
         isCurrentMissionDay && !isCompleted && hasMultiTaskChecklist && !allTasksLogged && (checklistLogged ?? 0) > 0;
     const visuallyDone = isCompleted || showPreCompleteBadge;
+    const showBeforeJoin = Boolean(beforeJoin) && !visuallyDone && !isCurrentMissionDay;
 
     useEffect(() => {
         if (reduceMotion || optimizeForScroll || !(isMilestone && isCompleted)) return;
@@ -433,7 +437,12 @@ const AnimatedDayCell = React.memo(function AnimatedDayCell({
             ]
             : [styles.dayButtonIncomplete, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }],
         isCurrentMissionDay && !visuallyDone && { borderColor: theme.colors.red[900], borderWidth: 2, borderStyle: 'dashed' as const },
-        locked && styles.dayButtonFuture,
+        locked && !showBeforeJoin && styles.dayButtonFuture,
+        showBeforeJoin && {
+            borderColor: withAlpha(theme.colors.amber[500], isDark ? 70 : 60),
+            borderWidth: 1.5,
+            backgroundColor: withAlpha(theme.colors.amber[500], isDark ? 12 : 9),
+        },
     ];
 
     return (
@@ -444,6 +453,12 @@ const AnimatedDayCell = React.memo(function AnimatedDayCell({
                 { transform: [{ scale }] },
             ]}
         >
+            {showBeforeJoin ? (
+                <View
+                    pointerEvents="none"
+                    style={[styles.beforeJoinHalo, { backgroundColor: withAlpha(theme.colors.amber[500], isDark ? 16 : 13) }]}
+                />
+            ) : null}
             <TouchableOpacity
                 onPressIn={handlePressIn}
                 onPressOut={handlePressOut}
@@ -457,6 +472,8 @@ const AnimatedDayCell = React.memo(function AnimatedDayCell({
                     <Animated.View style={[styles.badgeWrap, isMilestone && { opacity: shimmerOpacity }]}>
                         <CompletedDayDot day={day} hasPhoto={hasPhoto} hasNoteOnly={hasNoteOnly} isRepaired={isRepaired} />
                     </Animated.View>
+                ) : showBeforeJoin ? (
+                    <Text style={[styles.dayText, { color: withAlpha(theme.colors.amber[500], 85) }]}>{day}</Text>
                 ) : locked ? (
                     <Lock size={15} color={theme.colors.textMuted} />
                 ) : isCurrentMissionDay ? (
@@ -1792,6 +1809,15 @@ export default function HabitDetail() {
         return calendarDateForHabitMissionDayIndex(clockHabit, dayIndex, now);
     }, [clockHabit, now]);
 
+    // Joined a group mission after it started: days before the join date are drawn
+    // in amber ("you weren't in yet") instead of as missed/locked days.
+    const joinDateKey = useMemo(() => {
+        if (!clockHabit?.challengeGroupId || !clockHabit.joinedChallengeAt) return null;
+        const ms = new Date(clockHabit.joinedChallengeAt).getTime();
+        if (!Number.isFinite(ms)) return null;
+        return calendarDateKeyForTimestamp(ms, getHabitMissionTimeZone(clockHabit));
+    }, [clockHabit]);
+
     const detailBottomPad = Math.max(insets.bottom, 24) + 16;
 
     const handleDayPress = useCallback((dayIndex: number, day: number) => {
@@ -2810,6 +2836,7 @@ export default function HabitDetail() {
                                 isRepaired={isRepaired}
                                 checklistLogged={checklistLogged}
                                 checklistTotal={checklistTotal}
+                                beforeJoin={joinDateKey !== null && dateStr !== '' && dateStr < joinDateKey}
                                 onPress={handleDayPress} // Stable callback reference
                                 optimizeForScroll={optimizeGridScrollForLongGrid}
                             />
@@ -2828,6 +2855,26 @@ export default function HabitDetail() {
                         return Array.from({ length: 7 - remainder }, (_, i) => <View key={`ph-${i}`} style={styles.dayButtonPlaceholder} />);
                     })()}
                 </View>
+
+                {joinDateKey !== null && displayedGridDays.some((d) => {
+                    const ds = getDayDate(d - 1);
+                    return ds !== '' && ds < joinDateKey && !completedDateSet.has(ds);
+                }) ? (
+                    <View style={styles.beforeJoinLegend}>
+                        <View
+                            style={[
+                                styles.beforeJoinLegendDot,
+                                {
+                                    borderColor: withAlpha(theme.colors.amber[500], isDark ? 70 : 60),
+                                    backgroundColor: withAlpha(theme.colors.amber[500], isDark ? 12 : 9),
+                                },
+                            ]}
+                        />
+                        <Text style={[styles.beforeJoinLegendText, { color: theme.colors.textSecondary }]}>
+                            Amber days were before you joined. They don't count against you.
+                        </Text>
+                    </View>
+                ) : null}
 
             </ScrollView>
 
@@ -3247,6 +3294,10 @@ const styles = StyleSheet.create({
     dayButtonMilestone: { shadowColor: '#fbbf24', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.45, shadowRadius: 14, elevation: 8 },
     dayButtonIncomplete: { borderWidth: 1 },
     dayButtonFuture: { opacity: 0.45 },
+    beforeJoinLegend: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10, paddingHorizontal: 4 },
+    beforeJoinLegendDot: { width: 12, height: 12, borderRadius: 6, borderWidth: 1.5 },
+    beforeJoinLegendText: { flex: 1, fontSize: 12, lineHeight: 16 },
+    beforeJoinHalo: { position: 'absolute', top: -3, left: -3, right: -3, bottom: -3, borderRadius: 9999 },
     dayText: { fontWeight: '700', fontSize: 16 },
     currentDayText: { fontSize: 18, fontWeight: '800' },
     badgeWrap: { width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center' },

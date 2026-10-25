@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Text } from "./AppText";
 import {
   ActivityIndicator,
@@ -14,6 +14,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useAndroidKeyboardOverlap } from "../hooks/useAndroidKeyboardOverlap";
 import { Users, X } from "lucide-react-native";
 import type { Habit } from "../types/habit";
 import { useTheme } from "../context/ThemeContext";
@@ -45,6 +46,8 @@ type Props = {
 export function StreakRepairSheet({ visible, onClose, habit, eligible, onRequested }: Props) {
   const { theme, isDark } = useTheme();
   const insets = useSafeAreaInsets();
+  const backdropRef = useRef<View>(null);
+  const keyboardOverlap = useAndroidKeyboardOverlap(backdropRef, visible);
   const { height: windowHeight } = useWindowDimensions();
   const { showToast } = useToast();
   const { isPremium, loading: premiumLoading } = usePremium();
@@ -123,6 +126,7 @@ export function StreakRepairSheet({ visible, onClose, habit, eligible, onRequest
   return (
     <Modal visible={visible} animationType="slide" transparent statusBarTranslucent onRequestClose={onClose}>
       <View
+        ref={backdropRef}
         style={[
           styles.backdrop,
           { backgroundColor: isDark ? withAlpha(theme.colors.scrim, 45) : withAlpha(theme.colors.scrim, 22) },
@@ -132,7 +136,7 @@ export function StreakRepairSheet({ visible, onClose, habit, eligible, onRequest
         <KeyboardAvoidingView
           pointerEvents="box-none"
           behavior={Platform.OS === "ios" ? "padding" : undefined}
-          style={styles.keyboardAvoider}
+          style={[styles.keyboardAvoider, keyboardOverlap ? { paddingBottom: keyboardOverlap } : null]}
         >
         <Pressable
           style={[

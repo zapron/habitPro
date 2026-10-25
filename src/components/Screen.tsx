@@ -1,7 +1,8 @@
-import React, { ReactNode } from "react";
+import React, { ReactNode, useRef } from "react";
 import { KeyboardAvoidingView, Platform, StyleProp, StyleSheet, View, ViewStyle } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "../context/ThemeContext";
+import { useAndroidKeyboardOverlap } from "../hooks/useAndroidKeyboardOverlap";
 
 type ScreenProps = {
   children: ReactNode;
@@ -13,26 +14,25 @@ type ScreenProps = {
 export function Screen({ children, style, plain }: ScreenProps) {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
+  const containerRef = useRef<View>(null);
+  const keyboardOverlap = useAndroidKeyboardOverlap(containerRef);
   /** Tight top inset: only safe area + small gap (replaces fixed 48px). */
   const paddingTop = plain
     ? Math.max(insets.top, 20)
     : Math.max(insets.top + 4, 12);
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.colors.background }, style]}>
+    <View ref={containerRef} style={[styles.container, { backgroundColor: theme.colors.background }, style]}>
       <KeyboardAvoidingView
         style={[
           styles.content,
           plain && styles.contentPlain,
           { paddingHorizontal: theme.spacing.sm, paddingTop },
+          keyboardOverlap ? { paddingBottom: keyboardOverlap } : null,
         ]}
-        // Android already resizes the window when the keyboard opens
-        // (default windowSoftInputMode="adjustResize"), so no `behavior` is
-        // needed there — stacking "height" on top of that native resize is
-        // what let a focused field near the bottom of a form (e.g. a
-        // Description textarea) end up covered by the keyboard. Every other
-        // KeyboardAvoidingView in the app already follows this same
-        // `undefined` on Android pattern; this was the one outlier.
+        // No `behavior` on Android: with edge-to-edge the window is no longer
+        // resized for the keyboard, so the measured overlap above pads the
+        // content instead (0 on devices that still resize, so no double gap).
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         keyboardVerticalOffset={Platform.OS === "ios" ? 12 : 0}
       >

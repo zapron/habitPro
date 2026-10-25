@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   StatusBar,
   Platform,
+  Keyboard,
 } from "react-native";
 import { useRouter } from "expo-router";
 
@@ -82,6 +83,15 @@ export default function CreateHabit() {
       });
     }, Platform.OS === "ios" ? 180 : 240);
   };
+
+  // Android pads the screen for the keyboard only once it has finished opening,
+  // so scroll the brief into view again at that point (the focus-time scroll
+  // runs before the content area has shrunk and can't reach far enough).
+  useEffect(() => {
+    if (Platform.OS !== "android" || focused !== "desc") return;
+    const sub = Keyboard.addListener("keyboardDidShow", () => scrollDescriptionAboveKeyboard());
+    return () => sub.remove();
+  }, [focused]);
 
   const bumpDays = (delta: number) => {
     setTotalDays((d) => Math.max(1, Math.min(365, d + delta)));

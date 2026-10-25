@@ -1,6 +1,6 @@
 import { Text } from "../../src/components/AppText";
 import { useEffect, useRef, useState } from "react";
-import { View, TextInput, TouchableOpacity, ScrollView, StyleSheet, StatusBar, Platform, InteractionManager } from "react-native";
+import { View, TextInput, TouchableOpacity, ScrollView, StyleSheet, StatusBar, Platform, InteractionManager, Keyboard } from "react-native";
 import { useRouter } from "expo-router";
 import { ArrowLeft, Camera, Check, Clock3, ListChecks, Plane, Plus, X } from "lucide-react-native";
 import { Screen } from "../../src/components/Screen";
@@ -100,6 +100,14 @@ export default function CreateMiniMission() {
       });
     }, Platform.OS === "ios" ? 180 : 240);
   };
+
+  // Android pads the screen for the keyboard only once it has finished opening,
+  // so scroll the objective into view again at that point.
+  useEffect(() => {
+    if (Platform.OS !== "android" || focused !== "objective") return;
+    const sub = Keyboard.addListener("keyboardDidShow", () => scrollObjectiveAboveKeyboard());
+    return () => sub.remove();
+  }, [focused]);
 
   const displayHours = Math.floor(totalMinutes / 60);
   const displayMins = totalMinutes % 60;
