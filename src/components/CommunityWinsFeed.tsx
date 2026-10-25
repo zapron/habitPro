@@ -14,9 +14,9 @@ import {
   RefreshControl,
   InteractionManager,
 } from "react-native";
-import { FlashList, type ListRenderItem } from "@shopify/flash-list";
+import { FlashList, type FlashListRef, type ListRenderItem } from "@shopify/flash-list";
 import type { ReactElement } from "react";
-import { useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { Flame } from "lucide-react-native";
@@ -184,6 +184,24 @@ export function CommunityWinsFeed({
     }
   }, [loadInitial]);
 
+  // Tapping the Community tab while already on it (Instagram-style): jump back
+  // to the top, or refresh when already there.
+  const listRef = useRef<FlashListRef<ListRow>>(null);
+  const scrollYRef = useRef(0);
+  const navigation = useNavigation();
+  useEffect(() => {
+    // The tab navigator types its events loosely from inside a child component.
+    const unsubscribe = (navigation as any).addListener("tabPress", () => {
+      if (!navigation.isFocused()) return;
+      if (scrollYRef.current > 8) {
+        listRef.current?.scrollToOffset({ offset: 0, animated: true });
+      } else if (!refreshing) {
+        void onRefresh();
+      }
+    });
+    return unsubscribe;
+  }, [navigation, onRefresh, refreshing]);
+
   const loadMore = useCallback(async () => {
     const requestedUserId = userId;
     if (!requestedUserId || !hasMore || loadMoreInFlight.current) return;
@@ -338,7 +356,13 @@ export function CommunityWinsFeed({
           onOpenMission={openMissionFromFeed}
           onCheer={handleCheer}
           onOpenCheerers={(w) => setCheerersSheet({ winId: w.id, totalLikes: w.cheerCount })}
-          onOpenComments={(w) => setCommentsSheet({ winId: w.id, winOwnerUserId: w.user_id })}
+          onOpenComments={(w) => {
+            setCommentsSheet({ winId: w.id, winOwnerUserId: w.user_id });
+            // Opening the sheet marks the thread read, so drop the maroon pill now.
+            if (w.unreadCommentCount) {
+              setItems((prev) => prev.map((x) => (x.id === w.id ? { ...x, unreadCommentCount: 0 } : x)));
+            }
+          }}
         />
       );
     },
@@ -380,6 +404,11 @@ export function CommunityWinsFeed({
   return (
     <>
       <FlashList
+        ref={listRef}
+        onScroll={(e) => {
+          scrollYRef.current = e.nativeEvent.contentOffset.y;
+        }}
+        scrollEventThrottle={64}
         style={variant === "feed" ? { flex: 1, marginHorizontal: -feedBleed } : { flex: 1 }}
         data={listRows}
         keyExtractor={(row) => (row.kind === "skeleton" ? row.id : row.win.id)}

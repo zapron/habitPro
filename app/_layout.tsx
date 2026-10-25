@@ -132,7 +132,7 @@ function RootLayoutNav() {
         return;
       }
 
-      if (type === "community_win_comment") {
+      if (type === "community_win_comment" || type === "community_win_thread_reply") {
         const winId = typeof data.win_id === "string" ? data.win_id : "";
         if (winId) {
           router.push({ pathname: "/journey-moment/[id]", params: { id: winId, openComments: "1" } });

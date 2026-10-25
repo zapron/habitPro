@@ -247,6 +247,31 @@ function buildMessage(
         data,
       };
     }
+    case "community_win_comment":
+    case "community_win_thread_reply": {
+      const who =
+        typeof payload.from_username === "string" && payload.from_username !== "someone"
+          ? `@${String(payload.from_username).toLowerCase()}`
+          : "Someone";
+      const title =
+        typeof payload.mini_mission_title === "string" ? payload.mini_mission_title : "a post";
+      const body = typeof payload.body === "string" ? payload.body.trim() : "";
+      const preview = body.length > 90 ? `${body.slice(0, 87)}...` : body;
+      // Only the first reply in a thread inserts a row (later ones update it),
+      // so a thread reply push fires once per unread thread.
+      if (t === "community_win_thread_reply") {
+        return {
+          title: "New reply in a thread",
+          body: preview ? `${who} replied on “${title}”: ${preview}` : `${who} replied on “${title}”`,
+          data,
+        };
+      }
+      return {
+        title: "New comment on your win",
+        body: preview ? `${who}: ${preview}` : `${who} commented on “${title}”`,
+        data,
+      };
+    }
     case "streak_window_reminder": {
       const habitTitle =
         typeof payload.habit_title === "string" ? payload.habit_title : "Your mission";

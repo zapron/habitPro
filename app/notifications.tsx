@@ -217,6 +217,8 @@ function notificationTitle(type: string, payload?: Record<string, unknown>): str
     }
     case "community_win_comment":
       return "New comment on your win";
+    case "community_win_thread_reply":
+      return "New reply in a thread";
     case "streak_repair_request":
       return "Streak repair request";
     case "streak_repair_result":
@@ -333,6 +335,22 @@ function notificationSubtitle(n: NotificationRow): string | null {
       }
       return `${who} cheered “${title}” · Tap to view`;
     }
+    case "community_win_thread_reply": {
+      const who =
+        typeof p.from_username === "string" && p.from_username && p.from_username !== "someone"
+          ? p.from_username.toLowerCase()
+          : "Someone";
+      const title = typeof p.mini_mission_title === "string" && p.mini_mission_title ? p.mini_mission_title : "a post";
+      const replies = typeof p.reply_count === "number" ? p.reply_count : Number(p.reply_count) || 1;
+      if (replies > 1) {
+        return `${replies} new replies on “${title}” · latest from ${who} · Tap to view`;
+      }
+      const body = typeof p.body === "string" ? p.body.trim() : "";
+      const preview = body.length > 80 ? `${body.slice(0, 77)}...` : body;
+      return preview.length > 0
+        ? `${who} replied on “${title}”: "${preview}" · Tap to view`
+        : `${who} replied on “${title}” · Tap to view`;
+    }
     case "community_win_comment": {
       const parsed = parseCommunityWinCommentPayload(p);
       if (!parsed) return "Someone commented on your Community win · Tap to view";
@@ -435,6 +453,7 @@ function notificationVisual(n: NotificationRow): { Icon: LucideIcon; tone: Notif
     case "community_win_cheer":
       return { Icon: Heart, tone: "positive" };
     case "community_win_comment":
+    case "community_win_thread_reply":
       return { Icon: MessageCircle, tone: "social" };
     case "streak_repair_request":
       return { Icon: Wrench, tone: "social" };
@@ -808,7 +827,7 @@ export default function NotificationsScreen() {
       return;
     }
 
-    if (n.type === "community_win_comment") {
+    if (n.type === "community_win_comment" || n.type === "community_win_thread_reply") {
       const parsed = parseCommunityWinCommentPayload(p);
       const winId = parsed?.win_id ?? (typeof p.win_id === "string" ? p.win_id : "");
       if (winId) {

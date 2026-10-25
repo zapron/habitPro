@@ -83,6 +83,8 @@ export type CommunityWinFeedItem = CommunityWinRow & {
   cheerCount: number;
   viewerHasCheered: boolean;
   commentCount: number;
+  /** Comments by others since the viewer last opened this thread (feed RPC only; capped at 10). */
+  unreadCommentCount?: number;
 };
 
 export type CommunityPlayerRecentWin = {
@@ -361,6 +363,7 @@ type CommunityFeedRpcItem = {
   cheerCount?: number | null;
   viewerHasCheered?: boolean | null;
   commentCount?: number | null;
+  unreadCommentCount?: number | null;
 };
 
 function normalizeRpcCommunityWinItem(item: CommunityFeedRpcItem): CommunityWinFeedItem | null {
@@ -404,6 +407,10 @@ function normalizeRpcCommunityWinItem(item: CommunityFeedRpcItem): CommunityWinF
     commentCount:
       typeof item.commentCount === "number" && Number.isFinite(item.commentCount)
         ? Math.max(0, item.commentCount)
+        : 0,
+    unreadCommentCount:
+      typeof item.unreadCommentCount === "number" && Number.isFinite(item.unreadCommentCount)
+        ? Math.max(0, item.unreadCommentCount)
         : 0,
   };
 }
@@ -1380,6 +1387,19 @@ export async function fetchCommunityWinComments(
   });
 
   return { ok: true, items };
+}
+
+/**
+ * Marks a thread read when its comments sheet opens. Returns when the viewer
+ * had last read it (to place the "new since you last looked" divider), or null
+ * when they aren't part of the thread (nothing is recorded then).
+ */
+export async function markCommunityWinCommentsRead(winId: string): Promise<string | null> {
+  const supabase = getSupabase();
+  if (!supabase) return null;
+  const { data, error } = await supabase.rpc("rpc_mark_community_win_comments_read_v1", { p_win_id: winId });
+  if (error || typeof data !== "string") return null;
+  return data;
 }
 
 export async function postCommunityWinComment(

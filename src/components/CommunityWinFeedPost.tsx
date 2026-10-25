@@ -303,6 +303,10 @@ export const CommunityWinFeedPost = memo(function CommunityWinFeedPost({
       : null;
   const level = levelFromTotalXp(win.xp);
   const playerLeague = playerLeagueForLevel(level, theme, isDark);
+  // Threads you're part of with replies you haven't opened yet: maroon pill.
+  const unreadComments = win.unreadCommentCount ?? 0;
+  const unreadLabel = unreadComments > 9 ? "9+" : String(unreadComments);
+  const unreadTint = isDark ? "#f17c93" : theme.colors.maroon[500];
   const showMissionTitle = !streakKicker;
   /** Null for a real mini mission — only a habit-streak post (current or legacy-synthetic-id) resolves. */
   const missionHabitId = habitIdFromHabitStreakMiniMissionId(win.mini_mission_id);
@@ -796,13 +800,30 @@ export const CommunityWinFeedPost = memo(function CommunityWinFeedPost({
           <Pressable
             onPress={() => onOpenComments?.(win)}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            style={styles.commentIconRow}
+            style={[
+              styles.commentIconRow,
+              unreadComments > 0 && [
+                styles.commentUnreadPill,
+                {
+                  backgroundColor: withAlpha(theme.colors.maroon[500], isDark ? 22 : 10),
+                  borderColor: theme.colors.maroon[500],
+                },
+              ],
+            ]}
             accessibilityRole="button"
-            accessibilityLabel={win.commentCount < 1 ? "No comments yet" : `Open ${win.commentCount} comments`}
+            accessibilityLabel={
+              win.commentCount < 1
+                ? "No comments yet"
+                : unreadComments > 0
+                  ? `Open ${win.commentCount} comments, ${unreadLabel} new`
+                  : `Open ${win.commentCount} comments`
+            }
           >
-            <MessageCircle size={20} color={theme.colors.textMuted} strokeWidth={2} />
+            <MessageCircle size={20} color={unreadComments > 0 ? unreadTint : theme.colors.textMuted} strokeWidth={2} />
             {win.commentCount > 0 ? (
-              <Text style={[styles.cheerCount, { color: theme.colors.textMuted }]}>{win.commentCount}</Text>
+              <Text style={[styles.cheerCount, { color: unreadComments > 0 ? unreadTint : theme.colors.textMuted }]}>
+                {unreadComments > 0 ? `${win.commentCount} · ${unreadLabel} new` : win.commentCount}
+              </Text>
             ) : null}
           </Pressable>
           <Text style={[styles.timeInline, { color: theme.colors.textMuted }]}>
@@ -1010,6 +1031,7 @@ const styles = StyleSheet.create({
   padCardInner: { paddingHorizontal: 16 },
   cheerIconRow: { flexDirection: "row", alignItems: "center", gap: 5 },
   commentIconRow: { flexDirection: "row", alignItems: "center", gap: 5, marginRight: "auto" },
+  commentUnreadPill: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, height: 28 },
   timeInline: {
     fontSize: 12,
     fontWeight: "600",

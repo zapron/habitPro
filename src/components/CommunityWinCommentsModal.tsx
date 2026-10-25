@@ -24,6 +24,7 @@ import { formatRelativeTime } from "../lib/communityWinFeedFormat";
 import {
   deleteCommunityWinComment,
   fetchCommunityWinComments,
+  markCommunityWinCommentsRead,
   postCommunityWinComment,
   type CommunityWinComment,
 } from "../lib/communityWinsApi";
@@ -83,6 +84,9 @@ export function CommunityWinCommentsModal({
   const [draft, setDraft] = useState("");
   const [posting, setPosting] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
+  /** When the viewer had last read this thread, captured as the sheet opens (null: not a participant / nothing to mark). */
+  const [lastReadAt, setLastReadAt] = useState<string | null>(null);
+  const scrolledToNewRef = useRef(false);
 
   const bottomPad = Math.max(insets.bottom, theme.spacing.md);
   const sheetMaxPx = windowHeight * SHEET_MAX_SCREEN_RATIO;
@@ -110,8 +114,15 @@ export function CommunityWinCommentsModal({
   };
 
   useEffect(() => {
+    setLastReadAt(null);
+    scrolledToNewRef.current = false;
     if (!visible || !winId) return;
     let cancelled = false;
+    // Opening the sheet marks the thread read (and clears its reply notification);
+    // the previous read time drives the "new since you last looked" divider.
+    void markCommunityWinCommentsRead(winId).then((prev) => {
+      if (!cancelled) setLastReadAt(prev);
+    });
     const task = InteractionManager.runAfterInteractions(() => {
       void (async () => {
         if (cancelled) return;
@@ -183,6 +194,14 @@ export function CommunityWinCommentsModal({
   };
 
   const headerCount = items.length;
+
+  // First comment by someone else since the last read; older ones are dimmed.
+  const lastReadMs = lastReadAt ? Date.parse(lastReadAt) : NaN;
+  const isNewComment = (c: CommunityWinComment) =>
+    Number.isFinite(lastReadMs) && c.authorId !== sessionUserId && Date.parse(c.createdAt) > lastReadMs;
+  const firstNewIndex = items.findIndex(isNewComment);
+  const newCount = firstNewIndex < 0 ? 0 : items.slice(firstNewIndex).filter(isNewComment).length;
+  const newTint = isDark ? "#f17c93" : theme.colors.maroon[500];
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
@@ -260,10 +279,28 @@ export function CommunityWinCommentsModal({
                   ]}
                   keyboardShouldPersistTaps="handled"
                 >
-                  {items.map((c) => {
+                  {items.map((c, index) => {
                     const canDelete = sessionUserId === c.authorId || sessionUserId === winOwnerUserId;
                     return (
-                      <View key={c.id} style={styles.row}>
+                      <View key={c.id}>
+                      {index === firstNewIndex ? (
+                        <View
+                          style={styles.newDivider}
+                          onLayout={(e) => {
+                            if (scrolledToNewRef.current || firstNewIndex === 0) return;
+                            scrolledToNewRef.current = true;
+                            const y = e.nativeEvent.layout.y;
+                            requestAnimationFrame(() => scrollRef.current?.scrollTo({ y: Math.max(0, y - 8), animated: true }));
+                          }}
+                        >
+                          <View style={[styles.newDividerLine, { backgroundColor: theme.colors.maroon[500] }]} />
+                          <Text style={[styles.newDividerLabel, { color: newTint }]}>
+                            {`${newCount} NEW SINCE YOU LAST LOOKED`}
+                          </Text>
+                          <View style={[styles.newDividerLine, { backgroundColor: theme.colors.maroon[500] }]} />
+                        </View>
+                      ) : null}
+                      <View style={[styles.row, firstNewIndex > 0 && index < firstNewIndex && styles.rowSeen]}>
                         <View
                           style={[
                             styles.rowAvatar,
@@ -303,6 +340,7 @@ export function CommunityWinCommentsModal({
                             </Pressable>
                           ) : null}
                         </View>
+                      </View>
                       </View>
                     );
                   })}
@@ -408,6 +446,10 @@ const styles = StyleSheet.create({
   center: { paddingHorizontal: 16, alignItems: "center", justifyContent: "center" },
   list: { paddingTop: 12, gap: 16 },
   row: { flexDirection: "row", gap: 10 },
+  rowSeen: { opacity: 0.7 },
+  newDivider: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 14 },
+  newDividerLine: { flex: 1, height: StyleSheet.hairlineWidth * 2 },
+  newDividerLabel: { fontSize: 11, fontWeight: "800", letterSpacing: 1.2 },
   rowAvatar: { width: 34, height: 34, borderRadius: 17, borderWidth: 1, alignItems: "center", justifyContent: "center", flexShrink: 0, overflow: "hidden" },
   rowAvatarPhoto: { width: 34, height: 34 },
   rowAvatarInitials: { fontSize: 11, fontWeight: "800" },
