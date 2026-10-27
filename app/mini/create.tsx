@@ -140,9 +140,13 @@ export default function CreateMiniMission() {
     const taskChecklist: TaskChecklistItem[] = freeformEnabled
       ? []
       : checklistItems
-          .map((item) => ({ id: item.id, label: item.label.trim() }))
-          .filter((item) => item.label.length > 0)
-          .map((item, index) => ({ id: item.id, label: item.label, order: index + 1 }));
+          // A task left unnamed (quickly adding several, naming them later in the
+          // memory note) is saved as "Task N" by its position instead of dropped.
+          .map((item, index) => ({
+            id: item.id,
+            label: item.label.trim() || `Task ${index + 1}`,
+            order: index + 1,
+          }));
 
     setCreatingMode(mode);
     void (async () => {
@@ -390,7 +394,7 @@ export default function CreateMiniMission() {
                           color: theme.colors.textPrimary,
                         },
                       ]}
-                      placeholder="e.g., Warm up"
+                      placeholder={`Task ${index + 1}`}
                       placeholderTextColor={theme.colors.textMuted}
                       value={item.label}
                       onChangeText={(text) => updateChecklistItem(item.id, text)}

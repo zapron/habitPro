@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  Keyboard,
   KeyboardAvoidingView,
   InteractionManager,
   Modal,
@@ -97,6 +98,25 @@ export function CommunityWinCommentsModal({
   // jump on the very first layout pass, then corrected via onLayout once
   // the real height is known (font scale, multiline growth, etc.).
   const [composerHeight, setComposerHeight] = useState(56 + bottomPad);
+  // The composer lifts above the keyboard but the list doesn't move, so while
+  // the keyboard is up the list also reserves its height; otherwise the newest
+  // comment lands behind the composer.
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  useEffect(() => {
+    if (!visible) return;
+    const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+    const show = Keyboard.addListener(showEvent, (e) => {
+      setKeyboardHeight(e.endCoordinates.height);
+      requestAnimationFrame(() => scrollRef.current?.scrollToEnd({ animated: true }));
+    });
+    const hide = Keyboard.addListener(hideEvent, () => setKeyboardHeight(0));
+    return () => {
+      show.remove();
+      hide.remove();
+      setKeyboardHeight(0);
+    };
+  }, [visible]);
 
   const load = async () => {
     if (!winId) return;
@@ -275,7 +295,10 @@ export function CommunityWinCommentsModal({
                   style={styles.listScroll}
                   contentContainerStyle={[
                     styles.list,
-                    { paddingBottom: composerHeight + theme.spacing.sm, paddingHorizontal: theme.spacing.md + 4 },
+                    {
+                      paddingBottom: composerHeight + keyboardHeight + theme.spacing.sm,
+                      paddingHorizontal: theme.spacing.md + 4,
+                    },
                   ]}
                   keyboardShouldPersistTaps="handled"
                 >
