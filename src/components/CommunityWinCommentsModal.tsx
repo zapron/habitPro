@@ -18,6 +18,7 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Lock, MessageCircle, Send, Trash2, X } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useAndroidKeyboardOverlap } from "../hooks/useAndroidKeyboardOverlap";
 import { usePlusUpsell } from "../context/PlusUpsellContext";
 import { usePremium } from "../context/PremiumContext";
 import { useTheme } from "../context/ThemeContext";
@@ -102,13 +103,20 @@ export function CommunityWinCommentsModal({
   // the keyboard is up the list also reserves its height; otherwise the newest
   // comment lands behind the composer.
   const [keyboardHeight, setKeyboardHeight] = useState(0);
+  // Android: the composer is lifted by exactly this (see below) instead of a
+  // KeyboardAvoidingView, whose padding could stay stuck after the keyboard
+  // closed — the composer then floated a comment's height up, covering the
+  // last comment, with empty space under it.
+  const modalRootRef = useRef<View>(null);
+  const androidKeyboardLift = useAndroidKeyboardOverlap(modalRootRef, visible);
+  const keyboardLift = Platform.OS === "android" ? androidKeyboardLift : keyboardHeight;
   useEffect(() => {
     if (!visible) return;
     const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
     const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
     const show = Keyboard.addListener(showEvent, (e) => {
       setKeyboardHeight(e.endCoordinates.height);
-      requestAnimationFrame(() => scrollRef.current?.scrollToEnd({ animated: true }));
+      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 60);
     });
     const hide = Keyboard.addListener(hideEvent, () => setKeyboardHeight(0));
     return () => {
@@ -225,7 +233,7 @@ export function CommunityWinCommentsModal({
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={styles.modalRoot}>
+      <View ref={modalRootRef} style={styles.modalRoot}>
         <Pressable
           style={[StyleSheet.absoluteFillObject, { backgroundColor: isDark ? "rgba(0,0,0,.45)" : "rgba(0,0,0,.22)" }]}
           onPress={onClose}
@@ -296,7 +304,7 @@ export function CommunityWinCommentsModal({
                   contentContainerStyle={[
                     styles.list,
                     {
-                      paddingBottom: composerHeight + keyboardHeight + theme.spacing.sm,
+                      paddingBottom: composerHeight + keyboardLift + theme.spacing.sm,
                       paddingHorizontal: theme.spacing.md + 4,
                     },
                   ]}
@@ -374,9 +382,8 @@ export function CommunityWinCommentsModal({
         </View>
 
         <KeyboardAvoidingView
-          behavior="padding"
-          keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 12}
-          style={styles.composerLayer}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          style={[styles.composerLayer, Platform.OS === "android" ? { bottom: androidKeyboardLift } : null]}
           pointerEvents="box-none"
         >
           <View
@@ -386,7 +393,8 @@ export function CommunityWinCommentsModal({
               {
                 backgroundColor: theme.colors.surface,
                 borderTopColor: theme.colors.border,
-                paddingBottom: bottomPad,
+                // Above the keyboard the nav-bar/home-indicator inset is covered anyway.
+                paddingBottom: keyboardLift > 0 ? theme.spacing.sm : bottomPad,
                 paddingHorizontal: theme.spacing.md + 4,
               },
             ]}
