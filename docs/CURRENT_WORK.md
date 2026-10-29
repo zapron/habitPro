@@ -1,6 +1,162 @@
 # HabitPro Current Work
 
-Last updated: 2026-10-25 — Big multi-day session (2026-10-18 → 10-25), all committed and pushed. In it: free cheers + premium-only comments (migration live), a dedicated Reports screen, sliding photo dots, an outcome card on Home, a liquid light/dark switch, the recovery-snapshot false-alarm fix, a redesigned habitpro-web site (honeycomb + neon pulse), the move to the custom domain **www.habitpro.life**, and a code-rendered promo-video pipeline. Two app OTAs went to production. See the newest entry below.
+Last updated: 2026-10-29 — Creator approval committed; Android comment-composer fix and a cleaner checklist day sheet shipped by OTA; Video Moments final direction + executive plan published for the user's approval (nothing built from it yet). See the newest entry below.
+
+## Session Handoff (2026-10-29 — composer fix, checklist sheet restyle, Video Moments plan)
+
+**State:**
+- App `main` = `4bfd777` plus the docs commit that carries this entry, pushed. `npx tsc --noEmit` clean.
+- Commits:
+  - `d571a96` feat: the creator's approval alone admits a join request (the 2026-10-28 work: `app/challenge/[id].tsx` + migration `20261028120000`, already live).
+  - `9d9edcc` fix(android): the comment composer no longer floats above the last comment.
+  - `4bfd777` feat: cleaner checklist day sheet.
+- Production OTA `69386e38-12b3-419b-ba2c-ccb48cb8792b` (runtime 1.1.37): composer fix + checklist sheet. Published with the video work stashed.
+- **Not device-verified:** both changes passed `tsc` only. The emulator couldn't reach local Supabase because the Mac's LAN IP changed (`.env.local` still says `10.20.30.207`, the Mac is now `192.168.68.66`). The user is testing on device.
+- Still uncommitted, by design: Video Moments (all files listed in the 2026-10-28 entry, plus `supabase/migrations/20261027130000_video_moments.sql`, which the next `db:push` would push). Same stash rule before any OTA.
+
+### 1. Comment composer on Android (`9d9edcc`)
+- **Symptom (user screenshot):** at rest, the composer sat about one comment's height above the bottom, with empty space under it, and the last comment was hidden behind it.
+- **Cause:** the composer's own `KeyboardAvoidingView` (`behavior="padding"`, offset 12) could keep its padding after the keyboard closed. The list's bottom padding used `keyboardHeight` from the keyboard events, so the two disagreed.
+- **Fix** (`CommunityWinCommentsModal.tsx`): on Android the KAV no longer pads. The composer layer gets `bottom: useAndroidKeyboardOverlap(modalRootRef)`, the same measured-overlap hook the memory sheet uses, and the list pads by `composerHeight + that same number`. iOS keeps KAV padding plus `keyboardWillShow` height. While the keyboard is up, the composer drops its safe-area bottom padding (no gap above the keyboard).
+
+### 2. Checklist day sheet restyle (`4bfd777`, same props and handlers)
+- Logged tasks show a 40px thumbnail of their photo, or a note icon, with a small green check, instead of a struck-out label. Unlogged tasks show a dashed "+" box and "Tap to log".
+- The eye icon is now an `IN POST` / `HIDDEN` pill (same `onToggleTaskInclusion`).
+- A segmented progress bar sits under "N/M logged".
+- "Mark Day Complete" is the one solid green button; Publish/Update is a neutral outline.
+- `MiniChecklistSheet` (mini missions) was **not** restyled; it still uses the old look.
+
+### 3. Video Moments: direction for approval (nothing built from it yet)
+- Exploration canvas: https://claude.ai/artifact/HdMVfG4VT5jSFxbfKyuQdF. **Final direction + executive plan: https://claude.ai/artifact/CQp9i39Qz2BzcRHCRddoYu.**
+- Proposed rule changes awaiting the user's OK:
+  - the reel window opens on day 7 (once marked done) through the end of the next block;
+  - one reel per person per week across all missions;
+  - silent clips (audio stripped) with a 2 MB upload cap.
+- Proposed UI:
+  - one progress line under the day grid ("5s reel · 3 days to go" / "Post 2 more days…" / "Reel ready · N days left" / "Reel used ✓");
+  - an unlock toast;
+  - a reel-first option in the moment sheet;
+  - a silent player with a "5s" chip and no mute button.
+  - Dropped: celebration screen, ticket, Home card changes.
+- Phases:
+  - 0, safety: size cap, audio strip, window and weekly cap, a "Report post" with a Copyright reason, a Terms takedown section;
+  - 1, UI;
+  - 2, store build with a new runtime, the user's `db:push`, a tester allowlist on the flag;
+  - 3, a 2–3 week test with metrics, then go/no-go.
+- Context from the discussion:
+  - cost is small (~250 KB per clip);
+  - the copyright risk from background music is handled by removing audio, plus a report/takedown path and Terms. The user was advised to have a lawyer check the Terms.
+
+## Session Handoff (2026-10-27 → 2026-10-28 — creator approval, feedback fixes, invite copy, Video Moments WIP)
+
+**State:**
+- App `main` = `db0a0a9`, pushed. Web `main` = `09c0fca`, pushed.
+- **Uncommitted in the app repo** (nothing pushed, by design):
+  - creator approval: `app/challenge/[id].tsx` (one copy line) + `supabase/migrations/20261028120000_join_request_creator_approval.sql`. Both are already live (migration pushed, OTA sent), so they should be committed next;
+  - the whole Video Moments feature (section 4);
+  - these doc updates.
+- Production OTAs (runtime 1.1.37, android + ios):
+  1. `7fc90372`: comments-above-composer + "Task N" names (`db0a0a9`).
+  2. `bf8c88b3-f90c-4463-8c7b-4c8c0c765ebc`: "Join requests: creator approval line". Published from the working tree with the video work stashed, so it carries only the `challenge/[id].tsx` copy change on top of `db0a0a9`.
+- Migrations: `20261028120000_join_request_creator_approval` is **in production** (user ran `db:push`; confirmed via `list_migrations`). `20261027130000_video_moments.sql` is **local only, not pushed**. It was moved out of `supabase/migrations/` during that `db:push` and is back in the folder now, so the **next `db:push` will push it**. Don't run `db:push` until Video Moments is meant to ship (the flag still defaults off, but it adds a bucket, table, columns and RPC).
+- **OTA rule while Video Moments is uncommitted:** `eas update` bundles the working tree. Before any OTA: `git stash push -u -m video-moments-wip -- app.json package.json package-lock.json "app/habit/[id].tsx" src/components/CommunityWinFeedPost.tsx src/components/CommunityWinsFeed.tsx src/components/StreakMemoryGallery.tsx src/components/StreakMemorySheet.tsx src/lib/communityWinsApi.ts src/types/habit.ts src/features src/lib/featureFlags.ts`, then `git stash pop` afterwards. Video code needs native modules that the 1.1.37 build doesn't have.
+
+### 1. Join requests: creator's single approval (live)
+- `rpc_vote_challenge_join_request_v1` (migration `20261028120000`, a copy of the `20260921120000` version) now approves when `(p_vote = 'approve' and uid = creator_id) or approves >= approvals_required`. The two-member quorum still works and any decline still declines.
+- Approval still creates the **normal invite** + `challenge_invite` notification. The requester accepts from the Home invite card or the Invites tab. No auto-join (the 2026-10-27 auto-join version stays reverted).
+- Copy under each request: the creator sees "Your approval lets them in"; members see "1/2 approvals · or the creator's".
+- Tested locally (`db:reset` + SQL): member alone stays pending; creator approve gives approved + pending invite + notification; solo-creator decline gives declined with no invite. `tsc` clean.
+
+### 2. Feedback fixes (`db0a0a9`, OTA `7fc90372`)
+- **Comments sheet:** the last comment hid behind the composer while typing. The list now pads by composer height + keyboard height (iOS `keyboardWillShow`, Android `keyboardDidShow`) and scrolls to the end when the keyboard opens.
+- **Checklist tasks:** an unnamed task saves as "Task 1…N" (`item.label.trim() || \`Task ${index + 1}\``) in `app/create.tsx` and `app/mini/create.tsx`; the placeholder shows the same.
+
+### 3. Website invite page (habitPro-web `16c5e3c`, `09c0fca`)
+- `app/invite/page.tsx`: friendlier copy ("{from} invited you to "{title}", which is more fun with a friend…"). The heading shortens to "You're invited to {kind}." when the inviter is named in the line below.
+- The inviter's name is bold maroon: `--maroon-text` in `globals.css` (light `#6e1727`, dark `#f17c93`), class `.invite-from`.
+
+### 4. Video Moments (built, uncommitted, local only)
+- **Rule:** a habit (not checklist) mission earns one 5-second video per 7-day block, counted from the mission start. All 7 days done, no repaired days, at least 4 days posted to Community. It can be claimed only during the **next** block (the block's own last day isn't in `completed_dates` yet when you'd claim).
+- **Server:** migration `20261027130000_video_moments.sql`:
+  - `app_feature_flags` (`video_moments` = false) + `feature_enabled()`;
+  - `moment-videos` bucket (10 MB, mp4/mov/jpeg), insert needs the flag and premium;
+  - `moment_videos` table, unique per user/habit/block;
+  - `community_wins.video_url` / `video_poster_url`, guarded by `tg_community_wins_guard_video` (`video_not_claimed`);
+  - `rpc_claim_video_moment_v1` re-checks every rule server-side and verifies the uploaded object exists.
+  - SQL tests passed locally.
+- **Client:**
+  - `src/lib/featureFlags.ts`;
+  - `src/features/videoMoments/` (`credit.ts`, `api.ts`: compress to 1280px / 2 Mbps, thumbnail, upload, claim; `VideoMomentPlayer.tsx`: poster until tap, plays once, mute toggle, hold to replay, 150 MB cache);
+  - `StreakMemorySheet` has "Record 5s video" / "Video from library" (5.5 s max);
+  - `app/habit/[id].tsx`: the unlocked day pulses amber with a ▶ badge and legend line (the big unlock card was dropped per user feedback); uploading and claiming happens on memory commit, and both publish paths pass the video fields;
+  - playback in the Community feed post, the moment view and the hex gallery's enlarged view.
+- **Native deps** (need a new build; `app.json` plugins + mic permission): `expo-video`, `expo-video-thumbnails`, `react-native-compressor`, `react-native-nitro-modules` 0.35.10. Android dev build ran on the emulator after adding nitro-modules.
+- Cost check: a 4.5 s clip came out at 221 KB.
+- Local test data: missions `video-test` (block 1 claimed, day-9 post with video) and `video-test-2` (glow test). Seed SQL was in the session scratchpad, not the repo.
+- **Open:**
+  - checklist habits: the recommended option A (one task's photo becomes a 5 s video) is awaiting the user's answer;
+  - remaining playback surfaces: full-screen lightbox, My Journey, journey-moment page, player profile;
+  - iOS dev build not tested yet;
+  - watch for a player mount issue inside Android Modals;
+  - to ship: commit (maybe on a branch), user runs `db:push`, new native build, then flip `video_moments` on.
+
+## Session Handoff (2026-10-25 → 2026-10-27 — feedback round: keyboard, comments, invites, join approval)
+
+**State:**
+- `npx tsc --noEmit` clean.
+- `main` = `2a4cc4e`, pushed. Only these doc updates are uncommitted.
+- Production OTAs (runtime 1.1.37, android + ios):
+  1. `7afda2df-197a-43ed-9876-618f5ef39285`: keyboard fix, Community tap-to-top, amber pre-join days. Published before the commit; the code is `4ee0366`.
+  2. `0e809e34-b7a6-4de1-b886-da47f1a38607`: unread comment threads + thread-reply notifications (`7a03f5a`).
+  3. `8f2193cd-4f4c-46ec-a3c6-4c8626a19a2c`: Home invite card, Invites count + red dot, stale-invite cutoff (`2a4cc4e`).
+- Migrations: `20261026120000_community_comment_threads_unread` is **in production** (user ran `db:push`; confirmed via `list_migrations`). Nothing is pending.
+- `notify-push`: the user deployed the current version (comment + thread-reply copy). The agent's own deploy attempt was blocked by the permission classifier, so the user deploys.
+
+### 1. Android keyboard hiding notes and briefs (`4ee0366`, user confirmed it works)
+- **Cause:** with `edgeToEdgeEnabled`, Android no longer resizes the window for the keyboard, and Modals never did, so the old "`behavior` undefined on Android" pattern left fields under the keyboard.
+- **New hook:** `src/hooks/useAndroidKeyboardOverlap.ts` measures how much of a container the keyboard covers (0 on devices that still resize, and on iOS).
+- **Applied in:**
+  - `Screen.tsx` (padding), used by habit create and mini create (both also re-scroll their description on `keyboardDidShow`);
+  - `StreakMemorySheet.tsx` (sheet lifts and shrinks, note scrolls into view), which covers every moment: habit day, checklist task, mini, mini task;
+  - `StreakRepairSheet.tsx`.
+- `react-native-keyboard-controller` was not added (it needs a native build); keep it as a fallback if a device still misbehaves.
+
+### 2. Community tab tap-to-top and amber pre-join days (`4ee0366` / `7a03f5a`)
+- **Community tab:** `CommunityWinsFeed.tsx` listens to `tabPress`. Scrolled down, it scrolls to top; already at top, it refreshes.
+- **Amber days:** `app/habit/[id].tsx` draws group-mission days before `habit.joinedChallengeAt` as amber ring + halo cells, with a legend line, instead of locked/missed.
+
+### 3. Unread comment threads (`7a03f5a`, migration live, `notify-push` deployed by the user)
+- **Read state:** `community_win_comment_reads(user_id, win_id, last_read_at)`, written by a trigger on comment insert and by `rpc_mark_community_win_comments_read_v1` (when the comments sheet opens; returns the previous read time; non-participants get null and nothing is written). It also marks that thread's unread reply notification read. The backfill starts everyone "caught up".
+- **Feed:** `rpc_community_feed_page_v1` gained `unreadCommentCount`, computed in the same query (capped at 10). It applies only to threads you commented on, or your own post.
+- **UI:**
+  - the feed's comment control becomes a maroon pill ("6 · 2 new", "9+");
+  - the comments sheet shows a "N NEW SINCE YOU LAST LOOKED" divider, dims older comments and scrolls to the divider.
+- **Notifications:** `notify_community_win_comment` also notifies earlier commenters (`community_win_thread_reply`), one unread row per thread per user. Later replies update it (`reply_count`, latest preview), so the INSERT webhook pushes once per unread thread.
+- **Push copy:** `notify-push` gained real copy for `community_win_comment` (previously the generic fallback) and `community_win_thread_reply`.
+
+### 4. Invites (`2a4cc4e`)
+- **Count bug:** Compete's "Invites (N)" used the not-yet-loaded list, so it showed 0 until the tab was opened. It now uses `InviteBadgeContext`'s count until the list loads, plus a pulsing red dot.
+- **Home card:** `HomeInviteCard` (`src/components/HomeInviteCard.tsx`, data from `src/lib/homeInvitePreview.ts`) sits under the outcome card. "See invite" routes to Compete Invites; accepting stays there because of the rules commitment. It fetches only while the badge count is above 0.
+- **Stale invites:** pending group invites never expired, and 38 were pending in production (32 older than 7 days). `groupInviteVisibleSinceIso()` in `groupChallengesApi.ts` now hides pending group invites sent before 2026-10-26 (IST) or more than 7 days old, everywhere: the badge, the Invites tab (answered invites still show as history) and the Home card. Nothing was deleted.
+
+### 5. Join requests: creator approval + automatic join (built, then REVERTED)
+- **What was built:**
+  - the creator's approve alone admits someone;
+  - the approval's invite was tagged (`challenge_invites.from_join_request_id`) and the requester's app joined automatically through a `joinGroupMissionFromInvite()` helper extracted from Compete and a `useAutoJoinApprovedRequests` hook;
+  - the rules commitment moved to request time;
+  - a migration `20261027120000_join_request_creator_approval_auto_join` (SQL-tested locally).
+- **Reverted before commit, push or `db:push`.** The user decided the Home invite card (item 4) already gives approved requesters a one-tap path, so the existing flow stays: approval → normal invite → accept from Home or Invites.
+- Nothing from it is in git or production. Local DB was re-reset without the migration.
+- If this is ever revisited: an invite → local habit must be created on the requester's device, which is why the design kept an invite row and auto-accepted client-side rather than inserting into `challenge_members` on the server.
+
+### Other
+- **Data change:** `zapron` and `raktim_24` got 3-month `promo` grants in `community_access_grants` (`manual_admin_grant`), to 2027-01-25 and 2027-01-26; `profile_is_premium` was verified true.
+- **Video Moments (5-second video power-up):** design and architecture canvas at https://claude.ai/artifact/XYbkt92qZABd1uVYJ94LMD. It needs a native build (`expo-video`, compressor, thumbnails). Open decisions:
+  - rolling 7 days or Mon–Sun?
+  - one per week, or one per mission?
+  - premium only?
+  - Supabase Pro limits were quoted from memory and need confirming. Production storage is 878 MB across 2,911 photos.
+- **Parked:** nested comment replies (`parent_id`), AI coach, web intro.
 
 ## Session Handoff (2026-10-18 → 2026-10-25 — social gating flip, Reports screen, liquid theme switch, website + domain, promo-video pipeline)
 

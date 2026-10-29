@@ -2,6 +2,34 @@
 
 This is a concise chronological log for future sessions. Keep secrets out of this file.
 
+## 2026-10-29 (Composer fix, checklist sheet restyle, Video Moments plan)
+
+Full detail in `docs/CURRENT_WORK.md`.
+- **Commits:** `d571a96` (creator approval, already live), `9d9edcc` (Android comment composer no longer floats over the last comment), `4bfd777` (checklist day sheet: photo thumbnails, IN POST/HIDDEN pill, progress bar, one primary button).
+- **OTA:** `69386e38` (runtime 1.1.37). Typecheck only; on-device check pending (emulator blocked by a stale LAN IP in `.env.local`).
+- **Video Moments:** final direction + executive plan for approval at https://claude.ai/artifact/CQp9i39Qz2BzcRHCRddoYu (silent clips, 2 MB cap, day-7 window, one per week, report + Terms first). Code still uncommitted and flagged off.
+
+## 2026-10-27 → 2026-10-28 (Creator approval, feedback fixes, invite copy, Video Moments WIP)
+
+Full detail in `docs/CURRENT_WORK.md`.
+- **Commits:** `db0a0a9`: comments stay above the composer while typing; unnamed tasks save as "Task N". Web `16c5e3c`, `09c0fca`: friendlier invite copy, inviter name in bold maroon.
+- **Live but uncommitted:** creator's single approval admits a join requester (migration `20261028120000`, pushed by the user) + creator/member copy in `app/challenge/[id].tsx`.
+- **OTAs:** `7fc90372`, `bf8c88b3` (runtime 1.1.37).
+- **Video Moments:** built end to end (flagged off) but uncommitted. Migration `20261027130000` is local only and will go out with the next `db:push`. It needs a native build. Stash the video files before any OTA.
+
+## 2026-10-25 → 2026-10-27 (Feedback round: keyboard, comment threads, invites, join approval)
+
+Full detail in `docs/CURRENT_WORK.md`.
+- **Commits:**
+  - `4ee0366`: Android keyboard overlap hook, Community tap-to-top, amber pre-join days.
+  - `7a03f5a`: unread comment threads + thread-reply notifications.
+  - `2a4cc4e`: Home invite card, Invites count fix + red dot, stale-invite cutoff.
+- **OTAs:** `7afda2df`, `0e809e34`, `8f2193cd` (runtime 1.1.37).
+- **Migrations:** `20261026120000` is live. `notify-push` was deployed by the user.
+- **Reverted:** a creator-approval + automatic-join flow for join requests was built and SQL-tested, then reverted before commit. The Home invite card covers it.
+- **Data:** 3-month promo grants for `zapron` and `raktim_24`.
+- **Video Moments:** design canvas made, not built.
+
 ## 2026-10-18 → 2026-10-25 (Social gating flip, Reports screen, liquid theme switch, website redesign + habitpro.life, promo videos)
 
 Full detail in `docs/CURRENT_WORK.md`.
