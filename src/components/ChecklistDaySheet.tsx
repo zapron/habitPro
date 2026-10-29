@@ -1,8 +1,9 @@
 import { Text } from "./AppText";
-import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { ActivityIndicator, Image, Modal, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Check, ChevronRight, Eye, EyeOff, MessageCircle, Share2, X } from "lucide-react-native";
+import { Check, ChevronRight, MessageCircle, NotebookPen, Plus, Share2, X } from "lucide-react-native";
 import { useTheme } from "../context/ThemeContext";
+import { withAlpha } from "../styles/theme";
 import type { StreakMemoryTaskEntry, TaskChecklistItem } from "../types/habit";
 
 type Props = {
@@ -122,6 +123,17 @@ export function ChecklistDaySheet({
               <Text style={[styles.sub, { color: theme.colors.textMuted }]} numberOfLines={1}>
                 {missionTitle} · {loggedCount}/{tasks.length} logged
               </Text>
+              <View style={styles.progressRow}>
+                {tasks.map((task, i) => (
+                  <View
+                    key={task.id}
+                    style={[
+                      styles.progressSeg,
+                      { backgroundColor: i < loggedCount ? theme.colors.green[500] : theme.colors.surfaceElevated },
+                    ]}
+                  />
+                ))}
+              </View>
             </View>
             <Pressable
               onPress={onClose}
@@ -138,41 +150,53 @@ export function ChecklistDaySheet({
             {tasks.map((task) => {
               const entry = loggedByTaskId.get(task.id);
               const logged = Boolean(entry);
-              const shareable = Boolean(entry && /^https?:\/\//.test(entry.proofUrls[0] ?? ""));
+              const photoUri = entry?.proofUrls[0];
+              const shareable = Boolean(entry && /^https?:\/\//.test(photoUri ?? ""));
               const included = entry?.includedInShare !== false;
               return (
                 <Pressable
                   key={task.id}
                   onPress={() => onSelectTask(task)}
+                  accessibilityRole="button"
+                  accessibilityLabel={logged ? `${task.label}, logged` : `${task.label}, not logged yet`}
                   style={({ pressed }) => [
                     styles.taskRow,
-                    {
-                      backgroundColor: theme.colors.surfaceElevated,
-                      borderColor: logged ? theme.colors.green[500] : theme.colors.border,
-                      opacity: pressed ? 0.85 : 1,
-                    },
+                    { borderBottomColor: theme.colors.border, opacity: pressed ? 0.7 : 1 },
                   ]}
                 >
-                  <View
-                    style={[
-                      styles.taskCheck,
-                      {
-                        backgroundColor: logged ? theme.colors.green[500] : "transparent",
-                        borderColor: logged ? theme.colors.green[500] : theme.colors.border,
-                      },
-                    ]}
-                  >
-                    {logged ? <Check size={13} color={theme.colors.white} strokeWidth={3} /> : null}
+                  {/* What you logged is the proof — show it, instead of striking the task out. */}
+                  {photoUri ? (
+                    <View>
+                      <Image source={{ uri: photoUri }} style={[styles.thumb, { backgroundColor: theme.colors.surfaceElevated }]} />
+                      <View style={[styles.thumbCheck, { backgroundColor: theme.colors.green[500], borderColor: theme.colors.surface }]}>
+                        <Check size={9} color={theme.colors.white} strokeWidth={4} />
+                      </View>
+                    </View>
+                  ) : logged ? (
+                    <View>
+                      <View style={[styles.thumb, styles.thumbCenter, { backgroundColor: theme.colors.surfaceElevated }]}>
+                        <NotebookPen size={16} color={theme.colors.textSecondary} />
+                      </View>
+                      <View style={[styles.thumbCheck, { backgroundColor: theme.colors.green[500], borderColor: theme.colors.surface }]}>
+                        <Check size={9} color={theme.colors.white} strokeWidth={4} />
+                      </View>
+                    </View>
+                  ) : (
+                    <View style={[styles.thumb, styles.thumbCenter, styles.thumbEmpty, { borderColor: theme.colors.border }]}>
+                      <Plus size={16} color={theme.colors.textMuted} strokeWidth={2.4} />
+                    </View>
+                  )}
+                  <View style={styles.taskText}>
+                    <Text
+                      style={[styles.taskLabel, { color: logged ? theme.colors.textPrimary : theme.colors.textSecondary }]}
+                      numberOfLines={1}
+                    >
+                      {task.label}
+                    </Text>
+                    <Text style={[styles.taskMeta, { color: theme.colors.textMuted }]} numberOfLines={1}>
+                      {!logged ? (dayCompleted ? "Not logged" : "Tap to log") : photoUri ? "Photo" : "Note"}
+                    </Text>
                   </View>
-                  <Text
-                    style={[
-                      styles.taskLabel,
-                      { color: theme.colors.textPrimary, textDecorationLine: logged ? "line-through" : "none" },
-                    ]}
-                    numberOfLines={1}
-                  >
-                    {task.label}
-                  </Text>
                   {shareable ? (
                     <Pressable
                       onPress={(e) => {
@@ -182,16 +206,20 @@ export function ChecklistDaySheet({
                       hitSlop={8}
                       accessibilityRole="button"
                       accessibilityLabel={included ? "Included in Community — tap to exclude" : "Excluded from Community — tap to include"}
-                      style={styles.includeToggle}
+                      style={[
+                        styles.includePill,
+                        {
+                          backgroundColor: included ? withAlpha(theme.colors.green[500], 12) : theme.colors.surfaceElevated,
+                        },
+                      ]}
                     >
-                      {included ? (
-                        <Eye size={16} color={theme.colors.indigo[400]} />
-                      ) : (
-                        <EyeOff size={16} color={theme.colors.textMuted} />
-                      )}
+                      <Text style={[styles.includePillText, { color: included ? theme.colors.green[500] : theme.colors.textMuted }]}>
+                        {included ? "IN POST" : "HIDDEN"}
+                      </Text>
                     </Pressable>
-                  ) : null}
-                  <ChevronRight size={16} color={theme.colors.textMuted} />
+                  ) : (
+                    <ChevronRight size={16} color={theme.colors.textMuted} />
+                  )}
                 </Pressable>
               );
             })}
@@ -203,12 +231,12 @@ export function ChecklistDaySheet({
               style={[
                 styles.completeBtn,
                 {
-                  backgroundColor: `${theme.colors.green[500]}14`,
+                  backgroundColor: theme.colors.green[500],
                 },
               ]}
             >
-              <Check size={15} color={theme.colors.green[500]} strokeWidth={3} />
-              <Text style={[styles.completeBtnText, { color: theme.colors.green[500] }]}>
+              <Check size={16} color={theme.colors.white} strokeWidth={3} />
+              <Text style={[styles.completeBtnText, { color: theme.colors.white }]}>
                 Mark Day Complete
               </Text>
             </Pressable>
@@ -226,8 +254,8 @@ export function ChecklistDaySheet({
                 style={[
                   styles.shareBtn,
                   {
-                    borderColor: theme.colors.indigo[500],
-                    backgroundColor: `${theme.colors.indigo[500]}14`,
+                    borderColor: theme.colors.border,
+                    backgroundColor: "transparent",
                     opacity: sharing ? 0.7 : 1,
                   },
                 ]}
@@ -237,7 +265,7 @@ export function ChecklistDaySheet({
                 ) : (
                   <Share2 size={15} color={theme.colors.indigo[400]} />
                 )}
-                <Text style={[styles.shareBtnText, { color: theme.colors.indigo[400] }]}>
+                <Text style={[styles.shareBtnText, { color: theme.colors.textPrimary }]}>
                   {sharing
                     ? "Publishing…"
                     : alreadyShared
@@ -322,39 +350,42 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   list: { flexGrow: 0 },
+  progressRow: { flexDirection: "row", gap: 3, marginTop: 8 },
+  progressSeg: { flex: 1, height: 4, borderRadius: 2 },
   taskRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    marginBottom: 8,
+    gap: 12,
+    paddingVertical: 9,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  taskCheck: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    borderWidth: 1.5,
+  thumb: { width: 40, height: 40, borderRadius: 10 },
+  thumbCenter: { alignItems: "center", justifyContent: "center" },
+  thumbEmpty: { borderWidth: 1.5, borderStyle: "dashed" },
+  thumbCheck: {
+    position: "absolute",
+    right: -4,
+    bottom: -4,
+    width: 17,
+    height: 17,
+    borderRadius: 9,
+    borderWidth: 2,
     alignItems: "center",
     justifyContent: "center",
   },
-  taskLabel: { flex: 1, minWidth: 0, fontSize: 14, fontWeight: "700" },
-  includeToggle: {
-    width: 26,
-    height: 26,
-    alignItems: "center",
-    justifyContent: "center",
-  },
+  taskText: { flex: 1, minWidth: 0 },
+  taskLabel: { fontSize: 14, fontWeight: "700" },
+  taskMeta: { fontSize: 11, fontWeight: "600", marginTop: 1 },
+  includePill: { borderRadius: 9999, paddingVertical: 5, paddingHorizontal: 9 },
+  includePillText: { fontSize: 10, fontWeight: "800", letterSpacing: 0.6 },
   completeBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
     borderRadius: 12,
-    paddingVertical: 13,
-    marginTop: 4,
+    paddingVertical: 14,
+    marginTop: 12,
   },
   completeBtnText: { fontSize: 14, fontWeight: "800" },
   shareBtn: {
