@@ -2210,7 +2210,9 @@ export default function ChallengeDetailScreen() {
                       @{req.requesterUsername ?? "someone"}
                     </Text>
                     <Text style={{ fontSize: 12, fontWeight: "600", color: theme.colors.textMuted, marginTop: 2 }}>
-                      {`${req.approveCount}/${req.approvalsRequired} approvals`}
+                      {amCreator
+                        ? "Your approval lets them in"
+                        : `${req.approveCount}/${req.approvalsRequired} approvals · or the creator's`}
                     </Text>
                   </View>
                   {joinRequestVoteBusyId === req.id ? (
