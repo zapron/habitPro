@@ -2,8 +2,9 @@ import { Text } from "./AppText";
 import { useState } from "react";
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Switch, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Check, ChevronRight, Eye, EyeOff, Flag, Globe, X } from "lucide-react-native";
+import { Flag, X } from "lucide-react-native";
 import { useTheme } from "../context/ThemeContext";
+import { TaskProofRow } from "./TaskProofRow";
 import type { StreakMemoryTaskEntry, TaskChecklistItem } from "../types/habit";
 
 type Props = {
@@ -29,7 +30,7 @@ type Props = {
  * any-time re-editable daily entry, a mini mission completes once — so publishing to
  * Community is a single toggle bundled with "Complete Mission" (mirrors the classic
  * single-photo mini's toggle), not a separate repeatable share action. Each
- * shareable (photo-bearing) task does still get its own include/exclude eye toggle,
+ * shareable (photo-bearing) task does still get its own IN POST / HIDDEN pill,
  * matching ChecklistDaySheet — the per-task photo choice just gets bundled into this
  * one publish action instead of being a separately repeatable share/update step.
  * Tapping a task opens the existing StreakMemorySheet reused as-is, scoped to that
@@ -52,7 +53,9 @@ export function MiniChecklistSheet({
   const [publishToCommunity, setPublishToCommunity] = useState(false);
   const loggedByTaskId = new Map(loggedTasks.map((t) => [t.taskId, t]));
   const loggedCount = tasks.filter((t) => loggedByTaskId.has(t.id)).length;
-  const hasShareablePhoto = loggedTasks.some((t) => /^https?:\/\//.test(t.proofUrls[0] ?? ""));
+  const shareableTasks = loggedTasks.filter((t) => /^https?:\/\//.test(t.proofUrls[0] ?? ""));
+  const hasShareablePhoto = shareableTasks.length > 0;
+  const includedCount = shareableTasks.filter((t) => t.includedInShare !== false).length;
   const canTogglePublish = canPublishCommunity && hasShareablePhoto;
 
   return (
@@ -91,6 +94,17 @@ export function MiniChecklistSheet({
               <Text style={[styles.sub, { color: theme.colors.textMuted }]} numberOfLines={1}>
                 {missionTitle} · {loggedCount}/{tasks.length} logged
               </Text>
+              <View style={styles.progressRow}>
+                {tasks.map((task, i) => (
+                  <View
+                    key={task.id}
+                    style={[
+                      styles.progressSeg,
+                      { backgroundColor: i < loggedCount ? theme.colors.green[500] : theme.colors.surfaceElevated },
+                    ]}
+                  />
+                ))}
+              </View>
             </View>
             <Pressable
               onPress={onClose}
@@ -106,90 +120,49 @@ export function MiniChecklistSheet({
           <ScrollView style={styles.list} showsVerticalScrollIndicator={false}>
             {tasks.map((task) => {
               const entry = loggedByTaskId.get(task.id);
-              const logged = Boolean(entry);
-              const shareable = Boolean(entry && /^https?:\/\//.test(entry.proofUrls[0] ?? ""));
-              const included = entry?.includedInShare !== false;
+              const photoUri = entry?.proofUrls[0];
+              const shareable = Boolean(entry && /^https?:\/\//.test(photoUri ?? ""));
               return (
-                <Pressable
+                <TaskProofRow
                   key={task.id}
+                  label={task.label}
+                  state={!entry ? "empty" : photoUri ? "photo" : "note"}
+                  photoUri={photoUri}
+                  meta={!entry ? "Tap to log" : photoUri ? "Photo" : "Note"}
+                  inclusion={
+                    shareable
+                      ? { included: entry?.includedInShare !== false, onToggle: () => onToggleTaskInclusion(task.id) }
+                      : undefined
+                  }
                   onPress={() => onSelectTask(task)}
-                  style={({ pressed }) => [
-                    styles.taskRow,
-                    {
-                      backgroundColor: theme.colors.surfaceElevated,
-                      borderColor: logged ? theme.colors.green[500] : theme.colors.border,
-                      opacity: pressed ? 0.85 : 1,
-                    },
-                  ]}
-                >
-                  <View
-                    style={[
-                      styles.taskCheck,
-                      {
-                        backgroundColor: logged ? theme.colors.green[500] : "transparent",
-                        borderColor: logged ? theme.colors.green[500] : theme.colors.border,
-                      },
-                    ]}
-                  >
-                    {logged ? <Check size={13} color={theme.colors.white} strokeWidth={3} /> : null}
-                  </View>
-                  <Text
-                    style={[
-                      styles.taskLabel,
-                      { color: theme.colors.textPrimary, textDecorationLine: logged ? "line-through" : "none" },
-                    ]}
-                    numberOfLines={1}
-                  >
-                    {task.label}
-                  </Text>
-                  {shareable ? (
-                    <Pressable
-                      onPress={(e) => {
-                        e.stopPropagation();
-                        onToggleTaskInclusion(task.id);
-                      }}
-                      hitSlop={8}
-                      accessibilityRole="button"
-                      accessibilityLabel={included ? "Included in Community — tap to exclude" : "Excluded from Community — tap to include"}
-                      style={styles.includeToggle}
-                    >
-                      {included ? (
-                        <Eye size={16} color={theme.colors.indigo[400]} />
-                      ) : (
-                        <EyeOff size={16} color={theme.colors.textMuted} />
-                      )}
-                    </Pressable>
-                  ) : null}
-                  <ChevronRight size={16} color={theme.colors.textMuted} />
-                </Pressable>
+                  accessibilityLabel={entry ? `${task.label}, logged` : `${task.label}, not logged yet`}
+                />
               );
             })}
           </ScrollView>
 
           <View
-            style={[
-              styles.publishRow,
-              { borderColor: theme.colors.border, backgroundColor: theme.colors.surfaceElevated },
-            ]}
+            style={[styles.publishRow, { borderTopColor: theme.colors.border }]}
           >
-            <Globe size={18} color={theme.colors.cyan[400]} />
             <View style={styles.publishTextCol}>
               <Text style={[styles.publishTitle, { color: theme.colors.textPrimary }]}>
-                Publish to Community
+                Share to Community
               </Text>
               <Text style={[styles.publishHint, { color: theme.colors.textMuted }]}>
                 {!hasShareablePhoto
                   ? "Log at least one task with a photo to publish."
                   : !canPublishCommunity
                     ? "Sign in with HabitPro Community to publish."
-                    : "Shares logged task photos. Leaving this off keeps the mission private."}
+                    : includedCount === 0
+                      ? "No photos marked IN POST yet."
+                      : `${includedCount} photo${includedCount === 1 ? "" : "s"} in the post · off keeps it private`}
               </Text>
             </View>
             <Switch
               value={publishToCommunity && canTogglePublish}
               onValueChange={setPublishToCommunity}
               disabled={completing || !canTogglePublish}
-              trackColor={{ false: theme.colors.border, true: theme.colors.indigo[600] }}
+              trackColor={{ false: theme.colors.border, true: theme.colors.green[500] }}
               thumbColor={theme.colors.white}
               ios_backgroundColor={theme.colors.border}
             />
@@ -200,19 +173,15 @@ export function MiniChecklistSheet({
             disabled={completing}
             style={[
               styles.completeBtn,
-              {
-                borderColor: theme.colors.green[500],
-                backgroundColor: `${theme.colors.green[500]}14`,
-                opacity: completing ? 0.7 : 1,
-              },
+              { backgroundColor: theme.colors.green[500], opacity: completing ? 0.7 : 1 },
             ]}
           >
             {completing ? (
-              <ActivityIndicator size="small" color={theme.colors.green[500]} />
+              <ActivityIndicator size="small" color={theme.colors.white} />
             ) : (
-              <Flag size={15} color={theme.colors.green[500]} />
+              <Flag size={15} color={theme.colors.white} />
             )}
-            <Text style={[styles.completeBtnText, { color: theme.colors.green[500] }]}>
+            <Text style={[styles.completeBtnText, { color: theme.colors.white }]}>
               {completing ? "Completing…" : "Complete Mission"}
             </Text>
           </Pressable>
@@ -246,40 +215,15 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   list: { flexGrow: 0 },
-  taskRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    marginBottom: 8,
-  },
-  taskCheck: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    borderWidth: 1.5,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  taskLabel: { flex: 1, minWidth: 0, fontSize: 14, fontWeight: "700" },
-  includeToggle: {
-    width: 26,
-    height: 26,
-    alignItems: "center",
-    justifyContent: "center",
-  },
+  progressRow: { flexDirection: "row", gap: 3, marginTop: 8 },
+  progressSeg: { flex: 1, height: 4, borderRadius: 2 },
   publishRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    marginTop: 4,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingTop: 12,
+    marginTop: 10,
   },
   publishTextCol: { flex: 1, minWidth: 0 },
   publishTitle: { fontSize: 13, fontWeight: "800" },
@@ -289,10 +233,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
-    borderWidth: 1,
     borderRadius: 12,
-    paddingVertical: 12,
-    marginTop: 6,
+    paddingVertical: 14,
+    marginTop: 12,
   },
-  completeBtnText: { fontSize: 13, fontWeight: "700" },
+  completeBtnText: { fontSize: 14, fontWeight: "800" },
 });

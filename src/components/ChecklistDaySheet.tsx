@@ -1,9 +1,9 @@
 import { Text } from "./AppText";
-import { ActivityIndicator, Image, Modal, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Check, ChevronRight, MessageCircle, NotebookPen, Plus, Share2, X } from "lucide-react-native";
+import { Check, MessageCircle, Share2, X } from "lucide-react-native";
 import { useTheme } from "../context/ThemeContext";
-import { withAlpha } from "../styles/theme";
+import { TaskProofRow } from "./TaskProofRow";
 import type { StreakMemoryTaskEntry, TaskChecklistItem } from "../types/habit";
 
 type Props = {
@@ -149,78 +149,23 @@ export function ChecklistDaySheet({
           <ScrollView style={styles.list} showsVerticalScrollIndicator={false}>
             {tasks.map((task) => {
               const entry = loggedByTaskId.get(task.id);
-              const logged = Boolean(entry);
               const photoUri = entry?.proofUrls[0];
               const shareable = Boolean(entry && /^https?:\/\//.test(photoUri ?? ""));
-              const included = entry?.includedInShare !== false;
               return (
-                <Pressable
+                <TaskProofRow
                   key={task.id}
+                  label={task.label}
+                  state={!entry ? "empty" : photoUri ? "photo" : "note"}
+                  photoUri={photoUri}
+                  meta={!entry ? (dayCompleted ? "Not logged" : "Tap to log") : photoUri ? "Photo" : "Note"}
+                  inclusion={
+                    shareable
+                      ? { included: entry?.includedInShare !== false, onToggle: () => onToggleTaskInclusion(task.id) }
+                      : undefined
+                  }
                   onPress={() => onSelectTask(task)}
-                  accessibilityRole="button"
-                  accessibilityLabel={logged ? `${task.label}, logged` : `${task.label}, not logged yet`}
-                  style={({ pressed }) => [
-                    styles.taskRow,
-                    { borderBottomColor: theme.colors.border, opacity: pressed ? 0.7 : 1 },
-                  ]}
-                >
-                  {/* What you logged is the proof — show it, instead of striking the task out. */}
-                  {photoUri ? (
-                    <View>
-                      <Image source={{ uri: photoUri }} style={[styles.thumb, { backgroundColor: theme.colors.surfaceElevated }]} />
-                      <View style={[styles.thumbCheck, { backgroundColor: theme.colors.green[500], borderColor: theme.colors.surface }]}>
-                        <Check size={9} color={theme.colors.white} strokeWidth={4} />
-                      </View>
-                    </View>
-                  ) : logged ? (
-                    <View>
-                      <View style={[styles.thumb, styles.thumbCenter, { backgroundColor: theme.colors.surfaceElevated }]}>
-                        <NotebookPen size={16} color={theme.colors.textSecondary} />
-                      </View>
-                      <View style={[styles.thumbCheck, { backgroundColor: theme.colors.green[500], borderColor: theme.colors.surface }]}>
-                        <Check size={9} color={theme.colors.white} strokeWidth={4} />
-                      </View>
-                    </View>
-                  ) : (
-                    <View style={[styles.thumb, styles.thumbCenter, styles.thumbEmpty, { borderColor: theme.colors.border }]}>
-                      <Plus size={16} color={theme.colors.textMuted} strokeWidth={2.4} />
-                    </View>
-                  )}
-                  <View style={styles.taskText}>
-                    <Text
-                      style={[styles.taskLabel, { color: logged ? theme.colors.textPrimary : theme.colors.textSecondary }]}
-                      numberOfLines={1}
-                    >
-                      {task.label}
-                    </Text>
-                    <Text style={[styles.taskMeta, { color: theme.colors.textMuted }]} numberOfLines={1}>
-                      {!logged ? (dayCompleted ? "Not logged" : "Tap to log") : photoUri ? "Photo" : "Note"}
-                    </Text>
-                  </View>
-                  {shareable ? (
-                    <Pressable
-                      onPress={(e) => {
-                        e.stopPropagation();
-                        onToggleTaskInclusion(task.id);
-                      }}
-                      hitSlop={8}
-                      accessibilityRole="button"
-                      accessibilityLabel={included ? "Included in Community — tap to exclude" : "Excluded from Community — tap to include"}
-                      style={[
-                        styles.includePill,
-                        {
-                          backgroundColor: included ? withAlpha(theme.colors.green[500], 12) : theme.colors.surfaceElevated,
-                        },
-                      ]}
-                    >
-                      <Text style={[styles.includePillText, { color: included ? theme.colors.green[500] : theme.colors.textMuted }]}>
-                        {included ? "IN POST" : "HIDDEN"}
-                      </Text>
-                    </Pressable>
-                  ) : (
-                    <ChevronRight size={16} color={theme.colors.textMuted} />
-                  )}
-                </Pressable>
+                  accessibilityLabel={entry ? `${task.label}, logged` : `${task.label}, not logged yet`}
+                />
               );
             })}
           </ScrollView>
@@ -352,32 +297,6 @@ const styles = StyleSheet.create({
   list: { flexGrow: 0 },
   progressRow: { flexDirection: "row", gap: 3, marginTop: 8 },
   progressSeg: { flex: 1, height: 4, borderRadius: 2 },
-  taskRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    paddingVertical: 9,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  thumb: { width: 40, height: 40, borderRadius: 10 },
-  thumbCenter: { alignItems: "center", justifyContent: "center" },
-  thumbEmpty: { borderWidth: 1.5, borderStyle: "dashed" },
-  thumbCheck: {
-    position: "absolute",
-    right: -4,
-    bottom: -4,
-    width: 17,
-    height: 17,
-    borderRadius: 9,
-    borderWidth: 2,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  taskText: { flex: 1, minWidth: 0 },
-  taskLabel: { fontSize: 14, fontWeight: "700" },
-  taskMeta: { fontSize: 11, fontWeight: "600", marginTop: 1 },
-  includePill: { borderRadius: 9999, paddingVertical: 5, paddingHorizontal: 9 },
-  includePillText: { fontSize: 10, fontWeight: "800", letterSpacing: 0.6 },
   completeBtn: {
     flexDirection: "row",
     alignItems: "center",
