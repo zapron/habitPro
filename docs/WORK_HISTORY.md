@@ -2,6 +2,24 @@
 
 This is a concise chronological log for future sessions. Keep secrets out of this file.
 
+## 2026-11-06 → 2026-11-07 (1.1.39 release, Chapter testers, record-only Chapters)
+
+Full detail in `docs/CURRENT_WORK.md`.
+- **Commits (branch `release/1.1.39-chapters`):**
+  - `ddc36c3`: Chapters + post reports, 1.1.39 / runtime 1.1.39, production EAS env pinned, build fails on a RevenueCat `test_` key.
+  - `25d6deb`: record-only Chapters; `.easignore` cuts the upload from 608 MB to 21 MB.
+- **Production:** three migrations pushed by the user. Flags still off. Testers `raktim_24` and `zapron` have Chapters on, with test missions seeded (`docs/CHAPTER_TESTING.md`). OTA `66fecc0b` (runtime 1.1.39).
+- **Validation:**
+  - Maestro on iOS + Android against local Supabase: Chapter post, checklist Chapter, Journey playback, reports.
+  - On the user's devices: a Chapter posted from both accounts. The record-only change is tsc only.
+- **Found:**
+  - Library Chapter picks never worked: iOS passthrough export ignores the trim; Android has no trimmer. Removed for now.
+  - App alerts don't show over another Modal on iOS.
+- **Open:**
+  - iOS screen stops responding after closing the post-check-in share modal (suspect: `LazyMount` unmounts it 120 ms into a slide dismiss).
+  - Store submission (TestFlight / Play Internal → Open).
+  - Block user before App Store review.
+
 ## 2026-11-01 → 2026-11-05 (Chapters backend + UI, local iOS/Android test kit)
 
 Full detail in `docs/CURRENT_WORK.md`.

@@ -1,6 +1,50 @@
 # HabitPro Current Work
 
-Last updated: 2026-11-05 — Chapters (Video Moments) Phases A–C built and tested end to end on the iOS Simulator + Android Emulator against local Supabase (Maestro flows); two bugs fixed; next: Journey playback + checklist Chapter row, all in the first build. See the newest entry below.
+Last updated: 2026-11-07 — 1.1.39 (Chapters + post reports) committed, migrations live, builds on the user's devices, Chapters on for two testers; Chapters made record-only and shipped by OTA. See the newest entry below.
+
+## Session Handoff (2026-11-06 → 2026-11-07 — 1.1.39 release, Chapter testers, record-only Chapters)
+
+**State:**
+- Branch `release/1.1.39-chapters` (not merged into `main`). Commits:
+  - `ddc36c3` feat: Chapters (5-second video moments), post reports, 1.1.39. Version 1.1.39, **runtimeVersion 1.1.39**, iOS buildNumber 39, Android versionCode 40 (also in the gitignored `android/app/build.gradle`).
+  - `25d6deb` fix: Chapters are recorded only; slimmer EAS uploads.
+  - The docs commit that carries this entry.
+- Migrations `20261101120000_community_win_reports`, `20261101121000_video_moments`, `20261105120000_challenge_memory_detail_chapter` were **pushed to production by the user** (2026-11-06). Flags `video_moments` and `community_report_autohide` are both still `enabled = false`.
+- Builds: iOS and Android 1.1.39 production builds done; the user has both installed on their devices. Next store steps (user): iOS `npx eas-cli submit -p ios --latest` → TestFlight; Android AAB → Play **Internal testing** (no review, separate opt-in link) → test purchase/restore → promote to **Open testing** (where every current Android user is; nothing is in Production yet).
+- Production OTA `66fecc0b-0c05-48d6-8443-2f6e60003c5b` (runtime 1.1.39, both platforms): record-only Chapters. Only 1.1.39 builds receive it.
+- `.maestro/` is local only (`.git/info/exclude`). Its Chapter flows still tap "Chapter from library", which no longer exists, and the iOS Simulator has no camera, so the Chapter post flow can now only be checked on a real phone.
+
+**Release safety added in `ddc36c3` / `25d6deb`:**
+- `eas.json` production profile pins `"environment": "production"`; the `apk` profile pins `preview`.
+- `app.config.js` fails a production EAS build if the Android RevenueCat key is a Test Store key (`test_…`). EAS env: production has `goog_`/`appl_` keys; preview has only `goog_`; development has none. `.env` is excluded from uploads.
+- `.easignore` (used instead of `.gitignore` for uploads) now drops `marketing/` (~560 MB), `supabase/` (includes the prod-data `seed.sql`), `.maestro/`, `.claude/`, `.codex/`, `.vscode/`, `.mcp.json`: upload 608 MB → 21 MB, verified with `eas build:inspect`; `android/` and `google-services.json` still included. Earlier builds uploaded `seed.sql` to Expo; the user may delete those old builds.
+- A fresh prebuild diff confirmed `android/` matches `app.json` (manifest, icons, RECORD_AUDIO).
+
+**Reports (in `ddc36c3`):**
+- ⋯ → Report on a feed post and on a single post (`app/journey-moment/[id].tsx`); shared prompt `src/lib/communityReportPrompt.ts`.
+- The reporter stops getting the post (the feed RPC skips posts the viewer reported). 3 reporters hide it for everyone but the author once `community_report_autohide` is on. Review queue: `docs/COMMUNITY_REPORTS_REVIEW.md`.
+- Deferred until before App Store review: block user (guideline 1.2), report on comments.
+
+**Chapter testers (production data):**
+- `raktim_24` and `zapron` are in `app_feature_testers` for `video_moments`. Both are premium.
+- Test missions `chapter-test-ready/day7/day4/checklist` were seeded for both. The seed, check, cleanup and tester queries are in **`docs/CHAPTER_TESTING.md`**. Re-running the seed resets everything, including used Chapters.
+- Verified on the user's devices: a Chapter posted from `chapter-test-ready` on both accounts (4990 ms and 5253 ms clips).
+- Old app versions (≤1.1.38) show a Chapter post as a still photo (the poster is saved as `memory_image_url`; they ignore `video_url`). Confirmed by reading the code, not run on an old build.
+
+**Record-only Chapters (`25d6deb`, OTA `66fecc0b`):**
+- User report: "Chapter from library" showed the iOS trimmer, but nothing uploaded after trimming. Android has no trim step and only showed "trim the video" alerts.
+- Causes:
+  - **iOS:** expo-image-picker 17's default `videoExportPreset: Passthrough` with a library `PHAsset` writes the original full-length file and ignores the trim. The 8 s clip failed our 5.5 s check. The "Keep it to 5 seconds" alert is an app-level `<Modal>` and didn't show over the memory sheet's own Modal, so nothing seemed to happen.
+  - **Android:** `allowsEditing` only crops images; there is no video trimmer.
+- Decision (user): drop library picks for now. `pickChapterClip()` is camera-only; the memory sheet menu is "Record 5s chapter / Take photo / Photo library"; the checklist "Add your Chapter" row opens the camera directly.
+- To bring library picks back: iOS would need a non-passthrough `videoExportPreset` (untested); Android needs a native trimmer (new build).
+- **Not device-tested** (tsc only). Also untested: whether Android camera apps stop at 5 s.
+
+**Open / not fixed:**
+- **iOS: back button and screen stop responding after closing a modal** (user has seen it more than once, no reliable repro steps). Suspect: after a check-in, `ShareWinModal` (`animationType="slide"`) opens 900 ms later. Its `LazyMount unmountOnExit` removes it 120 ms after `visible` turns false (`app/habit/[id].tsx` ~L2385), which is mid-dismiss. On iOS that can leave an invisible view that eats touches. The same Modal-over-Modal limit hid the Chapter alert above. Not reproduced yet; the user will try. Likely fix: unmount after the Modal's `onDismiss`, or use `unmountDelayMs` ≥ 450.
+- Daily Dose of Tech: iOS header buttons dead after the last day (not reproduced; may be the same issue).
+- Community player says "1 photo" for a 2-slide post. The habit screen back button has no accessibility label.
+- Not tested: the day-4 charging UI on device; RevenueCat 10.16 purchase/restore (needs a store-installed build).
 
 ## Session Handoff (2026-11-01 → 2026-11-05 — Chapters backend + UI, local iOS/Android test kit)
 
@@ -115,7 +159,7 @@ Last updated: 2026-11-05 — Chapters (Video Moments) Phases A–C built and tes
 - **Client:**
   - `src/lib/featureFlags.ts`;
   - `src/features/videoMoments/` (`credit.ts`, `api.ts`: compress to 1280px / 2 Mbps, thumbnail, upload, claim; `VideoMomentPlayer.tsx`: poster until tap, plays once, mute toggle, hold to replay, 150 MB cache);
-  - `StreakMemorySheet` has "Record 5s video" / "Video from library" (5.5 s max);
+  - `StreakMemorySheet` has "Record 5s chapter" (5.5 s max). "Chapter from library" was removed on 2026-11-07: Android has no trim step (long clips just got the "Keep it to 5 seconds" alert), and on iOS expo-image-picker 17's passthrough export hands back the untrimmed original, so a trimmed 8 s clip still read as 8 s and the alert was hidden behind the sheet's Modal. The checklist "Add your Chapter" row opens the camera directly;
   - `app/habit/[id].tsx`: the unlocked day pulses amber with a ▶ badge and legend line (the big unlock card was dropped per user feedback); uploading and claiming happens on memory commit, and both publish paths pass the video fields;
   - playback in the Community feed post, the moment view and the hex gallery's enlarged view.
 - **Native deps** (need a new build; `app.json` plugins + mic permission): `expo-video`, `expo-video-thumbnails`, `react-native-compressor`, `react-native-nitro-modules` 0.35.10. Android dev build ran on the emulator after adding nitro-modules.
