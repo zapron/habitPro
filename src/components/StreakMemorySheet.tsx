@@ -264,8 +264,8 @@ export const StreakMemorySheet = React.memo(function StreakMemorySheet({
     }
   }, [applyPickedUri, waitForPickerPresentationWindow]);
 
-  const pickVideo = useCallback(async (source: "camera" | "library") => {
-    const clip = await pickChapterClip(source);
+  const pickVideo = useCallback(async () => {
+    const clip = await pickChapterClip();
     if (!clip) return;
     setImageUri(clip.posterUri);
     setPickedVideo({ uri: clip.uri, durationMs: clip.durationMs });
@@ -278,12 +278,12 @@ export const StreakMemorySheet = React.memo(function StreakMemorySheet({
     const releasePickerLock = () => {
       photoPickerOpeningRef.current = false;
     };
-    const launchPicker = (source: "camera" | "library" | "videoCamera" | "videoLibrary") => {
+    const launchPicker = (source: "camera" | "library" | "videoCamera") => {
       void (async () => {
         try {
           if (source === "camera") await pickFromCamera();
           else if (source === "library") await pickFromLibrary();
-          else await pickVideo(source === "videoCamera" ? "camera" : "library");
+          else await pickVideo();
         } finally {
           releasePickerLock();
         }
@@ -301,14 +301,14 @@ export const StreakMemorySheet = React.memo(function StreakMemorySheet({
             ? "You've unlocked a chapter: a 5-second silent clip of this week."
             : "Take a new picture or choose one from your gallery.",
           options: videoMomentAvailable
-            ? ["Cancel", "Record 5s chapter", "Chapter from library", "Take photo", "Photo library"]
+            ? ["Cancel", "Record 5s chapter", "Take photo", "Photo library"]
             : ["Cancel", "Take photo", "Photo library"],
           cancelButtonIndex: 0,
           userInterfaceStyle: isDark ? "dark" : "light",
         },
         (buttonIndex) => {
           const order = videoMomentAvailable
-            ? ([null, "videoCamera", "videoLibrary", "camera", "library"] as const)
+            ? ([null, "videoCamera", "camera", "library"] as const)
             : ([null, "camera", "library"] as const);
           const source = order[buttonIndex] ?? null;
           if (source) {
@@ -336,14 +336,6 @@ export const StreakMemorySheet = React.memo(function StreakMemorySheet({
                   icon: <Video size={18} color={theme.colors.amber[500]} strokeWidth={2} />,
                   onPress: () => {
                     launchPicker("videoCamera");
-                  },
-                },
-                {
-                  text: "Chapter from library",
-                  style: "neutral" as const,
-                  icon: <Video size={18} color={theme.colors.amber[500]} strokeWidth={2} />,
-                  onPress: () => {
-                    launchPicker("videoLibrary");
                   },
                 },
               ]

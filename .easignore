@@ -57,3 +57,13 @@ android/app/build/
 android/app/.cxx/
 android/app/.externalNativeBuild/
 android/app/.kotlin/
+
+# Not needed to build the app. marketing/ alone was ~560 MB of the upload, and
+# supabase/seed.sql is a snapshot of production data.
+/marketing/
+/supabase/
+.maestro/
+.claude/
+.codex/
+.vscode/
+.mcp.json

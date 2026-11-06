@@ -10,20 +10,17 @@ const IOS_PICKER_PRESENT_DELAY_MS = 360;
 export type PickedChapterClip = { uri: string; durationMs: number; posterUri: string };
 
 /**
- * Records or picks a clip of 5 seconds or less and grabs its first frame as a
- * local poster. Returns null when the person cancels; explains any other
- * problem itself (permission, too long, unreadable) and returns null.
+ * Records a clip of 5 seconds or less and grabs its first frame as a local
+ * poster. Returns null when the person cancels; explains any other problem
+ * itself (permission, too long, unreadable) and returns null.
+ *
+ * Camera only. Picking from the library doesn't work yet: Android has no trim
+ * step, and on iOS expo-image-picker 17 hands back the untrimmed original.
  */
-export async function pickChapterClip(source: "camera" | "library"): Promise<PickedChapterClip | null> {
-  const perm =
-    source === "camera"
-      ? await ImagePicker.requestCameraPermissionsAsync()
-      : await ImagePicker.requestMediaLibraryPermissionsAsync();
+export async function pickChapterClip(): Promise<PickedChapterClip | null> {
+  const perm = await ImagePicker.requestCameraPermissionsAsync();
   if (!perm.granted) {
-    showAppAlert(
-      source === "camera" ? "Camera permission needed" : "Photos permission needed",
-      "Allow access from Settings to add your chapter.",
-    );
+    showAppAlert("Camera permission needed", "Allow access from Settings to add your chapter.");
     return null;
   }
   if (Platform.OS === "ios") {
@@ -35,8 +32,7 @@ export async function pickChapterClip(source: "camera" | "library"): Promise<Pic
     videoMaxDuration: VIDEO_MOMENT_MAX_MS / 1000,
     quality: 0.8,
   };
-  const res =
-    source === "camera" ? await ImagePicker.launchCameraAsync(options) : await ImagePicker.launchImageLibraryAsync(options);
+  const res = await ImagePicker.launchCameraAsync(options);
   const asset = !res.canceled ? res.assets[0] : undefined;
   if (!asset) return null;
   const durationMs = asset.duration ?? 0;

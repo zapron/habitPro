@@ -1674,8 +1674,8 @@ export default function HabitDetail() {
         if (!dayCtx || !habit || checklistChapterBusy) return;
         if (!credit || credit.dateKey !== dayCtx.dateStr) return;
         const reopenChecklist = () => setChecklistDayUi(dayCtx);
-        const run = async (source: 'camera' | 'library') => {
-            const clip = await pickChapterClip(source);
+        void (async () => {
+            const clip = await pickChapterClip();
             if (!clip) return;
             setChecklistChapterBusy(true);
             try {
@@ -1702,31 +1702,8 @@ export default function HabitDetail() {
             } finally {
                 setChecklistChapterBusy(false);
             }
-        };
-        const title = `Chapter ${credit.block.blockNumber}`;
-        const message = 'A 5-second silent clip of this week.';
-        if (Platform.OS === 'ios') {
-            ActionSheetIOS.showActionSheetWithOptions(
-                {
-                    title,
-                    message,
-                    options: ['Cancel', 'Record 5s chapter', 'Chapter from library'],
-                    cancelButtonIndex: 0,
-                    userInterfaceStyle: isDark ? 'dark' : 'light',
-                },
-                (index) => {
-                    if (index === 1) void run('camera');
-                    else if (index === 2) void run('library');
-                },
-            );
-            return;
-        }
-        showAppAlert(title, message, [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Record 5s chapter', style: 'neutral', onPress: () => void run('camera') },
-            { text: 'Chapter from library', style: 'neutral', onPress: () => void run('library') },
-        ]);
-    }, [checklistDayUi, videoCredit, habit, checklistChapterBusy, patchStreakMemory, setStreakMemory, isDark]);
+        })();
+    }, [checklistDayUi, videoCredit, habit, checklistChapterBusy, patchStreakMemory, setStreakMemory]);
 
     // The open checklist day's Chapter row: already added, or unlocked for this day.
     const checklistChapter = useMemo((): ChecklistChapter | null => {
