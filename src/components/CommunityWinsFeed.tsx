@@ -32,6 +32,7 @@ import {
   toggleCheer,
   type CommunityWinFeedItem,
 } from "../lib/communityWinsApi";
+import { promptReportCommunityWin } from "../lib/communityReportPrompt";
 import { fetchChallengeGroupIdForHabit } from "../lib/groupChallengesApi";
 import { traceAsync } from "../lib/perfTrace";
 import { CommunityWinFeedPost } from "./CommunityWinFeedPost";
@@ -247,6 +248,21 @@ export function CommunityWinsFeed({
     setExpandedById((prev) => ({ ...prev, [id]: !prev[id] }));
   }, []);
 
+  const handleReport = useCallback(
+    (win: CommunityWinFeedItem) => {
+      promptReportCommunityWin(win.id, (res) => {
+        if (res.ok === true) {
+          // Gone from this person's feed right away; the server decides for everyone else.
+          setItems((prev) => prev.filter((x) => x.id !== win.id));
+          showToast("Reported. Thanks, we'll review it.", "success");
+        } else {
+          showToast(res.error, "error");
+        }
+      });
+    },
+    [showToast],
+  );
+
   const handleCheer = useCallback(
     async (win: CommunityWinFeedItem): Promise<boolean> => {
       if (!session?.user) return false;
@@ -355,6 +371,7 @@ export function CommunityWinsFeed({
           onOpenPlayer={openPlayerStory}
           onOpenMission={openMissionFromFeed}
           onCheer={handleCheer}
+          onReport={handleReport}
           onOpenCheerers={(w) => setCheerersSheet({ winId: w.id, totalLikes: w.cheerCount })}
           onOpenComments={(w) => {
             setCommentsSheet({ winId: w.id, winOwnerUserId: w.user_id });
@@ -374,6 +391,7 @@ export function CommunityWinsFeed({
       expandedById,
       toggleExpanded,
       handleCheer,
+      handleReport,
       reduceMotion,
       openPlayerStory,
     ],

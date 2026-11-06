@@ -2,14 +2,18 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Text } from "./AppText";
 import {
     Animated,
+    Pressable,
     View,
     StyleSheet,
     Easing,
 } from "react-native";
+import { BookOpen, Check } from "lucide-react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { GlassTopHighlight } from "./GlassTopHighlight";
 import { useTheme } from '../context/ThemeContext';
 import { useReducedMotion } from '../hooks/useReducedMotion';
+import { withAlpha } from '../styles/theme';
+import type { ChapterStatus } from '../features/videoMoments/credit';
 
 interface StreakProgressCardProps {
     streak: number;
@@ -17,6 +21,9 @@ interface StreakProgressCardProps {
     totalDays: number;
     /** Override the progress bar's active color, e.g. for manual-finish missions. */
     ringColor?: string;
+    /** Chapters (5-second clips): this week's row under the bar; null hides it. */
+    chapter?: ChapterStatus | null;
+    onPressChapter?: () => void;
 }
 
 type Intensity = 'none' | 'warm' | 'hot' | 'epic' | 'legendary';
@@ -35,7 +42,120 @@ function intensityFor(streak: number): Intensity {
  * pill progress bar on the right, instead of a separate full-width alert
  * strip.
  */
-export function StreakProgressCard({ streak, completedCount, totalDays, ringColor }: StreakProgressCardProps) {
+function plural(n: number, word: string): string {
+    return `${n} ${word}${n === 1 ? '' : 's'}`;
+}
+
+/**
+ * This week's chapter: the bar above shows the whole campaign, this row shows
+ * only the seven days that earn the next chapter, so every check-in visibly
+ * moves it. Turns amber (pulsing icon) once a chapter is ready to use.
+ */
+function ChapterRow({ status, onPress }: { status: ChapterStatus; onPress?: () => void }) {
+    const { theme } = useTheme();
+    const reduceMotion = useReducedMotion();
+    const pulse = useRef(new Animated.Value(0)).current;
+    const amber = theme.colors.amber[500];
+    const green = theme.colors.green[500];
+    const ready = status.kind === 'ready';
+
+    useEffect(() => {
+        if (!ready || reduceMotion) {
+            pulse.setValue(0);
+            return undefined;
+        }
+        const loop = Animated.loop(
+            Animated.sequence([
+                Animated.timing(pulse, { toValue: 1, duration: 900, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+                Animated.timing(pulse, { toValue: 0, duration: 900, easing: Easing.in(Easing.quad), useNativeDriver: true }),
+            ]),
+        );
+        loop.start();
+        return () => loop.stop();
+    }, [ready, reduceMotion, pulse]);
+
+    let lead: string;
+    let rest: string;
+    let leadColor = theme.colors.textPrimary;
+    if (status.kind === 'ready') {
+        lead = `Chapter ${status.chapter} unlocked`;
+        rest = status.daysLeft <= 1 ? ' · last day to use it' : ` · ${plural(status.daysLeft, 'day')} left to use it`;
+        leadColor = amber;
+    } else if (status.kind === 'kept') {
+        lead = `Chapter ${status.chapter} kept`;
+        rest = status.nextDay ? ` · next one on day ${status.nextDay}` : '';
+        leadColor = green;
+    } else if (status.kind === 'blocked') {
+        lead =
+            status.reason === 'repaired' ? 'Repaired day' : status.reason === 'missed' ? 'Missed a day' : 'Not enough posts';
+        rest = ` · next chapter starts day ${status.nextDay}`;
+        leadColor = theme.colors.textSecondary;
+    } else {
+        lead = `Chapter ${status.chapter}`;
+        rest =
+            (status.daysToGo > 0 ? ` · ${plural(status.daysToGo, 'day')} to go` : ' · finish today') +
+            (status.postsNeeded > 0 ? ` · ${plural(status.postsNeeded, 'more post')}` : '');
+    }
+
+    const iconBg = ready ? amber : status.kind === 'kept' ? green : theme.colors.surfaceElevated;
+    const iconColor = ready || status.kind === 'kept' ? '#ffffff' : theme.colors.textMuted;
+
+    return (
+        <Pressable
+            onPress={onPress}
+            disabled={!onPress}
+            accessibilityRole={onPress ? 'button' : 'text'}
+            accessibilityLabel={`${lead}${rest}`}
+            style={[styles.chapterRow, { borderTopColor: theme.colors.border }]}
+        >
+            <View>
+                {ready ? (
+                    <Animated.View
+                        pointerEvents="none"
+                        style={[
+                            styles.chapterHalo,
+                            {
+                                backgroundColor: withAlpha(amber, 30),
+                                opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: [0, 1] }),
+                                transform: [{ scale: pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.5] }) }],
+                            },
+                        ]}
+                    />
+                ) : null}
+                <View style={[styles.chapterIcon, { backgroundColor: iconBg }]}>
+                    {status.kind === 'kept' ? (
+                        <Check size={13} color={iconColor} strokeWidth={3} />
+                    ) : (
+                        <BookOpen size={13} color={iconColor} strokeWidth={2.4} />
+                    )}
+                </View>
+            </View>
+            <Text style={[styles.chapterText, { color: theme.colors.textSecondary }]} numberOfLines={2}>
+                <Text style={{ color: leadColor, fontWeight: '800' }}>{lead}</Text>
+                {rest}
+            </Text>
+            {status.kind === 'charging' ? (
+                <View style={styles.chapterDots}>
+                    {status.dots.map((d, i) => (
+                        <View
+                            key={i}
+                            style={[
+                                styles.chapterDot,
+                                d === 'done'
+                                    ? { backgroundColor: amber }
+                                    : d === 'today'
+                                        ? { borderWidth: 1.5, borderColor: amber }
+                                        : { backgroundColor: theme.colors.border },
+                            ]}
+                        />
+                    ))}
+                </View>
+            ) : null}
+        </Pressable>
+    );
+}
+
+export function StreakProgressCard({ streak, completedCount, totalDays, ringColor, chapter, onPressChapter }: StreakProgressCardProps) {
     const { theme, isDark } = useTheme();
     const reduceMotion = useReducedMotion();
     const pctAnim = useRef(new Animated.Value(0)).current;
@@ -173,6 +293,7 @@ export function StreakProgressCard({ streak, completedCount, totalDays, ringColo
                         </View>
                     </View>
                 </View>
+                {chapter ? <ChapterRow status={chapter} onPress={onPressChapter} /> : null}
             </View>
         </View>
     );
@@ -216,4 +337,17 @@ const styles = StyleSheet.create({
         textShadowOffset: { width: 0, height: 1 },
     },
     dayCount: { fontSize: 14, fontWeight: '700', flexShrink: 0, marginRight: 2 },
+    chapterRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+        marginTop: 12,
+        paddingTop: 11,
+        borderTopWidth: StyleSheet.hairlineWidth,
+    },
+    chapterIcon: { width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+    chapterHalo: { position: 'absolute', top: 0, left: 0, width: 24, height: 24, borderRadius: 12 },
+    chapterText: { flex: 1, minWidth: 0, fontSize: 12.5, lineHeight: 17, fontWeight: '600' },
+    chapterDots: { flexDirection: 'row', gap: 3, flexShrink: 0 },
+    chapterDot: { width: 7, height: 7, borderRadius: 4 },
 });

@@ -23,7 +23,7 @@ const DEV_USERS = [
 ];
 
 function localSupabaseStatus() {
-  const raw = execSync("npx supabase status -o json", {
+  const raw = execSync("npx supabase@2 status -o json", {
     cwd: new URL("..", import.meta.url).pathname,
     stdio: ["ignore", "pipe", "ignore"],
   }).toString();

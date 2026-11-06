@@ -20,6 +20,8 @@ For a physical iPhone test, use `preview` or change/add a physical-device develo
 
 ## Before Building
 
+Chapters release (2026-11): bump the runtimeVersion first (`npm run version:sync`), since the build adds native modules and react-native-purchases 10.16. After the build, sandbox-test purchase and restore once. Local Xcode is 27: build/run on an iOS 26 simulator (`npm run dev:local`); EAS builds use their own Xcode image.
+
 Validate code:
 
 ```bash

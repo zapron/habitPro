@@ -44,3 +44,6 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# marketing working files (screenshots, rendered reels, store assets) — kept out of git
+/marketing/

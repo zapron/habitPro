@@ -5,6 +5,7 @@ import { Check, MessageCircle, Share2, X } from "lucide-react-native";
 import { useTheme } from "../context/ThemeContext";
 import { TaskProofRow } from "./TaskProofRow";
 import type { StreakMemoryTaskEntry, TaskChecklistItem } from "../types/habit";
+import { ChecklistChapterRow, type ChecklistChapter } from "../features/videoMoments/ChecklistChapterRow";
 
 type Props = {
   visible: boolean;
@@ -28,6 +29,13 @@ type Props = {
   onUnshare: () => void;
   /** Present only when alreadyShared && !revoked — opens the comments sheet for this day's win. */
   onOpenComments?: () => void;
+  /**
+   * Chapters: the optional row under the tasks — unlocked and waiting to be
+   * added, or already added to this day (then it's always in the day's post).
+   */
+  chapter?: ChecklistChapter | null;
+  chapterBusy?: boolean;
+  onAddChapter?: () => void;
   onClose: () => void;
 };
 
@@ -63,6 +71,9 @@ export function ChecklistDaySheet({
   onShare,
   onUnshare,
   onOpenComments,
+  chapter = null,
+  chapterBusy = false,
+  onAddChapter,
   onClose,
 }: Props) {
   const { theme } = useTheme();
@@ -71,6 +82,14 @@ export function ChecklistDaySheet({
   const loggedCount = tasks.filter((t) => loggedByTaskId.has(t.id)).length;
   const shareableTasks = loggedTasks.filter((t) => /^https?:\/\//.test(t.proofUrls[0] ?? ""));
   const includedCount = shareableTasks.filter((t) => t.includedInShare !== false).length;
+  const chapterInPost = chapter?.kind === "added";
+  const postItemCount = includedCount + (chapterInPost ? 1 : 0);
+  const photosLabel = `${includedCount} photo${includedCount === 1 ? "" : "s"}`;
+  const publishLabel = chapterInPost
+    ? includedCount > 0
+      ? `Publish to Community (Chapter + ${photosLabel})`
+      : "Publish to Community (Chapter)"
+    : `Publish to Community (${photosLabel})`;
 
   return (
     <Modal
@@ -168,6 +187,9 @@ export function ChecklistDaySheet({
                 />
               );
             })}
+            {chapter && (chapter.kind === "added" || onAddChapter) ? (
+              <ChecklistChapterRow chapter={chapter} busy={chapterBusy} onAdd={() => onAddChapter?.()} />
+            ) : null}
           </ScrollView>
 
           {!dayCompleted ? (
@@ -191,7 +213,7 @@ export function ChecklistDaySheet({
             <Text style={[styles.revokedNote, { color: theme.colors.textMuted }]}>
               Removed from Community — this day can’t be shared again.
             </Text>
-          ) : includedCount > 0 ? (
+          ) : postItemCount > 0 ? (
             <>
               <Pressable
                 onPress={onShare}
@@ -214,8 +236,8 @@ export function ChecklistDaySheet({
                   {sharing
                     ? "Publishing…"
                     : alreadyShared
-                      ? `Update on Community (${includedCount})`
-                      : `Publish to Community (${includedCount} photo${includedCount === 1 ? "" : "s"})`}
+                      ? `Update on Community (${postItemCount})`
+                      : publishLabel}
                 </Text>
               </Pressable>
               {alreadyShared ? (

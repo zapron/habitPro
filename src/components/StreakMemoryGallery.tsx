@@ -18,7 +18,9 @@ import {
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { FlashList } from "@shopify/flash-list";
-import { Bookmark, Share2, Wrench, X } from "lucide-react-native";
+import { Bookmark, Play, Share2, Wrench, X } from "lucide-react-native";
+import { VideoMomentPlayer } from "../features/videoMoments/VideoMomentPlayer";
+import { CHAPTER_SLIDE_ID, chapterSlideLabel } from "../features/videoMoments/chapterSlides";
 import { LinearGradient } from "expo-linear-gradient";
 import Svg, { ClipPath, Defs, Image as SvgImage, Path } from "react-native-svg";
 import { useTheme } from "../context/ThemeContext";
@@ -188,6 +190,24 @@ function HoneycombBuildTile({
   return <Animated.View style={[style, animatedStyle]}>{children}</Animated.View>;
 }
 
+/**
+ * A checklist day's slides: its Chapter (if added) first, then the tasks. A
+ * normal day's Chapter needs no slide; its poster already is the memory photo.
+ */
+function daySlides(memory: StreakMemory | undefined): StreakMemoryTaskEntry[] {
+  const tasks = memory?.tasks ?? [];
+  if (!memory?.videoUrl || !memory.videoPosterUrl || memory.imageUrl || memory.imageUri) return tasks;
+  return [
+    {
+      taskId: CHAPTER_SLIDE_ID,
+      label: chapterSlideLabel(),
+      proofUrls: [memory.videoPosterUrl],
+      loggedAt: memory.createdAt,
+    },
+    ...tasks,
+  ];
+}
+
 export function StreakMemoryGallery({
   entries,
   sectionTitle = "Your moments",
@@ -261,7 +281,7 @@ export function StreakMemoryGallery({
    * convention already used for minis' MiniMomentCarousel, not the Community-share
    * convention of dropping content-less entries.
    */
-  const openTasks = useMemo(() => open?.memory?.tasks ?? [], [open?.memory?.tasks]);
+  const openTasks = useMemo(() => daySlides(open?.memory), [open?.memory]);
   const isGalleryOpen = openTasks.length > 0;
   const clampedGalleryIndex = Math.min(galleryIndex, Math.max(0, openTasks.length - 1));
   const activeTask: StreakMemoryTaskEntry | null = isGalleryOpen ? openTasks[clampedGalleryIndex] : null;
@@ -393,7 +413,7 @@ export function StreakMemoryGallery({
                * single static cover regardless of how many tasks a day has; the full set is
                * one tap away in the swipeable viewer, not cycled in-grid.
                */
-              const taskEntries = memory.tasks ?? [];
+              const taskEntries = daySlides(memory);
               const hasTasks = taskEntries.length > 0;
               const taskPhotoUris = hasTasks
                 ? taskEntries
@@ -461,6 +481,14 @@ export function StreakMemoryGallery({
                       )}
                       <Path d={hexPath} fill="transparent" stroke={memoryBorder} strokeWidth={1.8} />
                     </Svg>
+
+                    {memory.videoUrl ? (
+                      <View pointerEvents="none" style={styles.hexVideoBadgeWrap}>
+                        <View style={[styles.hexVideoBadge, { backgroundColor: theme.colors.amber[500] }]}>
+                          <Play size={11} color="#ffffff" fill="#ffffff" />
+                        </View>
+                      </View>
+                    ) : null}
 
                     {dateParts && showDates ? (
                       // Positioned inline (not in the static stylesheet) because it must
@@ -592,6 +620,13 @@ export function StreakMemoryGallery({
                           ]}
                         >
                           <Image source={{ uri: taskUri! }} style={styles.viewerImg} resizeMode="cover" />
+                          {task.taskId === CHAPTER_SLIDE_ID && open?.memory?.videoUrl ? (
+                            <VideoMomentPlayer
+                              videoUrl={open.memory.videoUrl}
+                              posterUrl={taskUri!}
+                              style={StyleSheet.absoluteFillObject}
+                            />
+                          ) : null}
                         </View>
                       ) : (
                         <View
@@ -646,6 +681,13 @@ export function StreakMemoryGallery({
                     }
                   }}
                 />
+                {open?.memory?.videoUrl ? (
+                  <VideoMomentPlayer
+                    videoUrl={open.memory.videoUrl}
+                    posterUrl={viewerUri!}
+                    style={StyleSheet.absoluteFillObject}
+                  />
+                ) : null}
               </View>
             ) : modalNoteTrim ? (
               <View
@@ -739,6 +781,18 @@ export function StreakMemoryGallery({
 }
 
 const styles = StyleSheet.create({
+  // Above hexSvg (zIndex 2), or the poster image covers it.
+  hexVideoBadgeWrap: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center", zIndex: 3 },
+  hexVideoBadge: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingLeft: 2,
+    borderWidth: 2,
+    borderColor: "rgba(255,255,255,0.85)",
+  },
   section: { marginBottom: 28 },
   sectionHead: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 6 },
   showDatesToggle: { flexDirection: "row", alignItems: "center", gap: 4, marginLeft: "auto" },

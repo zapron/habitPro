@@ -33,6 +33,11 @@ export type ChallengeMemoryDetail = {
   imageUrl: string | null;
   photoSyncState: PhotoSyncState;
   tasks: ChallengeMemoryTaskEntry[];
+  /**
+   * A claimed Chapter clip. Its poster is `imageUrl` on a normal day, or the
+   * `tasks` slide with taskId "chapter" on a checklist day.
+   */
+  videoUrl: string | null;
   createdAt: string | null;
   updatedAt: string | null;
   communityWin: ChallengeMemoryCommunityWin | null;
@@ -140,6 +145,7 @@ function normalizeDetail(value: unknown): ChallengeMemoryDetail | null {
     imageUrl: stringValue(row.imageUrl),
     photoSyncState: normalizePhotoSyncState(row.photoSyncState),
     tasks: normalizeTaskGallery(row.tasks),
+    videoUrl: stringValue(row.videoUrl),
     createdAt: stringValue(row.createdAt),
     updatedAt: stringValue(row.updatedAt),
     communityWin: normalizeCommunityWin(row.communityWin),

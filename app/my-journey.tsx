@@ -82,6 +82,9 @@ import { playerLeagueForLevel } from "../src/utils/playerLeague";
 import { storageThumbnailUri } from "../src/utils/imageThumbnail";
 import { withAlpha } from "../src/styles/theme";
 import { PageDots } from "../src/components/PageDots";
+import { attachChapterVideo, CHAPTER_SLIDE_ID, chapterSlideLabel } from "../src/features/videoMoments/chapterSlides";
+import { ChapterPlayBadge } from "../src/features/videoMoments/ChapterPlayBadge";
+import { VideoMomentPlayer } from "../src/features/videoMoments/VideoMomentPlayer";
 
 type StoryTab = "missions" | "minis";
 type JourneyMode = "public" | "private";
@@ -249,6 +252,17 @@ function memoryTaskGallery(memory: StreakMemory | undefined): CommunityMemoryGal
   return items.length > 0 ? items : null;
 }
 
+/**
+ * A checklist day's Chapter sits on its own first slide (the day has no single
+ * photo for it to replace); a normal day's Chapter poster already is its photo.
+ */
+function memoryGalleryWithChapter(memory: StreakMemory | undefined): CommunityMemoryGalleryItem[] | null {
+  const tasks = memoryTaskGallery(memory);
+  const poster = memory?.videoPosterUrl?.trim();
+  if (!memory?.videoUrl || !poster || memoryImageUri(memory)) return tasks;
+  return [{ taskId: CHAPTER_SLIDE_ID, label: chapterSlideLabel(), imageUrl: poster, note: null }, ...(tasks ?? [])];
+}
+
 function isPublicCommunityMemory(memory: StreakMemory | undefined, revoked?: boolean): boolean {
   return memory?.communityPosted === true && memory.communityFeedRevoked !== true && revoked !== true;
 }
@@ -263,10 +277,10 @@ function isPrivateStoryPost(post: CommunityPlayerStoryPost): boolean {
  */
 function journeySlidesForPost(post: CommunityPlayerStoryPost): CommunityMemoryGalleryItem[] {
   if (post.memoryGallery && post.memoryGallery.length > 0) {
-    return post.memoryGallery;
+    return attachChapterVideo(post.memoryGallery, post.videoUrl, (g) => g.taskId === CHAPTER_SLIDE_ID);
   }
   return post.memoryImageUrl
-    ? [{ taskId: post.id, label: post.title, imageUrl: post.memoryImageUrl, note: null }]
+    ? [{ taskId: post.id, label: post.title, imageUrl: post.memoryImageUrl, note: null, videoUrl: post.videoUrl ?? null }]
     : [];
 }
 
@@ -293,7 +307,7 @@ function privatePostFromMemory(input: {
   dayNumber?: number | null;
 }): CommunityPlayerStoryPost {
   const repairText = repairCopy(input.memory.repairSource);
-  const gallery = memoryTaskGallery(input.memory);
+  const gallery = memoryGalleryWithChapter(input.memory);
   return {
     id: input.id,
     title: input.title,
@@ -313,6 +327,7 @@ function privatePostFromMemory(input: {
     streakMissionDay: input.dayNumber ?? null,
     streakCountAtPost: input.dayNumber ?? null,
     liveSquadId: null,
+    videoUrl: input.memory.videoUrl ?? null,
     cheerCount: 0,
     viewerHasCheered: false,
     commentCount: 0,
@@ -331,7 +346,7 @@ function buildPrivateStory(habits: readonly Habit[], minis: readonly MiniMission
       const note = memoryNote(memory);
       const repair = memory.repairSource;
       const hasTasks = Boolean(memory.tasks && memory.tasks.length > 0);
-      if (isPublicCommunityMemory(memory) || (!imageUri && !note && !repair && !hasTasks)) continue;
+      if (isPublicCommunityMemory(memory) || (!imageUri && !note && !repair && !hasTasks && !memory.videoUrl)) continue;
 
       posts.push(
         privatePostFromMemory({
@@ -822,6 +837,7 @@ function RecentProofBadge({
         )}
         <Path d={RECENT_PROOF_BADGE_PATH} fill="none" stroke={DAY_PILL_BACKGROUND} strokeWidth={1.1} />
       </Svg>
+      {post.videoUrl && imagesEnabled ? <ChapterPlayBadge size={22} /> : null}
       <View style={[styles.dayPill, styles.recentProofDayPill, { backgroundColor: DAY_PILL_BACKGROUND }]}>
         <Text style={styles.dayPillText} numberOfLines={1}>
           {storyDayLabel(post)}
@@ -922,6 +938,7 @@ function StoryPhotoTile({
           <Text style={styles.tileStatusText}>{post.cheerCount}</Text>
         </View>
       ) : null}
+      {uri && post.videoUrl && imagesEnabled ? <ChapterPlayBadge size={isCircle ? 22 : 26} /> : null}
       {showStackBadge ? (
         <View
           style={[
@@ -1689,12 +1706,24 @@ function JourneyMemoryLightbox({
               <View style={[journeyLightboxStyles.imgWrap, { width }]}>
                 {uri && !failed ? (
                   <>
-                    <Image
-                      source={{ uri }}
-                      style={journeyLightboxStyles.img}
-                      resizeMode="contain"
-                      onError={() => setFailedUris((prev) => (prev.has(uri) ? prev : new Set(prev).add(uri)))}
-                    />
+                    {item.videoUrl ? (
+                      <VideoMomentPlayer
+                        videoUrl={item.videoUrl}
+                        posterUrl={uri}
+                        fit="contain"
+                        style={[
+                          journeyLightboxStyles.video,
+                          { top: insets.top + 60, bottom: Math.max(insets.bottom, 12) + 36 },
+                        ]}
+                      />
+                    ) : (
+                      <Image
+                        source={{ uri }}
+                        style={journeyLightboxStyles.img}
+                        resizeMode="contain"
+                        onError={() => setFailedUris((prev) => (prev.has(uri) ? prev : new Set(prev).add(uri)))}
+                      />
+                    )}
                     {note ? (
                       <View
                         style={[journeyLightboxStyles.captionBar, { paddingBottom: Math.max(insets.bottom, 12) + 28 }]}
@@ -1734,6 +1763,12 @@ function JourneyMemoryLightbox({
 }
 
 const journeyLightboxStyles = StyleSheet.create({
+  video: {
+    position: "absolute",
+    left: 12,
+    right: 12,
+    backgroundColor: "transparent",
+  },
   root: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.92)",

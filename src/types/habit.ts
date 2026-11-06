@@ -34,6 +34,15 @@ export interface StreakMemory {
   imageUri?: string;
   /** Supabase Storage public URL after upload (synced for cohort / other devices). */
   imageUrl?: string;
+  /**
+   * Video Moments: the claimed 5-second video. `imageUrl` holds its poster
+   * frame, so every photo surface keeps working and only adds a play badge.
+   */
+  videoUrl?: string;
+  videoPosterUrl?: string;
+  /** Capture-sheet hand-off only (never persisted): the picked clip before upload. */
+  videoUri?: string;
+  videoDurationMs?: number;
   createdAt: string;
   /** This check-in was shared to the Community wins feed (habit streak moments). */
   communityPosted?: boolean;

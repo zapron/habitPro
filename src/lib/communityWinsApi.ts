@@ -57,6 +57,11 @@ export type CommunityMemoryGalleryItem = {
   label: string;
   note: string | null;
   imageUrl: string | null;
+  /**
+   * Read side only, never written to memory_gallery: the Chapter clip attached
+   * from the post's own (server-checked) video_url. See chapterSlides.ts.
+   */
+  videoUrl?: string | null;
 };
 
 export type CommunityWinRow = {
@@ -73,6 +78,8 @@ export type CommunityWinRow = {
   streak_mission_day: number | null;
   streak_count_at_post: number | null;
   live_squad_id: string | null;
+  /** Video Moments: a claimed 5-second video; memory_image_url is its poster. */
+  video_url: string | null;
 };
 
 export type CommunityWinFeedItem = CommunityWinRow & {
@@ -124,6 +131,8 @@ export type CommunityPlayerStoryPost = {
   streakMissionDay: number | null;
   streakCountAtPost: number | null;
   liveSquadId: string | null;
+  /** Chapter clip; memoryImageUrl (or the chapter slide of memoryGallery) is its poster. */
+  videoUrl?: string | null;
   cheerCount: number;
   viewerHasCheered: boolean;
   commentCount: number;
@@ -193,7 +202,7 @@ export type CommunityWinCheerer = {
 };
 
 type CommunityActionFailureReason = "auth_required" | "premium_required";
-type CommunityActionResult =
+export type CommunityActionResult =
   | { ok: true }
   | { ok: false; error: string; reason?: CommunityActionFailureReason };
 
@@ -216,6 +225,9 @@ export async function postCommunityWin(input: {
   streakCountAtPost?: number | null;
   /** Mini missions only. Shows a Live Squad badge on the public Community photo. */
   liveSquadId?: string | null;
+  /** Video Moments: a claimed video (the server rejects any other URL). Omit to leave untouched. */
+  videoUrl?: string | null;
+  videoPosterUrl?: string | null;
 }): Promise<CommunityActionResult> {
   const supabase = getSupabase();
   if (!supabase) return { ok: false, error: "Cloud sync not configured." };
@@ -258,6 +270,9 @@ export async function postCommunityWin(input: {
       streak_mission_day: streakDay,
       streak_count_at_post: streakCount,
       live_squad_id: liveSquadId,
+      ...(input.videoUrl !== undefined
+        ? { video_url: input.videoUrl, video_poster_url: input.videoPosterUrl ?? null }
+        : {}),
     },
     { onConflict: "user_id,mini_mission_id" },
   );
@@ -395,6 +410,7 @@ function normalizeRpcCommunityWinItem(item: CommunityFeedRpcItem): CommunityWinF
         ? win.streak_count_at_post
         : null,
     live_squad_id: typeof win.live_squad_id === "string" ? win.live_squad_id : null,
+    video_url: typeof (win as { video_url?: unknown }).video_url === "string" ? (win as { video_url: string }).video_url : null,
     username,
     displayName: typeof displayRaw === "string" && displayRaw.trim().length > 0 ? displayRaw.trim() : null,
     avatarUrl: typeof author.avatarUrl === "string" && author.avatarUrl.trim().length > 0 ? author.avatarUrl : null,
@@ -531,7 +547,7 @@ export async function fetchCommunityWinsFeedPage(
   const { data: winsRaw, error: winsErr } = await supabase
     .from("community_wins")
     .select(
-      "id, user_id, mini_mission_id, title, completed_at, memory_note, memory_image_url, memory_gallery, created_at, feed_source, streak_mission_day, streak_count_at_post, live_squad_id",
+      "id, user_id, mini_mission_id, title, completed_at, memory_note, memory_image_url, memory_gallery, created_at, feed_source, streak_mission_day, streak_count_at_post, live_squad_id, video_url",
     )
     .order("created_at", { ascending: false })
     .range(offset, offset + take - 1);
@@ -566,7 +582,7 @@ export async function fetchCommunityWinMoment(
   const { data, error } = await supabase
     .from("community_wins")
     .select(
-      "id, user_id, mini_mission_id, title, completed_at, memory_note, memory_image_url, memory_gallery, created_at, feed_source, streak_mission_day, streak_count_at_post, live_squad_id",
+      "id, user_id, mini_mission_id, title, completed_at, memory_note, memory_image_url, memory_gallery, created_at, feed_source, streak_mission_day, streak_count_at_post, live_squad_id, video_url",
     )
     .eq("id", id)
     .maybeSingle();
@@ -597,6 +613,7 @@ export async function fetchCommunityWinMoment(
         ? row.streak_count_at_post
         : null,
     live_squad_id: typeof row.live_squad_id === "string" ? row.live_squad_id : null,
+    video_url: typeof row.video_url === "string" ? row.video_url : null,
   };
 
   if (!win.user_id) return { ok: false, error: "This moment is no longer available." };
@@ -692,6 +709,7 @@ function normalizeStoryPost(
     streakMissionDay: row.streak_mission_day ?? null,
     streakCountAtPost: row.streak_count_at_post ?? null,
     liveSquadId: row.live_squad_id ?? null,
+    videoUrl: row.video_url ?? null,
     cheerCount,
     viewerHasCheered,
     commentCount,
@@ -903,7 +921,7 @@ export async function fetchCommunityPlayerMissionJourneyPage(input: {
   let query = supabase
     .from("community_wins")
     .select(
-      "id, user_id, mini_mission_id, title, completed_at, memory_note, memory_image_url, memory_gallery, created_at, feed_source, streak_mission_day, streak_count_at_post, live_squad_id",
+      "id, user_id, mini_mission_id, title, completed_at, memory_note, memory_image_url, memory_gallery, created_at, feed_source, streak_mission_day, streak_count_at_post, live_squad_id, video_url",
     )
     .eq("user_id", input.userId)
     .eq("feed_source", "habit_streak")
@@ -946,6 +964,7 @@ export async function fetchCommunityPlayerMissionJourneyPage(input: {
             ? row.streak_count_at_post
             : null,
         live_squad_id: typeof row.live_squad_id === "string" ? row.live_squad_id : null,
+        video_url: typeof row.video_url === "string" ? row.video_url : null,
       } satisfies CommunityWinRow;
     })
     .filter((row): row is CommunityWinRow => row !== null);
@@ -1004,7 +1023,7 @@ export async function fetchCommunityPlayerStoryPage(input: {
   let query = supabase
     .from("community_wins")
     .select(
-      "id, user_id, mini_mission_id, title, completed_at, memory_note, memory_image_url, memory_gallery, created_at, feed_source, streak_mission_day, streak_count_at_post, live_squad_id",
+      "id, user_id, mini_mission_id, title, completed_at, memory_note, memory_image_url, memory_gallery, created_at, feed_source, streak_mission_day, streak_count_at_post, live_squad_id, video_url",
     )
     .eq("user_id", input.userId)
     .order("created_at", { ascending: false });
@@ -1038,6 +1057,7 @@ export async function fetchCommunityPlayerStoryPage(input: {
             ? row.streak_count_at_post
             : null,
         live_squad_id: typeof row.live_squad_id === "string" ? row.live_squad_id : null,
+        video_url: typeof row.video_url === "string" ? row.video_url : null,
       } satisfies CommunityWinRow;
     })
     .filter((row): row is CommunityWinRow => row !== null);
@@ -1440,5 +1460,34 @@ export async function deleteCommunityWinComment(commentId: string): Promise<Comm
 
   const { error } = await supabase.from("community_win_comments").delete().eq("id", commentId);
   if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
+export type CommunityReportReason = "copyright" | "inappropriate" | "spam" | "harassment" | "other";
+
+const REPORT_ERRORS: Record<string, string> = {
+  own_post: "You can't report your own post.",
+  not_found: "This post isn't there any more.",
+  rate_limited: "You've sent a lot of reports today. Try again tomorrow.",
+  invalid_reason: "Pick a reason for the report.",
+};
+
+/** Reports someone else's post once per person (rpc_report_community_win_v1); repeats are a no-op. */
+export async function reportCommunityWin(
+  winId: string,
+  reason: CommunityReportReason,
+  details?: string,
+): Promise<CommunityActionResult> {
+  const supabase = getSupabase();
+  if (!supabase) return { ok: false, error: "Cloud sync not configured." };
+  const { error } = await supabase.rpc("rpc_report_community_win_v1", {
+    p_win_id: winId,
+    p_reason: reason,
+    p_details: details?.trim() ? details.trim().slice(0, 500) : null,
+  });
+  if (error) {
+    const key = Object.keys(REPORT_ERRORS).find((k) => error.message.includes(k));
+    return { ok: false, error: key ? REPORT_ERRORS[key] : "Couldn't send the report. Try again." };
+  }
   return { ok: true };
 }

@@ -5,11 +5,16 @@ import type { NativeSyntheticEvent, NativeScrollEvent } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { X } from "lucide-react-native";
 import { PageDots } from "./PageDots";
+import { VideoMomentPlayer } from "../features/videoMoments/VideoMomentPlayer";
 
-/** One carousel slide — a photo, a note, or both. `imageUrl` null renders a text-only card. */
+/**
+ * One carousel slide — a photo, a note, or both. `imageUrl` null renders a text-only card.
+ * With `videoUrl` (a Chapter), `imageUrl` is its poster and the slide plays the clip on tap.
+ */
 export type CommunityLightboxSlide = {
   imageUrl: string | null;
   note?: string | null;
+  videoUrl?: string | null;
 };
 
 type Props = {
@@ -92,7 +97,16 @@ export function CommunityWinImageLightbox({ visible, slides, initialIndex = 0, o
             }
             return (
               <View style={[styles.imgWrap, { width }]}>
-                <Image source={{ uri: item.imageUrl }} style={styles.img} resizeMode="contain" />
+                {item.videoUrl ? (
+                  <VideoMomentPlayer
+                    videoUrl={item.videoUrl}
+                    posterUrl={item.imageUrl}
+                    fit="contain"
+                    style={[styles.video, { top: insets.top + 60, bottom: Math.max(insets.bottom, 12) + 36 }]}
+                  />
+                ) : (
+                  <Image source={{ uri: item.imageUrl }} style={styles.img} resizeMode="contain" />
+                )}
                 {note ? (
                   <View style={[styles.captionBar, { paddingBottom: Math.max(insets.bottom, 12) + 28 }]} pointerEvents="none">
                     <Text style={styles.captionText} numberOfLines={4}>
@@ -158,6 +172,12 @@ const styles = StyleSheet.create({
   img: {
     width: "100%",
     height: "100%",
+  },
+  video: {
+    position: "absolute",
+    left: 12,
+    right: 12,
+    backgroundColor: "transparent",
   },
   captionBar: {
     position: "absolute",

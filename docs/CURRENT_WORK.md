@@ -1,6 +1,34 @@
 # HabitPro Current Work
 
-Last updated: 2026-10-29 — Creator approval committed; Android comment-composer fix and a cleaner checklist day sheet shipped by OTA; Video Moments final direction + executive plan published for the user's approval (nothing built from it yet). See the newest entry below.
+Last updated: 2026-11-05 — Chapters (Video Moments) Phases A–C built and tested end to end on the iOS Simulator + Android Emulator against local Supabase (Maestro flows); two bugs fixed; next: Journey playback + checklist Chapter row, all in the first build. See the newest entry below.
+
+## Session Handoff (2026-11-01 → 2026-11-05 — Chapters backend + UI, local iOS/Android test kit)
+
+**Product decisions (user, final):**
+- Name is **Chapter** ("Chapter 1 unlocked"). A mission earns one per 7-day week (7/7 days, no repair, ≥4 Community posts), usable from that week's day 7 through day 14 ("bank" = one week; do NOT extend).
+- Only missions whose day 1 is on/after the flag's `starts_on` are eligible; existing missions never get Chapters. Existing users must see zero change, even after `db:push`.
+- Clips: max 2 MB, ~5 s, **no audio**, loop silently ("boomerang"), cached on the phone (7 days / 100 MB LRU).
+- Report post feature (⋯ → Report) ships with it; auto-hide flag `community_report_autohide` off by default. Review process: `docs/COMMUNITY_REPORTS_REVIEW.md`.
+- **Everything ships in ONE new native build** (not build-then-OTA): normal missions + **Journey playback** + **checklist missions' Chapter row**. User wants it all built before the build.
+- Checklist design agreed: Chapter is a separate optional row under the day's tasks ("▶ Add your Chapter · N days left"), attached to the day (not to a task); if skipped it shows again next day until day 14. No per-task video, no new banking logic. Verify server-side claim rules work unchanged for checklist missions (completedDates / communityPosted counting).
+
+**Built (all uncommitted, local only — see git status):**
+- Migrations `20261101120000_community_win_reports.sql`, `20261101121000_video_moments.sql` — 110/110 backend tests passed earlier; **NOT pushed** (user runs `npm run db:push`).
+- App: `src/features/videoMoments/*` (credit.ts, api.ts, videoCache.ts, VideoMomentPlayer.tsx, chapterToast.ts), `src/lib/featureFlags.ts`, StreakProgressCard chapter row, StreakMemorySheet chapter picker, feed player + Report, `app/habit/[id].tsx` wiring. Native deps added: expo-video, expo-video-thumbnails, react-native-compressor, react-native-nitro-modules; **react-native-purchases 10.0.0 → 10.16.0** (needed for local Xcode 27).
+- Fixed this session: (1) publishing a Chapter dropped the video (photo-upload branch rebuilt the memory) — `app/habit/[id].tsx` ~L1148 skips it for video; (2) Android crash on Stop (`player.pause()` on a released player) — removed from `VideoMomentPlayer.tsx`; "5s" chip moved top-left (overlapped the feed's Day badge).
+
+**Verified end to end (Maestro, local DB):** iOS — sign in, day-10 mission shows "Chapter 1 unlocked · 5 days left", library clip → compress (541 KB, 540×960, 4 s, no audio track) → claim → post with video_url + poster. Android (test_friend) — sees the post, plays, stops, replays from cache < 3 s, reports (row in `community_win_reports`). Not yet: Android → iOS direction, day-4 charging UI, author's view after a report.
+
+**Still to build before the build:** Journey playback (`app/my-journey.tsx`, `app/journey-moment/[id].tsx`, `app/community-player/[id].tsx`, squad memory views — none reference video today; squad RPCs need `videoUrl` → small migration); checklist Chapter row (`ChecklistDaySheet` + remove the `taskChecklist` exclusion at `app/habit/[id].tsx` ~L1010); copy "Photo required" → should allow a chapter.
+
+**Release checklist (later):** user `db:push` → `npm run version:sync` with a **new runtimeVersion** (JS with purchases 10.16 / new native modules on an old build crashes at start — seen on Android: "setupPurchases called with 16 arguments, expected 12") → EAS builds from a feature branch → testers via `app_feature_testers` → sandbox-test purchase + restore with RevenueCat 10.16. Every production OTA until then: stash the video work (incl. package.json/package-lock.json).
+
+**Local test kit (new):**
+- `npm run dev:local` (`scripts/dev-local.sh`): starts Docker/Supabase, boots iPhone 17 Pro **iOS 26.5** (Xcode 27 apps crash on iOS 27 sims; Simulator.app is gone → DeviceHub), `adb reverse` 8081/54321, writes `127.0.0.1` into `.env.local`, restarts Metro, opens both apps. Flags `--rebuild-ios`, `--rebuild-android` after native changes. `npm start` puts the LAN IP back for real phones.
+- Maestro (installed at `~/.maestro/bin`, not a dependency): `.maestro/open-app.yaml`, `chapter-ready.yaml`, `chapter-post.yaml` (env MISSION, EMAIL), `feed-chapter.yaml`. A Chapter can be claimed once, so reset test data (moment_videos, test posts, `moment-videos` storage via API, re-run scratchpad `seed_chapters.sql`) before re-running. Accounts: raktim24@gmail.com / requester@example.com, password devTest123 (local only).
+- Supabase CLI pinned to `npx supabase@2` in package.json scripts, `seed-local-dev-users.mjs`, docs (v3.0.0 can't read our `config.toml` `[inbucket]`). Local DB was reset from a fresh prod snapshot on 2026-11-05.
+
+**Uncommitted / not to commit:** everything above; `.maestro/` (ask user); never commit `supabase/seed.sql`, `marketing/`, `.claude/`, `.mcp.json`. Web Terms draft in habitPro-web (needs Grievance Officer name). Prod data change 2026-11-04: promo grant for agniv_monkinmind until 2026-12-04 (grant id ee2f624b-…).
 
 ## Session Handoff (2026-10-29 — composer fix, checklist sheet restyle, Video Moments plan)
 

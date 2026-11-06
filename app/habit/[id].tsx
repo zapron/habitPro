@@ -28,7 +28,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { GlassTopHighlight } from '../../src/components/GlassTopHighlight';
 import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ArrowLeft, Trash2, Lock, RotateCcw, Plane, Gamepad2, Globe, User, Users, Info, Bell, Wrench, Camera, MessageSquare, Share2 } from 'lucide-react-native';
+import { ArrowLeft, Trash2, Lock, RotateCcw, Plane, Gamepad2, Globe, User, Users, Info, Bell, Wrench, Camera, MessageSquare, Share2, Play } from 'lucide-react-native';
 import { ShareWinModal } from '../../src/components/ShareWinModal';
 import Svg, { Path } from 'react-native-svg';
 import { useHabitStore } from '../../src/store/habitStore';
@@ -109,6 +109,13 @@ import { requestRemoteSync } from "../../src/lib/syncQueue";
 import { startJsStallProbe, traceSync } from "../../src/lib/jsThreadProbe";
 import { waitForHabitPersistIdle } from "../../src/lib/chunkedHabitPersistStorage";
 import { withAlpha } from "../../src/styles/theme";
+import { useFeatureFlag } from "../../src/lib/featureFlags";
+import { chapterStatusForToday, videoMomentCreditForToday } from "../../src/features/videoMoments/credit";
+import { shouldAnnounceChapter } from "../../src/features/videoMoments/chapterToast";
+import { fetchClaimedVideoBlocks, uploadAndClaimVideoMoment } from "../../src/features/videoMoments/api";
+import { pickChapterClip } from "../../src/features/videoMoments/pickChapterClip";
+import { CHAPTER_SLIDE_ID, chapterSlideLabel } from "../../src/features/videoMoments/chapterSlides";
+import type { ChecklistChapter } from "../../src/features/videoMoments/ChecklistChapterRow";
 
 const LOCKED_CHECKIN_MSG =
     'You can only check in for the current mission day. Each day unlocks 24 hours after the mission started (day 2 after the first 24 hours, and so on).';
@@ -352,6 +359,7 @@ const AnimatedDayCell = React.memo(function AnimatedDayCell({
     checklistLogged,
     checklistTotal,
     beforeJoin,
+    videoPowerUp,
     onPress,
     optimizeForScroll,
 }: {
@@ -371,6 +379,8 @@ const AnimatedDayCell = React.memo(function AnimatedDayCell({
     checklistTotal?: number;
     /** Group mission day from before this member joined — not theirs to have missed. */
     beforeJoin?: boolean;
+    /** Today's cell when a Video Moment is unlocked: amber pulsing halo + play badge. */
+    videoPowerUp?: boolean;
     onPress: (dayIndex: number, day: number) => void;
     optimizeForScroll: boolean;
 }) {
@@ -391,6 +401,23 @@ const AnimatedDayCell = React.memo(function AnimatedDayCell({
         isCurrentMissionDay && !isCompleted && hasMultiTaskChecklist && !allTasksLogged && (checklistLogged ?? 0) > 0;
     const visuallyDone = isCompleted || showPreCompleteBadge;
     const showBeforeJoin = Boolean(beforeJoin) && !visuallyDone && !isCurrentMissionDay;
+    const showPowerUp = Boolean(videoPowerUp) && isCurrentMissionDay && !visuallyDone;
+    const powerPulse = useRef(new Animated.Value(0)).current;
+    useEffect(() => {
+        if (!showPowerUp) return;
+        if (reduceMotion) {
+            powerPulse.setValue(0.6);
+            return;
+        }
+        const loop = Animated.loop(
+            Animated.sequence([
+                Animated.timing(powerPulse, { toValue: 1, duration: 1100, easing: Easing.out(Easing.quad), useNativeDriver: true, isInteraction: false }),
+                Animated.timing(powerPulse, { toValue: 0, duration: 1100, easing: Easing.in(Easing.quad), useNativeDriver: true, isInteraction: false }),
+            ]),
+        );
+        loop.start();
+        return () => loop.stop();
+    }, [showPowerUp, reduceMotion, powerPulse]);
 
     useEffect(() => {
         if (reduceMotion || optimizeForScroll || !(isMilestone && isCompleted)) return;
@@ -453,6 +480,31 @@ const AnimatedDayCell = React.memo(function AnimatedDayCell({
                 { transform: [{ scale }] },
             ]}
         >
+            {showPowerUp ? (
+                <>
+                    <Animated.View
+                        pointerEvents="none"
+                        style={[
+                            styles.powerUpGlow,
+                            {
+                                backgroundColor: withAlpha(theme.colors.amber[500], isDark ? 30 : 24),
+                                opacity: powerPulse.interpolate({ inputRange: [0, 1], outputRange: [0.35, 1] }),
+                                transform: [{ scale: powerPulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.28] }) }],
+                            },
+                        ]}
+                    />
+                    <Animated.View
+                        pointerEvents="none"
+                        style={[
+                            styles.powerUpRing,
+                            {
+                                borderColor: theme.colors.amber[500],
+                                opacity: powerPulse.interpolate({ inputRange: [0, 1], outputRange: [1, 0.55] }),
+                            },
+                        ]}
+                    />
+                </>
+            ) : null}
             {showBeforeJoin ? (
                 <View
                     pointerEvents="none"
@@ -485,6 +537,11 @@ const AnimatedDayCell = React.memo(function AnimatedDayCell({
                     <Text style={[styles.dayText, isCurrentMissionDay ? { color: theme.colors.red[500] } : { color: theme.colors.textMuted }]}>{day}</Text>
                 )}
             </TouchableOpacity>
+            {showPowerUp ? (
+                <View pointerEvents="none" style={[styles.powerUpBadge, { backgroundColor: theme.colors.amber[500], borderColor: theme.colors.background }]}>
+                    <Play size={8} color="#ffffff" fill="#ffffff" />
+                </View>
+            ) : null}
         </Animated.View>
     );
 });
@@ -670,6 +727,8 @@ export default function HabitDetail() {
         | null;
     const [taskMemoryUi, setTaskMemoryUi] = useState<TaskMemoryUiState>(null);
     const [checklistShareBusy, setChecklistShareBusy] = useState(false);
+    /** Compressing/uploading/claiming a checklist day's Chapter clip. */
+    const [checklistChapterBusy, setChecklistChapterBusy] = useState(false);
     const [acceptedGroupMemberCount, setAcceptedGroupMemberCount] = useState<number>(0);
     const [groupSheetOpen, setGroupSheetOpen] = useState(false);
     const [shareMenuVisible, setShareMenuVisible] = useState(false);
@@ -915,7 +974,7 @@ export default function HabitDetail() {
             const entries = Object.entries(raw)
                 .filter(([, memory]) => {
                     if (memory.checkInOnly) {
-                        return Boolean(memory.note?.trim() || memory.imageUrl || memory.imageUri);
+                        return Boolean(memory.note?.trim() || memory.imageUrl || memory.imageUri || memory.videoUrl);
                     }
                     return true;
                 })
@@ -936,6 +995,45 @@ export default function HabitDetail() {
 
     const isManual = mode === 'manual';
     const activeMissionDaySlot = clockHabit ? getHabitActiveMissionDaySlot(clockHabit, now) : null;
+
+    // Video Moments (experiment, behind the video_moments flag): a 5-second
+    // video earned by a clean 7-day block, usable during the next block.
+    const videoMomentsFlag = useFeatureFlag('video_moments');
+    const videoMomentsEnabled = videoMomentsFlag.enabled;
+    const [claimedVideoBlocks, setClaimedVideoBlocks] = useState<Set<number>>(() => new Set());
+    useEffect(() => {
+        if (!videoMomentsEnabled || !habit?.id || !session?.user) return;
+        let cancelled = false;
+        void fetchClaimedVideoBlocks(habit.id).then((blocks) => {
+            if (!cancelled) setClaimedVideoBlocks(blocks);
+        });
+        return () => {
+            cancelled = true;
+        };
+    }, [videoMomentsEnabled, habit?.id, session?.user]);
+    const videoCredit = useMemo(() => {
+        if (!videoMomentsEnabled || socialLocked || !clockHabit) return null;
+        return videoMomentCreditForToday(clockHabit, now, claimedVideoBlocks, videoMomentsFlag.startsOn);
+    }, [videoMomentsEnabled, videoMomentsFlag.startsOn, socialLocked, clockHabit, now, claimedVideoBlocks]);
+    // The campaign card's "this week" chapter row.
+    const chapterStatus = useMemo(() => {
+        if (!videoMomentsEnabled || socialLocked || !clockHabit) return null;
+        return chapterStatusForToday(clockHabit, now, claimedVideoBlocks, videoMomentsFlag.startsOn);
+    }, [videoMomentsEnabled, videoMomentsFlag.startsOn, socialLocked, clockHabit, now, claimedVideoBlocks]);
+    const readyChapter = chapterStatus?.kind === 'ready' ? chapterStatus : null;
+    useEffect(() => {
+        if (!readyChapter || !habit?.id) return;
+        let cancelled = false;
+        void shouldAnnounceChapter(habit.id, readyChapter.chapter).then((announce) => {
+            if (cancelled || !announce) return;
+            const lastDay = readyChapter.credit.missionDay + readyChapter.daysLeft - 1;
+            showToast(`Chapter ${readyChapter.chapter} unlocked · use it by day ${lastDay}`, 'success');
+            void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        });
+        return () => {
+            cancelled = true;
+        };
+    }, [readyChapter?.chapter, habit?.id]); // eslint-disable-line react-hooks/exhaustive-deps
     const useActiveTrailGrid = isManual || totalDays > INITIAL_GRID_RENDER_DAYS;
     const activeTrailReachedDay = useMemo(() => {
         return traceSync("habit.detail.activeTrailReachedDay", () => {
@@ -1027,8 +1125,36 @@ export default function HabitDetail() {
             // celebration fires instantly instead of waiting on the network.
             const wantsUploadNow = meta?.publishToCommunity === true;
             let memoryToSave = memory;
+
+            // Video moment: always uploaded and claimed now (the server re-checks
+            // the unlock rules). Its poster becomes the moment's photo, so every
+            // photo surface keeps working.
+            if (memory?.videoUri) {
+                if (!videoCredit || videoCredit.dateKey !== ctx.dateStr) {
+                    showToast("This chapter isn't available any more.", 'error');
+                    throw new Error('video_credit_unavailable');
+                }
+                try {
+                    const { videoUrl, posterUrl } = await uploadAndClaimVideoMoment({
+                        habitId: habit.id,
+                        credit: videoCredit,
+                        localUri: memory.videoUri,
+                        durationMs: memory.videoDurationMs ?? 5000,
+                    });
+                    const { videoUri: _v, videoDurationMs: _d, imageUri: _i, ...rest } = memory;
+                    memoryToSave = { ...rest, imageUrl: posterUrl, videoUrl, videoPosterUrl: posterUrl };
+                    setClaimedVideoBlocks((prev) => new Set(prev).add(videoCredit.block.blockNumber));
+                } catch (e) {
+                    showToast(e instanceof Error ? e.message : String(e), 'error');
+                    throw e;
+                }
+            }
+
+            // A video moment's poster is already uploaded above; uploading it again
+            // here would rebuild the memory from `memory` and drop the video.
             if (
                 memory &&
+                !memory.videoUri &&
                 wantsUploadNow &&
                 canUseStreakMemoryUpload() &&
                 shouldUploadLocalStreakImage(memory.imageUri)
@@ -1128,6 +1254,9 @@ export default function HabitDetail() {
                     feedSource: "habit_streak",
                     streakMissionDay: ctx.day,
                     streakCountAtPost: streakAfter,
+                    ...(memoryToSave.videoUrl
+                        ? { videoUrl: memoryToSave.videoUrl, videoPosterUrl: memoryToSave.videoPosterUrl ?? null }
+                        : {}),
                 });
                 if (res.ok === true) {
                     patchStreakMemory(habit.id, ctx.dateStr, { communityPosted: true });
@@ -1154,6 +1283,7 @@ export default function HabitDetail() {
             showToast,
             openUpsell,
             refreshPremiumAccess,
+            videoCredit,
         ],
     );
 
@@ -1416,7 +1546,7 @@ export default function HabitDetail() {
                 return;
             }
             const tasks = mem?.tasks ?? [];
-            const gallery = tasks
+            const taskGallery = tasks
                 .filter((t) => t.includedInShare !== false && t.proofUrls[0] && /^https?:\/\//.test(t.proofUrls[0]))
                 .map((t) => ({
                     taskId: t.taskId,
@@ -1424,6 +1554,15 @@ export default function HabitDetail() {
                     note: t.note ?? null,
                     imageUrl: t.proofUrls[0],
                 }));
+            // The day's Chapter, if added, leads the catalog and is always in the post.
+            const chapterVideo =
+                mem?.videoUrl && mem.videoPosterUrl ? { videoUrl: mem.videoUrl, posterUrl: mem.videoPosterUrl } : null;
+            const gallery = chapterVideo
+                ? [
+                      { taskId: CHAPTER_SLIDE_ID, label: chapterSlideLabel(), note: null, imageUrl: chapterVideo.posterUrl },
+                      ...taskGallery,
+                  ]
+                : taskGallery;
 
             if (gallery.length === 0) {
                 if (mem?.communityPosted) {
@@ -1435,9 +1574,12 @@ export default function HabitDetail() {
                     return;
                 }
                 setChecklistDayUi(null);
+                const chapterWaiting = videoCredit !== null && videoCredit.dateKey === dateStr;
                 showAppAlert(
                     'Photo required',
-                    'Log at least one task with a photo before sharing this day’s catalog.',
+                    chapterWaiting
+                        ? 'Log at least one task with a photo, or add your Chapter, before sharing this day’s catalog.'
+                        : 'Log at least one task with a photo before sharing this day’s catalog.',
                     [{ text: 'OK', onPress: reopenChecklist }],
                 );
                 return;
@@ -1471,17 +1613,25 @@ export default function HabitDetail() {
                     miniMissionId: habitStreakCommunityWinId(habit.id, dateStr),
                     title: habit.title,
                     completedAt: habit.streakMemories?.[dateStr]?.createdAt ?? new Date().toISOString(),
-                    memoryNote: gallery[0].note,
+                    memoryNote: taskGallery[0]?.note ?? null,
                     memoryImageUrl: gallery[0].imageUrl,
                     memoryGallery: gallery,
                     feedSource: "habit_streak",
                     streakMissionDay: day,
                     streakCountAtPost: habit.streak,
+                    ...(chapterVideo
+                        ? { videoUrl: chapterVideo.videoUrl, videoPosterUrl: chapterVideo.posterUrl }
+                        : {}),
                 });
                 if (res.ok === true) {
                     patchStreakMemory(habit.id, dateStr, { communityPosted: true });
+                    const photos = `${taskGallery.length} photo${taskGallery.length === 1 ? '' : 's'}`;
                     showToast(
-                        `Shared ${gallery.length} photo${gallery.length === 1 ? '' : 's'} to Community.`,
+                        chapterVideo
+                            ? taskGallery.length > 0
+                                ? `Shared your Chapter and ${photos} to Community.`
+                                : 'Shared your Chapter to Community.'
+                            : `Shared ${photos} to Community.`,
                         'success',
                     );
                 } else {
@@ -1508,8 +1658,88 @@ export default function HabitDetail() {
             openUpsell,
             handleChecklistDayUnshare,
             checklistDayUi,
+            videoCredit,
         ],
     );
+
+    /**
+     * Checklist missions: adds the unlocked Chapter to the open day. The clip
+     * belongs to the day, not to a task, and stays out of the task list; it
+     * doesn't complete the day. It's claimed on the server right away (which
+     * re-checks the unlock rules), then rides along in the day's post.
+     */
+    const handleAddChecklistChapter = useCallback(() => {
+        const dayCtx = checklistDayUi;
+        const credit = videoCredit;
+        if (!dayCtx || !habit || checklistChapterBusy) return;
+        if (!credit || credit.dateKey !== dayCtx.dateStr) return;
+        const reopenChecklist = () => setChecklistDayUi(dayCtx);
+        const run = async (source: 'camera' | 'library') => {
+            const clip = await pickChapterClip(source);
+            if (!clip) return;
+            setChecklistChapterBusy(true);
+            try {
+                const { videoUrl, posterUrl } = await uploadAndClaimVideoMoment({
+                    habitId: habit.id,
+                    credit,
+                    localUri: clip.uri,
+                    durationMs: clip.durationMs,
+                });
+                setClaimedVideoBlocks((prev) => new Set(prev).add(credit.block.blockNumber));
+                // Never imageUrl: on a checklist day that would count as the day being done (sync.ts).
+                const patch = { videoUrl, videoPosterUrl: posterUrl };
+                if (useHabitStore.getState().getHabit(habit.id)?.streakMemories?.[dayCtx.dateStr]) {
+                    patchStreakMemory(habit.id, dayCtx.dateStr, patch);
+                } else {
+                    setStreakMemory(habit.id, dayCtx.dateStr, { createdAt: new Date().toISOString(), ...patch });
+                }
+                void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            } catch (e) {
+                setChecklistDayUi(null);
+                showAppAlert('Couldn’t add your Chapter', e instanceof Error ? e.message : String(e), [
+                    { text: 'OK', onPress: reopenChecklist },
+                ]);
+            } finally {
+                setChecklistChapterBusy(false);
+            }
+        };
+        const title = `Chapter ${credit.block.blockNumber}`;
+        const message = 'A 5-second silent clip of this week.';
+        if (Platform.OS === 'ios') {
+            ActionSheetIOS.showActionSheetWithOptions(
+                {
+                    title,
+                    message,
+                    options: ['Cancel', 'Record 5s chapter', 'Chapter from library'],
+                    cancelButtonIndex: 0,
+                    userInterfaceStyle: isDark ? 'dark' : 'light',
+                },
+                (index) => {
+                    if (index === 1) void run('camera');
+                    else if (index === 2) void run('library');
+                },
+            );
+            return;
+        }
+        showAppAlert(title, message, [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Record 5s chapter', style: 'neutral', onPress: () => void run('camera') },
+            { text: 'Chapter from library', style: 'neutral', onPress: () => void run('library') },
+        ]);
+    }, [checklistDayUi, videoCredit, habit, checklistChapterBusy, patchStreakMemory, setStreakMemory, isDark]);
+
+    // The open checklist day's Chapter row: already added, or unlocked for this day.
+    const checklistChapter = useMemo((): ChecklistChapter | null => {
+        if (!checklistDayUi || !habit) return null;
+        const mem = habit.streakMemories?.[checklistDayUi.dateStr];
+        if (mem?.videoUrl && mem.videoPosterUrl) {
+            return { kind: 'added', videoUrl: mem.videoUrl, posterUrl: mem.videoPosterUrl };
+        }
+        if (readyChapter && readyChapter.credit.dateKey === checklistDayUi.dateStr) {
+            return { kind: 'ready', chapter: readyChapter.chapter, daysLeft: readyChapter.daysLeft };
+        }
+        return null;
+    }, [checklistDayUi, habit, readyChapter]);
 
     const handleHabitMemoryCommunityChange = useCallback(
         async (next: boolean, dateStr: string, day: number) => {
@@ -1576,6 +1806,9 @@ export default function HabitDetail() {
                         feedSource: "habit_streak",
                         streakMissionDay: day,
                         streakCountAtPost: habit.streak,
+                        ...(memForPost.videoUrl
+                            ? { videoUrl: memForPost.videoUrl, videoPosterUrl: memForPost.videoPosterUrl ?? null }
+                            : {}),
                     });
                     if (res.ok === true) {
                         patchStreakMemory(habit.id, dateStr, { communityPosted: true });
@@ -2188,6 +2421,11 @@ export default function HabitDetail() {
                     onOpenComments={openHabitComments}
                     requireNote={effectiveRequireNote}
                     requirePhoto={effectiveRequirePhoto}
+                    videoMomentAvailable={
+                        videoCredit !== null &&
+                        memoryUi?.kind !== 'view' &&
+                        memoryUi?.dateStr === videoCredit.dateKey
+                    }
                     onClose={() => {
                         pendingMemoryRef.current = null;
                         setMemoryUi(null);
@@ -2237,6 +2475,9 @@ export default function HabitDetail() {
                             handleChecklistDayUnshare(checklistDayUi.dateStr);
                         }}
                         onOpenComments={openChecklistDayComments}
+                        chapter={checklistChapter}
+                        chapterBusy={checklistChapterBusy}
+                        onAddChapter={handleAddChecklistChapter}
                         onToggleTaskInclusion={(taskId) => {
                             if (!checklistDayUi) return;
                             handleToggleTaskInclusion(checklistDayUi.dateStr, taskId);
@@ -2627,6 +2868,14 @@ export default function HabitDetail() {
                     completedCount={effectiveCompletedCount}
                     totalDays={totalDays}
                     ringColor={isManual ? (isDark ? '#B57C46' : '#8A5A2E') : undefined}
+                    chapter={chapterStatus}
+                    onPressChapter={
+                        // A checklist day's Chapter row stays on the day sheet after Mark Day Complete.
+                        readyChapter &&
+                        (Boolean(habit.taskChecklist?.length) || !completedDateSet.has(readyChapter.credit.dateKey))
+                            ? () => handleDayPress(readyChapter.credit.missionDay - 1, readyChapter.credit.missionDay)
+                            : undefined
+                    }
                 />
 
                 {eligibleRepair && habit ? (
@@ -2837,6 +3086,7 @@ export default function HabitDetail() {
                                 checklistLogged={checklistLogged}
                                 checklistTotal={checklistTotal}
                                 beforeJoin={joinDateKey !== null && dateStr !== '' && dateStr < joinDateKey}
+                                videoPowerUp={videoCredit !== null && videoCredit.dateKey === dateStr}
                                 onPress={handleDayPress} // Stable callback reference
                                 optimizeForScroll={optimizeGridScrollForLongGrid}
                             />
@@ -2855,6 +3105,7 @@ export default function HabitDetail() {
                         return Array.from({ length: 7 - remainder }, (_, i) => <View key={`ph-${i}`} style={styles.dayButtonPlaceholder} />);
                     })()}
                 </View>
+
 
                 {joinDateKey !== null && displayedGridDays.some((d) => {
                     const ds = getDayDate(d - 1);
@@ -3297,6 +3548,9 @@ const styles = StyleSheet.create({
     beforeJoinLegend: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10, paddingHorizontal: 4 },
     beforeJoinLegendDot: { width: 12, height: 12, borderRadius: 6, borderWidth: 1.5 },
     beforeJoinLegendText: { flex: 1, fontSize: 12, lineHeight: 16 },
+    powerUpGlow: { position: 'absolute', top: -5, left: -5, right: -5, bottom: -5, borderRadius: 9999 },
+    powerUpRing: { position: 'absolute', top: -2, left: -2, right: -2, bottom: -2, borderRadius: 9999, borderWidth: 2 },
+    powerUpBadge: { position: 'absolute', top: -3, right: -3, width: 18, height: 18, borderRadius: 9, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
     beforeJoinHalo: { position: 'absolute', top: -3, left: -3, right: -3, bottom: -3, borderRadius: 9999 },
     dayText: { fontWeight: '700', fontSize: 16 },
     currentDayText: { fontSize: 18, fontWeight: '800' },

@@ -24,7 +24,9 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as ImagePicker from "expo-image-picker";
-import { Camera, Flag, Globe, ImageIcon, Lock, MessageCircle, Quote, Square, Users, X } from "lucide-react-native";
+import { VideoMomentPlayer } from "../features/videoMoments/VideoMomentPlayer";
+import { pickChapterClip } from "../features/videoMoments/pickChapterClip";
+import { Camera, Flag, Globe, ImageIcon, Lock, MessageCircle, Play, Quote, Square, Users, Video, X } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import { useTheme } from "../context/ThemeContext";
 import type { StreakMemory } from "../types/habit";
@@ -110,6 +112,11 @@ type StreakMemorySheetProps = {
    * multi-task day has no meaningful per-task publish choice of its own.
    */
   hideCommunityPublish?: boolean;
+  /**
+   * create + habit only: a Video Moment credit is available today, so the
+   * photo slot also offers a 5-second chapter clip (its poster stands in as the photo).
+   */
+  videoMomentAvailable?: boolean;
 };
 
 export const StreakMemorySheet = React.memo(function StreakMemorySheet({
@@ -131,6 +138,7 @@ export const StreakMemorySheet = React.memo(function StreakMemorySheet({
   prefill,
   noticeVariant = "locks-on-save",
   hideCommunityPublish = false,
+  videoMomentAvailable = false,
   requireNote = false,
   requirePhoto = false,
 }: StreakMemorySheetProps) {
@@ -145,6 +153,8 @@ export const StreakMemorySheet = React.memo(function StreakMemorySheet({
   const { height: windowH, width: windowW } = useWindowDimensions();
   const [note, setNote] = useState("");
   const [imageUri, setImageUri] = useState<string | undefined>();
+  /** Picked Video Moment clip; imageUri then holds its local poster frame. */
+  const [pickedVideo, setPickedVideo] = useState<{ uri: string; durationMs: number } | null>(null);
   const [publishToCommunity, setPublishToCommunity] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const photoPickerOpeningRef = useRef(false);
@@ -180,6 +190,7 @@ export const StreakMemorySheet = React.memo(function StreakMemorySheet({
       if (!isView) {
         setNote(prefill?.note ?? "");
         setImageUri(prefill?.imageUri ?? undefined);
+        setPickedVideo(null);
         setPublishToCommunity(false);
       }
     }
@@ -216,6 +227,7 @@ export const StreakMemorySheet = React.memo(function StreakMemorySheet({
 
   const applyPickedUri = useCallback((uri: string | undefined) => {
     if (uri) {
+      setPickedVideo(null);
       setImageUri(uri);
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
@@ -252,17 +264,26 @@ export const StreakMemorySheet = React.memo(function StreakMemorySheet({
     }
   }, [applyPickedUri, waitForPickerPresentationWindow]);
 
+  const pickVideo = useCallback(async (source: "camera" | "library") => {
+    const clip = await pickChapterClip(source);
+    if (!clip) return;
+    setImageUri(clip.posterUri);
+    setPickedVideo({ uri: clip.uri, durationMs: clip.durationMs });
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  }, []);
+
   const choosePhotoSource = useCallback(() => {
     if (submitting || photoPickerOpeningRef.current) return;
     photoPickerOpeningRef.current = true;
     const releasePickerLock = () => {
       photoPickerOpeningRef.current = false;
     };
-    const launchPicker = (source: "camera" | "library") => {
+    const launchPicker = (source: "camera" | "library" | "videoCamera" | "videoLibrary") => {
       void (async () => {
         try {
           if (source === "camera") await pickFromCamera();
-          else await pickFromLibrary();
+          else if (source === "library") await pickFromLibrary();
+          else await pickVideo(source === "videoCamera" ? "camera" : "library");
         } finally {
           releasePickerLock();
         }
@@ -275,17 +296,23 @@ export const StreakMemorySheet = React.memo(function StreakMemorySheet({
     if (Platform.OS === "ios") {
       ActionSheetIOS.showActionSheetWithOptions(
         {
-          title: "Add a photo",
-          message: "Take a new picture or choose one from your gallery.",
-          options: ["Cancel", "Take photo", "Photo library"],
+          title: videoMomentAvailable ? "Add your chapter or a photo" : "Add a photo",
+          message: videoMomentAvailable
+            ? "You've unlocked a chapter: a 5-second silent clip of this week."
+            : "Take a new picture or choose one from your gallery.",
+          options: videoMomentAvailable
+            ? ["Cancel", "Record 5s chapter", "Chapter from library", "Take photo", "Photo library"]
+            : ["Cancel", "Take photo", "Photo library"],
           cancelButtonIndex: 0,
           userInterfaceStyle: isDark ? "dark" : "light",
         },
         (buttonIndex) => {
-          if (buttonIndex === 1) {
-            launchPicker("camera");
-          } else if (buttonIndex === 2) {
-            launchPicker("library");
+          const order = videoMomentAvailable
+            ? ([null, "videoCamera", "videoLibrary", "camera", "library"] as const)
+            : ([null, "camera", "library"] as const);
+          const source = order[buttonIndex] ?? null;
+          if (source) {
+            launchPicker(source);
           } else {
             releasePickerLock();
           }
@@ -295,10 +322,32 @@ export const StreakMemorySheet = React.memo(function StreakMemorySheet({
     }
     requestAnimationFrame(() => {
       showAppAlert(
-        "Add a photo",
-        "Take a new picture or choose one from your gallery.",
+        videoMomentAvailable ? "Add your chapter or a photo" : "Add a photo",
+        videoMomentAvailable
+          ? "You've unlocked a chapter: a 5-second silent clip of this week."
+          : "Take a new picture or choose one from your gallery.",
         [
           { text: "Cancel", style: "cancel", onPress: releasePickerLock },
+          ...(videoMomentAvailable
+            ? [
+                {
+                  text: "Record 5s chapter",
+                  style: "neutral" as const,
+                  icon: <Video size={18} color={theme.colors.amber[500]} strokeWidth={2} />,
+                  onPress: () => {
+                    launchPicker("videoCamera");
+                  },
+                },
+                {
+                  text: "Chapter from library",
+                  style: "neutral" as const,
+                  icon: <Video size={18} color={theme.colors.amber[500]} strokeWidth={2} />,
+                  onPress: () => {
+                    launchPicker("videoLibrary");
+                  },
+                },
+              ]
+            : []),
           {
             text: "Take photo",
             style: "neutral",
@@ -319,7 +368,7 @@ export const StreakMemorySheet = React.memo(function StreakMemorySheet({
         { cancelable: true, onDismiss: releasePickerLock },
       );
     });
-  }, [isDark, pickFromCamera, pickFromLibrary, submitting, visible]);
+  }, [isDark, pickFromCamera, pickFromLibrary, pickVideo, submitting, visible, videoMomentAvailable]);
 
   const handleSquadShareChange = useCallback(
     (nextPublic: boolean) => {
@@ -376,6 +425,7 @@ export const StreakMemorySheet = React.memo(function StreakMemorySheet({
       createdAt: new Date().toISOString(),
       ...(note.trim() ? { note: note.trim() } : {}),
       ...(imageUri ? { imageUri } : {}),
+      ...(pickedVideo ? { videoUri: pickedVideo.uri, videoDurationMs: pickedVideo.durationMs } : {}),
     };
     const hasContent = memory.note || memory.imageUri;
     if (!hasContent) {
@@ -420,6 +470,7 @@ export const StreakMemorySheet = React.memo(function StreakMemorySheet({
     isMini,
     note,
     imageUri,
+    pickedVideo,
     onCommit,
     onClose,
     publishToCommunity,
@@ -656,6 +707,13 @@ export const StreakMemorySheet = React.memo(function StreakMemorySheet({
                                   </Text>
                                 </View>
                               )}
+                              {vm?.videoUrl && !imgLoading ? (
+                                <VideoMomentPlayer
+                                  videoUrl={vm.videoUrl}
+                                  posterUrl={viewImageUri!}
+                                  style={StyleSheet.absoluteFillObject}
+                                />
+                              ) : null}
                             </View>
                           </View>
                         ) : imgFailed ? (
@@ -888,12 +946,24 @@ export const StreakMemorySheet = React.memo(function StreakMemorySheet({
                         {imageUri ? (
                           <View style={styles.photoSlotImageFill}>
                             <Image source={{ uri: imageUri }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
+                            {pickedVideo ? (
+                              <View style={styles.videoBadge}>
+                                <Play size={11} color="#f8fafc" fill="#f8fafc" />
+                                <Text style={styles.videoBadgeText}>
+                                  {`${Math.min(5, Math.max(1, Math.round(pickedVideo.durationMs / 1000)))}s · Chapter`}
+                                </Text>
+                              </View>
+                            ) : null}
                           </View>
                         ) : (
                           <View style={[styles.photoEmpty, styles.photoEmptyMemory]}>
-                            <ImageIcon size={28} color={theme.colors.indigo[400]} />
+                            {videoMomentAvailable ? (
+                              <Video size={28} color={theme.colors.amber[500]} />
+                            ) : (
+                              <ImageIcon size={28} color={theme.colors.indigo[400]} />
+                            )}
                             <Text style={[styles.photoCta, styles.photoCtaMemory, { color: theme.colors.textSecondary }]}>
-                              Tap to add a photo
+                              {videoMomentAvailable ? "Tap to record your chapter or add a photo" : "Tap to add a photo"}
                             </Text>
                           </View>
                         )}
@@ -1330,6 +1400,19 @@ const styles = StyleSheet.create({
   photoSlotImageFill: {
     ...StyleSheet.absoluteFillObject,
   },
+  videoBadge: {
+    position: "absolute",
+    left: 10,
+    bottom: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 9,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: "rgba(3,5,10,0.72)",
+  },
+  videoBadgeText: { color: "#f8fafc", fontSize: 11, fontWeight: "800" },
   photo: { width: "100%", height: "100%" },
   photoEmpty: {
     flex: 1,

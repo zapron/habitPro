@@ -76,6 +76,8 @@ import { levelFromTotalXp, xpInCurrentLevel } from "../../src/utils/xpLevel";
 import { playerLeagueForLevel } from "../../src/utils/playerLeague";
 import { storageThumbnailUri } from "../../src/utils/imageThumbnail";
 import { avatarIdentityFor } from "../../src/utils/avatarIdentity";
+import { attachChapterVideo, CHAPTER_SLIDE_ID } from "../../src/features/videoMoments/chapterSlides";
+import { ChapterPlayBadge } from "../../src/features/videoMoments/ChapterPlayBadge";
 import type { AppTheme } from "../../src/styles/theme";
 import { withAlpha } from "../../src/styles/theme";
 
@@ -137,11 +139,17 @@ function storyDayLabel(post: CommunityPlayerStoryPost): string {
  */
 function gallerySlidesForPost(post: CommunityPlayerStoryPost): CommunityLightboxSlide[] {
   if (post.memoryGallery && post.memoryGallery.length > 0) {
-    return post.memoryGallery
-      .filter((g) => Boolean(g.imageUrl))
-      .map((g) => ({ imageUrl: g.imageUrl, note: g.note }));
+    return attachChapterVideo(
+      post.memoryGallery
+        .filter((g) => Boolean(g.imageUrl))
+        .map((g) => ({ imageUrl: g.imageUrl, note: g.note, chapter: g.taskId === CHAPTER_SLIDE_ID })),
+      post.videoUrl,
+      (slide) => slide.chapter,
+    ).map(({ chapter: _chapter, ...slide }) => slide);
   }
-  return post.memoryImageUrl ? [{ imageUrl: post.memoryImageUrl, note: post.memoryNote }] : [];
+  return post.memoryImageUrl
+    ? [{ imageUrl: post.memoryImageUrl, note: post.memoryNote, videoUrl: post.videoUrl ?? null }]
+    : [];
 }
 
 function sortTime(iso: string | undefined): number {
@@ -421,6 +429,7 @@ function StoryPhotoTile({
         theme={theme}
         style={[styles.storyPhotoImage, { borderRadius: radius }, imageStyle]}
       />
+      {post.videoUrl && imagesEnabled ? <ChapterPlayBadge /> : null}
       <View style={[styles.dayPill, { backgroundColor: resolvedPillTone }]}>
         <Text style={styles.dayPillText} numberOfLines={1}>
           {storyDayLabel(post)}
@@ -487,6 +496,7 @@ function RecentProofBadge({
             <ImageIcon size={18} color={theme.colors.textMuted} />
           </View>
         )}
+        {post.videoUrl && imagesEnabled ? <ChapterPlayBadge size={22} /> : null}
       </View>
       <Svg width={size} height={size} viewBox="0 0 100 100" style={styles.recentProofSvg} pointerEvents="none">
         <Rect x={0} y={0} width={100} height={100} fill="transparent" />
@@ -661,6 +671,7 @@ function MissionProofTile({
             <ImageIcon size={18} color={theme.colors.textMuted} />
           </View>
         )}
+        {post.videoUrl && imagesEnabled ? <ChapterPlayBadge size={22} /> : null}
         {extraCount > 0 ? (
           <View style={styles.moreOverlay}>
             <Text style={styles.moreOverlayText}>View more</Text>
@@ -1352,6 +1363,7 @@ function MiniPostTile({
                 <ImageIcon size={22} color={theme.colors.textMuted} />
               </View>
             )}
+            {post.videoUrl && imagesEnabled ? <ChapterPlayBadge size={22} /> : null}
           </Pressable>
           <View style={[styles.dayPill, { backgroundColor: storyPillTone(`${post.feedSource}:${post.title}`) }]}>
             <Text style={styles.dayPillText} numberOfLines={1}>

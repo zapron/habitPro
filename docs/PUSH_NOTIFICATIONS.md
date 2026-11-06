@@ -23,14 +23,14 @@ Local **mini mission** timers (`expo-notifications` local schedules) follow the 
 
 ```bash
 cd habitPro
-npx supabase db push
+npx supabase@2 db push
 ```
 
 ### 2. Deploy Edge Functions
 
 ```bash
-npx supabase functions deploy notify-push --no-verify-jwt
-npx supabase functions deploy process-streak-reminders --no-verify-jwt
+npx supabase@2 functions deploy notify-push --no-verify-jwt
+npx supabase@2 functions deploy process-streak-reminders --no-verify-jwt
 ```
 
 Set secrets (Dashboard → Project Settings → Edge Functions, or CLI):

@@ -380,6 +380,12 @@ Caution Points). `supabase/seed.sql` is gitignored and holds a full
 production data snapshot (all users) when present locally — never
 commit it.
 
+Since 2026-11-05: `npm run dev:local` starts Supabase, the iOS 26.5
+Simulator and the Android Emulator on `127.0.0.1` (immune to LAN IP
+changes), and opens both apps; Maestro flows in `.maestro/` drive them.
+Use `npx supabase@2` (CLI v3 rejects our `config.toml`). Chapters
+(Video Moments) decisions live in `docs/CURRENT_WORK.md`.
+
 ## How To Resume In A New Chat
 
 Tell the new agent:

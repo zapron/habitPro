@@ -36,6 +36,8 @@ import {
 import { CustomNudgeModal } from "../src/components/CustomNudgeModal";
 import { CommunityWinCheerersModal } from "../src/components/CommunityWinCheerersModal";
 import { CommunityWinImageLightbox } from "../src/components/CommunityWinImageLightbox";
+import { VideoMomentPlayer } from "../src/features/videoMoments/VideoMomentPlayer";
+import { CHAPTER_SLIDE_ID } from "../src/features/videoMoments/chapterSlides";
 import { Screen } from "../src/components/Screen";
 import { useAuth } from "../src/context/AuthContext";
 import { usePlusUpsell } from "../src/context/PlusUpsellContext";
@@ -131,12 +133,15 @@ function MemoryPhotoCarousel({
   onIndexChange,
   onPressSlide,
   resizeMode,
+  videoUrl,
 }: {
   slides: ChallengeMemoryTaskEntry[];
   activeIndex: number;
   onIndexChange: (index: number) => void;
   onPressSlide: (index: number) => void;
   resizeMode: "cover" | "contain";
+  /** Plays on the "chapter" slide, which shows its poster. */
+  videoUrl?: string | null;
 }) {
   const { width: screenWidth } = useWindowDimensions();
   const [slideWidth, setSlideWidth] = useState(() => Math.max(1, screenWidth));
@@ -173,6 +178,8 @@ function MemoryPhotoCarousel({
               <Pressable
                 onPress={() => onPressSlide(index)}
                 style={{ width: slideWidth, height: "100%" }}
+                // The Chapter's player covers this slide and has its own play/stop controls.
+                accessible={!(videoUrl && item.taskId === CHAPTER_SLIDE_ID)}
                 accessibilityRole="imagebutton"
                 accessibilityLabel="Open photo full screen"
               >
@@ -182,6 +189,9 @@ function MemoryPhotoCarousel({
                   resizeMode={resizeMode}
                   onError={() => setFailedUris((prev) => (prev.has(uri) ? prev : new Set(prev).add(uri)))}
                 />
+                {videoUrl && item.taskId === CHAPTER_SLIDE_ID ? (
+                  <VideoMomentPlayer videoUrl={videoUrl} posterUrl={uri} fit={resizeMode} style={StyleSheet.absoluteFill} />
+                ) : null}
               </Pressable>
             );
           }
@@ -495,6 +505,12 @@ export default function ChallengeMemoryScreen() {
     : showSyncedPhoto && detail?.imageUrl
       ? [detail.imageUrl]
       : [];
+  // The chapter's poster is the single photo, or the task gallery's "chapter" slide.
+  const chapterPosterUrl = detail?.videoUrl
+    ? hasTaskGallery
+      ? (detail.tasks.find((t) => t.taskId === CHAPTER_SLIDE_ID)?.imageUrl ?? null)
+      : (detail.imageUrl ?? null)
+    : null;
   const activeTask = hasTaskGallery ? (detail?.tasks[activeTaskIndex] ?? detail?.tasks[0] ?? null) : null;
   const noteText = (activeTask?.note ?? detail?.note ?? "").trim();
   const hasLongNote = noteText.length > NOTE_COLLAPSE_LIMIT || noteText.includes("\n");
@@ -560,6 +576,7 @@ export default function ChallengeMemoryScreen() {
                       setImageViewerOpen(true);
                     }}
                     resizeMode={showCommunityPhoto ? "cover" : "contain"}
+                    videoUrl={detail!.videoUrl}
                   />
                   {showCommunityWin ? (
                     <View
@@ -595,6 +612,8 @@ export default function ChallengeMemoryScreen() {
                       setLightboxIndex(0);
                       setImageViewerOpen(true);
                     }}
+                    // The Chapter's player covers the photo and has its own play/stop controls.
+                    accessible={!detail.videoUrl}
                     accessibilityRole="imagebutton"
                     accessibilityLabel="Open photo full screen"
                   >
@@ -613,6 +632,14 @@ export default function ChallengeMemoryScreen() {
                       <View style={[StyleSheet.absoluteFillObject, styles.photoLoading, { backgroundColor: "rgba(15,23,42,0.5)" }]}>
                         <ActivityIndicator size="small" color="#fff" />
                       </View>
+                    ) : null}
+                    {detail.videoUrl && !imageLoading ? (
+                      <VideoMomentPlayer
+                        videoUrl={detail.videoUrl}
+                        posterUrl={detail.imageUrl!}
+                        fit={showCommunityPhoto ? "cover" : "contain"}
+                        style={StyleSheet.absoluteFill}
+                      />
                     ) : null}
                   </Pressable>
                   {showCommunityWin ? (
@@ -894,7 +921,11 @@ export default function ChallengeMemoryScreen() {
 
       <CommunityWinImageLightbox
         visible={imageViewerOpen && lightboxImages.length > 0}
-        slides={lightboxImages.map((uri) => ({ imageUrl: uri, note: null }))}
+        slides={lightboxImages.map((uri) => ({
+          imageUrl: uri,
+          note: null,
+          videoUrl: uri === chapterPosterUrl ? detail?.videoUrl : null,
+        }))}
         initialIndex={lightboxIndex}
         onClose={() => setImageViewerOpen(false)}
       />

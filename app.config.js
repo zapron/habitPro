@@ -45,6 +45,13 @@ if (process.env.EAS_BUILD === "true" && !revenuecatIosApiKey) {
       "The iOS build will show the paywall but cannot start App Store purchases.",
   );
 }
+// A store build with a Test Store key ships a paywall that can't sell; stop the build.
+if (process.env.EAS_BUILD_PROFILE === "production" && revenuecatAndroidApiKey.startsWith("test_")) {
+  throw new Error(
+    "[habitPro] Production build has a RevenueCat Test Store key in EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY. " +
+      "Set the Play Store public SDK key (goog_...) in the EAS production environment.",
+  );
+}
 if (process.env.EAS_BUILD === "true" && revenuecatAndroidApiKey.startsWith("test_")) {
   console.warn(
     "[habitPro] EAS build: EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY looks like a RevenueCat Test Store key. " +

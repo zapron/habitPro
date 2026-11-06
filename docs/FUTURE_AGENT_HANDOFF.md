@@ -16,6 +16,8 @@ Then inspect the files relevant to the user request.
 
 ## Do Not Do
 
+- **Never ship the Chapters (Video Moments) work in an OTA to existing builds** (added 2026-11-05). It brings new native modules (expo-video, expo-video-thumbnails, react-native-compressor, react-native-nitro-modules) and react-native-purchases 10.16; that JS on an older native build crashes at startup (seen: "setupPurchases called with 16 arguments, expected 12"). Until it ships in a build with a **new runtimeVersion**, stash it (incl. `package.json`, `package-lock.json`) before every production OTA. See `docs/CURRENT_WORK.md`.
+
 - **Do not apply a Supabase migration to production yourself, ever** —
   not `npm run db:push`/`supabase db push`, not the `apply_migration`
   MCP tool, not `execute_sql` for anything beyond a `select`. Write the

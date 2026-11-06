@@ -2,6 +2,17 @@
 
 This is a concise chronological log for future sessions. Keep secrets out of this file.
 
+## 2026-11-01 → 2026-11-05 (Chapters backend + UI, local iOS/Android test kit)
+
+Full detail in `docs/CURRENT_WORK.md`.
+- **Commits:** `4051203` (mini mission sheets match the checklist day sheet; also shipped by OTA `64fc5ef8`). All Chapter work is uncommitted.
+- **Chapters (Video Moments):** two migrations written and reset-tested locally (110/110 backend tests), not pushed. App wiring for the progress-card chapter row, picker, upload/claim, feed player with phone cache, and Report post. New native deps + react-native-purchases 10.16 mean a **new runtimeVersion** is required before any build/OTA carrying this code.
+- **Bugs fixed:** publishing a Chapter dropped its video; Android crash when stopping a clip (`player.pause()` on a released player).
+- **Validation:** `npx tsc --noEmit`; Maestro end to end on iOS 26.5 Simulator (post with video) + Android Emulator (view, cached replay, report).
+- **Tooling:** `npm run dev:local`, Maestro flows in `.maestro/`, Supabase CLI pinned to `npx supabase@2` (v3 can't read our config).
+- **Prod data:** 2026-11-04 promo grant (1 month) for agniv_monkinmind.
+- **Next:** Journey playback + checklist Chapter row (both in the first build), then db:push → runtime bump → builds → testers.
+
 ## 2026-10-29 (Composer fix, checklist sheet restyle, Video Moments plan)
 
 Full detail in `docs/CURRENT_WORK.md`.

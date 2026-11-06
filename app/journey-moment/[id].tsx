@@ -9,7 +9,7 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { ArrowLeft, Camera, ChevronRight, Clock3, Globe, Image as ImageIcon, MessageCircle, Radio, RefreshCw, ThumbsUp, User } from "lucide-react-native";
+import { ArrowLeft, Camera, ChevronRight, Clock3, Globe, Image as ImageIcon, MessageCircle, MoreHorizontal, Radio, RefreshCw, ThumbsUp, User } from "lucide-react-native";
 import { Text } from "../../src/components/AppText";
 import { CommunityWinCheerersModal } from "../../src/components/CommunityWinCheerersModal";
 import { CommunityWinCommentsModal } from "../../src/components/CommunityWinCommentsModal";
@@ -23,8 +23,12 @@ import { useUsernameGate } from "../../src/context/UsernameGateContext";
 import { buildStreakCelebrationKicker } from "../../src/lib/communityStreakFeedCopy";
 import { formatCompletedAt, formatRelativeTime } from "../../src/lib/communityWinFeedFormat";
 import { fetchCommunityWinMoment, toggleCheer, type CommunityWinFeedItem } from "../../src/lib/communityWinsApi";
+import { promptReportCommunityWin } from "../../src/lib/communityReportPrompt";
 import { backOrReplace } from "../../src/lib/navigation";
 import { storageThumbnailUri } from "../../src/utils/imageThumbnail";
+import { VideoMomentPlayer } from "../../src/features/videoMoments/VideoMomentPlayer";
+import { attachChapterVideo, CHAPTER_SLIDE_ID } from "../../src/features/videoMoments/chapterSlides";
+import { ChapterPlayBadge } from "../../src/features/videoMoments/ChapterPlayBadge";
 import { withAlpha } from "../../src/styles/theme";
 
 function paramString(value: string | string[] | undefined): string {
@@ -98,9 +102,15 @@ export default function JourneyMomentScreen() {
   const fullGallerySlides = useMemo<CommunityLightboxSlide[]>(() => {
     if (!moment) return [];
     if (moment.memory_gallery && moment.memory_gallery.length > 0) {
-      return moment.memory_gallery.map((g) => ({ imageUrl: g.imageUrl, note: g.note }));
+      return attachChapterVideo(
+        moment.memory_gallery.map((g) => ({ imageUrl: g.imageUrl, note: g.note, chapter: g.taskId === CHAPTER_SLIDE_ID })),
+        moment.video_url,
+        (slide) => slide.chapter,
+      ).map(({ chapter: _chapter, ...slide }) => slide);
     }
-    return moment.memory_image_url ? [{ imageUrl: moment.memory_image_url, note: moment.memory_note }] : [];
+    return moment.memory_image_url
+      ? [{ imageUrl: moment.memory_image_url, note: moment.memory_note, videoUrl: moment.video_url ?? null }]
+      : [];
   }, [moment]);
 
   const load = useCallback(
@@ -139,6 +149,18 @@ export default function JourneyMomentScreen() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const handleReport = useCallback(() => {
+    if (!moment) return;
+    promptReportCommunityWin(moment.id, (res) => {
+      if (res.ok === true) {
+        showToast("Reported. Thanks, we'll review it.", "success");
+        backOrReplace(router, "/(tabs)/community");
+      } else {
+        showToast(res.error, "error");
+      }
+    });
+  }, [moment, router, showToast]);
 
   const handleToggleCheer = useCallback(async () => {
     if (!moment || cheerBusy) return;
@@ -250,6 +272,9 @@ export default function JourneyMomentScreen() {
   }
 
   const hasImage = Boolean(imageUri);
+  // A one-photo Chapter plays in place. With more slides (a checklist day), the
+  // poster opens the viewer, where the Chapter plays first and the photos follow.
+  const inlineChapter = hasImage && Boolean(moment.video_url) && fullGallerySlides.length <= 1;
   const note = moment.memory_note?.trim();
 
   return (
@@ -303,6 +328,8 @@ export default function JourneyMomentScreen() {
             style={[styles.mediaWrap, { height: hasImage ? imageHeight : 180, backgroundColor: mediaBg }]}
             onPress={() => (fullGallerySlides.length > 0 ? setLightboxSlides(fullGallerySlides) : undefined)}
             disabled={!moment.memory_image_url}
+            // The inline player covers the photo and has its own play/stop controls.
+            accessible={!inlineChapter}
             accessibilityRole={moment.memory_image_url ? "imagebutton" : undefined}
             accessibilityLabel={moment.memory_image_url ? "Open proof image" : undefined}
           >
@@ -319,6 +346,18 @@ export default function JourneyMomentScreen() {
                 <Text style={[styles.textOnlyTitle, { color: theme.colors.textPrimary }]}>Text memory</Text>
               </View>
             )}
+
+            {inlineChapter && imageUri && moment.video_url ? (
+              <VideoMomentPlayer
+                key={moment.video_url}
+                videoUrl={moment.video_url}
+                posterUrl={imageUri}
+                style={styles.media}
+                chipCorner="bottom-left"
+              />
+            ) : hasImage && moment.video_url ? (
+              <ChapterPlayBadge size={44} />
+            ) : null}
 
             <View style={[styles.dayPill, { backgroundColor: "rgba(8, 145, 178, 0.9)" }]}>
               <Text style={styles.dayText}>{dayLabel(moment)}</Text>
@@ -374,17 +413,29 @@ export default function JourneyMomentScreen() {
             <Text style={[styles.noteText, { color: theme.colors.textPrimary }]}>
               {note || "Visual proof saved for this moment."}
             </Text>
-            <Pressable
-              style={styles.commentsRow}
-              onPress={() => setCommentsOpen(true)}
-              accessibilityRole="button"
-              accessibilityLabel="View comments"
-            >
-              <MessageCircle size={16} color={muted} />
-              <Text style={[styles.commentsRowText, { color: muted }]}>
-                {moment.commentCount > 0 ? `${moment.commentCount} comment${moment.commentCount === 1 ? "" : "s"}` : "Comments"}
-              </Text>
-            </Pressable>
+            <View style={styles.footerRow}>
+              <Pressable
+                style={styles.commentsRow}
+                onPress={() => setCommentsOpen(true)}
+                accessibilityRole="button"
+                accessibilityLabel="View comments"
+              >
+                <MessageCircle size={16} color={muted} />
+                <Text style={[styles.commentsRowText, { color: muted }]}>
+                  {moment.commentCount > 0 ? `${moment.commentCount} comment${moment.commentCount === 1 ? "" : "s"}` : "Comments"}
+                </Text>
+              </Pressable>
+              {session?.user && !isOwnMoment ? (
+                <Pressable
+                  onPress={handleReport}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Report post"
+                >
+                  <MoreHorizontal size={18} color={muted} />
+                </Pressable>
+              ) : null}
+            </View>
           </View>
         </View>
 
@@ -655,12 +706,16 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     fontWeight: "800",
   },
+  footerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 12,
+  },
   commentsRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    marginTop: 12,
-    alignSelf: "flex-start",
   },
   commentsRowText: {
     fontSize: 13,

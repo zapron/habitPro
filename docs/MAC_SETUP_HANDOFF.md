@@ -41,19 +41,25 @@ Install on Mac:
 - Node compatible with the current project.
 - Xcode and iOS Simulator if doing local iOS runs.
 - EAS CLI through `npx eas ...` or global install if preferred.
-- Supabase CLI if managing migrations.
+- Supabase CLI if managing migrations — always through `npx supabase@2` (v3 can't read our `config.toml`).
+- Docker Desktop for the local Supabase stack.
+- Android Studio with an emulator, for local Android runs.
+- Maestro (UI test flows in `.maestro/`), installed outside the project: `curl -fsSL "https://get.maestro.mobile.dev" | bash`.
+- Xcode 27 note: there is no Simulator.app (use DeviceHub), `npx expo run:ios` fails, and its builds crash on iOS 27 simulators — use an iOS 26 simulator. `npm run dev:local` handles all of this.
 
 Login:
 
 ```bash
 eas login
-npx supabase login
+npx supabase@2 login
 ```
 
 ## Common Commands
 
 ```bash
 npx tsc --noEmit
+npm run dev:local          # local Supabase + iOS Simulator + Android Emulator, both apps opened
+npm run dev:local -- --rebuild-ios   # after a native change (also --rebuild-android)
 npx expo start -c
 npm run build:ios:preview
 npm run build:ios

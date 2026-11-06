@@ -26,6 +26,7 @@ import {
   ThumbsUp,
   Images,
   MessageCircle,
+  MoreHorizontal,
 } from "lucide-react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { habitIdFromHabitStreakMiniMissionId, type CommunityWinFeedItem } from "../lib/communityWinsApi";
@@ -38,6 +39,8 @@ import { playerLeagueForLevel } from "../utils/playerLeague";
 import { storageThumbnailUri } from "../utils/imageThumbnail";
 import { avatarIdentityFor } from "../utils/avatarIdentity";
 import { withAlpha } from "../styles/theme";
+import { VideoMomentPlayer } from "../features/videoMoments/VideoMomentPlayer";
+import { attachChapterVideo, CHAPTER_SLIDE_ID } from "../features/videoMoments/chapterSlides";
 import { CohortStreakPill } from "./CohortStreakPill";
 import { PageDots } from "./PageDots";
 
@@ -99,6 +102,8 @@ type Props = {
   onOpenCheerers?: (win: CommunityWinFeedItem) => void;
   /** POC: opens the comments sheet for this win. */
   onOpenComments?: (win: CommunityWinFeedItem) => void;
+  /** Report someone else's post; not shown on your own. */
+  onReport?: (win: CommunityWinFeedItem) => void;
 };
 
 function CheerBurstOverlay({
@@ -173,6 +178,7 @@ function PhotoCarousel({
   onPressSlide,
   estimatedWidth,
   displayUriFor,
+  videoSlide,
 }: {
   images: string[];
   activeIndex: number;
@@ -180,6 +186,8 @@ function PhotoCarousel({
   onPressSlide: () => void;
   estimatedWidth: number;
   displayUriFor: (uri: string) => string;
+  /** A checklist day's Chapter: this slide shows its poster and plays the clip on tap. */
+  videoSlide?: { index: number; videoUrl: string } | null;
 }) {
   const [slideWidth, setSlideWidth] = useState(estimatedWidth);
 
@@ -206,7 +214,7 @@ function PhotoCarousel({
         keyExtractor={(uri, index) => `${index}-${uri}`}
         getItemLayout={(_, index) => ({ length: slideWidth, offset: slideWidth * index, index })}
         onMomentumScrollEnd={onMomentumScrollEnd}
-        renderItem={({ item }) => (
+        renderItem={({ item, index }) => (
           <Pressable
             onPress={onPressSlide}
             style={{ width: slideWidth, height: "100%" }}
@@ -219,6 +227,14 @@ function PhotoCarousel({
               resizeMode="cover"
               accessibilityIgnoresInvertColors
             />
+            {videoSlide && videoSlide.index === index ? (
+              <VideoMomentPlayer
+                key={videoSlide.videoUrl}
+                videoUrl={videoSlide.videoUrl}
+                posterUrl={displayUriFor(item)}
+                style={styles.photoImageFill}
+              />
+            ) : null}
           </Pressable>
         )}
       />
@@ -246,6 +262,7 @@ export const CommunityWinFeedPost = memo(function CommunityWinFeedPost({
   onCheer,
   onOpenCheerers,
   onOpenComments,
+  onReport,
 }: Props) {
   const { width: windowWidth } = useWindowDimensions();
   const handle = win.username ? win.username : "Someone";
@@ -340,13 +357,25 @@ export const CommunityWinFeedPost = memo(function CommunityWinFeedPost({
     }
     return win.memory_image_url ? [win.memory_image_url] : [];
   }, [win.memory_gallery, win.memory_image_url]);
+  /** A checklist day's Chapter slide inside the carousel (same filtering as galleryImages). */
+  const galleryVideoSlide = useMemo(() => {
+    if (!win.video_url || !win.memory_gallery) return null;
+    const index = win.memory_gallery.filter((g) => Boolean(g.imageUrl)).findIndex((g) => g.taskId === CHAPTER_SLIDE_ID);
+    return index >= 0 ? { index, videoUrl: win.video_url } : null;
+  }, [win.memory_gallery, win.video_url]);
   /** Same catalog, but keeping each task's note for the full-screen lightbox's captions. */
   const gallerySlides = useMemo<CommunityLightboxSlide[]>(() => {
     if (win.memory_gallery && win.memory_gallery.length > 0) {
-      return win.memory_gallery.map((g) => ({ imageUrl: g.imageUrl, note: g.note }));
+      return attachChapterVideo(
+        win.memory_gallery.map((g) => ({ imageUrl: g.imageUrl, note: g.note, chapter: g.taskId === CHAPTER_SLIDE_ID })),
+        win.video_url,
+        (slide) => slide.chapter,
+      ).map(({ chapter: _chapter, ...slide }) => slide);
     }
-    return win.memory_image_url ? [{ imageUrl: win.memory_image_url, note: win.memory_note }] : [];
-  }, [win.memory_gallery, win.memory_image_url, win.memory_note]);
+    return win.memory_image_url
+      ? [{ imageUrl: win.memory_image_url, note: win.memory_note, videoUrl: win.video_url ?? null }]
+      : [];
+  }, [win.memory_gallery, win.memory_image_url, win.memory_note, win.video_url]);
 
   // FlashList recycles this component across different posts — reset the swipe
   // position whenever the underlying win changes so a stale index from a
@@ -576,6 +605,7 @@ export const CommunityWinFeedPost = memo(function CommunityWinFeedPost({
           onPressSlide={() => onImageAreaPress(galleryImages[activeGalleryIndex] ?? null)}
           estimatedWidth={photoRenderWidth}
           displayUriFor={displayUriFor}
+          videoSlide={galleryVideoSlide}
         />
         {isLiveSquadWin ? (
           <View
@@ -664,6 +694,14 @@ export const CommunityWinFeedPost = memo(function CommunityWinFeedPost({
           accessibilityIgnoresInvertColors
         />
         {!imageLoaded ? <View pointerEvents="none" style={styles.photoLoadGlow} /> : null}
+        {win.video_url && imageLoaded ? (
+          <VideoMomentPlayer
+            key={win.video_url}
+            videoUrl={win.video_url}
+            posterUrl={imageDisplayUri ?? win.memory_image_url}
+            style={styles.photoImageFill}
+          />
+        ) : null}
         {isLiveSquadWin ? (
           <View
             pointerEvents="none"
@@ -829,6 +867,17 @@ export const CommunityWinFeedPost = memo(function CommunityWinFeedPost({
           <Text style={[styles.timeInline, { color: theme.colors.textMuted }]}>
             {formatRelativeTime(win.created_at)}
           </Text>
+          {onReport && sessionUserId && win.user_id !== sessionUserId ? (
+            <Pressable
+              onPress={() => onReport(win)}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              style={styles.moreButton}
+              accessibilityRole="button"
+              accessibilityLabel="Report post"
+            >
+              <MoreHorizontal size={18} color={theme.colors.textMuted} />
+            </Pressable>
+          ) : null}
         </View>
       </View>
     </View>
@@ -1032,6 +1081,7 @@ const styles = StyleSheet.create({
   cheerIconRow: { flexDirection: "row", alignItems: "center", gap: 5 },
   commentIconRow: { flexDirection: "row", alignItems: "center", gap: 5, marginRight: "auto" },
   commentUnreadPill: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, height: 28 },
+  moreButton: { marginLeft: 10, height: 24, justifyContent: "center" },
   timeInline: {
     fontSize: 12,
     fontWeight: "600",

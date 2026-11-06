@@ -42,6 +42,7 @@
     },
     "production": {
       "channel": "production",
+      "environment": "production",
       "env": {
         "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
         "EXPO_DOCTOR_SKIP_DEPENDENCY_VERSION_CHECK": "1"
