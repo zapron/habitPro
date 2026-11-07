@@ -25,7 +25,8 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as ImagePicker from "expo-image-picker";
 import { VideoMomentPlayer } from "../features/videoMoments/VideoMomentPlayer";
-import { pickChapterClip } from "../features/videoMoments/pickChapterClip";
+import { useChapterRecorder } from "../features/videoMoments/ChapterRecorder";
+import { VIDEO_MOMENT_MAX_MS } from "../features/videoMoments/credit";
 import { Camera, Flag, Globe, ImageIcon, Lock, MessageCircle, Play, Quote, Square, Users, Video, X } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import { useTheme } from "../context/ThemeContext";
@@ -114,7 +115,7 @@ type StreakMemorySheetProps = {
   hideCommunityPublish?: boolean;
   /**
    * create + habit only: a Video Moment credit is available today, so the
-   * photo slot also offers a 5-second chapter clip (its poster stands in as the photo).
+   * photo slot also offers a 7-second chapter clip (its poster stands in as the photo).
    */
   videoMomentAvailable?: boolean;
 };
@@ -158,6 +159,8 @@ export const StreakMemorySheet = React.memo(function StreakMemorySheet({
   const [publishToCommunity, setPublishToCommunity] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const photoPickerOpeningRef = useRef(false);
+  const { record: recordChapter, recorder: chapterRecorder, isOpen: chapterRecorderOpen, close: closeChapterRecorder } =
+    useChapterRecorder();
   const backdropRef = useRef<View>(null);
   const createScrollRef = useRef<ScrollView>(null);
   const noteInputYRef = useRef(0);
@@ -265,12 +268,12 @@ export const StreakMemorySheet = React.memo(function StreakMemorySheet({
   }, [applyPickedUri, waitForPickerPresentationWindow]);
 
   const pickVideo = useCallback(async () => {
-    const clip = await pickChapterClip();
+    const clip = await recordChapter();
     if (!clip) return;
     setImageUri(clip.posterUri);
     setPickedVideo({ uri: clip.uri, durationMs: clip.durationMs });
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-  }, []);
+  }, [recordChapter]);
 
   const choosePhotoSource = useCallback(() => {
     if (submitting || photoPickerOpeningRef.current) return;
@@ -298,10 +301,10 @@ export const StreakMemorySheet = React.memo(function StreakMemorySheet({
         {
           title: videoMomentAvailable ? "Add your chapter or a photo" : "Add a photo",
           message: videoMomentAvailable
-            ? "You've unlocked a chapter: a 5-second silent clip of this week."
+            ? "You've unlocked a chapter: a 7-second silent clip of this week."
             : "Take a new picture or choose one from your gallery.",
           options: videoMomentAvailable
-            ? ["Cancel", "Record 5s chapter", "Take photo", "Photo library"]
+            ? ["Cancel", "Record 7s chapter", "Take photo", "Photo library"]
             : ["Cancel", "Take photo", "Photo library"],
           cancelButtonIndex: 0,
           userInterfaceStyle: isDark ? "dark" : "light",
@@ -324,14 +327,14 @@ export const StreakMemorySheet = React.memo(function StreakMemorySheet({
       showAppAlert(
         videoMomentAvailable ? "Add your chapter or a photo" : "Add a photo",
         videoMomentAvailable
-          ? "You've unlocked a chapter: a 5-second silent clip of this week."
+          ? "You've unlocked a chapter: a 7-second silent clip of this week."
           : "Take a new picture or choose one from your gallery.",
         [
           { text: "Cancel", style: "cancel", onPress: releasePickerLock },
           ...(videoMomentAvailable
             ? [
                 {
-                  text: "Record 5s chapter",
+                  text: "Record 7s chapter",
                   style: "neutral" as const,
                   icon: <Video size={18} color={theme.colors.amber[500]} strokeWidth={2} />,
                   onPress: () => {
@@ -377,8 +380,16 @@ export const StreakMemorySheet = React.memo(function StreakMemorySheet({
   /** Backdrop, X, Android back — does not check in (create) or only closes (view). */
   const handleDismiss = useCallback(() => {
     if (submitting) return;
+    if (chapterRecorderOpen) {
+      closeChapterRecorder();
+      return;
+    }
     onClose();
-  }, [onClose, submitting]);
+  }, [chapterRecorderOpen, closeChapterRecorder, onClose, submitting]);
+
+  useEffect(() => {
+    if (!visible) closeChapterRecorder();
+  }, [visible, closeChapterRecorder]);
 
   /** Explicit: check in for this day without saving a photo/note. */
   const handleJustMarkDone = useCallback(async () => {
@@ -942,7 +953,7 @@ export const StreakMemorySheet = React.memo(function StreakMemorySheet({
                               <View style={styles.videoBadge}>
                                 <Play size={11} color="#f8fafc" fill="#f8fafc" />
                                 <Text style={styles.videoBadgeText}>
-                                  {`${Math.min(5, Math.max(1, Math.round(pickedVideo.durationMs / 1000)))}s · Chapter`}
+                                  {`${Math.min(VIDEO_MOMENT_MAX_MS / 1000, Math.max(1, Math.round(pickedVideo.durationMs / 1000)))}s · Chapter`}
                                 </Text>
                               </View>
                             ) : null}
@@ -1240,6 +1251,7 @@ export const StreakMemorySheet = React.memo(function StreakMemorySheet({
           </View>
         </KeyboardAvoidingView>
       </View>
+      {chapterRecorder}
     </Modal>
   );
 });

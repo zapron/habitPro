@@ -35,7 +35,7 @@ export interface StreakMemory {
   /** Supabase Storage public URL after upload (synced for cohort / other devices). */
   imageUrl?: string;
   /**
-   * Video Moments: the claimed 5-second video. `imageUrl` holds its poster
+   * Video Moments: the claimed 7-second video. `imageUrl` holds its poster
    * frame, so every photo surface keeps working and only adds a play badge.
    */
   videoUrl?: string;

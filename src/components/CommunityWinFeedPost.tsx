@@ -39,7 +39,7 @@ import { playerLeagueForLevel } from "../utils/playerLeague";
 import { storageThumbnailUri } from "../utils/imageThumbnail";
 import { avatarIdentityFor } from "../utils/avatarIdentity";
 import { withAlpha } from "../styles/theme";
-import { VideoMomentPlayer } from "../features/videoMoments/VideoMomentPlayer";
+import { stopActiveChapter, VideoMomentPlayer } from "../features/videoMoments/VideoMomentPlayer";
 import { attachChapterVideo, CHAPTER_SLIDE_ID } from "../features/videoMoments/chapterSlides";
 import { CohortStreakPill } from "./CohortStreakPill";
 import { PageDots } from "./PageDots";
@@ -209,6 +209,7 @@ function PhotoCarousel({
         data={images}
         horizontal
         pagingEnabled
+        onScrollBeginDrag={() => stopActiveChapter()}
         showsHorizontalScrollIndicator={false}
         initialScrollIndex={activeIndex}
         keyExtractor={(uri, index) => `${index}-${uri}`}

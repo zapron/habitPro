@@ -4,7 +4,7 @@
     "owner": "raktim24",
     "slug": "habitPro",
     "scheme": "habitpro",
-    "version": "1.1.39",
+    "version": "1.1.40",
     "platforms": [
       "ios",
       "android"
@@ -13,7 +13,7 @@
     "icon": "./assets/app-icon-v5.png",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
-    "runtimeVersion": "1.1.39",
+    "runtimeVersion": "1.1.40",
     "updates": {
       "url": "https://u.expo.dev/cdfc2b93-f246-47b6-94ca-6a816ffda876",
       "checkAutomatically": "ON_LOAD",
@@ -30,7 +30,7 @@
     },
     "ios": {
       "bundleIdentifier": "com.rakti.habitpro",
-      "buildNumber": "39",
+      "buildNumber": "40",
       "supportsTablet": false,
       "usesAppleSignIn": true,
       "infoPlist": {
@@ -39,7 +39,7 @@
     },
     "android": {
       "package": "com.rakti.habitpro",
-      "versionCode": 40,
+      "versionCode": 41,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon-v5-foreground.png",
         "backgroundColor": "#070B14"
@@ -66,6 +66,14 @@
           "dark": {
             "image": "./assets/splash-wordmark-v2-dark.png",
             "backgroundColor": "#070B14"
+          },
+          "android": {
+            "image": "./assets/splash-wordmark-v2-android.png",
+            "imageWidth": 288,
+            "dark": {
+              "image": "./assets/splash-wordmark-v2-dark-android.png",
+              "backgroundColor": "#070B14"
+            }
           }
         }
       ],
@@ -80,13 +88,21 @@
       ],
       "expo-secure-store",
       "expo-video",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow habitPro to capture photos and 7-second chapters for streak memories.",
+          "microphonePermission": "Your phone asks for this while recording a 7-second chapter. HabitPro removes all sound before the clip is saved.",
+          "recordAudioAndroid": false
+        }
+      ],
       "react-native-compressor",
       [
         "expo-image-picker",
         {
           "photosPermission": "Allow habitPro to attach photos to your streak memories.",
-          "cameraPermission": "Allow habitPro to capture photos and 5-second chapters for streak memories.",
-          "microphonePermission": "Your phone asks for this while recording a 5-second chapter. HabitPro removes all sound before the clip is saved."
+          "cameraPermission": "Allow habitPro to capture photos and 7-second chapters for streak memories.",
+          "microphonePermission": "Your phone asks for this while recording a 7-second chapter. HabitPro removes all sound before the clip is saved."
         }
       ]
     ],

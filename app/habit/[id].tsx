@@ -110,10 +110,16 @@ import { startJsStallProbe, traceSync } from "../../src/lib/jsThreadProbe";
 import { waitForHabitPersistIdle } from "../../src/lib/chunkedHabitPersistStorage";
 import { withAlpha } from "../../src/styles/theme";
 import { useFeatureFlag } from "../../src/lib/featureFlags";
-import { chapterStatusForToday, videoMomentCreditForToday } from "../../src/features/videoMoments/credit";
+import {
+    chapterStatusForToday,
+    VIDEO_MOMENT_BLOCK_DAYS,
+    VIDEO_MOMENT_MAX_MS,
+    VIDEO_MOMENT_MIN_POSTS,
+    videoMomentCreditForToday,
+} from "../../src/features/videoMoments/credit";
 import { shouldAnnounceChapter } from "../../src/features/videoMoments/chapterToast";
 import { fetchClaimedVideoBlocks, uploadAndClaimVideoMoment } from "../../src/features/videoMoments/api";
-import { pickChapterClip } from "../../src/features/videoMoments/pickChapterClip";
+import { useChapterRecorder } from "../../src/features/videoMoments/ChapterRecorder";
 import { CHAPTER_SLIDE_ID, chapterSlideLabel } from "../../src/features/videoMoments/chapterSlides";
 import type { ChecklistChapter } from "../../src/features/videoMoments/ChecklistChapterRow";
 
@@ -729,6 +735,7 @@ export default function HabitDetail() {
     const [checklistShareBusy, setChecklistShareBusy] = useState(false);
     /** Compressing/uploading/claiming a checklist day's Chapter clip. */
     const [checklistChapterBusy, setChecklistChapterBusy] = useState(false);
+    const checklistChapterRecorder = useChapterRecorder();
     const [acceptedGroupMemberCount, setAcceptedGroupMemberCount] = useState<number>(0);
     const [groupSheetOpen, setGroupSheetOpen] = useState(false);
     const [shareMenuVisible, setShareMenuVisible] = useState(false);
@@ -996,7 +1003,7 @@ export default function HabitDetail() {
     const isManual = mode === 'manual';
     const activeMissionDaySlot = clockHabit ? getHabitActiveMissionDaySlot(clockHabit, now) : null;
 
-    // Video Moments (experiment, behind the video_moments flag): a 5-second
+    // Video Moments (experiment, behind the video_moments flag): a 7-second
     // video earned by a clean 7-day block, usable during the next block.
     const videoMomentsFlag = useFeatureFlag('video_moments');
     const videoMomentsEnabled = videoMomentsFlag.enabled;
@@ -1668,6 +1675,7 @@ export default function HabitDetail() {
      * doesn't complete the day. It's claimed on the server right away (which
      * re-checks the unlock rules), then rides along in the day's post.
      */
+    const recordChecklistChapter = checklistChapterRecorder.record;
     const handleAddChecklistChapter = useCallback(() => {
         const dayCtx = checklistDayUi;
         const credit = videoCredit;
@@ -1675,7 +1683,7 @@ export default function HabitDetail() {
         if (!credit || credit.dateKey !== dayCtx.dateStr) return;
         const reopenChecklist = () => setChecklistDayUi(dayCtx);
         void (async () => {
-            const clip = await pickChapterClip();
+            const clip = await recordChecklistChapter();
             if (!clip) return;
             setChecklistChapterBusy(true);
             try {
@@ -1703,7 +1711,7 @@ export default function HabitDetail() {
                 setChecklistChapterBusy(false);
             }
         })();
-    }, [checklistDayUi, videoCredit, habit, checklistChapterBusy, patchStreakMemory, setStreakMemory]);
+    }, [checklistDayUi, videoCredit, habit, checklistChapterBusy, patchStreakMemory, setStreakMemory, recordChecklistChapter]);
 
     // The open checklist day's Chapter row: already added, or unlocked for this day.
     const checklistChapter = useMemo((): ChecklistChapter | null => {
@@ -2143,6 +2151,19 @@ export default function HabitDetail() {
     const effectiveRequireNote = Boolean(habit.challengeGroupId) && Boolean(habit.requireNote);
     const effectiveRequirePhoto = Boolean(habit.challengeGroupId) && Boolean(habit.requirePhoto);
 
+    /** Tapping a charging Chapter row explains what still unlocks it. */
+    const showChapterHowTo = (chapter: number, posts: number, postsNeeded: number) => {
+        const postLine =
+            postsNeeded > 0
+                ? `Post ${postsNeeded} more of this week’s days to Community (${posts} of ${VIDEO_MOMENT_MIN_POSTS} so far). A post you remove stops counting.`
+                : `You’ve posted ${posts} days to Community this week, which is enough.`;
+        showAppAlert(
+            `How to unlock Chapter ${chapter}`,
+            `Check in all ${VIDEO_MOMENT_BLOCK_DAYS} days of this week without a streak repair.\n\n${postLine}\n\nThen record a ${VIDEO_MOMENT_MAX_MS / 1000}-second Chapter on day ${chapter * VIDEO_MOMENT_BLOCK_DAYS}.`,
+            [{ text: 'Got it' }],
+        );
+    };
+
     const handleShareOnDemand = () => {
         if (shareOnDemandBusyRef.current) return;
         shareOnDemandBusyRef.current = true;
@@ -2455,6 +2476,7 @@ export default function HabitDetail() {
                         chapter={checklistChapter}
                         chapterBusy={checklistChapterBusy}
                         onAddChapter={handleAddChecklistChapter}
+                        chapterRecorder={checklistChapterRecorder.recorder}
                         onToggleTaskInclusion={(taskId) => {
                             if (!checklistDayUi) return;
                             handleToggleTaskInclusion(checklistDayUi.dateStr, taskId);
@@ -2497,7 +2519,10 @@ export default function HabitDetail() {
                                     : undefined,
                             });
                         }}
-                        onClose={() => setChecklistDayUi(null)}
+                        onClose={() => {
+                            if (checklistChapterRecorder.isOpen) checklistChapterRecorder.close();
+                            else setChecklistDayUi(null);
+                        }}
                     />
                     <StreakMemorySheet
                         visible={taskMemoryUi !== null}
@@ -2851,7 +2876,9 @@ export default function HabitDetail() {
                         readyChapter &&
                         (Boolean(habit.taskChecklist?.length) || !completedDateSet.has(readyChapter.credit.dateKey))
                             ? () => handleDayPress(readyChapter.credit.missionDay - 1, readyChapter.credit.missionDay)
-                            : undefined
+                            : chapterStatus?.kind === 'charging'
+                              ? () => showChapterHowTo(chapterStatus.chapter, chapterStatus.posts, chapterStatus.postsNeeded)
+                              : undefined
                     }
                 />
 

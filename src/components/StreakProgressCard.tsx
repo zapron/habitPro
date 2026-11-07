@@ -21,7 +21,7 @@ interface StreakProgressCardProps {
     totalDays: number;
     /** Override the progress bar's active color, e.g. for manual-finish missions. */
     ringColor?: string;
-    /** Chapters (5-second clips): this week's row under the bar; null hides it. */
+    /** Chapters (7-second clips): this week's row under the bar; null hides it. */
     chapter?: ChapterStatus | null;
     onPressChapter?: () => void;
 }
@@ -94,7 +94,7 @@ function ChapterRow({ status, onPress }: { status: ChapterStatus; onPress?: () =
         lead = `Chapter ${status.chapter}`;
         rest =
             (status.daysToGo > 0 ? ` · ${plural(status.daysToGo, 'day')} to go` : ' · finish today') +
-            (status.postsNeeded > 0 ? ` · ${plural(status.postsNeeded, 'more post')}` : '');
+            (status.postsNeeded > 0 ? ` · post ${status.postsNeeded} more to Community` : '');
     }
 
     const iconBg = ready ? amber : status.kind === 'kept' ? green : theme.colors.surfaceElevated;

@@ -84,7 +84,7 @@ import { withAlpha } from "../src/styles/theme";
 import { PageDots } from "../src/components/PageDots";
 import { attachChapterVideo, CHAPTER_SLIDE_ID, chapterSlideLabel } from "../src/features/videoMoments/chapterSlides";
 import { ChapterPlayBadge } from "../src/features/videoMoments/ChapterPlayBadge";
-import { VideoMomentPlayer } from "../src/features/videoMoments/VideoMomentPlayer";
+import { stopActiveChapter, VideoMomentPlayer } from "../src/features/videoMoments/VideoMomentPlayer";
 
 type StoryTab = "missions" | "minis";
 type JourneyMode = "public" | "private";
@@ -1693,6 +1693,7 @@ function JourneyMemoryLightbox({
           data={slides}
           horizontal
           pagingEnabled
+          onScrollBeginDrag={() => stopActiveChapter()}
           showsHorizontalScrollIndicator={false}
           initialScrollIndex={initialIndex}
           getItemLayout={(_, index) => ({ length: width, offset: width * index, index })}

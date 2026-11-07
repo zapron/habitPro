@@ -5,7 +5,7 @@ import type { NativeSyntheticEvent, NativeScrollEvent } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { X } from "lucide-react-native";
 import { PageDots } from "./PageDots";
-import { VideoMomentPlayer } from "../features/videoMoments/VideoMomentPlayer";
+import { stopActiveChapter, VideoMomentPlayer } from "../features/videoMoments/VideoMomentPlayer";
 
 /**
  * One carousel slide — a photo, a note, or both. `imageUrl` null renders a text-only card.
@@ -79,6 +79,7 @@ export function CommunityWinImageLightbox({ visible, slides, initialIndex = 0, o
           data={slides}
           horizontal
           pagingEnabled
+          onScrollBeginDrag={() => stopActiveChapter()}
           showsHorizontalScrollIndicator={false}
           initialScrollIndex={initialIndex}
           getItemLayout={(_, index) => ({ length: width, offset: width * index, index })}

@@ -1,3 +1,4 @@
+import type React from "react";
 import { Text } from "./AppText";
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -36,6 +37,8 @@ type Props = {
   chapter?: ChecklistChapter | null;
   chapterBusy?: boolean;
   onAddChapter?: () => void;
+  /** The in-app Chapter camera (useChapterRecorder), drawn over the sheet inside its Modal. */
+  chapterRecorder?: React.ReactNode;
   onClose: () => void;
 };
 
@@ -74,6 +77,7 @@ export function ChecklistDaySheet({
   chapter = null,
   chapterBusy = false,
   onAddChapter,
+  chapterRecorder = null,
   onClose,
 }: Props) {
   const { theme } = useTheme();
@@ -277,6 +281,7 @@ export function ChecklistDaySheet({
           ) : null}
         </View>
       </View>
+      {chapterRecorder}
     </Modal>
   );
 }

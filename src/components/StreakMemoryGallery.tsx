@@ -19,7 +19,7 @@ import {
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { FlashList } from "@shopify/flash-list";
 import { Bookmark, Play, Share2, Wrench, X } from "lucide-react-native";
-import { VideoMomentPlayer } from "../features/videoMoments/VideoMomentPlayer";
+import { stopActiveChapter, VideoMomentPlayer } from "../features/videoMoments/VideoMomentPlayer";
 import { CHAPTER_SLIDE_ID, chapterSlideLabel } from "../features/videoMoments/chapterSlides";
 import { LinearGradient } from "expo-linear-gradient";
 import Svg, { ClipPath, Defs, Image as SvgImage, Path } from "react-native-svg";
@@ -598,6 +598,7 @@ export function StreakMemoryGallery({
                 <ScrollView
                   horizontal
                   pagingEnabled
+                  onScrollBeginDrag={() => stopActiveChapter()}
                   showsHorizontalScrollIndicator={false}
                   style={{ width: viewerPhotoWidth, height: viewerPhotoHeight }}
                   contentContainerStyle={{ width: viewerPhotoWidth * openTasks.length }}

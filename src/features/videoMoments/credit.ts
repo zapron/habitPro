@@ -5,7 +5,7 @@ import {
 } from "../../utils/missionDaySlots";
 
 /**
- * Video Moments: a mission earns one 5-second video per 7-day block of its own
+ * Video Moments: a mission earns one 7-second video per 7-day block of its own
  * days (1-7, 8-14, ...) when all seven are done, none was streak-repaired and
  * at least 4 of them were posted to Community. The video can be used from the
  * block's own day 7 (once days 1-6 are done) through the last day of the next
@@ -15,7 +15,7 @@ import {
  */
 export const VIDEO_MOMENT_BLOCK_DAYS = 7;
 export const VIDEO_MOMENT_MIN_POSTS = 4;
-export const VIDEO_MOMENT_MAX_MS = 5000;
+export const VIDEO_MOMENT_MAX_MS = 7000;
 
 export type VideoMomentBlockProgress = {
   blockNumber: number;
@@ -127,6 +127,8 @@ export type ChapterStatus =
       daysToGo: number;
       /** Community posts still needed this week (0 when there are enough). */
       postsNeeded: number;
+      /** This week's days on Community so far (removed posts don't count). */
+      posts: number;
     }
   | { kind: "blocked"; chapter: number; reason: "repaired" | "missed" | "posts"; nextDay: number }
   | { kind: "ready"; credit: VideoMomentCredit; chapter: number; daysLeft: number }
@@ -165,17 +167,16 @@ export function chapterStatusForToday(
   const memories = habit.streakMemories ?? {};
   const dots: ("done" | "today" | "ahead" | "missed")[] = [];
   let posts = 0;
-  let postedToday = false;
+  // Today can't be posted any more once it's on Community or was taken off it.
+  let todayUsed = false;
   let repaired = false;
   for (let i = 0; i < VIDEO_MOMENT_BLOCK_DAYS; i++) {
     const day = (chapter - 1) * VIDEO_MOMENT_BLOCK_DAYS + i + 1;
     const key = calendarDateForHabitMissionDayIndex(habit, day - 1, nowMs);
     const mem = memories[key];
     if (mem?.repairSource) repaired = true;
-    if (mem?.communityPosted && !mem.communityFeedRevoked) {
-      posts += 1;
-      if (day === slot) postedToday = true;
-    }
+    if (mem?.communityPosted && !mem.communityFeedRevoked) posts += 1;
+    if (day === slot && (mem?.communityPosted || mem?.communityFeedRevoked)) todayUsed = true;
     if (completed.has(key)) dots.push("done");
     else if (day === slot) dots.push("today");
     else if (day > slot) dots.push("ahead");
@@ -185,9 +186,9 @@ export function chapterStatusForToday(
   if (repaired && nextDay) return { kind: "blocked", chapter, reason: "repaired", nextDay };
   if (dots.includes("missed") && nextDay) return { kind: "blocked", chapter, reason: "missed", nextDay };
   const postsNeeded = Math.max(0, VIDEO_MOMENT_MIN_POSTS - posts);
-  // Days left to post this week, today included if it isn't posted yet.
-  const postingDaysLeft = weekEnd - slot + (postedToday ? 0 : 1);
+  // Days left to post this week, today included if it can still be posted.
+  const postingDaysLeft = weekEnd - slot + (todayUsed ? 0 : 1);
   if (postsNeeded > postingDaysLeft && nextDay) return { kind: "blocked", chapter, reason: "posts", nextDay };
   if (repaired || dots.includes("missed") || postsNeeded > postingDaysLeft) return null;
-  return { kind: "charging", chapter, dots, daysToGo: weekEnd - slot, postsNeeded };
+  return { kind: "charging", chapter, dots, daysToGo: weekEnd - slot, postsNeeded, posts };
 }

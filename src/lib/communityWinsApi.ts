@@ -78,7 +78,7 @@ export type CommunityWinRow = {
   streak_mission_day: number | null;
   streak_count_at_post: number | null;
   live_squad_id: string | null;
-  /** Video Moments: a claimed 5-second video; memory_image_url is its poster. */
+  /** Video Moments: a claimed 7-second video; memory_image_url is its poster. */
   video_url: string | null;
 };
 

@@ -48,7 +48,7 @@ export function ChecklistChapterRow({ chapter, busy, onAdd }: Props) {
               Your Chapter
             </Text>
             <Text style={[styles.meta, { color: theme.colors.textMuted }]} numberOfLines={1}>
-              5s clip · goes in this day's post
+              7s clip · goes in this day's post
             </Text>
           </View>
           {previewOpen ? (
@@ -94,7 +94,7 @@ export function ChecklistChapterRow({ chapter, busy, onAdd }: Props) {
           {busy ? "Adding your Chapter…" : "Add your Chapter"}
         </Text>
         <Text style={[styles.meta, { color: busy ? theme.colors.textMuted : amber }]} numberOfLines={1}>
-          {busy ? "Getting the clip ready" : `Chapter ${chapter.chapter} · 5s clip · ${daysLeftText}`}
+          {busy ? "Getting the clip ready" : `Chapter ${chapter.chapter} · 7s clip · ${daysLeftText}`}
         </Text>
       </View>
       {busy ? null : <ChevronRight size={16} color={theme.colors.textMuted} />}

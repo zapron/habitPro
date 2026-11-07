@@ -36,6 +36,7 @@ import { promptReportCommunityWin } from "../lib/communityReportPrompt";
 import { fetchChallengeGroupIdForHabit } from "../lib/groupChallengesApi";
 import { traceAsync } from "../lib/perfTrace";
 import { CommunityWinFeedPost } from "./CommunityWinFeedPost";
+import { stopActiveChapter } from "../features/videoMoments/VideoMomentPlayer";
 import { CommunityWinFeedSkeletonRow } from "./CommunityWinFeedSkeleton";
 import { CommunityWinImageLightbox, type CommunityLightboxSlide } from "./CommunityWinImageLightbox";
 import { CommunityWinCheerersModal } from "./CommunityWinCheerersModal";
@@ -56,6 +57,7 @@ type ListRow =
   | { kind: "skeleton"; id: string };
 
 const COMMUNITY_FOCUS_RELOAD_TTL_MS = 45_000;
+const CHAPTER_VIEWABILITY = { itemVisiblePercentThreshold: 30 };
 
 export function CommunityWinsFeed({
   contentPaddingBottom = 24,
@@ -160,6 +162,26 @@ export function CommunityWinsFeed({
       if (userIdRef.current === requestedUserId) setLoading(false);
     }
   }, [showToast, userId]);
+
+  // A chapter clip stops once its post scrolls away or the tab loses focus:
+  // FlashList keeps the cell around, and on Android a playing video in an
+  // off-screen cell comes back as a frozen frame.
+  const onViewableItemsChanged = useCallback(
+    ({ viewableItems }: { viewableItems: { item: ListRow }[] }) => {
+      const visibleVideos = new Set<string>();
+      for (const v of viewableItems) {
+        if (v.item?.kind === "post" && v.item.win.video_url) visibleVideos.add(v.item.win.video_url);
+      }
+      stopActiveChapter(visibleVideos);
+    },
+    [],
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      return () => stopActiveChapter();
+    }, []),
+  );
 
   useFocusEffect(
     useCallback(() => {
@@ -432,6 +454,8 @@ export function CommunityWinsFeed({
         keyExtractor={(row) => (row.kind === "skeleton" ? row.id : row.win.id)}
         renderItem={renderItem}
         getItemType={(row) => row.kind}
+        onViewableItemsChanged={onViewableItemsChanged}
+        viewabilityConfig={CHAPTER_VIEWABILITY}
         contentContainerStyle={{ paddingBottom: contentPaddingBottom, flexGrow: 1 }}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.indigo[400]} />

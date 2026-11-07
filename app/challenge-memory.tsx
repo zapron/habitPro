@@ -36,7 +36,7 @@ import {
 import { CustomNudgeModal } from "../src/components/CustomNudgeModal";
 import { CommunityWinCheerersModal } from "../src/components/CommunityWinCheerersModal";
 import { CommunityWinImageLightbox } from "../src/components/CommunityWinImageLightbox";
-import { VideoMomentPlayer } from "../src/features/videoMoments/VideoMomentPlayer";
+import { stopActiveChapter, VideoMomentPlayer } from "../src/features/videoMoments/VideoMomentPlayer";
 import { CHAPTER_SLIDE_ID } from "../src/features/videoMoments/chapterSlides";
 import { Screen } from "../src/components/Screen";
 import { useAuth } from "../src/context/AuthContext";
@@ -165,6 +165,7 @@ function MemoryPhotoCarousel({
         data={slides}
         horizontal
         pagingEnabled
+        onScrollBeginDrag={() => stopActiveChapter()}
         showsHorizontalScrollIndicator={false}
         initialScrollIndex={activeIndex}
         keyExtractor={(item, index) => `${index}-${item.taskId}`}
