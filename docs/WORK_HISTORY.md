@@ -2,6 +2,24 @@
 
 This is a concise chronological log for future sessions. Keep secrets out of this file.
 
+## 2026-11-07 evening (1.1.40 committed, Chapter player fixes)
+
+Full detail in `docs/CURRENT_WORK.md`.
+- **Commit `e273b8a`:**
+  - in-app 7 s ChapterRecorder (expo-camera), 7 s Chapters and their migration, Android splash fix, version 1.1.40 / runtime 1.1.40;
+  - player fixes: Android tap-to-stop, one clip at a time, stop on scroll-away, blur or swipe;
+  - the "post N more to Community" hint and its how-to-unlock alert;
+  - a day removed from Community today no longer counts as postable.
+- **Production:** the 7 s migration is live (user `db:push`). EAS builds iOS 40 `01bcb7bf` and Android 41 `da3d2e06` were made before the player fixes. **OTA not sent:** the auto-mode classifier blocked it, so the user runs `npm run update:production` with `.env.local` moved aside.
+- **Validation:**
+  - `npx tsc --noEmit` clean.
+  - Android Emulator: feed tap-to-stop, and scroll away then back shows the play button.
+  - iOS Simulator (fake clip, removed): checklist Chapter flows never stuck; the how-to alert renders.
+- **Open:**
+  - iOS stuck screen on a checklist day after adding a Chapter (real iPhone only, not reproduced);
+  - share card day count off by one after Mark Day Complete;
+  - SQL-deleted missions linger on devices.
+
 ## 2026-11-06 → 2026-11-07 (1.1.39 release, Chapter testers, record-only Chapters)
 
 Full detail in `docs/CURRENT_WORK.md`.

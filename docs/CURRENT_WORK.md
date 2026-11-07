@@ -1,6 +1,50 @@
 # HabitPro Current Work
 
-Last updated: 2026-11-07 — 1.1.39 (Chapters + post reports) committed, migrations live, builds on the user's devices, Chapters on for two testers; Chapters made record-only and shipped by OTA. See the newest entry below.
+Last updated: 2026-11-07 (evening): 1.1.40 committed (`e273b8a`): in-app 7 s recorder, Chapter player fixes, unlock hint. Builds done, 7 s migration live on prod; production OTA for 1.1.40 not yet sent. See the newest entry below.
+
+## Session Handoff (2026-11-07 evening: 1.1.40 committed, Chapter player fixes)
+
+**State:**
+- Branch `release/1.1.39-chapters` (not merged into `main`, not pushed this session). Commits:
+  - `e273b8a` feat: in-app 7-second Chapter recorder, 1.1.40. Everything listed under "Later on 2026-11-07" in the entry below, plus the player fixes here. Version 1.1.40, runtimeVersion 1.1.40, Android versionCode 41, iOS build 40.
+  - The docs commit that carries this entry.
+- **Prod migration `20261107120000_chapter_seven_seconds` is live.** Checked on prod: `moment_videos_duration_ms_check` is `1..7500`, so the user ran `db:push`.
+- **Builds (runtime 1.1.40):**
+  - iOS build 40 `01bcb7bf`.
+  - Android versionCode 41 rebuild `da3d2e06`, which has the fixed splash. Upload this one; `cf6b3b3b` has the old clipped splash.
+  - The user has 1.1.40 on their phones and tested Chapters on both.
+  - These builds were made **before** the player fixes in `e273b8a`. Testers get those fixes only by OTA.
+- **OTA: NOT sent.** The auto-mode classifier blocked `npm run update:production`; the user must run it.
+  - Command: `npm run update:production -- --message "Chapter player fixes"`. It targets runtime 1.1.40 only, so 1.1.39 builds are unaffected.
+  - **Move `.env.local` aside first.** `dev-local.sh` wrote `EXPO_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321` into it. EAS env vars should win over dotenv, but this hasn't been verified, so don't rely on it.
+
+**User test feedback on 1.1.40 (real devices) and what changed:**
+1. "Tell users how many posts they still need": the Chapter row now reads "Chapter N · X days to go · post N more to Community". A charging row is tappable and shows "How to unlock Chapter N": 7/7 days without a repair, posts so far vs 4, removed posts don't count, record on day 7·N (`showChapterHowTo` in `app/habit/[id].tsx`). Checked on the iOS Simulator.
+2. "Post added then removed should update the logic": both app and server already excluded removed posts. The client counts `communityPosted && !communityFeedRevoked`; the server counts real `community_wins` rows. Bug fixed: a day taken off Community today still counted as a day you could post (`credit.ts`, `todayUsed`).
+3. **Android: tapping a playing Chapter didn't stop it, and several played at once.** The native VideoView swallowed touches, so the wrapping Pressable never fired. Fixes in `VideoMomentPlayer.tsx`:
+   - The tap target is now a sibling above the VideoView.
+   - Module-level `activeChapter` plus an exported `stopActiveChapter(keepUrls?)`, so starting a clip stops the one already playing.
+   - The clip stops on screen blur (`useIsFocused`).
+   - Checked on the Android Emulator: tap stops playback.
+4. **Scroll away and back left a frozen frame instead of the video.** FlashList keeps the off-screen cell, and on Android the playing surface comes back frozen. Fixes:
+   - `CommunityWinsFeed` stops the clip when its post leaves the viewport (`onViewableItemsChanged`, threshold 30%) or the tab blurs.
+   - Paged viewers call `stopActiveChapter()` on `onScrollBeginDrag`: `my-journey`, `challenge-memory`, `CommunityWinImageLightbox`, the feed carousel, `StreakMemoryGallery`.
+   - Checked on the Android Emulator: scrolling back shows the poster and play button.
+5. **iOS: screen stuck (back/share dead) after adding a Chapter on a checklist day. NOT reproduced, NOT fixed.**
+   - Ran on the iOS 26.5 Simulator with a temporary fake clip (the Simulator has no camera; the hack was removed before commit). Each of these, then back/share, worked:
+     - Add your Chapter, play it in the sheet, close the sheet;
+     - Publish (Chapter + 1 photo);
+     - Mark Day Complete, then share card, then Not now;
+     - D10 hex viewer: play, then share.
+   - Android is fine in the same flow (user).
+   - Next: get a screen recording or the exact last tap from the user. Check whether it only happens after a real camera recording (CameraView teardown inside the sheet's Modal) and whether backgrounding the app clears it.
+
+**Other open items:**
+- The share card after Mark Day Complete on a checklist day said "9/21 DAYS" on day 10 (grid computed before the completion landed). Not fixed.
+- Prod: missions deleted by SQL stay on phones that already have them. `mergeDirtyLocalIntoRemote` keeps local-only habits, and the delta RPC always returns empty `deletedIds`. Workaround: delete in-app first, or sign out and in. A fix would need server tombstones.
+- Prod test missions `chapter-test-*` were re-seeded by the user for raktim_24 and zapron (`chapter-test-ready` already has a 7 s clip on both).
+- Local DB: re-seeded with `seed_chapters.sql`; raktim24 posted a Chapter on `chapter-test-checklist` while testing.
+- Earlier open items in the entry below (block user, report on comments, "1 photo" count, back-button a11y label, Daily Dose header buttons, `.maestro` "Chapter from library" flows) are unchanged.
 
 ## Session Handoff (2026-11-06 → 2026-11-07 — 1.1.39 release, Chapter testers, record-only Chapters)
 
@@ -39,6 +83,35 @@ Last updated: 2026-11-07 — 1.1.39 (Chapters + post reports) committed, migrati
 - Decision (user): drop library picks for now. `pickChapterClip()` is camera-only; the memory sheet menu is "Record 5s chapter / Take photo / Photo library"; the checklist "Add your Chapter" row opens the camera directly.
 - To bring library picks back: iOS would need a non-passthrough `videoExportPreset` (untested); Android needs a native trimmer (new build).
 - **Not device-tested** (tsc only). Also untested: whether Android camera apps stop at 5 s.
+
+**Later on 2026-11-07:**
+- **iOS stuck-screen suspect ruled out on the Simulator.** Check-in → "Just mark done" → share card → "Not now" → back ran 11 times on the iOS 26.5 Simulator with local data reset each time (Maestro, scratchpad flows). It never stuck. A back tap made during the share card's ~0.3 s slide-out is ignored (normal iOS behaviour), and a tap 2 s later always worked. So the `LazyMount`/`ShareWinModal` theory below is **not** the cause; no code changed. Waiting for the user to note the screen, the last thing opened/closed, whether only back or the whole screen is dead, and whether backgrounding the app fixes it.
+- **Android cameras ignore the 5 s limit.** "Record 5s chapter" uses the system camera via `ImagePicker.launchCameraAsync({ videoMaxDuration: 5 })`. iOS stops at 5 s; many Android camera apps don't (the user recorded 10 s). The app has no trimming library (`react-native-compressor` 2.0.5 has no trim), and the server rejects clips over 5.5 s (`moment_videos.duration_ms`).
+  - Stopgap, OTA `b82bc522-0b2e-47da-85d1-b54155a90ab3` (runtime 1.1.39): the alert now says "Your camera recorded N seconds… record again and stop at 5" (`pickChapterClip.ts`). **Uncommitted.**
+  - **Decided (user): an in-app 5 s recorder for both platforms in the next build (1.1.40)**, so recording works the same on iOS and Android. Plan:
+    1. Add `expo-camera` (SDK 54 version via `npx expo install expo-camera`) and its `app.json` plugin. Record with `mute: true` so it needs no microphone.
+    2. New `src/features/videoMoments/ChapterRecorder.tsx`: back camera by default plus a flip button, one record button, a 5 s progress ring, `recordAsync({ maxDuration: 5 })` with a JS stop at 5 s as a backup, then a preview with "Use clip" / "Retake".
+    3. **Don't present it as a second `<Modal>`** over `StreakMemorySheet` or `ChecklistDaySheet`: on iOS a Modal over a Modal often doesn't show (the same reason the "Keep it to 5 seconds" alert was invisible). Render it as an absolute overlay inside the sheet that opened it, and resolve a promise with `{ uri, durationMs, posterUri }` like `pickChapterClip()`.
+    4. Swap `pickChapterClip()` callers (`StreakMemorySheet.tsx` `pickVideo`, `app/habit/[id].tsx` `handleAddChecklistChapter`) to the recorder. Keep the size/duration checks in `api.ts` and on the server.
+    5. `npm run version:sync` to **1.1.40 with runtimeVersion 1.1.40** (new native module). Never OTA this to 1.1.39 builds.
+    6. Test on the Android Emulator (it has a virtual camera) with `npm run dev:local --rebuild-android`. The iOS Simulator has no camera, so iOS needs a dev build or TestFlight on a real phone.
+    - Later, optional: a native trim module (AVFoundation / Media3) would also let "Chapter from library" come back.
+  - **Built and tested locally (uncommitted, not yet in any store build):**
+    - `src/features/videoMoments/ChapterRecorder.tsx`: `useChapterRecorder()` returns `{ record, recorder, isOpen, close }`. `record()` replaces `pickChapterClip()` (file deleted). `recorder` is rendered as the last child of the host sheet's Modal (`StreakMemorySheet`, and `ChecklistDaySheet` via its new `chapterRecorder` prop). While it's open, the host's back/close closes only the recorder.
+    - Camera: `CameraView mode="video" mute videoQuality="720p"`, back camera default plus flip. Auto-stop at 5 s (`maxDuration` plus a JS backup stop at 5.25 s). Stop is ignored in the first 1 s. A watchdog at 8 s shows "The camera got stuck" and remounts the camera. Close (X) is always visible except while processing. `durationMs` comes from the file (expo-video `player.duration`), capped at 5000.
+    - Permission: asked once on open. After "Don't allow" there's an in-overlay "Allow camera" / "Open Settings" screen (an auto re-ask looped on Android, fixed). No mic needed (`mute`). The `app.json` `expo-camera` plugin uses the same camera/mic strings and `recordAudioAndroid: false` (RECORD_AUDIO is still in the manifest from expo-image-picker).
+    - Version: `version:sync --version 1.1.40 --android-code 41 --ios-build 40` (runtimeVersion 1.1.40). `npx expo prebuild --no-install` ran locally.
+    - Android Emulator (virtual camera), all passed:
+      - auto-stop gives a 4.99 s file with a video stream only (ffprobe);
+      - Stop at 2.5 s gives 2.53 s; a tap at 0.4 s is ignored;
+      - Retake, flip to front, back button, X, and deny → Open Settings all work;
+      - normal check-in claimed (`moment_videos` 4986 ms) and the share card showed;
+      - checklist "Add your Chapter" claimed (4988 ms), and the row became "Your Chapter" / "Publish (Chapter + 1 photo)".
+    - iOS Simulator (no camera): the overlay opens inside the sheet (no Modal-over-Modal problem), the permission prompt shows our text, the camera never becomes ready (expected on the Simulator), and X goes back to the sheet. **Actual recording on iPhone is untested**: check it on a real phone (TestFlight 1.1.40).
+    - **Chapters are now exactly 7 seconds (user decision, 2026-11-07: "na kam, na zyada").** `VIDEO_MOMENT_MAX_MS = 7000`. The recorder has no early stop: one tap records the full 7 s, and a file under 6 s shows "The camera stopped early". All "5s"/"5-second" copy is now 7 (memory sheet menu, checklist row, player chip, permission strings). Server migration `supabase/migrations/20261107120000_chapter_seven_seconds.sql` changes `moment_videos.duration_ms` to 1–7500 and the RPC clamp to 7500 (5 s clips from 1.1.39 stay valid). **Tested locally with `db:reset` (constraint, clamp and grants checked); NOT pushed: the user must run `db:push` before 1.1.40 ships**, or 7 s claims fail on prod. Android re-test: the file is 6.995 s, a tap mid-recording is ignored, and the server stored 6995 ms / 1.09 MB (under the 2 MB cap). The "Ns · Chapter" chip in the memory sheet now uses the constant (type-check only).
+    - EAS production builds of 1.1.40 finished: Android versionCode 41 (`cf6b3b3b-f5c2-45a0-bd8f-bd01ea151a10`) and iOS build 40 (`01bcb7bf-5dfb-4132-8e0b-d4ed2d17c1d1`), runtime 1.1.40, built from the uncommitted working tree.
+    - **Android splash wordmark was clipped** (user photo: "HabitPro" cut at both edges). Android 12+ masks the splash icon to a circle about 2/3 of its box, and the wide wordmark didn't fit. Fix: Android-only `assets/splash-wordmark-v2-android.png` / `-dark-android.png` (1200 px square, wordmark scaled to fit inside the circle with a 6% margin), set via the `expo-splash-screen` plugin's `android` block (`imageWidth` 288). iOS is unchanged. Checked on the emulator after a native rebuild, light and dark. **Needs a new Android build.** Kept versionCode 41 (the first 41 AAB, `cf6b3b3b`, was never uploaded to Play; upload only the rebuilt one).
+    - Local dev note: `dev-local.sh --rebuild-android` fails with "Could not find device with name: emulator-5554" (`expo run:android --device` wants the AVD name). Workaround: `npx expo run:android --no-bundler --device Resizable_Experimental`.
 
 **Open / not fixed:**
 - **iOS: back button and screen stop responding after closing a modal** (user has seen it more than once, no reliable repro steps). Suspect: after a check-in, `ShareWinModal` (`animationType="slide"`) opens 900 ms later. Its `LazyMount unmountOnExit` removes it 120 ms after `visible` turns false (`app/habit/[id].tsx` ~L2385), which is mid-dismiss. On iOS that can leave an invisible view that eats touches. The same Modal-over-Modal limit hid the Chapter alert above. Not reproduced yet; the user will try. Likely fix: unmount after the Modal's `onDismiss`, or use `unmountDelayMs` ≥ 450.

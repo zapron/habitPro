@@ -10,7 +10,7 @@ a mission earns one Chapter per 7-day week of its own days (7/7 done, no streak
 repair, at least 4 Community posts that week), usable from that week's day 7
 through day 14. Only missions whose day 1 and server `first_seen_at` are on/after
 the tester's `starts_on` count. One Chapter per mission per week: deleting the
-post does not give it back. Chapters are recorded with the camera only (5 s max);
+post does not give it back. Chapters are recorded with the camera only: 7 s exactly from 1.1.40 (in-app recorder), 5 s max on 1.1.39;
 picking from the library was removed on 2026-11-07 (see `docs/CURRENT_WORK.md`).
 
 ## Testers
@@ -43,7 +43,7 @@ then creates:
 | Mission | What to test |
 |---|---|
 | `chapter-test-ready` (day 10) | Chapter 1 unlocked: record and post it |
-| `chapter-test-day7` (day 7) | Unlocks on the week's own day 7: check in today with "Record 5s chapter" |
+| `chapter-test-day7` (day 7) | Unlocks on the week's own day 7: check in today with "Record 7s chapter" ("Record 5s chapter" on 1.1.39) |
 | `chapter-test-day4` (day 4) | Charging row only ("Chapter 1 · 3 days to go"); no video by design |
 | `chapter-test-checklist` (day 10) | "Add your Chapter" row in the checklist day sheet |
 
