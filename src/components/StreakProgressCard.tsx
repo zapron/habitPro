@@ -47,7 +47,7 @@ function plural(n: number, word: string): string {
 }
 
 /**
- * This week's chapter: the bar above shows the whole campaign, this row shows
+ * The next chapter: the bar above shows the whole campaign, this row shows
  * only the seven days that earn the next chapter, so every check-in visibly
  * moves it. Turns amber (pulsing icon) once a chapter is ready to use.
  */
@@ -85,14 +85,10 @@ function ChapterRow({ status, onPress }: { status: ChapterStatus; onPress?: () =
         lead = `Chapter ${status.chapter} kept`;
         rest = status.nextDay ? ` · next one on day ${status.nextDay}` : '';
         leadColor = green;
-    } else if (status.kind === 'blocked') {
-        lead =
-            status.reason === 'repaired' ? 'Repaired day' : status.reason === 'missed' ? 'Missed a day' : 'Not enough posts';
-        rest = ` · next chapter starts day ${status.nextDay}`;
-        leadColor = theme.colors.textSecondary;
     } else {
         lead = `Chapter ${status.chapter}`;
         rest =
+            (status.restarted ? ' · restarted' : '') +
             (status.daysToGo > 0 ? ` · ${plural(status.daysToGo, 'day')} to go` : ' · finish today') +
             (status.postsNeeded > 0 ? ` · post ${status.postsNeeded} more to Community` : '');
     }

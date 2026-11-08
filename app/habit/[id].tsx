@@ -112,13 +112,14 @@ import { withAlpha } from "../../src/styles/theme";
 import { useFeatureFlag } from "../../src/lib/featureFlags";
 import {
     chapterStatusForToday,
+    type ClaimedChapter,
     VIDEO_MOMENT_BLOCK_DAYS,
     VIDEO_MOMENT_MAX_MS,
     VIDEO_MOMENT_MIN_POSTS,
     videoMomentCreditForToday,
 } from "../../src/features/videoMoments/credit";
 import { shouldAnnounceChapter } from "../../src/features/videoMoments/chapterToast";
-import { fetchClaimedVideoBlocks, uploadAndClaimVideoMoment } from "../../src/features/videoMoments/api";
+import { fetchClaimedChapters, uploadAndClaimVideoMoment } from "../../src/features/videoMoments/api";
 import { useChapterRecorder } from "../../src/features/videoMoments/ChapterRecorder";
 import { CHAPTER_SLIDE_ID, chapterSlideLabel } from "../../src/features/videoMoments/chapterSlides";
 import type { ChecklistChapter } from "../../src/features/videoMoments/ChecklistChapterRow";
@@ -1004,14 +1005,14 @@ export default function HabitDetail() {
     const activeMissionDaySlot = clockHabit ? getHabitActiveMissionDaySlot(clockHabit, now) : null;
 
     // Video Moments (experiment, behind the video_moments flag): a 7-second
-    // video earned by a clean 7-day block, usable during the next block.
+    // video earned by 7 clean days in a row, usable for the 7 days after.
     const videoMomentsFlag = useFeatureFlag('video_moments');
     const videoMomentsEnabled = videoMomentsFlag.enabled;
-    const [claimedVideoBlocks, setClaimedVideoBlocks] = useState<Set<number>>(() => new Set());
+    const [claimedVideoBlocks, setClaimedVideoBlocks] = useState<ClaimedChapter[]>([]);
     useEffect(() => {
         if (!videoMomentsEnabled || !habit?.id || !session?.user) return;
         let cancelled = false;
-        void fetchClaimedVideoBlocks(habit.id).then((blocks) => {
+        void fetchClaimedChapters(habit.id).then((blocks) => {
             if (!cancelled) setClaimedVideoBlocks(blocks);
         });
         return () => {
@@ -1150,7 +1151,10 @@ export default function HabitDetail() {
                     });
                     const { videoUri: _v, videoDurationMs: _d, imageUri: _i, ...rest } = memory;
                     memoryToSave = { ...rest, imageUrl: posterUrl, videoUrl, videoPosterUrl: posterUrl };
-                    setClaimedVideoBlocks((prev) => new Set(prev).add(videoCredit.block.blockNumber));
+                    setClaimedVideoBlocks((prev) => [
+                        ...prev,
+                        { blockNumber: videoCredit.block.blockNumber, startDateKey: videoCredit.block.dateKeys[0] },
+                    ]);
                 } catch (e) {
                     showToast(e instanceof Error ? e.message : String(e), 'error');
                     throw e;
@@ -1693,7 +1697,10 @@ export default function HabitDetail() {
                     localUri: clip.uri,
                     durationMs: clip.durationMs,
                 });
-                setClaimedVideoBlocks((prev) => new Set(prev).add(credit.block.blockNumber));
+                setClaimedVideoBlocks((prev) => [
+                    ...prev,
+                    { blockNumber: credit.block.blockNumber, startDateKey: credit.block.dateKeys[0] },
+                ]);
                 // Never imageUrl: on a checklist day that would count as the day being done (sync.ts).
                 const patch = { videoUrl, videoPosterUrl: posterUrl };
                 if (useHabitStore.getState().getHabit(habit.id)?.streakMemories?.[dayCtx.dateStr]) {
@@ -2152,14 +2159,14 @@ export default function HabitDetail() {
     const effectiveRequirePhoto = Boolean(habit.challengeGroupId) && Boolean(habit.requirePhoto);
 
     /** Tapping a charging Chapter row explains what still unlocks it. */
-    const showChapterHowTo = (chapter: number, posts: number, postsNeeded: number) => {
+    const showChapterHowTo = (chapter: number, posts: number, postsNeeded: number, endDay: number) => {
         const postLine =
             postsNeeded > 0
-                ? `Post ${postsNeeded} more of this week’s days to Community (${posts} of ${VIDEO_MOMENT_MIN_POSTS} so far). A post you remove stops counting.`
-                : `You’ve posted ${posts} days to Community this week, which is enough.`;
+                ? `Post ${postsNeeded} more of these days to Community (${posts} of ${VIDEO_MOMENT_MIN_POSTS} so far). A post you remove stops counting.`
+                : `You’ve posted ${posts} of these days to Community, which is enough.`;
         showAppAlert(
             `How to unlock Chapter ${chapter}`,
-            `Check in all ${VIDEO_MOMENT_BLOCK_DAYS} days of this week without a streak repair.\n\n${postLine}\n\nThen record a ${VIDEO_MOMENT_MAX_MS / 1000}-second Chapter on day ${chapter * VIDEO_MOMENT_BLOCK_DAYS}.`,
+            `Check in ${VIDEO_MOMENT_BLOCK_DAYS} days in a row without a streak repair. A repaired or missed day starts the count again the next day.\n\n${postLine}\n\nThen record a ${VIDEO_MOMENT_MAX_MS / 1000}-second Chapter on day ${endDay}.`,
             [{ text: 'Got it' }],
         );
     };
@@ -2877,7 +2884,13 @@ export default function HabitDetail() {
                         (Boolean(habit.taskChecklist?.length) || !completedDateSet.has(readyChapter.credit.dateKey))
                             ? () => handleDayPress(readyChapter.credit.missionDay - 1, readyChapter.credit.missionDay)
                             : chapterStatus?.kind === 'charging'
-                              ? () => showChapterHowTo(chapterStatus.chapter, chapterStatus.posts, chapterStatus.postsNeeded)
+                              ? () =>
+                                    showChapterHowTo(
+                                        chapterStatus.chapter,
+                                        chapterStatus.posts,
+                                        chapterStatus.postsNeeded,
+                                        chapterStatus.endDay,
+                                    )
                               : undefined
                     }
                 />

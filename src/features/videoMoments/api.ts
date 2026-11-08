@@ -2,22 +2,25 @@ import * as FileSystem from "expo-file-system/legacy";
 import * as VideoThumbnails from "expo-video-thumbnails";
 import { Video as VideoCompressor } from "react-native-compressor";
 import { getSupabase } from "../../lib/supabase";
-import type { VideoMomentCredit } from "./credit";
+import type { ClaimedChapter, VideoMomentCredit } from "./credit";
 
 const BUCKET = "moment-videos";
 /** Same cap as the bucket and moment_videos (2 MB). */
 const MAX_UPLOAD_BYTES = 2 * 1024 * 1024;
 
-/** Blocks of this mission whose video was already used (moment_videos rows). */
-export async function fetchClaimedVideoBlocks(habitId: string): Promise<Set<number>> {
+/** Chapters of this mission whose video was already used (moment_videos rows). */
+export async function fetchClaimedChapters(habitId: string): Promise<ClaimedChapter[]> {
   const supabase = getSupabase();
-  if (!supabase) return new Set();
+  if (!supabase) return [];
   const { data, error } = await supabase
     .from("moment_videos")
-    .select("block_number")
+    .select("block_number, start_date")
     .eq("habit_id", habitId);
-  if (error || !data) return new Set();
-  return new Set((data as { block_number: number }[]).map((r) => r.block_number));
+  if (error || !data) return [];
+  return (data as { block_number: number; start_date: string }[]).map((r) => ({
+    blockNumber: r.block_number,
+    startDateKey: r.start_date,
+  }));
 }
 
 function toFileUri(path: string): string {
@@ -36,10 +39,10 @@ const CLAIM_ERRORS: Record<string, string> = {
   feature_disabled: "Chapters aren't available right now.",
   premium_required: "Chapters are part of HabitPro Community.",
   mission_not_eligible: "Chapters start with missions begun after the feature launched.",
-  block_not_complete: "Every day of this week needs to be done first.",
-  block_has_repair: "A repaired day this week means no chapter this time.",
-  not_enough_posts: "You need 4 Community posts from this week.",
-  outside_window: "This chapter had to be used by the end of the next week.",
+  block_not_complete: "Each of these 7 days needs to be done first.",
+  block_has_repair: "A repaired day in these 7 days means no chapter this time.",
+  not_enough_posts: "You need 3 Community posts from these 7 days.",
+  outside_window: "This chapter had to be used within 7 days of earning it.",
   already_claimed: "You've already used this chapter.",
   video_too_large: "That clip is too large. Record a shorter one and try again.",
   video_not_uploaded: "The video didn't finish uploading. Try again.",

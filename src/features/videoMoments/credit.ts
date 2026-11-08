@@ -5,20 +5,28 @@ import {
 } from "../../utils/missionDaySlots";
 
 /**
- * Video Moments: a mission earns one 7-second video per 7-day block of its own
- * days (1-7, 8-14, ...) when all seven are done, none was streak-repaired and
- * at least 4 of them were posted to Community. The video can be used from the
- * block's own day 7 (once days 1-6 are done) through the last day of the next
- * block. Only missions that began on or after the feature's start date count.
- * The server re-checks all of this when the video is claimed
- * (rpc_claim_video_moment_v1); this file only drives the UI.
+ * Video Moments (Chapters): any 7 mission days in a row earn one 7-second
+ * video when all seven are done, none was streak-repaired and at least 3 of
+ * them were posted to Community. A repair or missed day restarts the count
+ * the next day, and a Chapter's days never count toward the next one (posts
+ * included). The video can be used from the week's own day 7 (once the six
+ * days before it are done) through 7 days after it. Only missions that began
+ * on or after the feature's start date count. The server re-checks all of
+ * this when the video is claimed (rpc_claim_video_moment_v1); this file only
+ * drives the UI.
  */
 export const VIDEO_MOMENT_BLOCK_DAYS = 7;
-export const VIDEO_MOMENT_MIN_POSTS = 4;
+export const VIDEO_MOMENT_MIN_POSTS = 3;
 export const VIDEO_MOMENT_MAX_MS = 7000;
 
+/** A Chapter already used (a moment_videos row). */
+export type ClaimedChapter = { blockNumber: number; startDateKey: string };
+
 export type VideoMomentBlockProgress = {
+  /** The Chapter's number (1, 2, ...); also names its storage path. */
   blockNumber: number;
+  /** Mission day of the week's first day. */
+  startDay: number;
   dateKeys: string[];
   daysDone: number;
   repairs: number;
@@ -27,54 +35,101 @@ export type VideoMomentBlockProgress = {
 };
 
 export type VideoMomentCredit = {
-  /** The block that earned the video. */
+  /** The week that earned the video. */
   block: VideoMomentBlockProgress;
   /** Today's mission day and date, where the video would be attached. */
   missionDay: number;
   dateKey: string;
 };
 
+function dateKeyForDay(habit: Habit, day: number, nowMs: number): string {
+  return calendarDateForHabitMissionDayIndex(habit, day - 1, nowMs);
+}
+
+function postedOn(habit: Habit, key: string): boolean {
+  const mem = habit.streakMemories?.[key];
+  return Boolean(mem?.communityPosted && !mem.communityFeedRevoked);
+}
+
 /**
- * `throughDay` (1-7) limits which days of the block are counted — 6 on the
- * block's own day 7, which is still being checked in.
+ * The 7 days from `startDay`. Days after today aren't counted, and today
+ * needn't be done yet (a Chapter can be recorded on its own day 7).
  */
-export function videoMomentBlockProgress(
+function weekProgress(
   habit: Habit,
   blockNumber: number,
+  startDay: number,
+  slot: number,
   nowMs: number,
-  throughDay: number = VIDEO_MOMENT_BLOCK_DAYS,
 ): VideoMomentBlockProgress {
   const completed = new Set(habit.completedDates ?? []);
   const memories = habit.streakMemories ?? {};
   const dateKeys: string[] = [];
   let daysDone = 0;
+  let daysNeeded = 0;
   let repairs = 0;
   let posts = 0;
-  for (let i = 0; i < VIDEO_MOMENT_BLOCK_DAYS; i++) {
-    const dayIndex = (blockNumber - 1) * VIDEO_MOMENT_BLOCK_DAYS + i;
-    const key = calendarDateForHabitMissionDayIndex(habit, dayIndex, nowMs);
+  for (let day = startDay; day < startDay + VIDEO_MOMENT_BLOCK_DAYS; day++) {
+    const key = dateKeyForDay(habit, day, nowMs);
     dateKeys.push(key);
-    if (i >= throughDay) continue;
+    if (day > slot) continue;
+    if (memories[key]?.repairSource) repairs += 1;
+    if (postedOn(habit, key)) posts += 1;
+    if (day === slot) continue;
+    daysNeeded += 1;
     if (completed.has(key)) daysDone += 1;
-    const mem = memories[key];
-    if (mem?.repairSource) repairs += 1;
-    if (mem?.communityPosted && !mem.communityFeedRevoked) posts += 1;
   }
   return {
     blockNumber,
+    startDay,
     dateKeys,
     daysDone,
     repairs,
     posts,
-    earned: daysDone === throughDay && repairs === 0 && posts >= VIDEO_MOMENT_MIN_POSTS,
+    earned:
+      startDay + VIDEO_MOMENT_BLOCK_DAYS - 1 <= slot &&
+      daysDone === daysNeeded &&
+      repairs === 0 &&
+      posts >= VIDEO_MOMENT_MIN_POSTS,
   };
 }
 
-/** Block the mission is in today (1-based), or null when the mission isn't running. */
-export function currentVideoMomentBlock(habit: Habit, nowMs: number): number | null {
-  const slot = getHabitActiveMissionDaySlot(habit, nowMs);
-  if (slot == null) return null;
-  return Math.ceil(slot / VIDEO_MOMENT_BLOCK_DAYS);
+type EarnedChapter = { block: VideoMomentBlockProgress; endDay: number; claimed: boolean };
+
+/**
+ * Chapters earned up to today, earliest first: each is the first qualifying
+ * 7 days after the previous one. A claimed week always counts, under the
+ * number the server stored, and no other week may share its days (an older
+ * app claims fixed weeks: days 1-7, 8-14, ...).
+ */
+function earnedChapters(
+  habit: Habit,
+  slot: number,
+  nowMs: number,
+  claimed: readonly ClaimedChapter[],
+): { chapters: EarnedChapter[]; nextStart: number; lastNumber: number } {
+  const claimedByStart = new Map(claimed.map((c) => [c.startDateKey, c.blockNumber]));
+  const claimedStartDays: number[] = [];
+  for (let day = 1; day <= slot; day++) {
+    if (claimedByStart.has(dateKeyForDay(habit, day, nowMs))) claimedStartDays.push(day);
+  }
+  const chapters: EarnedChapter[] = [];
+  let nextStart = 1;
+  let lastNumber = 0;
+  for (let endDay = VIDEO_MOMENT_BLOCK_DAYS; endDay <= slot; endDay++) {
+    const startDay = endDay - VIDEO_MOMENT_BLOCK_DAYS + 1;
+    if (startDay < nextStart) continue;
+    const claimedNumber = claimedByStart.get(dateKeyForDay(habit, startDay, nowMs));
+    if (claimedNumber == null && claimedStartDays.some((d) => d > startDay && d < startDay + VIDEO_MOMENT_BLOCK_DAYS)) {
+      continue;
+    }
+    const block = weekProgress(habit, claimedNumber ?? lastNumber + 1, startDay, slot, nowMs);
+    if (claimedNumber == null && !block.earned) continue;
+    chapters.push({ block, endDay, claimed: claimedNumber != null });
+    lastNumber = Math.max(lastNumber, block.blockNumber);
+    nextStart = endDay + 1;
+  }
+  return { chapters, nextStart, lastNumber };
 }
 
 /** The mission began on or after the feature's start date (the server also checks when it first saw it). */
@@ -83,65 +138,68 @@ export function videoMomentMissionEligible(habit: Habit, nowMs: number, startsOn
   return calendarDateForHabitMissionDayIndex(habit, 0, nowMs) >= startsOn;
 }
 
-/**
- * The video credit usable today, if any. The previous block's credit comes
- * first (it expires sooner); on a block's own day 7 that block's credit is
- * offered once days 1-6 qualify. `claimedBlocks` comes from moment_videos.
- */
+function lastUsableDay(habit: Habit, endDay: number): number {
+  return Math.min(Math.max(1, habit.totalDays ?? 21), endDay + VIDEO_MOMENT_BLOCK_DAYS);
+}
+
+function creditFrom(
+  habit: Habit,
+  slot: number,
+  nowMs: number,
+  chapters: readonly EarnedChapter[],
+): { credit: VideoMomentCredit; endDay: number } | null {
+  // Earliest first: it expires soonest.
+  const open = chapters.find((c) => !c.claimed && slot <= lastUsableDay(habit, c.endDay));
+  if (!open) return null;
+  return {
+    credit: { block: open.block, missionDay: slot, dateKey: dateKeyForDay(habit, slot, nowMs) },
+    endDay: open.endDay,
+  };
+}
+
+/** The video credit usable today, if any. `claimed` comes from moment_videos. */
 export function videoMomentCreditForToday(
   habit: Habit,
   nowMs: number,
-  claimedBlocks: ReadonlySet<number>,
+  claimed: readonly ClaimedChapter[],
   startsOn: string | null,
 ): VideoMomentCredit | null {
   if (!videoMomentMissionEligible(habit, nowMs, startsOn)) return null;
   const slot = getHabitActiveMissionDaySlot(habit, nowMs);
   if (slot == null) return null;
-  const dateKey = calendarDateForHabitMissionDayIndex(habit, slot - 1, nowMs);
-
-  const previous = Math.ceil(slot / VIDEO_MOMENT_BLOCK_DAYS) - 1;
-  if (previous >= 1 && !claimedBlocks.has(previous)) {
-    const block = videoMomentBlockProgress(habit, previous, nowMs);
-    if (block.earned) return { block, missionDay: slot, dateKey };
-  }
-
-  if (slot % VIDEO_MOMENT_BLOCK_DAYS === 0) {
-    const current = slot / VIDEO_MOMENT_BLOCK_DAYS;
-    if (!claimedBlocks.has(current)) {
-      const block = videoMomentBlockProgress(habit, current, nowMs, VIDEO_MOMENT_BLOCK_DAYS - 1);
-      if (block.earned) return { block, missionDay: slot, dateKey };
-    }
-  }
-  return null;
+  return creditFrom(habit, slot, nowMs, earnedChapters(habit, slot, nowMs, claimed).chapters)?.credit ?? null;
 }
 
 /** What the campaign progress card's chapter row shows today. */
 export type ChapterStatus =
   | {
       kind: "charging";
-      /** Week (block) being earned. */
+      /** Chapter being earned. */
       chapter: number;
-      /** One per day of this week: done, today (not done yet), still ahead, or missed. */
-      dots: ("done" | "today" | "ahead" | "missed")[];
-      /** Days after today until this week's day 7 (0 on day 7 itself). */
+      /** One per day of its 7 days: done, today (not done yet) or still ahead. */
+      dots: ("done" | "today" | "ahead")[];
+      /** Days after today until its day 7 (0 on day 7 itself). */
       daysToGo: number;
-      /** Community posts still needed this week (0 when there are enough). */
+      /** Mission day of its day 7. */
+      endDay: number;
+      /** Community posts still needed in these 7 days (0 when there are enough). */
       postsNeeded: number;
-      /** This week's days on Community so far (removed posts don't count). */
+      /** These 7 days' posts so far (removed posts don't count). */
       posts: number;
+      /** A repair or missed day restarted the count. */
+      restarted: boolean;
     }
-  | { kind: "blocked"; chapter: number; reason: "repaired" | "missed" | "posts"; nextDay: number }
   | { kind: "ready"; credit: VideoMomentCredit; chapter: number; daysLeft: number }
   | { kind: "kept"; chapter: number; nextDay: number | null };
 
 /**
  * Null hides the row: the mission isn't eligible (began before the start
- * date), isn't running, or this week can't finish inside the mission.
+ * date), isn't running, or 7 more days can't fit before it ends.
  */
 export function chapterStatusForToday(
   habit: Habit,
   nowMs: number,
-  claimedBlocks: ReadonlySet<number>,
+  claimed: readonly ClaimedChapter[],
   startsOn: string | null,
 ): ChapterStatus | null {
   if (!videoMomentMissionEligible(habit, nowMs, startsOn)) return null;
@@ -149,46 +207,63 @@ export function chapterStatusForToday(
   if (slot == null) return null;
   const totalDays = Math.max(1, habit.totalDays ?? 21);
 
-  const credit = videoMomentCreditForToday(habit, nowMs, claimedBlocks, startsOn);
-  if (credit) {
-    const lastUsableDay = Math.min(totalDays, credit.block.blockNumber * VIDEO_MOMENT_BLOCK_DAYS + VIDEO_MOMENT_BLOCK_DAYS);
-    return { kind: "ready", credit, chapter: credit.block.blockNumber, daysLeft: lastUsableDay - slot + 1 };
+  const { chapters, nextStart, lastNumber } = earnedChapters(habit, slot, nowMs, claimed);
+  const open = creditFrom(habit, slot, nowMs, chapters);
+  if (open) {
+    return {
+      kind: "ready",
+      credit: open.credit,
+      chapter: open.credit.block.blockNumber,
+      daysLeft: lastUsableDay(habit, open.endDay) - slot + 1,
+    };
   }
 
-  const chapter = Math.ceil(slot / VIDEO_MOMENT_BLOCK_DAYS);
-  const weekEnd = chapter * VIDEO_MOMENT_BLOCK_DAYS;
-  const nextWeekEnd = weekEnd + VIDEO_MOMENT_BLOCK_DAYS;
-  if (claimedBlocks.has(chapter)) {
-    return { kind: "kept", chapter, nextDay: nextWeekEnd <= totalDays ? nextWeekEnd : null };
+  // A Chapter ended today (and was kept): the next count starts tomorrow.
+  if (nextStart > slot) {
+    const nextDay = slot + VIDEO_MOMENT_BLOCK_DAYS;
+    return { kind: "kept", chapter: lastNumber, nextDay: nextDay <= totalDays ? nextDay : null };
   }
-  if (weekEnd > totalDays) return null;
 
+  // The count restarts the day after a repaired or missed day.
   const completed = new Set(habit.completedDates ?? []);
-  const memories = habit.streakMemories ?? {};
-  const dots: ("done" | "today" | "ahead" | "missed")[] = [];
-  let posts = 0;
-  // Today can't be posted any more once it's on Community or was taken off it.
-  let todayUsed = false;
-  let repaired = false;
-  for (let i = 0; i < VIDEO_MOMENT_BLOCK_DAYS; i++) {
-    const day = (chapter - 1) * VIDEO_MOMENT_BLOCK_DAYS + i + 1;
-    const key = calendarDateForHabitMissionDayIndex(habit, day - 1, nowMs);
-    const mem = memories[key];
-    if (mem?.repairSource) repaired = true;
-    if (mem?.communityPosted && !mem.communityFeedRevoked) posts += 1;
-    if (day === slot && (mem?.communityPosted || mem?.communityFeedRevoked)) todayUsed = true;
-    if (completed.has(key)) dots.push("done");
-    else if (day === slot) dots.push("today");
-    else if (day > slot) dots.push("ahead");
-    else dots.push("missed");
+  let runStart = nextStart;
+  for (let day = nextStart; day <= slot; day++) {
+    const key = dateKeyForDay(habit, day, nowMs);
+    if (habit.streakMemories?.[key]?.repairSource || (day < slot && !completed.has(key))) runStart = day + 1;
   }
-  const nextDay = weekEnd + 1 <= totalDays ? weekEnd + 1 : null;
-  if (repaired && nextDay) return { kind: "blocked", chapter, reason: "repaired", nextDay };
-  if (dots.includes("missed") && nextDay) return { kind: "blocked", chapter, reason: "missed", nextDay };
-  const postsNeeded = Math.max(0, VIDEO_MOMENT_MIN_POSTS - posts);
-  // Days left to post this week, today included if it can still be posted.
-  const postingDaysLeft = weekEnd - slot + (todayUsed ? 0 : 1);
-  if (postsNeeded > postingDaysLeft && nextDay) return { kind: "blocked", chapter, reason: "posts", nextDay };
-  if (repaired || dots.includes("missed") || postsNeeded > postingDaysLeft) return null;
-  return { kind: "charging", chapter, dots, daysToGo: weekEnd - slot, postsNeeded, posts };
+  if (runStart > slot) return null;
+
+  // Today can't be posted any more once it's on Community or was taken off it.
+  const todayMem = habit.streakMemories?.[dateKeyForDay(habit, slot, nowMs)];
+  const todayUsed = Boolean(todayMem?.communityPosted || todayMem?.communityFeedRevoked);
+  // The earliest day 7 these days can still reach: when the posts so far are
+  // short, the 7 days slide forward and their oldest posts drop off.
+  let endDay = Math.max(slot, runStart + VIDEO_MOMENT_BLOCK_DAYS - 1);
+  let posts = 0;
+  for (; ; endDay++) {
+    posts = 0;
+    for (let day = endDay - VIDEO_MOMENT_BLOCK_DAYS + 1; day <= slot; day++) {
+      if (postedOn(habit, dateKeyForDay(habit, day, nowMs))) posts += 1;
+    }
+    const postingDaysLeft = endDay - slot + (todayUsed ? 0 : 1);
+    if (posts + postingDaysLeft >= VIDEO_MOMENT_MIN_POSTS) break;
+  }
+  if (endDay > totalDays) return null;
+
+  const dots: ("done" | "today" | "ahead")[] = [];
+  for (let day = endDay - VIDEO_MOMENT_BLOCK_DAYS + 1; day <= endDay; day++) {
+    if (day > slot) dots.push("ahead");
+    else if (completed.has(dateKeyForDay(habit, day, nowMs))) dots.push("done");
+    else dots.push("today");
+  }
+  return {
+    kind: "charging",
+    chapter: lastNumber + 1,
+    dots,
+    daysToGo: endDay - slot,
+    endDay,
+    postsNeeded: Math.max(0, VIDEO_MOMENT_MIN_POSTS - posts),
+    posts,
+    restarted: runStart > nextStart,
+  };
 }
