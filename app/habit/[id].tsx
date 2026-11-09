@@ -2166,7 +2166,7 @@ export default function HabitDetail() {
                 : `You’ve posted ${posts} of these days to Community, which is enough.`;
         showAppAlert(
             `How to unlock Chapter ${chapter}`,
-            `Check in ${VIDEO_MOMENT_BLOCK_DAYS} days in a row without a streak repair. A repaired or missed day starts the count again the next day.\n\n${postLine}\n\nThen record a ${VIDEO_MOMENT_MAX_MS / 1000}-second Chapter on day ${endDay}.`,
+            `Check in ${VIDEO_MOMENT_BLOCK_DAYS} days in a row without a streak repair. A repaired or missed day starts the count again the next day.\n\n${postLine}\n\nThen record a Chapter of up to ${VIDEO_MOMENT_MAX_MS / 1000} seconds on day ${endDay}.`,
             [{ text: 'Got it' }],
         );
     };

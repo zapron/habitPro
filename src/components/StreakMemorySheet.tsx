@@ -301,10 +301,10 @@ export const StreakMemorySheet = React.memo(function StreakMemorySheet({
         {
           title: videoMomentAvailable ? "Add your chapter or a photo" : "Add a photo",
           message: videoMomentAvailable
-            ? "You've unlocked a chapter: a 7-second silent clip of this week."
+            ? "You've unlocked a chapter: a silent clip of up to 7 seconds."
             : "Take a new picture or choose one from your gallery.",
           options: videoMomentAvailable
-            ? ["Cancel", "Record 7s chapter", "Take photo", "Photo library"]
+            ? ["Cancel", "Record chapter", "Take photo", "Photo library"]
             : ["Cancel", "Take photo", "Photo library"],
           cancelButtonIndex: 0,
           userInterfaceStyle: isDark ? "dark" : "light",
@@ -327,14 +327,14 @@ export const StreakMemorySheet = React.memo(function StreakMemorySheet({
       showAppAlert(
         videoMomentAvailable ? "Add your chapter or a photo" : "Add a photo",
         videoMomentAvailable
-          ? "You've unlocked a chapter: a 7-second silent clip of this week."
+          ? "You've unlocked a chapter: a silent clip of up to 7 seconds."
           : "Take a new picture or choose one from your gallery.",
         [
           { text: "Cancel", style: "cancel", onPress: releasePickerLock },
           ...(videoMomentAvailable
             ? [
                 {
-                  text: "Record 7s chapter",
+                  text: "Record chapter",
                   style: "neutral" as const,
                   icon: <Video size={18} color={theme.colors.amber[500]} strokeWidth={2} />,
                   onPress: () => {

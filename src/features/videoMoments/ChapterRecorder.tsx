@@ -13,7 +13,9 @@ import { VIDEO_MOMENT_MAX_MS } from "./credit";
 
 export type PickedChapterClip = { uri: string; durationMs: number; posterUri: string };
 
-/** Every Chapter is the full 7 s; a much shorter file means the camera cut out. */
+/** The shortest Chapter: the shutter becomes a stop button after this. */
+const MIN_STOP_MS = 2000;
+/** Left to run, a clip is the full 7 s; a much shorter file means the camera cut out. */
 const MIN_CLIP_MS = VIDEO_MOMENT_MAX_MS - 1000;
 /** Backup stop in case the native maxDuration doesn't fire. */
 const STOP_GRACE_MS = 250;
@@ -28,8 +30,8 @@ const RING_LENGTH = 2 * Math.PI * RING_RADIUS;
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
 /**
- * The in-app Chapter camera: one tap records a silent clip of exactly 7
- * seconds (no stopping early), the same on iOS and Android (the system camera
+ * The in-app Chapter camera: one tap records a silent clip of up to 7
+ * seconds; tapping again after 2 s stops it early. The same on iOS and Android (the system camera
  * ignores length limits on many Android phones). `record()` resolves with the clip once the person taps
  * "Use clip", or null if they close it.
  *
@@ -97,6 +99,8 @@ function ChapterRecorder({
   const recordingIdRef = useRef(0);
   const [phase, setPhase] = useState<Phase>({ kind: "camera" });
   const [secondsLeft, setSecondsLeft] = useState(VIDEO_MOMENT_MAX_MS / 1000);
+  const [canStop, setCanStop] = useState(false);
+  const stoppedByUserRef = useRef(false);
   const progress = useRef(new Animated.Value(0)).current;
   const startedAtRef = useRef(0);
   const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
@@ -132,6 +136,8 @@ function ChapterRecorder({
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setPhase({ kind: "recording" });
     setSecondsLeft(VIDEO_MOMENT_MAX_MS / 1000);
+    setCanStop(false);
+    stoppedByUserRef.current = false;
     progress.setValue(0);
     Animated.timing(progress, {
       toValue: 1,
@@ -143,6 +149,7 @@ function ChapterRecorder({
     for (let s = 1; s < VIDEO_MOMENT_MAX_MS / 1000; s++) {
       timersRef.current.push(setTimeout(() => setSecondsLeft(VIDEO_MOMENT_MAX_MS / 1000 - s), s * 1000));
     }
+    timersRef.current.push(setTimeout(() => setCanStop(true), MIN_STOP_MS));
     timersRef.current.push(setTimeout(() => cameraRef.current?.stopRecording(), VIDEO_MOMENT_MAX_MS + STOP_GRACE_MS));
     timersRef.current.push(
       setTimeout(() => {
@@ -166,12 +173,13 @@ function ChapterRecorder({
     const elapsedMs = Date.now() - startedAtRef.current;
     clearTimers();
     progress.stopAnimation();
+    setCanStop(false);
     if (!mountedRef.current) return;
     if (!uri) {
       setPhase({ kind: "error", message: "The camera couldn't save that clip. Try again." });
       return;
     }
-    if (elapsedMs < MIN_CLIP_MS) {
+    if (elapsedMs < (stoppedByUserRef.current ? MIN_STOP_MS : MIN_CLIP_MS)) {
       setPhase({ kind: "error", message: "The camera stopped early. Try again." });
       return;
     }
@@ -187,6 +195,14 @@ function ChapterRecorder({
     } catch {
       if (mountedRef.current) setPhase({ kind: "error", message: "Couldn't read that clip. Try again." });
     }
+  };
+
+  const stopEarly = () => {
+    if (phase.kind !== "recording" || !canStop || stoppedByUserRef.current) return;
+    stoppedByUserRef.current = true;
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    progress.stopAnimation();
+    cameraRef.current?.stopRecording();
   };
 
   const retake = () => {
@@ -243,7 +259,13 @@ function ChapterRecorder({
         />
         <View style={[styles.hintWrap, { top: top + 56 }]} pointerEvents="none">
           <Text style={styles.hint}>
-            {recording ? `${secondsLeft}s` : phase.kind === "processing" ? "Getting your clip ready…" : "Tap to record 7 seconds"}
+            {recording
+              ? canStop
+                ? `${secondsLeft}s · tap to stop`
+                : `${secondsLeft}s`
+              : phase.kind === "processing"
+                ? "Getting your clip ready…"
+                : "Tap to record up to 7 seconds"}
           </Text>
         </View>
         {phase.kind === "error" ? (
@@ -259,10 +281,16 @@ function ChapterRecorder({
         <View style={[styles.controls, { paddingBottom: bottom + 8 }]}>
           <View style={styles.sideSlot} />
           <Pressable
-            onPress={() => void startRecording()}
-            disabled={!ready || phase.kind !== "camera"}
+            onPress={recording ? stopEarly : () => void startRecording()}
+            disabled={!ready || (recording ? !canStop : phase.kind !== "camera")}
             accessibilityRole="button"
-            accessibilityLabel={recording ? `Recording, ${secondsLeft} seconds left` : "Record 7-second chapter"}
+            accessibilityLabel={
+              recording
+                ? canStop
+                  ? `Stop recording, ${secondsLeft} seconds left`
+                  : `Recording, ${secondsLeft} seconds left`
+                : "Record chapter, up to 7 seconds"
+            }
             style={styles.shutter}
           >
             <Svg width={RING_SIZE} height={RING_SIZE} style={StyleSheet.absoluteFill}>
@@ -290,7 +318,12 @@ function ChapterRecorder({
             {phase.kind === "processing" || !ready ? (
               <ActivityIndicator color="#f8fafc" />
             ) : (
-              <View style={[recording ? styles.recordingDot : styles.recordDot, { backgroundColor: theme.colors.red[500] }]} />
+              <View
+                style={[
+                  recording ? (canStop ? styles.stopSquare : styles.recordingDot) : styles.recordDot,
+                  { backgroundColor: theme.colors.red[500] },
+                ]}
+              />
             )}
           </Pressable>
           <View style={styles.sideSlot}>
@@ -407,6 +440,7 @@ const styles = StyleSheet.create({
   shutter: { width: RING_SIZE, height: RING_SIZE, alignItems: "center", justifyContent: "center" },
   recordDot: { width: 60, height: 60, borderRadius: 30 },
   recordingDot: { width: 24, height: 24, borderRadius: 12 },
+  stopSquare: { width: 28, height: 28, borderRadius: 6 },
   iconButton: {
     width: 44,
     height: 44,

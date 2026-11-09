@@ -41,7 +41,7 @@ function RootLayoutNav() {
   const pathname = usePathname();
   const router = useRouter();
   const requireAuth = isSupabaseConfigured();
-  const { needsForceUpdate, downloadUrl, forceMessage, latestVersion, forceImageUrl, forceChangelog, forceChangelogUrl } =
+  const { needsForceUpdate, downloadUrl, forceMessage, latestVersion, forceImageUrl, forceImageUrlLight, forceChangelog, forceChangelogUrl } =
     useAppVersion();
 
   useEffect(() => {
@@ -377,6 +377,7 @@ function RootLayoutNav() {
         message={forceMessage}
         version={latestVersion}
         imageUrl={forceImageUrl}
+        imageUrlLight={forceImageUrlLight}
         changelog={forceChangelog}
         changelogUrl={forceChangelogUrl}
       />

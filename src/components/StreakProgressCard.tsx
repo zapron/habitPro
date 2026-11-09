@@ -13,7 +13,7 @@ import { GlassTopHighlight } from "./GlassTopHighlight";
 import { useTheme } from '../context/ThemeContext';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { withAlpha } from '../styles/theme';
-import type { ChapterStatus } from '../features/videoMoments/credit';
+import { VIDEO_MOMENT_MIN_POSTS, type ChapterStatus } from '../features/videoMoments/credit';
 
 interface StreakProgressCardProps {
     streak: number;
@@ -49,7 +49,9 @@ function plural(n: number, word: string): string {
 /**
  * The next chapter: the bar above shows the whole campaign, this row shows
  * only the seven days that earn the next chapter, so every check-in visibly
- * moves it. Turns amber (pulsing icon) once a chapter is ready to use.
+ * moves it. Charging: a header, a strip of the seven days and two small
+ * tiles (days, Community posts). Turns into an amber tile (pulsing icon) once
+ * a chapter is ready to use.
  */
 function ChapterRow({ status, onPress }: { status: ChapterStatus; onPress?: () => void }) {
     const { theme } = useTheme();
@@ -74,69 +76,129 @@ function ChapterRow({ status, onPress }: { status: ChapterStatus; onPress?: () =
         return () => loop.stop();
     }, [ready, reduceMotion, pulse]);
 
-    let lead: string;
-    let rest: string;
-    let leadColor = theme.colors.textPrimary;
+    const rowProps = {
+        onPress,
+        disabled: !onPress,
+        accessibilityRole: onPress ? ('button' as const) : ('text' as const),
+    };
+
     if (status.kind === 'ready') {
-        lead = `Chapter ${status.chapter} unlocked`;
-        rest = status.daysLeft <= 1 ? ' · last day to use it' : ` · ${plural(status.daysLeft, 'day')} left to use it`;
-        leadColor = amber;
-    } else if (status.kind === 'kept') {
-        lead = `Chapter ${status.chapter} kept`;
-        rest = status.nextDay ? ` · next one on day ${status.nextDay}` : '';
-        leadColor = green;
-    } else {
-        lead = `Chapter ${status.chapter}`;
-        rest =
-            (status.restarted ? ' · restarted' : '') +
-            (status.daysToGo > 0 ? ` · ${plural(status.daysToGo, 'day')} to go` : ' · finish today') +
-            (status.postsNeeded > 0 ? ` · post ${status.postsNeeded} more to Community` : '');
+        const left = status.daysLeft <= 1 ? 'Last day to use it' : `${plural(status.daysLeft, 'day')} left`;
+        return (
+            <View style={[styles.chapterSection, { borderTopColor: theme.colors.border }]}>
+                <Pressable
+                    {...rowProps}
+                    accessibilityLabel={`Chapter ${status.chapter} unlocked. Record up to 7 seconds. ${left}.`}
+                    style={[
+                        styles.readyTile,
+                        { backgroundColor: withAlpha(amber, 16), borderColor: withAlpha(amber, 45) },
+                    ]}
+                >
+                    <View>
+                        <Animated.View
+                            pointerEvents="none"
+                            style={[
+                                styles.chapterHalo,
+                                {
+                                    backgroundColor: withAlpha(amber, 30),
+                                    opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: [0, 1] }),
+                                    transform: [{ scale: pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.5] }) }],
+                                },
+                            ]}
+                        />
+                        <View style={[styles.chapterIcon, { backgroundColor: amber }]}>
+                            <BookOpen size={14} color="#ffffff" strokeWidth={2.4} />
+                        </View>
+                    </View>
+                    <View style={styles.flexText}>
+                        <Text style={[styles.chapterTitle, { color: amber }]} numberOfLines={1}>
+                            Chapter {status.chapter} unlocked
+                        </Text>
+                        <Text style={[styles.chapterSub, { color: theme.colors.textSecondary }]} numberOfLines={1}>
+                            Record up to 7 s · {left}
+                        </Text>
+                    </View>
+                    {onPress ? (
+                        <View style={[styles.recordPill, { backgroundColor: amber }]}>
+                            <Text style={styles.recordPillText}>Record</Text>
+                        </View>
+                    ) : null}
+                </Pressable>
+            </View>
+        );
     }
 
-    const iconBg = ready ? amber : status.kind === 'kept' ? green : theme.colors.surfaceElevated;
-    const iconColor = ready || status.kind === 'kept' ? '#ffffff' : theme.colors.textMuted;
+    if (status.kind === 'kept') {
+        const sub = status.nextDay ? `Next one can unlock on day ${status.nextDay}` : 'Saved in your moments';
+        return (
+            <Pressable
+                {...rowProps}
+                accessibilityLabel={`Chapter ${status.chapter} kept. ${sub}.`}
+                style={[styles.chapterSection, styles.keptRow, { borderTopColor: theme.colors.border }]}
+            >
+                <View style={[styles.chapterIcon, { backgroundColor: green }]}>
+                    <Check size={14} color="#ffffff" strokeWidth={3} />
+                </View>
+                <View style={styles.flexText}>
+                    <Text style={[styles.chapterTitle, { color: green }]} numberOfLines={1}>
+                        Chapter {status.chapter} kept
+                    </Text>
+                    <Text style={[styles.chapterSub, { color: theme.colors.textSecondary }]} numberOfLines={1}>
+                        {sub}
+                    </Text>
+                </View>
+            </Pressable>
+        );
+    }
+
+    const daysDone = status.dots.filter((d) => d === 'done').length;
+    const firstDay = status.endDay - status.dots.length + 1;
+    const todayIndex = status.dots.length - 1 - status.daysToGo;
+    const chip = status.restarted ? 'Restarted' : status.daysToGo === 0 ? 'Finish today' : `Unlocks day ${status.endDay}`;
+    const toGo = status.daysToGo === 0 ? 'today' : `${status.daysToGo} to go`;
+    const postsDone = status.postsNeeded === 0;
+    const tileBg = theme.colors.surfaceElevated;
 
     return (
         <Pressable
-            onPress={onPress}
-            disabled={!onPress}
-            accessibilityRole={onPress ? 'button' : 'text'}
-            accessibilityLabel={`${lead}${rest}`}
-            style={[styles.chapterRow, { borderTopColor: theme.colors.border }]}
+            {...rowProps}
+            accessibilityLabel={
+                `Chapter ${status.chapter}${status.restarted ? ', restarted' : ''}. ` +
+                `${daysDone} of 7 days, ${toGo}. ` +
+                (postsDone
+                    ? `${status.posts} Community posts, enough.`
+                    : `${status.posts} of ${VIDEO_MOMENT_MIN_POSTS} Community posts.`)
+            }
+            style={[styles.chapterSection, { borderTopColor: theme.colors.border }]}
         >
-            <View>
-                {ready ? (
-                    <Animated.View
-                        pointerEvents="none"
-                        style={[
-                            styles.chapterHalo,
-                            {
-                                backgroundColor: withAlpha(amber, 30),
-                                opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: [0, 1] }),
-                                transform: [{ scale: pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.5] }) }],
-                            },
-                        ]}
-                    />
-                ) : null}
-                <View style={[styles.chapterIcon, { backgroundColor: iconBg }]}>
-                    {status.kind === 'kept' ? (
-                        <Check size={13} color={iconColor} strokeWidth={3} />
-                    ) : (
-                        <BookOpen size={13} color={iconColor} strokeWidth={2.4} />
-                    )}
+            <View style={styles.chapterHead}>
+                <View style={[styles.chapterIcon, { backgroundColor: tileBg }]}>
+                    <BookOpen size={14} color={theme.colors.textMuted} strokeWidth={2.4} />
+                </View>
+                <Text style={[styles.chapterTitle, styles.flexText, { color: theme.colors.textPrimary }]} numberOfLines={1}>
+                    Chapter {status.chapter}
+                </Text>
+                <View
+                    style={[
+                        styles.chip,
+                        { backgroundColor: status.restarted ? withAlpha(amber, 16) : tileBg },
+                    ]}
+                >
+                    <Text
+                        style={[styles.chipText, { color: status.restarted ? amber : theme.colors.textSecondary }]}
+                        numberOfLines={1}
+                    >
+                        {chip}
+                    </Text>
                 </View>
             </View>
-            <Text style={[styles.chapterText, { color: theme.colors.textSecondary }]} numberOfLines={2}>
-                <Text style={{ color: leadColor, fontWeight: '800' }}>{lead}</Text>
-                {rest}
-            </Text>
-            {status.kind === 'charging' ? (
-                <View style={styles.chapterDots}>
-                    {status.dots.map((d, i) => (
+
+            <View style={styles.weekStrip}>
+                {status.dots.map((d, i) => (
+                    <View key={i} style={styles.weekCell}>
                         <View
-                            key={i}
                             style={[
-                                styles.chapterDot,
+                                styles.weekSeg,
                                 d === 'done'
                                     ? { backgroundColor: amber }
                                     : d === 'today'
@@ -144,9 +206,61 @@ function ChapterRow({ status, onPress }: { status: ChapterStatus; onPress?: () =
                                         : { backgroundColor: theme.colors.border },
                             ]}
                         />
-                    ))}
+                        <Text
+                            style={[
+                                styles.weekNum,
+                                i === todayIndex
+                                    ? { color: amber, fontWeight: '800' }
+                                    : { color: theme.colors.textMuted },
+                            ]}
+                        >
+                            {firstDay + i}
+                        </Text>
+                    </View>
+                ))}
+            </View>
+
+            <View style={styles.statRow}>
+                <View style={[styles.statTile, { backgroundColor: tileBg }]}>
+                    <Text style={[styles.statKey, { color: theme.colors.textMuted }]} numberOfLines={1}>
+                        DAYS
+                    </Text>
+                    <Text style={[styles.statValue, { color: theme.colors.textPrimary }]} numberOfLines={1}>
+                        {daysDone} of 7
+                        <Text style={[styles.statAside, { color: theme.colors.textSecondary }]}> · {toGo}</Text>
+                    </Text>
                 </View>
-            ) : null}
+                <View style={[styles.statTile, { backgroundColor: tileBg }]}>
+                    <Text style={[styles.statKey, { color: theme.colors.textMuted }]} numberOfLines={1}>
+                        COMMUNITY POSTS
+                    </Text>
+                    {postsDone ? (
+                        <View style={styles.statInline}>
+                            <Text style={[styles.statValue, { color: green }]} numberOfLines={1}>
+                                {status.posts} posted
+                            </Text>
+                            <Check size={13} color={green} strokeWidth={3} />
+                        </View>
+                    ) : (
+                        <View style={styles.statInline}>
+                            <Text style={[styles.statValue, { color: theme.colors.textPrimary }]} numberOfLines={1}>
+                                {status.posts} of {VIDEO_MOMENT_MIN_POSTS}
+                            </Text>
+                            <View style={styles.pips}>
+                                {Array.from({ length: VIDEO_MOMENT_MIN_POSTS }, (_, i) => (
+                                    <View
+                                        key={i}
+                                        style={[
+                                            styles.pip,
+                                            { backgroundColor: i < status.posts ? amber : theme.colors.border },
+                                        ]}
+                                    />
+                                ))}
+                            </View>
+                        </View>
+                    )}
+                </View>
+            </View>
         </Pressable>
     );
 }
@@ -333,17 +447,40 @@ const styles = StyleSheet.create({
         textShadowOffset: { width: 0, height: 1 },
     },
     dayCount: { fontSize: 14, fontWeight: '700', flexShrink: 0, marginRight: 2 },
-    chapterRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 10,
+    chapterSection: {
         marginTop: 12,
-        paddingTop: 11,
+        paddingTop: 12,
         borderTopWidth: StyleSheet.hairlineWidth,
     },
-    chapterIcon: { width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-    chapterHalo: { position: 'absolute', top: 0, left: 0, width: 24, height: 24, borderRadius: 12 },
-    chapterText: { flex: 1, minWidth: 0, fontSize: 12.5, lineHeight: 17, fontWeight: '600' },
-    chapterDots: { flexDirection: 'row', gap: 3, flexShrink: 0 },
-    chapterDot: { width: 7, height: 7, borderRadius: 4 },
+    chapterHead: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 12 },
+    chapterIcon: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+    chapterHalo: { position: 'absolute', top: 0, left: 0, width: 28, height: 28, borderRadius: 14 },
+    flexText: { flex: 1, minWidth: 0 },
+    chapterTitle: { fontSize: 15, fontWeight: '800' },
+    chapterSub: { fontSize: 12.5, fontWeight: '600', marginTop: 1 },
+    chip: { borderRadius: 999, paddingHorizontal: 9, paddingVertical: 3, flexShrink: 0 },
+    chipText: { fontSize: 11, fontWeight: '700' },
+    weekStrip: { flexDirection: 'row', gap: 5 },
+    weekCell: { flex: 1, alignItems: 'center', gap: 5 },
+    weekSeg: { alignSelf: 'stretch', height: 8, borderRadius: 4 },
+    weekNum: { fontSize: 10.5, fontWeight: '600' },
+    statRow: { flexDirection: 'row', gap: 8, marginTop: 12 },
+    statTile: { flex: 1, minWidth: 0, borderRadius: 12, paddingVertical: 9, paddingHorizontal: 11, gap: 2 },
+    statKey: { fontSize: 10, fontWeight: '700', letterSpacing: 0.5 },
+    statValue: { fontSize: 15, fontWeight: '800' },
+    statAside: { fontSize: 12.5, fontWeight: '600' },
+    statInline: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+    pips: { flexDirection: 'row', gap: 3 },
+    pip: { width: 7, height: 7, borderRadius: 4 },
+    readyTile: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+        borderRadius: 14,
+        borderWidth: 1,
+        padding: 12,
+    },
+    recordPill: { borderRadius: 10, paddingHorizontal: 13, paddingVertical: 8, flexShrink: 0 },
+    recordPillText: { color: '#1a1205', fontSize: 13, fontWeight: '800' },
+    keptRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
 });

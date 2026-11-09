@@ -23,6 +23,8 @@ type Props = {
   version?: string | null;
   /** Optional hero image for the card; falls back to a gradient when absent. */
   imageUrl?: string | null;
+  /** Optional light-theme hero image; `imageUrl` is used when absent. */
+  imageUrlLight?: string | null;
   /** Structured bullet-point changelog; falls back to `message` as a paragraph when empty. */
   changelog?: string[];
   /** Optional "See full changelog" link. */
@@ -35,10 +37,12 @@ export function ForceUpdateModal({
   downloadUrl,
   version,
   imageUrl,
+  imageUrlLight,
   changelog = [],
   changelogUrl,
 }: Props) {
   const { theme, isDark } = useTheme();
+  const heroUrl = !isDark && imageUrlLight ? imageUrlLight : imageUrl;
 
   const openDownload = () => {
     if (!downloadUrl) return;
@@ -69,8 +73,8 @@ export function ForceUpdateModal({
               { borderColor: theme.colors.border, borderRadius: theme.radius.lg, ...theme.shadow.card },
             ]}
           >
-            {imageUrl ? (
-              <Image source={{ uri: imageUrl }} style={styles.heroImage} resizeMode="cover" />
+            {heroUrl ? (
+              <Image source={{ uri: heroUrl }} style={styles.heroImage} resizeMode="cover" />
             ) : (
               <LinearGradient
                 colors={isDark ? ["#15803d", "#0e7490"] : ["#22c55e", "#0891b2"]}
@@ -112,7 +116,7 @@ export function ForceUpdateModal({
 
         <View style={styles.footer}>
           <TouchableOpacity
-            style={[styles.btn, { backgroundColor: theme.colors.indigo[600] }, !downloadUrl && { opacity: 0.45 }]}
+            style={[styles.btn, { backgroundColor: theme.colors.maroon[600] }, !downloadUrl && { opacity: 0.45 }]}
             onPress={openDownload}
             disabled={!downloadUrl}
             activeOpacity={0.85}

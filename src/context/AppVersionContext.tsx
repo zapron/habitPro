@@ -22,6 +22,8 @@ type AppVersionContextValue = {
   forceMessage: string | null;
   /** Premium force-update card content, sourced from the matching release row. */
   forceImageUrl: string | null;
+  /** Light-theme hero image, or null to use `forceImageUrl` in both themes. */
+  forceImageUrlLight: string | null;
   forceChangelog: string[];
   forceChangelogUrl: string | null;
   softUpdateUrl: string | null;
@@ -110,6 +112,7 @@ export function AppVersionProvider({ children }: { children: React.ReactNode }) 
     downloadUrl,
     forceMessage,
     forceImageUrl,
+    forceImageUrlLight,
     forceChangelog,
     forceChangelogUrl,
     softUpdateUrl,
@@ -123,6 +126,7 @@ export function AppVersionProvider({ children }: { children: React.ReactNode }) 
         downloadUrl: null as string | null,
         forceMessage: null as string | null,
         forceImageUrl: null as string | null,
+        forceImageUrlLight: null as string | null,
         forceChangelog: [] as string[],
         forceChangelogUrl: null as string | null,
         softUpdateUrl: null as string | null,
@@ -156,6 +160,10 @@ export function AppVersionProvider({ children }: { children: React.ReactNode }) 
       matchingRelease && typeof matchingRelease.image_url === "string" && matchingRelease.image_url.trim().length > 0
         ? matchingRelease.image_url.trim()
         : null;
+    const imageUrlLight =
+      matchingRelease && typeof matchingRelease.image_url_light === "string" && matchingRelease.image_url_light.trim().length > 0
+        ? matchingRelease.image_url_light.trim()
+        : null;
     const structuredChangelog =
       matchingRelease && Array.isArray(matchingRelease.changelog)
         ? matchingRelease.changelog.filter((line): line is string => typeof line === "string" && line.trim().length > 0)
@@ -173,6 +181,7 @@ export function AppVersionProvider({ children }: { children: React.ReactNode }) 
         downloadUrl: trimmedUrl,
         forceMessage: msg,
         forceImageUrl: imageUrl,
+        forceImageUrlLight: imageUrlLight,
         forceChangelog: changelog,
         forceChangelogUrl: changelogUrl,
         softUpdateUrl: softUrl,
@@ -189,6 +198,7 @@ export function AppVersionProvider({ children }: { children: React.ReactNode }) 
       downloadUrl: trimmedUrl,
       forceMessage: msg,
       forceImageUrl: imageUrl,
+      forceImageUrlLight: imageUrlLight,
       forceChangelog: changelog,
       forceChangelogUrl: changelogUrl,
       softUpdateUrl: softUrl,
@@ -212,6 +222,7 @@ export function AppVersionProvider({ children }: { children: React.ReactNode }) 
       downloadUrl,
       forceMessage,
       forceImageUrl,
+      forceImageUrlLight,
       forceChangelog,
       forceChangelogUrl,
       softUpdateUrl,
@@ -232,6 +243,7 @@ export function AppVersionProvider({ children }: { children: React.ReactNode }) 
       downloadUrl,
       forceMessage,
       forceImageUrl,
+      forceImageUrlLight,
       forceChangelog,
       forceChangelogUrl,
       softUpdateUrl,

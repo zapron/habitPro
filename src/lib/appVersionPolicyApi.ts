@@ -20,6 +20,8 @@ export type AppVersionReleaseRow = {
   notes: string | null;
   /** Optional hero image for the force-update screen's premium card. */
   image_url: string | null;
+  /** Optional light-theme hero image; the card falls back to `image_url`. */
+  image_url_light?: string | null;
   /** Optional structured bullet-point changelog; falls back to `notes` when null. */
   changelog: string[] | null;
   /** Optional link to a full changelog / release notes page. */
