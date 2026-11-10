@@ -125,7 +125,7 @@ export function ForceUpdateModal({
           </TouchableOpacity>
           {Platform.OS === "android" ? (
             <Text style={[styles.hint, { color: theme.colors.textMuted }]}>
-              Install the new APK over this one, then reopen the app.
+              Update from Google Play, then reopen the app.
             </Text>
           ) : null}
         </View>
