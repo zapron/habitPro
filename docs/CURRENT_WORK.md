@@ -1,6 +1,82 @@
 # HabitPro Current Work
 
-Last updated: 2026-11-07 (evening): 1.1.40 committed (`e273b8a`): in-app 7 s recorder, Chapter player fixes, unlock hint. Builds done, 7 s migration live on prod; production OTA for 1.1.40 not yet sent. See the newest entry below.
+Last updated: 2026-11-10: Chapters on a rolling 7-day week (3 posts), new Chapter card, tap-to-stop recorder, and the 1.1.40 force update are all live in production (migrations pushed, OTA `97410bbb`, `video_moments` on for everyone). Photo Repair is planned and paused. See the newest entry below.
+
+## Session Handoff (2026-11-08 → 2026-11-10: rolling Chapter week, 1.1.40 force update)
+
+**State:**
+- `main` and `release/1.1.39-chapters` are both at `80ee8a6`, pushed. `main` was fast-forwarded from the branch.
+- Commits:
+  - `db33081` feat: Chapters on a rolling 7-day week, 3 posts; `ship:production` script.
+  - `80ee8a6` feat: roomier Chapter card, tap to stop recording, maroon update button, light hero image.
+- **Uncommitted:** `src/components/ForceUpdateModal.tsx`, a one-line copy change. The Android hint under the Update button now reads "Update from Google Play, then reopen the app." (it said "Install the new APK over this one"). It may or may not be inside OTA `97410bbb`, since it was edited around the time that OTA ran. Commit it and let it ride the next OTA.
+- `.claude/`, `.mcp.json` stay untracked as always.
+
+**Production (checked on prod 2026-11-10):**
+- Migrations pushed by the user through `npm run ship:production`:
+  - `20261108120000_chapter_rolling_week`: `moment_videos.start_date` (backfilled, not null) plus the rewritten `rpc_claim_video_moment_v1`;
+  - `20261110120000_app_release_light_image`: `app_version_releases.image_url_light`.
+- OTA, runtime 1.1.40, both platforms:
+  - `97410bbb` "Chapters: rolling week, 3 posts, new card, tap to stop; maroon update button";
+  - an earlier one, `8c54d456`, "Chapters: rolling 7-day week, 3 posts; new Chapter card; player fixes", published by the user about a day before.
+- **Force update is live:**
+  - `app_version_policy`: min and latest are 1.1.40 on both platforms. Download URLs are unchanged (Play Store link for Android, TestFlight `join/QkTQgFq9` for iOS). `force_update_message` is the new Chapters copy.
+  - A new `app_version_releases` row: 1.1.40, `all`, with the dark and light hero images and 5 changelog bullets (Chapters, comment threads, free cheers + Reports, theme switch + Focus Mode, sheets/joins/fixes).
+- **`video_moments` flag is ON** (`enabled = true`, no `starts_on`), so Chapters are open to all Premium users. `community_report_autohide` is still OFF: reports are stored, but nothing is hidden automatically.
+- habitPro-web `0af6b0a`: `public/assets/release-1.1.40-hero.jpg` and `-hero-light.jpg` (1600×1000), live on www.habitpro.life. That repo also has an unrelated uncommitted `app/terms/page.tsx` that isn't ours; it was left alone.
+- The user confirmed 1.1.40 is out in both stores and running fine on their own phones.
+
+**What changed and why:**
+1. **Rolling Chapter week (user decision: fixed blocks were unfair after a break).**
+   - Rule: any 7 consecutive mission days, all done, none repaired; ≥3 Community posts in those 7 days ("3 is the bare minimum"); posts from before a break or a prior Chapter don't count.
+   - Server (`20261108120000`):
+     - the week is identified by its dates;
+     - an advisory lock plus an overlap check (`already_claimed`);
+     - old fixed-week claims from 1.1.39/1.1.40 still pass.
+   - Client: `src/features/videoMoments/credit.ts` (`earnedChapters`, `chapterStatusForToday` with the `charging` / `ready` / `kept` kinds; "blocked" was removed), `api.ts` (`fetchClaimedChapters` selects `block_number, start_date`), and the claim-error copy.
+   - Tested: 14 logic scenarios with `node -r sucrase/register`, and the RPC in psql (repair, 2 posts, overlap, shifted day, old fixed week).
+2. **`npm run ship:production -- "msg"`** (`scripts/ship-production.sh`): `db:push`, then moves `.env.local` aside with a trap restore, then `update:production`. Running it from Claude was blocked by the auto-mode classifier, so the user runs it.
+3. **Chapter card redesign (`StreakProgressCard.tsx`), the user picked "Option A":**
+   - header with a chip (Restarted / Finish today / Unlocks day N);
+   - a 7-segment week strip with day numbers;
+   - DAYS and COMMUNITY POSTS stat tiles with pips;
+   - an amber ready tile with a Record pill;
+   - a green kept row.
+   - Checked on the iOS Simulator in light and dark (charging, restarted and ready states). The kept state was not seen on a device.
+4. **Tap to stop in `ChapterRecorder.tsx`:** the shutter becomes a stop square after 2 s (`MIN_STOP_MS`), and an early stop is accepted at ≥2 s. Checked on the Android Emulator. **iOS camera stop is untested** (the Simulator has no camera); check it on a real iPhone.
+5. **Force-update screen:**
+   - The Update button is brand maroon (`theme.colors.maroon[600]`). It was `indigo[600]`, which already aliased to maroon on old builds.
+   - Optional `imageUrlLight` is plumbed through `appVersionPolicyApi` → `AppVersionContext` (`forceImageUrlLight`) → `_layout` → `ForceUpdateModal`.
+   - The hero image (new logo + play button + 7-day strip + "From streaks to stories" headline) was made with headless Chrome from HTML. Sources are in the session scratchpad and not kept; regenerate from `habitPro-web/public/assets` if needed.
+   - Checked as an old user would see it: the 1.1.39 modal code (`git show db33081:...`) was run against the release row on the iOS Simulator and the Android Emulator. Dark image, 5 bullets and a maroon button showed; on Android, Update opened the Play listing.
+6. Other copy: StreakMemorySheet "Record chapter"; the how-to-unlock alert says "up to 7 seconds".
+
+**Planned, NOT started: Photo Repair (paid). The user paused it on 2026-11-10 ("baad mein dekhte hain").**
+- User decisions so far:
+  - **Who gets it:** paid repair is available to everyone (Premium or not) on every mission. Sharing it to Community is Premium only.
+  - **Options by mission type:**
+    - solo mission: Self repair (XP, unchanged) or Paid repair;
+    - squad mission: Squad repair (XP + approval, unchanged) or Paid repair.
+  - **No limit** on paid repairs per Chapter. Keep the existing previous-day / 24 h window. The 14-day XP cooldown doesn't apply to paid repairs.
+  - **What a paid repair gives:** add photos like a normal day, the day counts toward Chapters (server `block_has_repair` and `credit.ts` would need to accept a paid + photo repair), and Community sharing for Premium users.
+  - **Price:** ₹10 as a store consumable through RevenueCat (store IAP is required; Razorpay/UPI can't be used for digital goods). Roughly ₹7 net after the store cut and GST.
+- Proposed pipeline:
+  - a `repair_credits` ledger written by `revenuecat-webhook` on `NON_RENEWING_PURCHASE`, idempotent on the transaction id;
+  - `rpc_paid_streak_repair_v1` consumes a credit with `repair_source = 'paid'`;
+  - REFUND handling;
+  - a gold photo tile instead of the spanner.
+- UI mockup: https://claude.ai/artifact/GHSShPCd6HP3JXKZj5oKK2. My recommendation is tab 2, photo first and then pay (4 taps). The user hasn't picked a flow yet.
+- User idea, not decided: **"Video repair".** Spend an unused Chapter credit to repair a missed day by recording 7 s for it. Premium only. Suggested for a second round, after paid repair ships.
+
+**Notes for the user (answered this session):**
+- Report option: the "…" at the right end of a Community post's cheers/comments row (`CommunityWinFeedPost.tsx`) and on `journey-moment/[id].tsx`. It shows only on other people's posts. It reports the whole post, so photo and Chapter posts are both covered. Offered: turn on `community_report_autohide` (3 reporters hide a post) and make the "…" easier to find. Neither has been decided.
+- Reel advice (2026-11-08): a "Kal se pakka" concept with Veo clips from Google Flow plus a code-rendered endcard ("Kal se nahi. Aaj se."). Nothing has been built yet; use the `habitpro-promo-video` skill when it starts.
+
+**Still open from earlier entries:**
+- the iOS stuck screen after adding a Chapter on a checklist day (not reproduced);
+- the share card says "9/21 DAYS" on day 10;
+- SQL-deleted missions linger on devices;
+- block user and report on comments before App Store review.
 
 ## Session Handoff (2026-11-07 evening: 1.1.40 committed, Chapter player fixes)
 

@@ -2,6 +2,31 @@
 
 This is a concise chronological log for future sessions. Keep secrets out of this file.
 
+## 2026-11-08 → 2026-11-10 (rolling Chapter week, 1.1.40 force update)
+
+Full detail in `docs/CURRENT_WORK.md`.
+- **Commits** (`main` = `release/1.1.39-chapters` = `80ee8a6`, pushed):
+  - `db33081`: Chapters on a rolling 7-day week with ≥3 posts from those days; `npm run ship:production`.
+  - `80ee8a6`: Chapter card redesign, tap to stop after 2 s, maroon Update button, light-theme hero image (`image_url_light`).
+  - Uncommitted: the ForceUpdateModal Android hint copy.
+- **Production:**
+  - the user ran `ship:production`: migrations `20261108120000` and `20261110120000` pushed, OTA `97410bbb` (runtime 1.1.40);
+  - force update to 1.1.40 on both platforms, with a new release row and hero images (habitPro-web `0af6b0a`);
+  - the `video_moments` flag is ON;
+  - `community_report_autohide` is still off.
+- **Validation:**
+  - `tsc` clean, `db:reset` clean;
+  - rolling logic in 14 scenarios, RPC cases in psql;
+  - the card on the iOS Simulator;
+  - tap-to-stop on the Android Emulator;
+  - the old-build force-update screen on the iOS Simulator and the Android Emulator.
+- **Open:**
+  - iOS camera tap-to-stop on a real device;
+  - the kept card state not seen;
+  - Photo Repair (paid ₹10) planned and paused, mockup artifact `GHSShPCd6HP3JXKZj5oKK2`;
+  - "Video repair" idea undecided;
+  - the earlier iOS stuck-screen and share-card day-count bugs.
+
 ## 2026-11-07 evening (1.1.40 committed, Chapter player fixes)
 
 Full detail in `docs/CURRENT_WORK.md`.

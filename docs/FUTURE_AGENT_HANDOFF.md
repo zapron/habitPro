@@ -51,6 +51,13 @@ Then inspect the files relevant to the user request.
 
 ## Current User Priorities
 
+- **Most current, as of 2026-11-10:** 1.1.40 is live in both stores, force update included, and Chapters (`video_moments`) are on for all Premium users. Next candidates, in the user's words:
+  - Photo Repair: a paid ₹10 repair that adds photos and counts toward Chapters. Planned, paused by the user.
+  - Possibly "Video repair" using a Chapter credit.
+  - The report autohide flag.
+  - Open bugs.
+
+  Read the top entry of `docs/CURRENT_WORK.md` first. The entries below this line are older history.
 - **Most current, as of 2026-09-13 (end of session)**: built the local
   dev environment described above, and in the process found + fixed
   three genuine, pre-existing production schema-drift issues (two
