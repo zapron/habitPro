@@ -7,10 +7,9 @@ import { PETROL } from "./FuelPetrolGraphics";
 import { darkTheme, lightTheme } from "../../styles/theme";
 
 // Default ceiling for callers that don't pass their own — Mini Missions'
-// create screen (16h). Live Squad has its own real, server-enforced 8h cap
-// (rpc_request_join_live_mini_squad_v1 rejects anything over 480 minutes) and
-// passes maxMinutes explicitly so its own "8h" tile still shows as the full
-// mark, not half of a 16h scale it doesn't actually have.
+// create screen (16h). Live Squad shares the same 16h server cap
+// (rpc_request_join_live_mini_squad_v1 and friends allow 1-960 minutes since
+// 20261111120000_live_mini_sixteen_hour_cap.sql) and passes 960 explicitly.
 const DEFAULT_MAX_MIN = 960;
 
 // Same two-loop path/colors as HabitProMark.tsx's static mark, centered on its

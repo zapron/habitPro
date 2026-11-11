@@ -430,7 +430,7 @@ export default function CreateMiniMission() {
 
         <Text style={[styles.label, { color: theme.colors.textSecondary, fontSize: theme.typography.caption, marginTop: 4 }]}>Duration</Text>
         <Text style={[styles.fieldHint, { color: theme.colors.textSecondary }]}>
-          Pick a preset or type any number of minutes (1–480).
+          Pick a preset or type any number of minutes (1–960).
         </Text>
 
         <View
