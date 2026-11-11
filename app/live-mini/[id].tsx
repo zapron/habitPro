@@ -3,7 +3,6 @@ import {
   ActivityIndicator,
   Animated,
   Easing,
-  FlatList,
   Image,
   Modal,
   Pressable,
@@ -18,7 +17,7 @@ import {
 import { useFocusEffect } from "@react-navigation/native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ArrowLeft, Check, Flame, Info, ListChecks, Radio, Timer, Trophy, UserPlus, Users, X } from "lucide-react-native";
+import { ArrowLeft, Check, Flame, Info, ListChecks, MoreHorizontal, Radio, Timer, Trophy, UserPlus, Users, X } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import { Text } from "../../src/components/AppText";
 import { GlassTopHighlight } from "../../src/components/GlassTopHighlight";
@@ -35,6 +34,7 @@ import { useToast } from "../../src/context/ToastContext";
 import {
   acceptLiveMiniInvite,
   declineLiveMiniInvite,
+  fetchLiveMiniMomentHearts,
   fetchLiveMiniPublicPreview,
   fetchLiveMiniSquad,
   getCachedLiveMiniSquad,
@@ -43,8 +43,12 @@ import {
   refreshLiveMiniMissed,
   removeLiveMiniParticipant,
   requestToJoinLiveMiniSquad,
+  setLiveMiniMomentHeart,
+  subscribeLiveMiniMomentHearts,
   subscribeLiveMiniSquad,
 } from "../../src/lib/liveMiniMissionsApi";
+import { LiveSquadMomentsFeed } from "../../src/components/liveMini/LiveSquadMomentsFeed";
+import { LiveSquadRaceCards } from "../../src/components/liveMini/LiveSquadRaceCards";
 import { syncLiveMiniFromLocalMission } from "../../src/lib/liveMiniMissionProgress";
 import { backOrReplace } from "../../src/lib/navigation";
 import { traceAsync } from "../../src/lib/perfTrace";
@@ -52,6 +56,7 @@ import { parseTaskChecklist } from "../../src/lib/sync";
 import { useHabitStore } from "../../src/store/habitStore";
 import type { MiniMission } from "../../src/types/habit";
 import type {
+  LiveMiniMomentHeart,
   LiveMiniParticipantRow,
   LiveMiniParticipantStatus,
   LiveMiniProfileLabel,
@@ -72,20 +77,15 @@ const QUICK_MINUTES = [
 
 const LONG_PRESETS = [
   { label: "1h", minutes: 60 },
-  { label: "90m", minutes: 90 },
   { label: "2h", minutes: 120 },
   { label: "4h", minutes: 240 },
   { label: "8h", minutes: 480 },
+  { label: "12h", minutes: 720 },
+  { label: "16h", minutes: 960 },
 ];
 
 const LIVE_MINI_BOARD_RELOAD_TTL_MS = 12_000;
 const LIVE_MINI_REALTIME_DEBOUNCE_MS = 350;
-
-/** Fixed tile size for the freeform memory gallery strip — lets FlatList use
- * getItemLayout (no measurement pass) so a long freeform run's moments don't
- * jank the whole screen while dragging, since only the visible window mounts. */
-const MEMORY_TILE_WIDTH = 88;
-const MEMORY_TILE_GAP = 8;
 
 /** Same square-grid language and rank palette as `CohortLeaderHero` — one
  * consistent "ranking" visual across both screens instead of two different
@@ -94,7 +94,7 @@ const PACE_SQUARE_COUNT = 14;
 const PACE_RANK2_COLOR = "#4B4BB0";
 
 function clampMinutes(value: number): number {
-  return Math.max(1, Math.min(480, Math.round(value)));
+  return Math.max(1, Math.min(960, Math.round(value)));
 }
 
 function createMiniMissionId(): string {
@@ -172,22 +172,6 @@ function statusCopy(status: LiveMiniParticipantStatus): string {
     case "cancelled":
       return "Cancelled";
   }
-}
-
-function statusTone(status: LiveMiniParticipantStatus, theme: ReturnType<typeof useTheme>["theme"], isDark: boolean) {
-  if (status === "completed") {
-    return { fg: theme.colors.green[500], bg: isDark ? withAlpha(theme.colors.green[500], 14) : withAlpha(theme.colors.green[600], 10) };
-  }
-  if (status === "in_progress") {
-    return { fg: theme.colors.cyan[400], bg: isDark ? withAlpha(theme.colors.cyan[400], 13) : withAlpha(theme.colors.cyan[500], 10) };
-  }
-  if (status === "expired") {
-    return { fg: theme.colors.textMuted, bg: isDark ? withAlpha(theme.colors.textSecondary, 12) : withAlpha(theme.colors.textMuted, 8) };
-  }
-  if (status === "missed" || status === "cancelled" || status === "declined") {
-    return { fg: theme.colors.red[500], bg: isDark ? withAlpha(theme.colors.red[500], 12) : withAlpha(theme.colors.red[500], 8) };
-  }
-  return { fg: theme.colors.indigo[400], bg: isDark ? withAlpha(theme.colors.indigo[400], 15) : withAlpha(theme.colors.indigo[500], 10) };
 }
 
 function isTerminalLiveMiniStatus(status: LiveMiniParticipantStatus): boolean {
@@ -622,29 +606,29 @@ const ParticipantCard = memo(function ParticipantCard({
   rank,
   profile,
   isMe,
+  hideOpenMine,
   localMission,
   highlightFinish,
   liveNowMs,
   onOpenMine,
   onOpenImage,
-  onOpenGalleryTile,
   onOpenPlayerJourney,
 }: {
   row: LiveMiniParticipantRow;
   rank: number | null;
   profile: LiveMiniProfileLabel | undefined;
   isMe: boolean;
+  /** The "Your timer" row above already offers Open; don't repeat it in my card. */
+  hideOpenMine?: boolean;
   localMission?: MiniMission;
   highlightFinish: boolean;
   liveNowMs: number;
   onOpenMine: () => void;
   onOpenImage: (uri: string) => void;
-  onOpenGalleryTile: (item: { label: string; note: string | null; uri: string | null }) => void;
   onOpenPlayerJourney: (userId: string, profile?: LiveMiniProfileLabel) => void;
 }) {
   const { theme, isDark } = useTheme();
   const finishGlow = useRef(new Animated.Value(0)).current;
-  const tone = statusTone(row.status, theme, isDark);
   const planned = row.planned_minutes ?? localMission?.estimatedMinutes ?? null;
   const reserve = row.reserve_minutes ?? 0;
   const totalMinutes = planned != null ? planned + reserve : null;
@@ -683,18 +667,46 @@ const ParticipantCard = memo(function ParticipantCard({
     }).start();
   }, [finishGlow, highlightFinish]);
 
+  // You are green, everyone else maroon: the two colors of the logo.
+  const personColor = isMe
+    ? isDark ? theme.colors.green[500] : theme.colors.green[600]
+    : isDark ? "#c2405d" : theme.colors.maroon[500];
+  const dropped = row.status === "missed" || row.status === "cancelled" || row.status === "declined" || row.status === "expired";
+  const ringColor = dropped || row.status === "invited" || row.status === "joined" ? theme.colors.textMuted : personColor;
+  const statusColor =
+    row.status === "completed" || row.status === "in_progress"
+      ? isDark ? theme.colors.green[500] : theme.colors.green[600]
+      : row.status === "missed"
+        ? theme.colors.red[500]
+        : theme.colors.textMuted;
+  const subLine =
+    row.status === "completed"
+      ? `${rank ? `${ordinalLabel(rank)} · ` : ""}${formatLiveMiniElapsed(row.final_elapsed_seconds)} of ${formatMinutesLabel(totalMinutes)} · locked`
+      : row.status === "in_progress"
+        ? `${elapsedSeconds == null ? "--" : formatLiveMiniElapsed(elapsedSeconds)} of ${formatMinutesLabel(totalMinutes)}${reserve > 0 ? ` · ${reserve}m reserve` : ""}`
+        : totalMinutes
+          ? `${formatMinutesLabel(totalMinutes)} timer`
+          : "Waiting for timer";
+
   return (
     <View
       style={[
         styles.participantCard,
-        { borderBottomColor: theme.colors.border },
+        { borderBottomColor: theme.colors.border, opacity: dropped ? 0.62 : 1 },
       ]}
     >
       <Animated.View
         pointerEvents="none"
         style={[styles.finishGlow, { backgroundColor: theme.colors.green[500], opacity: finishGlow }]}
       />
-      <View style={styles.participantTop}>
+      <View style={styles.participantRow}>
+        <View style={[styles.participantAvatar, { borderColor: ringColor, backgroundColor: withAlpha(ringColor, isDark ? 16 : 10) }]}>
+          {profile?.avatarUrl ? (
+            <Image source={{ uri: profile.avatarUrl }} style={styles.participantAvatarPhoto} />
+          ) : (
+            <Text style={[styles.participantAvatarText, { color: ringColor }]}>{initialsFromLabel(profile)}</Text>
+          )}
+        </View>
         <View style={styles.nameBlock}>
           <View style={styles.participantNameRow}>
             <Pressable
@@ -702,150 +714,36 @@ const ParticipantCard = memo(function ParticipantCard({
               hitSlop={6}
               accessibilityRole="button"
               accessibilityLabel={`Open player journey for ${playerName}`}
-              style={({ pressed }) => [
-                styles.participantNamePressable,
-                pressed ? styles.participantNamePressed : null,
-              ]}
+              style={({ pressed }) => [styles.participantNamePressable, pressed ? styles.participantNamePressed : null]}
             >
               <Text style={[styles.participantName, { color: theme.colors.textPrimary }]} numberOfLines={1}>
                 {playerName}
               </Text>
             </Pressable>
-            {isMe ? (
-              <View
-                style={[
-                  styles.youBadge,
-                  {
-                    backgroundColor: isDark ? withAlpha(theme.colors.indigo[500], 18) : withAlpha(theme.colors.indigo[600], 10),
-                    borderColor: isDark ? withAlpha(theme.colors.indigo[400], 36) : withAlpha(theme.colors.indigo[600], 22),
-                  },
-                ]}
-              >
-                <Text style={[styles.youBadgeText, { color: theme.colors.indigo[400] }]}>You</Text>
-              </View>
-            ) : null}
             {level != null ? (
-              <View
-                style={[
-                  styles.levelPill,
-                  { backgroundColor: "transparent", borderColor: theme.colors.border },
-                ]}
-              >
-                <Text style={[styles.levelPillText, { color: theme.colors.textMuted }]}>Lv {level}</Text>
-              </View>
+              <Text style={[styles.participantLevel, { color: theme.colors.textMuted }]}>Lv {level}</Text>
             ) : null}
-          </View>
-          <View style={styles.metaLineWrap}>
-            {totalMinutes ? (
-              <Text style={[styles.metaLine, { color: theme.colors.textMuted }]}>
-                {formatMinutesLabel(totalMinutes)} total{reserve > 0 ? ` (${reserve} reserve)` : ""}
+            <View style={styles.participantStatus}>
+              {row.status === "in_progress" ? <PulsingOnMissionDot color={statusColor} /> : null}
+              <Text style={[styles.participantStatusText, { color: statusColor }]}>
+                {isMe && row.status !== "in_progress" && row.status !== "completed" ? `You · ${statusCopy(row.status)}` : statusCopy(row.status)}
               </Text>
-            ) : (
-              <Text style={[styles.metaLine, { color: theme.colors.textMuted }]}>Waiting for timer</Text>
-            )}
+            </View>
           </View>
-        </View>
-
-        <View style={[styles.statusPill, { backgroundColor: tone.bg }]}>
-          {row.status === "in_progress" ? <PulsingOnMissionDot color={theme.colors.green[500]} /> : null}
-          <Text style={[styles.statusPillText, { color: tone.fg }]}>{statusCopy(row.status)}</Text>
+          {showProgress ? (
+            <View style={[styles.participantTrack, { backgroundColor: isDark ? withAlpha(theme.colors.sheen, 8) : withAlpha(theme.colors.sheen, 6) }]}>
+              <View style={[styles.participantFill, { width: `${Math.max(0.03, progress) * 100}%`, backgroundColor: personColor }]} />
+            </View>
+          ) : null}
+          <Text style={[styles.participantSub, { color: theme.colors.textMuted }]} numberOfLines={1}>
+            {subLine}
+          </Text>
         </View>
       </View>
 
-      {row.status === "completed" ? (
-        <View style={styles.resultRow}>
-          {/* Neutral numbered circle — matches the cohort screen's rank treatment instead of a colored trophy badge */}
-          <View style={[styles.rankCircle, { borderColor: theme.colors.border }]}>
-            <Text style={[styles.rankCircleText, { color: theme.colors.textMuted }]}>{rank ?? "-"}</Text>
-          </View>
-          <Text style={[styles.elapsedText, { color: theme.colors.textPrimary }]}>
-            {formatLiveMiniElapsed(row.final_elapsed_seconds)}
-          </Text>
-          {/* Plain icon+text, no chip chrome — "Done" status pill above already carries the color */}
-          <View style={styles.plainLockedRow}>
-            <Check size={12} color={theme.colors.textMuted} />
-            <Text style={[styles.lockedPillText, { color: theme.colors.textMuted }]}>Locked</Text>
-          </View>
-        </View>
-      ) : null}
-
-      {showProgress ? (
-        <View style={styles.progressBlock}>
-          <View style={[styles.resultTrack, { backgroundColor: isDark ? withAlpha(theme.colors.sheen, 8) : withAlpha(theme.colors.sheen, 6) }]}>
-            <View
-              style={[
-                styles.resultFill,
-                {
-                  width: `${Math.max(0.04, progress) * 100}%`,
-                  backgroundColor: theme.colors.indigo[500],
-                },
-              ]}
-            />
-          </View>
-          <View style={styles.progressMetaRow}>
-            <Text style={[styles.progressMetaText, { color: theme.colors.textMuted }]}>
-              {elapsedSeconds == null ? "--" : formatLiveMiniElapsed(elapsedSeconds)}
-            </Text>
-            <Text style={[styles.progressMetaText, { color: theme.colors.textMuted }]}>
-              of {formatMinutesLabel(totalMinutes)}
-            </Text>
-          </View>
-        </View>
-      ) : null}
-
-      {row.status === "in_progress" && row.deadline_at ? (
-        <Text style={[styles.deadlineText, { color: theme.colors.textSecondary }]}>
-          Deadline: {new Date(row.deadline_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-        </Text>
-      ) : null}
-
-      {row.memory_gallery && row.memory_gallery.length > 0 ? (
-        <FlatList
-          data={row.memory_gallery}
-          keyExtractor={(item) => item.taskId}
-          horizontal
-          nestedScrollEnabled
-          showsHorizontalScrollIndicator={false}
-          style={styles.memoryGalleryStrip}
-          contentContainerStyle={styles.memoryGalleryStripContent}
-          getItemLayout={(_data, index) => ({
-            length: MEMORY_TILE_WIDTH,
-            offset: index * (MEMORY_TILE_WIDTH + MEMORY_TILE_GAP),
-            index,
-          })}
-          renderItem={({ item }) => {
-            const uri = item.imageUrl ? withImageVersion(item.imageUrl, row.updated_at) : null;
-            const thumb = uri ? storageThumbnailUri(uri, 200, 200, 64) : null;
-            return (
-              <Pressable
-                onPress={() => onOpenGalleryTile({ label: item.label, note: item.note, uri })}
-                accessibilityRole="button"
-                accessibilityLabel={`View ${item.label}`}
-                style={({ pressed }) => [styles.memoryGalleryTile, { opacity: pressed ? 0.9 : 1 }]}
-              >
-                {thumb ? (
-                  <Image source={{ uri: thumb }} style={styles.memoryGalleryTileImage} resizeMode="cover" />
-                ) : (
-                  <View
-                    style={[
-                      styles.memoryGalleryTileImage,
-                      styles.memoryGalleryTextTile,
-                      { backgroundColor: theme.colors.surfaceElevated, borderColor: theme.colors.border },
-                    ]}
-                  >
-                    <Text numberOfLines={4} style={[styles.memoryGalleryTileNote, { color: theme.colors.textSecondary }]}>
-                      {item.note ?? "Marked complete"}
-                    </Text>
-                  </View>
-                )}
-                <Text numberOfLines={1} style={[styles.memoryGalleryTileLabel, { color: theme.colors.textMuted }]}>
-                  {item.label}
-                </Text>
-              </Pressable>
-            );
-          }}
-        />
-      ) : memoryImage ? (
+      {/* Moments live in the Squad moments feed below; this is only the
+          single-photo memory from older builds. */}
+      {!(row.memory_gallery && row.memory_gallery.length > 0) && memoryImage ? (
         <Pressable
           onPress={() => onOpenImage(memoryImage)}
           accessibilityRole="button"
@@ -861,7 +759,7 @@ const ParticipantCard = memo(function ParticipantCard({
         </Text>
       ) : null}
 
-      {isMe && localMission ? (
+      {isMe && localMission && !hideOpenMine ? (
         <Button
           title="Open my timer"
           variant="subtle"
@@ -908,6 +806,8 @@ export default function LiveMiniSquadScreen() {
    * plain openImageUri, which has no note field at all). */
   const [openGalleryTile, setOpenGalleryTile] = useState<{ label: string; note: string | null; uri: string | null } | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
+  /** The header ⋯ sheet: squad details, invite more, manage participants. */
+  const [optionsOpen, setOptionsOpen] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [publicPreview, setPublicPreview] = useState<LiveMiniPublicPreview | null>(null);
   const [publicPreviewLoading, setPublicPreviewLoading] = useState(false);
@@ -915,6 +815,9 @@ export default function LiveMiniSquadScreen() {
   const [moderationBusyId, setModerationBusyId] = useState<string | null>(null);
   const [finishHighlightIds, setFinishHighlightIds] = useState<Set<string>>(() => new Set());
   const [liveNowMs, setLiveNowMs] = useState(() => Date.now());
+  const [hearts, setHearts] = useState<LiveMiniMomentHeart[]>([]);
+  /** Players list: by default only people still in the run; "All" adds missed / cancelled / declined. */
+  const [showAllPlayers, setShowAllPlayers] = useState(false);
   const userIdRef = useRef(userId);
   const liveSyncKeyRef = useRef<string | null>(null);
   const previousParticipantStatusRef = useRef<Record<string, LiveMiniParticipantStatus>>({});
@@ -1059,9 +962,56 @@ export default function LiveMiniSquadScreen() {
     };
   }, [scheduleRealtimeLoad, squadId]);
 
+  // Silent hearts on squad moments: own fetch + realtime, separate from the board
+  // load so a heart never re-pulls the whole snapshot.
+  const loadHearts = useCallback(async () => {
+    if (!squadId || !userId) return;
+    try {
+      const rows = await fetchLiveMiniMomentHearts(squadId);
+      setHearts(rows);
+    } catch {
+      // Hearts are decoration; the board works without them.
+    }
+  }, [squadId, userId]);
+
+  useEffect(() => {
+    setHearts([]);
+    if (!squadId || !userId) return undefined;
+    void loadHearts();
+    let t: ReturnType<typeof setTimeout> | null = null;
+    const unsub = subscribeLiveMiniMomentHearts(squadId, () => {
+      if (t) clearTimeout(t);
+      t = setTimeout(() => void loadHearts(), 250);
+    });
+    return () => {
+      if (t) clearTimeout(t);
+      unsub?.();
+    };
+  }, [loadHearts, squadId, userId]);
+
+  const handleToggleHeart = useCallback(
+    (subjectUserId: string, taskId: string, on: boolean) => {
+      if (!squadId || !userId || subjectUserId === userId) return;
+      const matches = (h: LiveMiniMomentHeart) =>
+        h.subject_user_id === subjectUserId && h.task_id === taskId && h.liker_id === userId;
+      setHearts((prev) =>
+        on
+          ? prev.some(matches)
+            ? prev
+            : [...prev, { subject_user_id: subjectUserId, task_id: taskId, liker_id: userId }]
+          : prev.filter((h) => !matches(h)),
+      );
+      void setLiveMiniMomentHeart({ squadId, subjectUserId, taskId, likerId: userId, on }).then((res) => {
+        if (!res.ok) void loadHearts();
+      });
+    },
+    [loadHearts, squadId, userId],
+  );
+
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
+      void loadHearts();
       await load(true, { force: true });
     } finally {
       setRefreshing(false);
@@ -1165,6 +1115,43 @@ export default function LiveMiniSquadScreen() {
       }),
     [participants],
   );
+
+  /** Out of the run: hidden from the race cards, and from the players list unless "All" is on. */
+  const isDropped = (s: LiveMiniParticipantStatus) =>
+    s === "missed" || s === "cancelled" || s === "declined" || s === "expired";
+  const raceRows = useMemo(
+    () => sortedParticipants.filter((p) => !isDropped(p.status) && p.status !== "link_requested"),
+    [sortedParticipants],
+  );
+  const droppedCount = useMemo(
+    () => sortedParticipants.filter((p) => isDropped(p.status)).length,
+    [sortedParticipants],
+  );
+  const visibleParticipants = useMemo(
+    () => (showAllPlayers ? sortedParticipants : sortedParticipants.filter((p) => !isDropped(p.status))),
+    [showAllPlayers, sortedParticipants],
+  );
+  const removableParticipants = useMemo(
+    () =>
+      myParticipant?.role === "creator"
+        ? participants.filter((p) => p.role !== "creator" && !isTerminalLiveMiniStatus(p.status) && p.status !== "link_requested")
+        : [],
+    [myParticipant?.role, participants],
+  );
+  const myTimerRow = useMemo(() => {
+    if (!myParticipant || myParticipant.status !== "in_progress" || !localLiveMission) return null;
+    const mid = myParticipant.local_mini_mission_id ?? localLiveMission.id;
+    const deadline = myParticipant.deadline_at
+      ? new Date(myParticipant.deadline_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+      : null;
+    const moments = myParticipant.memory_gallery?.length ?? 0;
+    return {
+      subtitle: [deadline ? `Deadline ${deadline}` : null, `${moments} moment${moments === 1 ? "" : "s"} logged`]
+        .filter(Boolean)
+        .join(" · "),
+      open: () => router.push(`/mini/${mid}`),
+    };
+  }, [localLiveMission, myParticipant, router]);
 
   useEffect(() => {
     if (!hasRunningParticipants) return undefined;
@@ -1426,28 +1413,41 @@ export default function LiveMiniSquadScreen() {
       <View style={styles.header}>
         <TouchableOpacity
           onPress={() => backOrReplace(router, "/mini")}
-          activeOpacity={0.86}
-          style={[styles.iconButton, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}
+          activeOpacity={0.7}
+          hitSlop={8}
+          style={styles.headerIcon}
+          accessibilityRole="button"
+          accessibilityLabel="Back"
         >
-          <ArrowLeft size={20} color={theme.colors.textPrimary} />
+          <ArrowLeft size={22} color={theme.colors.textPrimary} />
         </TouchableOpacity>
-        <View style={styles.headerActions}>
-          {snapshot?.squad ? (
-            <TouchableOpacity
-              onPress={() => setDetailsOpen(true)}
-              activeOpacity={0.86}
-              style={[styles.iconButton, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}
-              accessibilityRole="button"
-              accessibilityLabel="Open Live Squad details"
-            >
-              <Info size={18} color={theme.colors.indigo[400]} />
-            </TouchableOpacity>
+        <View style={styles.headerCenter}>
+          <Text style={[styles.headerTitle, { color: theme.colors.textPrimary }]} numberOfLines={1}>
+            {squad?.title ?? "Live Squad"}
+          </Text>
+          {squad ? (
+            <View style={styles.headerSubRow}>
+              {!squadSettled ? <PulsingOnMissionDot color={isDark ? theme.colors.green[500] : theme.colors.green[600]} /> : null}
+              <Text style={[styles.headerSub, { color: theme.colors.textMuted }]} numberOfLines={1}>
+                {squadSettled ? "Ended" : "Live"} · {participants.length} player{participants.length === 1 ? "" : "s"} · {completedRows.length} done
+              </Text>
+            </View>
           ) : null}
-          <View style={[styles.livePill, { borderColor: theme.colors.border }]}>
-            <Radio size={14} color={theme.colors.textSecondary} />
-            <Text style={[styles.livePillText, { color: theme.colors.textSecondary }]}>Live Squad</Text>
-          </View>
         </View>
+        {snapshot?.squad ? (
+          <TouchableOpacity
+            onPress={() => setOptionsOpen(true)}
+            activeOpacity={0.7}
+            hitSlop={8}
+            style={styles.headerIcon}
+            accessibilityRole="button"
+            accessibilityLabel="Squad options: details, invite, manage participants"
+          >
+            <MoreHorizontal size={22} color={theme.colors.textPrimary} />
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.headerIcon} />
+        )}
       </View>
 
       {loading ? (
@@ -1523,7 +1523,7 @@ export default function LiveMiniSquadScreen() {
                     active={selectedMinutes === p.minutes}
                     onPress={() => setMinutes(p.minutes)}
                     isDark={isDark}
-                    maxMinutes={480}
+                    maxMinutes={960}
                   />
                 ))}
               </View>
@@ -1587,121 +1587,42 @@ export default function LiveMiniSquadScreen() {
             { paddingBottom: Math.max(insets.bottom, 24) + 8 },
           ]}
         >
-          <Text style={[styles.title, { color: theme.colors.textPrimary }]} numberOfLines={3}>
-            {squad.title}
-          </Text>
-          {squad.objective ? (
-            <Text style={[styles.objective, { color: theme.colors.textSecondary }]} numberOfLines={2}>
-              {squad.objective}
-            </Text>
-          ) : null}
+          {squadSettled ? (
+            <LiveSquadHero
+              completedRows={completedRows}
+              participants={participants}
+              profiles={snapshot.profiles}
+              bottomText={bottomText}
+            />
+          ) : (
+            <LiveSquadRaceCards
+              rows={raceRows}
+              profiles={snapshot.profiles}
+              userId={userId}
+              nowMs={liveNowMs}
+              completedRows={completedRows}
+            />
+          )}
 
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.metaPillsRow}
-            style={styles.metaPillsScroll}
-          >
-            <View
-              style={[
-                styles.metaChip,
-                {
-                  borderColor: theme.colors.border,
-                  backgroundColor: isDark ? "rgba(255,255,255,0.06)" : theme.colors.surfaceElevated,
-                },
-              ]}
-            >
-              <Users size={18} color={theme.colors.textMuted} />
-              <Text style={[styles.metaChipText, { color: theme.colors.textSecondary }]}>
-                {participants.length} player{participants.length === 1 ? "" : "s"}
-              </Text>
-            </View>
-
-            <View
-              style={[
-                styles.metaChip,
-                {
-                  borderColor: theme.colors.border,
-                  backgroundColor: isDark ? "rgba(255,255,255,0.06)" : theme.colors.surfaceElevated,
-                },
-              ]}
-            >
-              <Check size={18} color={theme.colors.textMuted} />
-              <Text style={[styles.metaChipText, { color: theme.colors.textSecondary }]}>
-                {completedRows.length} done
-              </Text>
-            </View>
-
-          </ScrollView>
-
-          <LiveSquadHero
-            completedRows={completedRows}
-            participants={participants}
-            profiles={snapshot.profiles}
-            bottomText={bottomText}
-          />
-
-          {creatorInviteMission ? (
-            <TouchableOpacity
-              onPress={() => setInviteOpen(true)}
-              activeOpacity={0.88}
-              style={[
-                styles.inviteMoreCard,
-                { borderTopColor: theme.colors.border, borderBottomColor: theme.colors.border },
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel="Invite more people to Live Squad"
-            >
-              <UserPlus size={18} color={theme.colors.cyan[400]} />
-              <View style={styles.inviteMoreTextCol}>
-                <Text style={[styles.inviteMoreTitle, { color: theme.colors.textPrimary }]}>Invite more</Text>
-                <Text style={[styles.inviteMoreBody, { color: theme.colors.textSecondary }]} numberOfLines={2}>
-                  Add people while the squad is active. They pick their own timer.
+          {myTimerRow ? (
+            <View style={[styles.timerRow, { borderColor: theme.colors.border }]}>
+              <Timer size={20} color={isDark ? theme.colors.green[500] : theme.colors.green[600]} />
+              <View style={styles.timerRowText}>
+                <Text style={[styles.timerRowTitle, { color: theme.colors.textPrimary }]}>Your timer</Text>
+                <Text style={[styles.timerRowSub, { color: theme.colors.textMuted }]} numberOfLines={1}>
+                  {myTimerRow.subtitle}
                 </Text>
               </View>
-              <Text style={[styles.inviteMoreCta, { color: theme.colors.cyan[400] }]}>Open</Text>
-            </TouchableOpacity>
-          ) : null}
-
-          {myParticipant?.role === "creator" ? (
-            <>
-              {participants.filter((p) => p.role !== "creator" && !isTerminalLiveMiniStatus(p.status) && p.status !== "link_requested").length > 0 ? (
-                <View
-                  style={[
-                    styles.moderationCard,
-                    { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
-                  ]}
-                >
-                  <Text style={[styles.moderationTitle, { color: theme.colors.textPrimary }]}>
-                    Manage participants
-                  </Text>
-                  {participants
-                    .filter((p) => p.role !== "creator" && !isTerminalLiveMiniStatus(p.status) && p.status !== "link_requested")
-                    .map((p) => {
-                      const label = shortDisplayName(snapshot?.profiles[p.user_id]);
-                      const rowBusy = moderationBusyId === p.user_id;
-                      return (
-                        <View key={p.id} style={styles.moderationRow}>
-                          <Text style={[styles.moderationName, { color: theme.colors.textPrimary }]} numberOfLines={1}>
-                            {label}
-                          </Text>
-                          <TouchableOpacity
-                            onPress={() => void handleRemoveParticipant(p.user_id, label)}
-                            disabled={rowBusy}
-                            style={[styles.moderationBtn, { borderColor: theme.colors.red[500] }]}
-                          >
-                            {rowBusy ? (
-                              <ActivityIndicator size="small" color={theme.colors.red[500]} />
-                            ) : (
-                              <Text style={[styles.moderationBtnText, { color: theme.colors.red[500] }]}>Remove</Text>
-                            )}
-                          </TouchableOpacity>
-                        </View>
-                      );
-                    })}
-                </View>
-              ) : null}
-            </>
+              <TouchableOpacity
+                onPress={myTimerRow.open}
+                activeOpacity={0.85}
+                style={[styles.timerRowButton, { backgroundColor: theme.colors.indigo[500] }]}
+                accessibilityRole="button"
+                accessibilityLabel="Open my timer"
+              >
+                <Text style={styles.timerRowButtonText}>Open</Text>
+              </TouchableOpacity>
+            </View>
           ) : null}
 
           {inviteActionable ? (
@@ -1709,7 +1630,7 @@ export default function LiveMiniSquadScreen() {
               <GlassTopHighlight radius={18} />
               <Text style={[styles.acceptTitle, { color: theme.colors.textPrimary }]}>Pick your timer</Text>
               <Text style={[styles.acceptBody, { color: theme.colors.textSecondary }]}>
-                Your timer starts as soon as you accept. Max duration is 8 hours.
+                Your timer starts as soon as you accept. Max duration is 16 hours.
                 {inviteExpiryLabel ? ` ${inviteExpiryLabel}.` : ""}
               </Text>
 
@@ -1755,7 +1676,7 @@ export default function LiveMiniSquadScreen() {
                     active={selectedMinutes === p.minutes}
                     onPress={() => setMinutes(p.minutes)}
                     isDark={isDark}
-                    maxMinutes={480}
+                    maxMinutes={960}
                   />
                 ))}
               </View>
@@ -1803,16 +1724,44 @@ export default function LiveMiniSquadScreen() {
             </View>
           ) : null}
 
-          <Text style={[styles.sectionLabel, { color: theme.colors.textMuted }]}>
-            Participants
-          </Text>
-          {sortedParticipants.map((row) => (
+          <View style={styles.playersHeader}>
+            <Text style={[styles.sectionLabel, styles.playersHeaderLabel, { color: theme.colors.textMuted }]}>
+              Participants
+            </Text>
+            {droppedCount > 0 ? (
+              <View
+                style={[styles.filterGroup, { backgroundColor: theme.colors.surfaceElevated }]}
+                accessibilityRole="radiogroup"
+                accessibilityLabel="Which players to show"
+              >
+                {[
+                  { key: "run", label: `${squadSettled ? "Finished" : "In the run"} · ${sortedParticipants.length - droppedCount}`, on: !showAllPlayers },
+                  { key: "all", label: `All · ${sortedParticipants.length}`, on: showAllPlayers },
+                ].map((opt) => (
+                  <TouchableOpacity
+                    key={opt.key}
+                    onPress={() => setShowAllPlayers(opt.key === "all")}
+                    activeOpacity={0.85}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected: opt.on }}
+                    style={[styles.filterChip, opt.on ? { backgroundColor: theme.colors.textPrimary } : null]}
+                  >
+                    <Text style={[styles.filterChipText, { color: opt.on ? theme.colors.background : theme.colors.textMuted }]}>
+                      {opt.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            ) : null}
+          </View>
+          {visibleParticipants.map((row) => (
             <ParticipantCard
               key={row.id}
               row={row}
               rank={rankFor(row, completedRows)}
               profile={snapshot.profiles[row.user_id]}
               isMe={row.user_id === userId}
+              hideOpenMine={row.user_id === userId && myTimerRow != null}
               localMission={row.user_id === userId ? localLiveMission : undefined}
               highlightFinish={finishHighlightIds.has(row.id)}
               liveNowMs={liveNowMs}
@@ -1824,13 +1773,29 @@ export default function LiveMiniSquadScreen() {
                 setOpenGalleryTile(null);
                 setOpenImageUri(uri);
               }}
-              onOpenGalleryTile={(item) => {
-                setOpenImageUri(null);
-                setOpenGalleryTile(item);
-              }}
               onOpenPlayerJourney={onOpenPlayerJourney}
             />
           ))}
+          {!showAllPlayers && droppedCount > 0 ? (
+            <TouchableOpacity onPress={() => setShowAllPlayers(true)} hitSlop={8} accessibilityRole="button">
+              <Text style={[styles.hiddenPlayersText, { color: theme.colors.textMuted }]}>
+                {droppedCount} {droppedCount === 1 ? "player" : "players"} who dropped out hidden · Show
+              </Text>
+            </TouchableOpacity>
+          ) : null}
+
+          <LiveSquadMomentsFeed
+            participants={participants}
+            profiles={snapshot.profiles}
+            userId={userId}
+            hearts={hearts}
+            nowMs={liveNowMs}
+            onToggleHeart={handleToggleHeart}
+            onOpenTile={(item) => {
+              setOpenImageUri(null);
+              setOpenGalleryTile(item);
+            }}
+          />
         </ScrollView>
       )}
 
@@ -1840,6 +1805,94 @@ export default function LiveMiniSquadScreen() {
           snapshot={{ ...snapshot, participants }}
           onClose={() => setDetailsOpen(false)}
         />
+      ) : null}
+
+      {snapshot ? (
+        <Modal visible={optionsOpen} transparent animationType="slide" onRequestClose={() => setOptionsOpen(false)}>
+          <View style={styles.detailsRoot}>
+            <Pressable
+              style={styles.detailsBackdrop}
+              onPress={() => setOptionsOpen(false)}
+              accessibilityRole="button"
+              accessibilityLabel="Close squad options"
+            />
+            <View
+              style={[
+                styles.detailsSheet,
+                { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, paddingBottom: Math.max(insets.bottom, 16) },
+              ]}
+            >
+              <View style={styles.detailsHeader}>
+                <Text style={[styles.optionsTitle, { color: theme.colors.textPrimary }]} numberOfLines={1}>
+                  {snapshot.squad.title}
+                </Text>
+                <TouchableOpacity
+                  onPress={() => setOptionsOpen(false)}
+                  activeOpacity={0.86}
+                  hitSlop={12}
+                  style={[styles.detailsClose, { backgroundColor: theme.colors.surfaceElevated, borderColor: theme.colors.border }]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Close options"
+                >
+                  <X size={20} color={theme.colors.textMuted} />
+                </TouchableOpacity>
+              </View>
+              {[
+                { key: "details", icon: <Info size={20} color={theme.colors.textPrimary} />, title: "Squad details", body: "Objective, creator and who is where.", run: () => setDetailsOpen(true) },
+                ...(creatorInviteMission
+                  ? [{ key: "invite", icon: <UserPlus size={20} color={theme.colors.textPrimary} />, title: "Invite more", body: "Add people while the squad is active. They pick their own timer.", run: () => setInviteOpen(true) }]
+                  : []),
+              ].map((opt) => (
+                <TouchableOpacity
+                  key={opt.key}
+                  activeOpacity={0.8}
+                  onPress={() => {
+                    setOptionsOpen(false);
+                    // Two RN Modals can't hand over in the same frame on iOS: let this one close first.
+                    setTimeout(opt.run, 350);
+                  }}
+                  style={[styles.optionRow, { borderBottomColor: theme.colors.border }]}
+                  accessibilityRole="button"
+                >
+                  {opt.icon}
+                  <View style={styles.optionText}>
+                    <Text style={[styles.optionTitle, { color: theme.colors.textPrimary }]}>{opt.title}</Text>
+                    <Text style={[styles.optionBody, { color: theme.colors.textMuted }]} numberOfLines={2}>{opt.body}</Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
+              {removableParticipants.length > 0 ? (
+                <View style={styles.optionManage}>
+                  <Text style={[styles.optionSection, { color: theme.colors.textMuted }]}>Manage participants</Text>
+                  {removableParticipants.map((p) => {
+                    const label = shortDisplayName(snapshot.profiles[p.user_id]);
+                    const rowBusy = moderationBusyId === p.user_id;
+                    return (
+                      <View key={p.id} style={styles.moderationRow}>
+                        <Text style={[styles.moderationName, { color: theme.colors.textPrimary }]} numberOfLines={1}>
+                          {label}
+                        </Text>
+                        <TouchableOpacity
+                          onPress={() => void handleRemoveParticipant(p.user_id, label)}
+                          disabled={rowBusy}
+                          style={[styles.moderationBtn, { borderColor: theme.colors.red[500] }]}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Remove ${label}`}
+                        >
+                          {rowBusy ? (
+                            <ActivityIndicator size="small" color={theme.colors.red[500]} />
+                          ) : (
+                            <Text style={[styles.moderationBtnText, { color: theme.colors.red[500] }]}>Remove</Text>
+                          )}
+                        </TouchableOpacity>
+                      </View>
+                    );
+                  })}
+                </View>
+              ) : null}
+            </View>
+          </View>
+        </Modal>
       ) : null}
 
       {creatorInviteMission ? (
@@ -1918,7 +1971,12 @@ export default function LiveMiniSquadScreen() {
 }
 
 const styles = StyleSheet.create({
-  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 14 },
+  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 6, marginHorizontal: -10 },
+  headerIcon: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
+  headerCenter: { flex: 1, minWidth: 0, alignItems: "center" },
+  headerTitle: { fontSize: 17, fontWeight: "900" },
+  headerSubRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 1 },
+  headerSub: { fontSize: 12, fontWeight: "600" },
   headerActions: { flexDirection: "row", alignItems: "center", gap: 8 },
   iconButton: { width: 40, height: 40, borderRadius: 999, alignItems: "center", justifyContent: "center", borderWidth: 1 },
   livePill: { minHeight: 36, borderRadius: 999, paddingHorizontal: 13, flexDirection: "row", alignItems: "center", gap: 6, borderWidth: 1 },
@@ -2015,12 +2073,34 @@ const styles = StyleSheet.create({
   inviteMoreBody: { fontSize: 12, lineHeight: 17, fontWeight: "600", marginTop: 2 },
   inviteMoreCta: { fontSize: 12, lineHeight: 16, fontWeight: "900" },
   sectionLabel: { fontSize: 13, fontWeight: "800", letterSpacing: 0.3, marginBottom: 12 },
-  participantCard: { paddingVertical: 16, borderBottomWidth: StyleSheet.hairlineWidth, position: "relative" },
+  timerRow: { flexDirection: "row", alignItems: "center", gap: 12, borderWidth: 1, borderRadius: 18, paddingVertical: 10, paddingLeft: 14, paddingRight: 10, marginTop: 12 },
+  timerRowText: { flex: 1, minWidth: 0 },
+  timerRowTitle: { fontSize: 14, fontWeight: "800" },
+  timerRowSub: { fontSize: 12, marginTop: 1, fontVariant: ["tabular-nums"] },
+  timerRowButton: { height: 40, paddingHorizontal: 18, borderRadius: 20, alignItems: "center", justifyContent: "center" },
+  timerRowButtonText: { color: "#ffffff", fontSize: 14, fontWeight: "800" },
+  playersHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8, marginTop: 18, marginBottom: 4 },
+  playersHeaderLabel: { marginBottom: 0 },
+  filterGroup: { flexDirection: "row", gap: 2, borderRadius: 999, padding: 3 },
+  filterChip: { height: 30, paddingHorizontal: 11, borderRadius: 999, alignItems: "center", justifyContent: "center" },
+  filterChipText: { fontSize: 12, fontWeight: "800" },
+  hiddenPlayersText: { fontSize: 12, fontWeight: "600", paddingVertical: 10 },
+  participantCard: { paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth, position: "relative" },
+  participantRow: { flexDirection: "row", alignItems: "center", gap: 12 },
+  participantAvatar: { width: 40, height: 40, borderRadius: 20, borderWidth: 2, alignItems: "center", justifyContent: "center", overflow: "hidden" },
+  participantAvatarPhoto: { width: "100%", height: "100%" },
+  participantAvatarText: { fontSize: 13, fontWeight: "900" },
+  participantLevel: { fontSize: 12, fontWeight: "600" },
+  participantStatus: { marginLeft: "auto", flexDirection: "row", alignItems: "center", gap: 6 },
+  participantStatusText: { fontSize: 12, fontWeight: "800" },
+  participantTrack: { height: 4, borderRadius: 2, overflow: "hidden", marginTop: 7 },
+  participantFill: { height: 4, borderRadius: 2 },
+  participantSub: { fontSize: 12, marginTop: 5, fontVariant: ["tabular-nums"] },
   finishGlow: { ...StyleSheet.absoluteFillObject },
   participantTop: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
   nameBlock: { flex: 1, minWidth: 0 },
   participantNameRow: { flexDirection: "row", alignItems: "center", gap: 7, minWidth: 0 },
-  participantName: { fontSize: 19, lineHeight: 24, fontWeight: "900", flexShrink: 1 },
+  participantName: { fontSize: 15, lineHeight: 20, fontWeight: "900", flexShrink: 1 },
   participantNamePressable: { flexShrink: 1, minWidth: 0 },
   participantNamePressed: { opacity: 0.72 },
   youBadge: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 7, paddingVertical: 3, flexShrink: 0 },
@@ -2067,13 +2147,6 @@ const styles = StyleSheet.create({
   deadlineText: { fontSize: 12, lineHeight: 17, fontWeight: "700", marginTop: 10 },
   memoryImage: { width: "100%", aspectRatio: 1.8, borderRadius: 14, marginTop: 12 },
   memoryNote: { fontSize: 13, lineHeight: 19, fontWeight: "600", marginTop: 10 },
-  memoryGalleryStrip: { marginTop: 12 },
-  memoryGalleryStripContent: { gap: 8, paddingRight: 4 },
-  memoryGalleryTile: { width: 88 },
-  memoryGalleryTileImage: { width: 88, height: 88, borderRadius: 12 },
-  memoryGalleryTextTile: { borderWidth: 1, alignItems: "center", justifyContent: "center", padding: 6 },
-  memoryGalleryTileNote: { fontSize: 10, lineHeight: 13, fontWeight: "600", textAlign: "center" },
-  memoryGalleryTileLabel: { fontSize: 10, fontWeight: "700", marginTop: 4, textAlign: "center" },
   openMineButton: { minHeight: 42, borderWidth: 1, borderRadius: 14, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, marginTop: 12 },
   openMineText: { fontSize: 13, fontWeight: "900" },
   imageViewerBackdrop: {
@@ -2122,6 +2195,13 @@ const styles = StyleSheet.create({
     gap: 12,
     marginBottom: 10,
   },
+  optionsTitle: { flex: 1, minWidth: 0, fontSize: 18, fontWeight: "900" },
+  optionRow: { flexDirection: "row", alignItems: "center", gap: 14, paddingVertical: 14, borderBottomWidth: StyleSheet.hairlineWidth },
+  optionText: { flex: 1, minWidth: 0 },
+  optionTitle: { fontSize: 15, fontWeight: "800" },
+  optionBody: { fontSize: 12, lineHeight: 17, marginTop: 2 },
+  optionManage: { marginTop: 16 },
+  optionSection: { fontSize: 12, fontWeight: "900", letterSpacing: 1.2, textTransform: "uppercase", marginBottom: 4 },
   detailsHeaderTitle: { flex: 1, minWidth: 0, fontSize: 23, lineHeight: 29, fontWeight: "900" },
   detailsClose: {
     width: 40,
