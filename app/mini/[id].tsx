@@ -1533,6 +1533,38 @@ export default function MiniMissionDetail() {
     | null
   >(null);
   const [freeformCompleting, setFreeformCompleting] = useState(false);
+
+  /**
+   * Live squads: push draft moments to the squad board while the mission runs
+   * (not just at Complete), so partners see each note/photo as it's logged,
+   * edited or removed. Keyed on what the board actually shows; debounced so a
+   * burst of edits is one RPC. Reads the store at fire time and bails if the
+   * mission already left in_progress (Complete/Cancel do their own final sync).
+   */
+  const liveDraftSyncKey =
+    mission?.liveSquadId && mission.status === "in_progress"
+      ? JSON.stringify(
+          (mission.captureMode === "freeform" ? draftMemoryEntries : Object.values(draftTaskEntries)).map((e) => [
+            e.taskId,
+            e.label,
+            e.note ?? "",
+            e.proofUrls[0] ?? "",
+          ]),
+        )
+      : null;
+  const liveDraftSyncedKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!liveDraftSyncKey || !mission?.id) return undefined;
+    if (liveDraftSyncedKeyRef.current === liveDraftSyncKey) return undefined;
+    const missionId = mission.id;
+    const timer = setTimeout(() => {
+      const latest = useHabitStore.getState().getMiniMission(missionId);
+      if (!latest?.liveSquadId || latest.status !== "in_progress") return;
+      liveDraftSyncedKeyRef.current = liveDraftSyncKey;
+      void syncLiveMiniFromLocalMission(latest);
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [liveDraftSyncKey, mission?.id]);
   /** Generated once per "Add a moment" tap, read by handleFreeformMemoryCommit — keeps
    * the id stable across the capture sheet's open/commit round trip without needing
    * to stuff it into freeformMemoryUi's "create" variant. */

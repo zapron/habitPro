@@ -20,6 +20,7 @@ function buildLiveMiniMemoryGallery(
     label: t.label,
     note: t.note ?? null,
     imageUrl: /^https?:\/\//.test(t.proofUrls[0] ?? "") ? t.proofUrls[0] : null,
+    loggedAt: t.loggedAt ?? null,
   }));
   return items.length > 0 ? items : null;
 }
@@ -64,8 +65,12 @@ export async function syncLiveMiniFromLocalMission(
   // was logged before the deadline in draftTasks/draftMemories rather than
   // clearing it. Send that along too, so the squad board doesn't lose
   // moments just because the timer beat the user to "Complete".
-  const missedTaskEntries =
-    status === "missed"
+  // While running, the same drafts are pushed live so the squad sees each moment
+  // as it's logged (rpc_sync_live_mini_progress stores the gallery for
+  // in_progress too). An empty array, not null, so deleting the last moment
+  // clears the squad's strip instead of leaving it stale.
+  const draftTaskEntries =
+    status === "missed" || status === "in_progress"
       ? mission.captureMode === "freeform"
         ? mission.draftMemories
         : mission.draftTasks
@@ -75,7 +80,9 @@ export async function syncLiveMiniFromLocalMission(
   const completedMemoryGallery =
     status === "completed"
       ? buildLiveMiniMemoryGallery(completionMemory?.tasks)
-      : buildLiveMiniMemoryGallery(missedTaskEntries);
+      : status === "in_progress"
+        ? buildLiveMiniMemoryGallery(draftTaskEntries) ?? []
+        : buildLiveMiniMemoryGallery(draftTaskEntries);
   await syncLiveMiniMissionProgress({
     squadId: mission.liveSquadId,
     localMiniMissionId: mission.id,

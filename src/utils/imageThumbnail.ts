@@ -3,6 +3,8 @@ export function storageThumbnailUri(
   width: number,
   height: number,
   quality = 58,
+  /** "contain" keeps the whole photo (no crop) inside width x height. */
+  resize: "cover" | "contain" = "cover",
 ): string {
   try {
     const url = new URL(uri);
@@ -11,7 +13,7 @@ export function storageThumbnailUri(
 
     url.searchParams.set("width", String(Math.max(1, Math.round(width))));
     url.searchParams.set("height", String(Math.max(1, Math.round(height))));
-    url.searchParams.set("resize", "cover");
+    url.searchParams.set("resize", resize);
     url.searchParams.set("quality", String(quality));
     return url.toString();
   } catch {

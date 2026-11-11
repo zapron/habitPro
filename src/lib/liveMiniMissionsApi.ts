@@ -1,5 +1,6 @@
 import type {
   LiveMiniMemoryGalleryItem,
+  LiveMiniMomentHeart,
   LiveMiniParticipantRow,
   LiveMiniParticipantStatus,
   LiveMiniProfileLabel,
@@ -538,6 +539,72 @@ export function subscribeLiveMiniSquad(
     )
     .subscribe();
 
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}
+
+/** Silent hearts on squad moments: no notification, the board animates instead. */
+export async function fetchLiveMiniMomentHearts(squadId: string): Promise<LiveMiniMomentHeart[]> {
+  const supabase = getSupabase();
+  if (!supabase || !squadId) return [];
+  const { data, error } = await supabase
+    .from("live_mini_moment_hearts")
+    .select("subject_user_id, task_id, liker_id")
+    .eq("squad_id", squadId);
+  if (error) throw error;
+  return (data ?? []) as LiveMiniMomentHeart[];
+}
+
+export async function setLiveMiniMomentHeart(input: {
+  squadId: string;
+  subjectUserId: string;
+  taskId: string;
+  likerId: string;
+  on: boolean;
+}): Promise<LiveMiniActionResult> {
+  const supabase = getSupabase();
+  if (!supabase) return { ok: false, error: "Supabase not configured" };
+  const key = {
+    squad_id: input.squadId,
+    subject_user_id: input.subjectUserId,
+    task_id: input.taskId,
+    liker_id: input.likerId,
+  };
+  const { error } = input.on
+    ? await supabase.from("live_mini_moment_hearts").upsert(key, { ignoreDuplicates: true })
+    : await supabase.from("live_mini_moment_hearts").delete().match(key);
+  if (error) return actionError(error);
+  return { ok: true };
+}
+
+/**
+ * Realtime for hearts. Inserts are filtered by squad server-side; Postgres
+ * Changes can't filter deletes, so those arrive for every squad and are matched
+ * on the primary key (which carries squad_id) here.
+ */
+export function subscribeLiveMiniMomentHearts(
+  squadId: string,
+  onChange: () => void,
+): (() => void) | null {
+  const supabase = getSupabase();
+  if (!supabase || !squadId) return null;
+  const channel = supabase
+    .channel(`live_mini_hearts_${squadId}_${Date.now()}_${Math.random().toString(36).slice(2)}`)
+    .on(
+      "postgres_changes",
+      { event: "INSERT", schema: "public", table: "live_mini_moment_hearts", filter: `squad_id=eq.${squadId}` },
+      () => onChange(),
+    )
+    .on(
+      "postgres_changes",
+      { event: "DELETE", schema: "public", table: "live_mini_moment_hearts" },
+      (payload) => {
+        const old = payload.old as { squad_id?: string } | null;
+        if (old?.squad_id === squadId) onChange();
+      },
+    )
+    .subscribe();
   return () => {
     supabase.removeChannel(channel);
   };

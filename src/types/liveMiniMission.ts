@@ -40,6 +40,15 @@ export type LiveMiniMemoryGalleryItem = {
   label: string;
   note: string | null;
   imageUrl: string | null;
+  /** When the moment was logged (ISO). Missing on rows synced by older app builds. */
+  loggedAt?: string | null;
+};
+
+/** One squad member's heart on another member's moment (live_mini_moment_hearts). */
+export type LiveMiniMomentHeart = {
+  subject_user_id: string;
+  task_id: string;
+  liker_id: string;
 };
 
 export type LiveMiniParticipantRow = {
