@@ -1,5 +1,6 @@
-import { memo } from "react";
-import { Image, ScrollView, StyleSheet, View } from "react-native";
+import { memo, useState } from "react";
+import { Image, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { ArrowDown, ArrowUp } from "lucide-react-native";
 import Svg, { Circle } from "react-native-svg";
 import { Text } from "../AppText";
 import { useTheme } from "../../context/ThemeContext";
@@ -15,10 +16,14 @@ import type {
  * Two players share the row; three or more become swipe cards (three fit,
  * the fourth peeks). The ring is time left. You are green, everyone else
  * maroon (the two colors of the logo); a timer under 10% turns amber.
- * Order comes from the screen (finished first, then running, then waiting).
+ * Order comes from the screen (finished first, then running, then waiting),
+ * except your own card, which always leads. Tap a card to open it (yours: your
+ * mission; others: their journey). Tap a running timer to flip every timer
+ * between time left (counting down) and time in (counting up).
  */
 
-const COMPACT_W = 104;
+const COMPACT_GAP = 8;
+const COMPACT_MIN_W = 96;
 const LOW_FUEL = 0.1;
 
 type Props = {
@@ -28,6 +33,7 @@ type Props = {
   nowMs: number;
   /** finished rows, fastest first: decides "1st", "2nd"... */
   completedRows: LiveMiniParticipantRow[];
+  onPressCard?: (row: LiveMiniParticipantRow) => void;
 };
 
 function ordinal(n: number): string {
@@ -60,6 +66,8 @@ function initialsFor(profile: LiveMiniProfileLabel | undefined): string {
 
 type CardModel = {
   key: string;
+  row: LiveMiniParticipantRow;
+  running: boolean;
   name: string;
   initials: string;
   avatarUrl: string | null;
@@ -80,21 +88,31 @@ export const LiveSquadRaceCards = memo(function LiveSquadRaceCards({
   userId,
   nowMs,
   completedRows,
+  onPressCard,
 }: Props) {
   const { theme, isDark } = useTheme();
+  const [countUp, setCountUp] = useState(false);
+  // Three cards fill the row exactly; a fourth and beyond sit off-screen to swipe to.
+  const [rowWidth, setRowWidth] = useState(0);
+  const compactW = rowWidth > 0 ? Math.max(COMPACT_MIN_W, (rowWidth - COMPACT_GAP * 2) / 3) : 110;
   const green = isDark ? theme.colors.green[500] : theme.colors.green[600];
   const maroon = isDark ? "#c2405d" : theme.colors.maroon[500];
   const amber = theme.colors.amber[500];
   const muted = theme.colors.textMuted;
 
-  const cards: CardModel[] = rows.map((row) => {
+  const ordered = userId
+    ? [...rows.filter((r) => r.user_id === userId), ...rows.filter((r) => r.user_id !== userId)]
+    : rows;
+  const cards: CardModel[] = ordered.map((row) => {
     const profile = profiles[row.user_id];
     const isMe = row.user_id === userId;
     const personColor = isMe ? green : maroon;
     const totalMin = (row.planned_minutes ?? 0) + (row.reserve_minutes ?? 0);
     const base = {
       key: row.id,
-      name: isMe ? "You" : profile?.username ?? profile?.displayName ?? "Member",
+      row,
+      running: false,
+      name: profile?.username ?? profile?.displayName ?? (isMe ? "You" : "Member"),
       initials: initialsFor(profile),
       avatarUrl: profile?.avatarUrl ?? null,
       isMe,
@@ -122,13 +140,18 @@ export const LiveSquadRaceCards = memo(function LiveSquadRaceCards({
       const left = Number.isFinite(deadlineMs) ? Math.max(0, (deadlineMs - nowMs) / 1000) : totalMin * 60;
       const fraction = Math.min(1, left / (totalMin * 60));
       const low = fraction < LOW_FUEL;
+      const startedMs = row.started_at ? Date.parse(row.started_at) : NaN;
+      const elapsed = Number.isFinite(startedMs)
+        ? Math.max(0, (nowMs - startedMs) / 1000)
+        : Math.max(0, totalMin * 60 - left);
       return {
         ...base,
+        running: true,
         color: low ? amber : personColor,
         tag: low ? "Low fuel" : "Live",
         tagColor: low ? amber : green,
-        big: clock(left),
-        sub: `left of ${minutesLabel(totalMin)}`,
+        big: clock(countUp ? elapsed : left),
+        sub: `${countUp ? "in" : "left"} of ${minutesLabel(totalMin)}`,
         fraction,
       };
     }
@@ -150,18 +173,40 @@ export const LiveSquadRaceCards = memo(function LiveSquadRaceCards({
     const ring = compact ? 52 : 48;
     const r = ring / 2 - 3;
     const circ = 2 * Math.PI * r;
+    const Arrow = countUp ? ArrowUp : ArrowDown;
+    const timerText = (
+      <Text
+        style={[compact ? styles.bigCompact : styles.bigWide, { color: theme.colors.textPrimary }]}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={0.7}
+      >
+        {c.big}
+      </Text>
+    );
+    const subText = (
+      <View style={[styles.subRow, compact ? styles.subRowCompact : null]}>
+        {c.running ? <Arrow size={11} color={theme.colors.textMuted} strokeWidth={2.6} /> : null}
+        <Text style={[styles.sub, { color: theme.colors.textMuted }, compact ? styles.subCompact : null]} numberOfLines={2}>
+          {c.sub}
+        </Text>
+      </View>
+    );
     return (
-      <View
+      <Pressable
         key={c.key}
-        style={[
-          compact ? styles.cardCompact : styles.cardWide,
+        onPress={onPressCard ? () => onPressCard(c.row) : undefined}
+        disabled={!onPressCard}
+        style={({ pressed }) => [
+          compact ? [styles.cardCompact, { width: compactW }] : styles.cardWide,
           {
-            backgroundColor: cardBg,
-            borderColor: c.isMe ? withAlpha(green, isDark ? 30 : 35) : theme.colors.border,
+            backgroundColor: c.isMe ? withAlpha(green, isDark ? 7 : 5) : cardBg,
+            borderColor: c.isMe ? withAlpha(green, isDark ? 45 : 50) : theme.colors.border,
+            opacity: pressed ? 0.9 : 1,
           },
         ]}
-        accessible
-        accessibilityLabel={`${c.name}, ${c.tag}, ${c.big} ${c.sub}`}
+        accessibilityRole="button"
+        accessibilityLabel={`${c.name}${c.isMe ? " (you)" : ""}, ${c.tag}, ${c.big} ${c.sub}`}
       >
         {compact ? (
           <Text style={[styles.tagCompact, { color: c.tagColor }]} numberOfLines={1}>
@@ -191,7 +236,7 @@ export const LiveSquadRaceCards = memo(function LiveSquadRaceCards({
               ]}
             >
               {c.avatarUrl ? (
-                <Image source={{ uri: c.avatarUrl }} style={styles.avatarPhoto} />
+                <Image source={{ uri: c.avatarUrl }} style={styles.avatarPhoto} resizeMethod="resize" fadeDuration={0} />
               ) : (
                 <Text style={[styles.initials, { color: c.color }]}>{c.initials}</Text>
               )}
@@ -207,12 +252,23 @@ export const LiveSquadRaceCards = memo(function LiveSquadRaceCards({
           <Text style={[styles.name, { color: c.isMe ? green : c.color === muted ? theme.colors.textSecondary : c.color }]} numberOfLines={1}>
             {c.name}
           </Text>
-          <Text style={[compact ? styles.bigCompact : styles.bigWide, { color: theme.colors.textPrimary }]} numberOfLines={1}>
-            {c.big}
-          </Text>
-          <Text style={[styles.sub, { color: theme.colors.textMuted }, compact ? styles.subCompact : null]} numberOfLines={2}>
-            {c.sub}
-          </Text>
+          {c.running ? (
+            <Pressable
+              onPress={() => setCountUp((v) => !v)}
+              hitSlop={6}
+              accessibilityRole="button"
+              accessibilityLabel={countUp ? "Show time left" : "Show time in"}
+              style={({ pressed }) => [compact ? styles.timerTapCompact : null, { opacity: pressed ? 0.6 : 1 }]}
+            >
+              {timerText}
+              {subText}
+            </Pressable>
+          ) : (
+            <>
+              {timerText}
+              {subText}
+            </>
+          )}
         </View>
         {!compact ? (
           <View style={[styles.footer, { borderTopColor: track }]}>
@@ -224,23 +280,23 @@ export const LiveSquadRaceCards = memo(function LiveSquadRaceCards({
             ) : null}
           </View>
         ) : null}
-      </View>
+      </Pressable>
     );
   };
 
   return (
-    <View style={styles.section}>
+    <View style={styles.section} onLayout={(e) => setRowWidth(Math.round(e.nativeEvent.layout.width))}>
       <View style={styles.headerRow}>
         <Text style={[styles.label, { color: theme.colors.textMuted }]}>{compact ? "Leaderboard" : "The race"}</Text>
         <Text style={[styles.hint, { color: theme.colors.textMuted }]}>
-          {compact ? `Swipe for all ${cards.length}` : "First finish locks the pace"}
+          {compact ? (cards.length > 3 ? `Swipe for all ${cards.length}` : `${cards.length} players`) : "First finish locks the pace"}
         </Text>
       </View>
       {compact ? (
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          snapToInterval={COMPACT_W + 8}
+          snapToInterval={compactW + COMPACT_GAP}
           decelerationRate="fast"
           contentContainerStyle={styles.strip}
           style={styles.stripOuter}
@@ -262,9 +318,9 @@ const styles = StyleSheet.create({
   grid: { flexDirection: "row", gap: 10 },
   // Bleed the swipe strip to the screen edges so cards slide under the gutter.
   stripOuter: { marginHorizontal: -16 },
-  strip: { gap: 8, paddingHorizontal: 16 },
+  strip: { gap: COMPACT_GAP, paddingHorizontal: 16 },
   cardWide: { flex: 1, borderWidth: 1, borderRadius: 22, padding: 14, gap: 12 },
-  cardCompact: { width: COMPACT_W, borderWidth: 1, borderRadius: 20, paddingVertical: 12, paddingHorizontal: 10, alignItems: "center", gap: 8 },
+  cardCompact: { borderWidth: 1, borderRadius: 20, paddingVertical: 12, paddingHorizontal: 10, alignItems: "center", gap: 8 },
   tagCompact: { fontSize: 11, fontWeight: "900", textAlign: "center", alignSelf: "stretch" },
   ringRowWide: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   ringRowCompact: { alignItems: "center" },
@@ -277,8 +333,11 @@ const styles = StyleSheet.create({
   textCompact: { alignItems: "center", gap: 2, alignSelf: "stretch" },
   name: { fontSize: 13, fontWeight: "800" },
   bigWide: { fontSize: 28, fontWeight: "900", letterSpacing: -0.6, fontVariant: ["tabular-nums"] },
-  bigCompact: { fontSize: 20, fontWeight: "900", letterSpacing: -0.4, fontVariant: ["tabular-nums"] },
-  sub: { fontSize: 12, fontVariant: ["tabular-nums"] },
+  bigCompact: { fontSize: 22, textAlign: "center", alignSelf: "stretch", fontWeight: "900", letterSpacing: -0.4, fontVariant: ["tabular-nums"] },
+  sub: { fontSize: 12, fontVariant: ["tabular-nums"], flexShrink: 1 },
+  subRow: { flexDirection: "row", alignItems: "center", gap: 3 },
+  subRowCompact: { justifyContent: "center" },
+  timerTapCompact: { alignItems: "center", alignSelf: "stretch", gap: 2 },
   subCompact: { fontSize: 11, textAlign: "center" },
   footer: { flexDirection: "row", justifyContent: "space-between", paddingTop: 10, borderTopWidth: 1 },
   footerText: { fontSize: 12, fontVariant: ["tabular-nums"] },

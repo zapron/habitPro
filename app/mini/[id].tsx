@@ -18,6 +18,7 @@ import {
   Easing,
   Image,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   ActivityIndicator,
@@ -33,21 +34,16 @@ import {
   ArrowLeft,
   Clock3,
   Check,
-  Trash2,
   CircleX,
-  Trophy,
   Fuel,
-  Flame,
-  Camera,
-  Info,
   Minimize2,
   Radio,
   Users,
   Share2,
   TreePine,
+  MoreHorizontal,
 } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
-import { LinearGradient } from "expo-linear-gradient";
 import {
   clearMiniMissionWarningNotification,
   shouldScheduleWarn,
@@ -107,7 +103,10 @@ import {
 } from "../../src/lib/streakMemoryStorage";
 import { MiniChecklistSheet } from "../../src/components/MiniChecklistSheet";
 import { MiniFreeformSheet } from "../../src/components/MiniFreeformSheet";
-import { MiniMomentCarousel } from "../../src/components/MiniMomentCarousel";
+import { MiniMomentCards } from "../../src/components/MiniMomentCards";
+import { MiniMomentLog } from "../../src/components/MiniMomentLog";
+import { LiveSquadComposer } from "../../src/components/liveMini/LiveSquadComposer";
+import { useLiveSquadMoments } from "../../src/components/liveMini/useLiveSquadMoments";
 import { syncLiveMiniFromLocalMission } from "../../src/lib/liveMiniMissionProgress";
 import { backOrReplace } from "../../src/lib/navigation";
 import { showAppAlert } from "../../src/context/AppDialogContext";
@@ -192,44 +191,6 @@ const MINI_DELETE_STEPS: OperationProgressStep[] = [
   { label: "Finalizing", description: "Returning you to Minis." },
 ];
 
-const QUOTES = [
-  {
-    text: "The secret of getting ahead is getting started.",
-    author: "Mark Twain",
-  },
-  { text: "Focus on being productive instead of busy.", author: "Tim Ferriss" },
-  { text: "Small steps every day lead to big results.", author: "Unknown" },
-  {
-    text: "You don't have to be great to start, but you have to start to be great.",
-    author: "Zig Ziglar",
-  },
-  {
-    text: "The only way to do great work is to love what you do.",
-    author: "Steve Jobs",
-  },
-  { text: "Done is better than perfect.", author: "Sheryl Sandberg" },
-  {
-    text: "Discipline is choosing between what you want now and what you want most.",
-    author: "Abraham Lincoln",
-  },
-  {
-    text: "It always seems impossible until it's done.",
-    author: "Nelson Mandela",
-  },
-  {
-    text: "Action is the foundational key to all success.",
-    author: "Pablo Picasso",
-  },
-  {
-    text: "What we do today determines where we'll be tomorrow.",
-    author: "Unknown",
-  },
-  { text: "Progress, not perfection.", author: "Unknown" },
-  {
-    text: "You are one decision away from a completely different life.",
-    author: "Unknown",
-  },
-];
 
 const formatDuration = (ms: number) => {
   const totalSeconds = Math.max(0, Math.floor(ms / 1000));
@@ -1497,6 +1458,8 @@ export default function MiniMissionDetail() {
     };
   }, [mergeFetchedMiniMission, mission, missionId, pendingExitAfterRemove]);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  /** Header ⋯ menu: details, cancel (while running), delete (solo only). */
+  const [optionsOpen, setOptionsOpen] = useState(false);
   const [operationProgress, setOperationProgress] = useState<OperationProgressState | null>(null);
   const [missionDetailsOpen, setMissionDetailsOpen] = useState(false);
   const [completionImageAspect, setCompletionImageAspect] = useState<number | null>(null);
@@ -1577,6 +1540,28 @@ export default function MiniMissionDetail() {
   const completionImageUri = useMemo(() => {
     return mission?.completionMemory?.imageUrl ?? mission?.completionMemory?.imageUri ?? null;
   }, [mission?.completionMemory?.imageUrl, mission?.completionMemory?.imageUri]);
+
+  /**
+   * Swipe cards for the completed moment(s). Checklist/freeform runs have
+   * tasks; an older single-photo or note-only memory becomes one card so every
+   * completed run uses the same layout. Tapping still opens the same viewer.
+   */
+  const hasTaskMoments = Boolean(mission?.completionMemory?.tasks && mission.completionMemory.tasks.length > 0);
+  const momentCards = useMemo<StreakMemoryTaskEntry[]>(() => {
+    const memory = mission?.completionMemory;
+    if (!memory) return [];
+    if (memory.tasks && memory.tasks.length > 0) return memory.tasks;
+    if (!completionImageUri && !memory.note) return [];
+    return [
+      {
+        taskId: "completion-moment",
+        label: "Your moment",
+        note: memory.note,
+        proofUrls: completionImageUri ? [completionImageUri] : [],
+        loggedAt: "",
+      },
+    ];
+  }, [completionImageUri, mission?.completionMemory]);
 
   useEffect(() => {
     // Reset when switching missions / images so we don't reuse an old aspect ratio.
@@ -1751,41 +1736,6 @@ export default function MiniMissionDetail() {
     return () => clearTimeout(timeout);
   }, [mission?.id, mission?.status, mission?.startedAt, totalMinutes]);
 
-  // Motivational quotes
-  const [quoteIdx, setQuoteIdx] = useState(() =>
-    Math.floor(Math.random() * QUOTES.length),
-  );
-  const quoteIdxRef = useRef(quoteIdx);
-  quoteIdxRef.current = quoteIdx;
-  const quoteFade = useRef(new Animated.Value(1)).current;
-
-  const animateQuoteChange = useCallback(
-    (nextIdx: number) => {
-      Animated.timing(quoteFade, {
-        toValue: 0,
-        duration: 200,
-        useNativeDriver: true,
-      }).start(() => {
-        setQuoteIdx(nextIdx);
-        Animated.timing(quoteFade, {
-          toValue: 1,
-          duration: 300,
-          useNativeDriver: true,
-        }).start();
-      });
-    },
-    [quoteFade],
-  );
-
-  // Auto-rotate quotes every 5s when in progress (pause while memory sheet is open)
-  useEffect(() => {
-    if (mission?.status !== "in_progress" || completeSheetOpen) return;
-    const interval = setInterval(() => {
-      const next = (quoteIdxRef.current + 1) % QUOTES.length;
-      animateQuoteChange(next);
-    }, 5000);
-    return () => clearInterval(interval);
-  }, [mission?.status, completeSheetOpen, animateQuoteChange]);
   const isLiveMiniMission = Boolean(mission?.liveSquadId);
   const isLiveMiniCreator = mission?.liveSquadRole === "creator";
   const plannedEndMs =
@@ -1898,6 +1848,45 @@ export default function MiniMissionDetail() {
     return Math.max(0, plannedMs - actualMs);
   }, [mission, totalMinutes]);
 
+  /** Completed stats card: time taken, planned, and how much of the fuel was used. */
+  const completedStats = useMemo(() => {
+    if (!mission || mission.status !== "completed" || !mission.startedAt || !mission.completedAt) return null;
+    const actualMs = Math.max(0, new Date(mission.completedAt).getTime() - new Date(mission.startedAt).getTime());
+    const plannedMs = Math.max(1, totalMinutes * 60 * 1000);
+    const h = Math.floor(totalMinutes / 60);
+    const m = totalMinutes % 60;
+    return {
+      taken: formatDuration(actualMs),
+      planned: h > 0 ? (m > 0 ? `${h}h ${m}m` : `${h}h`) : `${m}m`,
+      usedPct: Math.max(1, Math.min(100, Math.round((actualMs / plannedMs) * 100))),
+    };
+  }, [mission, totalMinutes]);
+
+  /**
+   * One quiet line above the title instead of the old Completed / minutes pills.
+   * Green only for done or running (a check or a small dot); everything else neutral.
+   */
+  const statusLine = useMemo(() => {
+    if (!mission) return null;
+    const green = isDark ? theme.colors.green[500] : theme.colors.green[600];
+    const muted = theme.colors.textSecondary;
+    const mode = mission.liveSquadId ? "Live squad" : "Solo";
+    if (mission.status === "completed") {
+      const day = mission.completedAt
+        ? new Date(mission.completedAt).toLocaleDateString([], { day: "numeric", month: "short" })
+        : null;
+      return { icon: "check" as const, color: green, text: "Completed", sub: [mode, day].filter(Boolean).join(" · ") };
+    }
+    if (mission.status === "cancelled") return { icon: null, color: muted, text: "Cancelled", sub: mode };
+    if (isTimerCheckInReview) return { icon: null, color: muted, text: "Time is up", sub: "Check in below" };
+    if (isMiniMissionFailed) return { icon: null, color: muted, text: "Missed", sub: "timer ran out" };
+    if (mission.status === "in_progress") {
+      const reserve = mission.completionMode !== "timer_check_in" ? ` · reserve ${mission.extendedMinutes ?? 0}/${MAX_RESERVE_FUEL_MINUTES}` : "";
+      return { icon: "dot" as const, color: green, text: "On mission", sub: `${mode} · ${totalMinutes} min${reserve}` };
+    }
+    return null;
+  }, [isDark, isMiniMissionFailed, isTimerCheckInReview, mission, theme.colors, totalMinutes]);
+
   const confirmDeleteMiniMission = useCallback(() => {
     if (!mission) return;
     setDeleteDialogOpen(false);
@@ -1935,6 +1924,46 @@ export default function MiniMissionDetail() {
       }, 9000);
     })();
   }, [mission, router]);
+
+  // While the run is live, moments are added from a bar at the bottom (like a
+  // chat) and listed above it, each with Edit / Delete. Same drafts and capture
+  // sheet as before; the squad sync effect above still pushes them.
+  const momentComposerOn =
+    mission?.status === "in_progress" &&
+    !isTimerUpState &&
+    (Boolean(mission.taskChecklist && mission.taskChecklist.length > 0) || mission.captureMode === "freeform");
+  const noopGalleryChange = useCallback(() => {}, []);
+  const inlineMoments = useLiveSquadMoments(mission, momentComposerOn, noopGalleryChange, null, false);
+  const { editMoment: editInlineMoment, deleteMoment: deleteInlineMoment } = inlineMoments;
+  const handleInlineMomentOptions = useCallback(
+    (taskId: string, label: string) => {
+      showAppAlert(label, undefined, [
+        { text: "Edit", style: "neutral", onPress: () => editInlineMoment(taskId) },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () =>
+            // Let the first dialog close before the confirm opens.
+            setTimeout(
+              () =>
+                showAppAlert("Delete this moment?", mission?.liveSquadId ? "It disappears from the squad feed too." : undefined, [
+                  { text: "Cancel", style: "cancel" },
+                  { text: "Delete", style: "destructive", onPress: () => deleteInlineMoment(taskId) },
+                ]),
+              300,
+            ),
+        },
+        { text: "Cancel", style: "cancel" },
+      ]);
+    },
+    [deleteInlineMoment, editInlineMoment, mission?.liveSquadId],
+  );
+  const mainScrollRef = useRef<ScrollView>(null);
+  const momentLogYRef = useRef(0);
+  const scrollToLatestMoment = useCallback(() => {
+    // Newest first: the new moment is at the top of the log.
+    setTimeout(() => mainScrollRef.current?.scrollTo({ y: Math.max(0, momentLogYRef.current - 8), animated: true }), 120);
+  }, []);
 
   if (!mission) {
     return (
@@ -2689,6 +2718,48 @@ export default function MiniMissionDetail() {
       />
 
       <ConfirmDialog
+        visible={optionsOpen}
+        onRequestClose={() => setOptionsOpen(false)}
+        title={mission.title}
+        actions={[
+          {
+            label: "Mission details",
+            variant: "secondary",
+            onPress: () => {
+              setOptionsOpen(false);
+              // Two RN Modals can't hand over in the same frame on iOS.
+              setTimeout(() => setMissionDetailsOpen(true), 350);
+            },
+          },
+          ...(mission.status === "in_progress" && !isTimerUpState
+            ? [
+                {
+                  label: "Cancel Mission",
+                  variant: "secondary" as const,
+                  onPress: () => {
+                    setOptionsOpen(false);
+                    handleCancel();
+                  },
+                },
+              ]
+            : []),
+          ...(!mission.liveSquadId
+            ? [
+                {
+                  label: "Delete mission",
+                  variant: "danger" as const,
+                  onPress: () => {
+                    setOptionsOpen(false);
+                    setTimeout(() => setDeleteDialogOpen(true), 350);
+                  },
+                },
+              ]
+            : []),
+          { label: "Close", variant: "secondary", onPress: () => setOptionsOpen(false) },
+        ]}
+      />
+
+      <ConfirmDialog
         visible={deleteDialogOpen}
         onRequestClose={() => setDeleteDialogOpen(false)}
         title="Delete Mini Mission"
@@ -2925,25 +2996,24 @@ export default function MiniMissionDetail() {
               },
             ]}
             onPress={() => {
-              if (mission.liveSquadId) {
-                showAppAlert("Live Squad mission", "Live mini missions cannot be deleted. Cancel it instead to close your run.");
-                return;
-              }
-              setDeleteDialogOpen(true);
+              void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              setOptionsOpen(true);
             }}
+            accessibilityRole="button"
+            accessibilityLabel="Mission options: details, cancel, delete"
           >
-            <Trash2
-              size={theme.icon.md}
-              color={mission.liveSquadId ? theme.colors.textMuted : theme.colors.red[500]}
-            />
+            <MoreHorizontal size={theme.icon.md} color={theme.colors.textPrimary} />
           </TouchableOpacity>
         </View>
       </View>
 
       <ScrollView
+        ref={mainScrollRef}
         style={styles.scroll}
-        contentContainerStyle={{ paddingBottom: scrollBottomPad }}
+        // The composer sits below in normal layout and owns the bottom inset.
+        contentContainerStyle={{ paddingBottom: momentComposerOn ? 20 : scrollBottomPad }}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode={momentComposerOn ? (Platform.OS === "ios" ? "interactive" : "on-drag") : "none"}
         showsVerticalScrollIndicator={false}
       >
         {isPureWaiting ? (
@@ -2973,18 +3043,6 @@ export default function MiniMissionDetail() {
               >
                 {mission.title}
               </Text>
-              <TouchableOpacity
-                style={styles.infoButton}
-                onPress={() => {
-                  void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  setMissionDetailsOpen(true);
-                }}
-                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-                accessibilityRole="button"
-                accessibilityLabel="Mini mission details"
-              >
-                <Info size={theme.icon.md} color={theme.colors.indigo[400]} />
-              </TouchableOpacity>
             </View>
 
             {readyObjective ? (
@@ -3015,6 +3073,24 @@ export default function MiniMissionDetail() {
           </View>
         ) : (
           <>
+            {statusLine ? (
+              <View style={styles.statusLine}>
+                {statusLine.icon === "check" ? (
+                  <Check size={15} color={statusLine.color} strokeWidth={3} />
+                ) : statusLine.icon === "dot" ? (
+                  <View style={[styles.statusDot, { backgroundColor: statusLine.color }]} />
+                ) : null}
+                <Text style={[styles.statusLineText, { color: statusLine.color }]} numberOfLines={1}>
+                  {statusLine.text}
+                </Text>
+                {statusLine.sub ? (
+                  <Text style={[styles.statusLineSub, { color: theme.colors.textMuted }]} numberOfLines={1}>
+                    {" · "}
+                    {statusLine.sub}
+                  </Text>
+                ) : null}
+              </View>
+            ) : null}
             <View style={styles.titleRow}>
               <Text
                 style={[
@@ -3029,18 +3105,6 @@ export default function MiniMissionDetail() {
               >
                 {mission.title}
               </Text>
-              <TouchableOpacity
-                style={styles.infoButton}
-                onPress={() => {
-                  void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  setMissionDetailsOpen(true);
-                }}
-                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-                accessibilityRole="button"
-                accessibilityLabel="Mini mission details"
-              >
-                <Info size={theme.icon.md} color={theme.colors.indigo[400]} />
-              </TouchableOpacity>
             </View>
 
             {mission.status === "in_progress" ? (
@@ -3053,82 +3117,39 @@ export default function MiniMissionDetail() {
                 onTimerExpired={() => setIsTimerUpState(true)}
               />
             ) : null}
-            <View style={styles.topPillsRow}>
-              {mission.status === "completed" ? (
-                <View
-                  style={[
-                    styles.completedPill,
-                    {
-                      backgroundColor: isDark ? withAlpha(theme.colors.green[500], 14) : withAlpha(theme.colors.green[600], 12),
-                      borderColor: isDark ? withAlpha(theme.colors.green[500], 28) : withAlpha(theme.colors.green[600], 22),
-                    },
-                  ]}
-                >
-                  <Check size={16} color={theme.colors.green[500]} />
-                  <Text style={[styles.completedPillText, { color: theme.colors.green[500] }]}>
-                    Completed
-                  </Text>
-                </View>
-              ) : null}
-
-              <View
-                style={[
-                  styles.metaPill,
-                  {
-                    borderColor: theme.colors.border,
-                    backgroundColor: theme.colors.surfaceElevated,
-                  },
-                ]}
-              >
-                <Clock3 size={14} color={theme.colors.cyan[400]} />
-                <Text style={[styles.metaText, { color: theme.colors.textPrimary }]}>
-                  {isTimerCheckInReview
-                    ? "Check In"
-                    : mission.status === "in_progress" && !isTimerUpState
-                    ? allowReserveFuel
-                      ? `${totalMinutes} min · reserve ${reserveUsed}/${MAX_RESERVE_FUEL_MINUTES}`
-                      : `${totalMinutes} min`
-                    : allowReserveFuel && (mission.extendedMinutes ?? 0) > 0
-                      ? `${totalMinutes} min (+${mission.extendedMinutes ?? 0})`
-                      : `${totalMinutes} min`}
-                </Text>
-              </View>
-            </View>
           </>
         )}
 
-        {mission.status === "completed" && earlyFinishMs > 0 ? (
-          <View style={[styles.rewardCard, { borderRadius: theme.radius.lg }]}>
-            <LinearGradient
-              pointerEvents="none"
-              colors={
-                isDark
-                  ? ["rgba(245, 158, 11, 0.30)", "rgba(217, 119, 6, 0.06)"]
-                  : ["rgba(253, 230, 138, 0.85)", "rgba(254, 243, 199, 0.3)"]
-              }
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={StyleSheet.absoluteFill}
-            />
-            <View style={styles.rewardIconBadge}>
-              <Flame size={24} color="#f59e0b" fill="#fde68a" />
-            </View>
-            <View style={styles.rewardTextCol}>
-              <Text style={[styles.rewardTitle, { color: theme.colors.yellow[400] }]}>
-                Early Finish Reward
-              </Text>
-              <View style={styles.rewardRow}>
-                <Trophy size={15} color={theme.colors.yellow[400]} />
-                <Text
-                  style={[
-                    styles.rewardText,
-                    { color: isDark ? "#fde68a" : theme.colors.amber[500] },
-                  ]}
-                >
-                  You beat your estimate by {formatDuration(earlyFinishMs)}.
-                </Text>
+        {mission.status === "completed" && completedStats ? (
+          <View style={[styles.statsCard, { backgroundColor: theme.colors.surfaceElevated }]}>
+            <View style={styles.statsRow}>
+              <View style={styles.statCell}>
+                <Text style={[styles.statValue, { color: theme.colors.textPrimary }]}>{completedStats.taken}</Text>
+                <Text style={[styles.statLabel, { color: theme.colors.textMuted }]}>time taken</Text>
               </View>
+              <View style={styles.statCell}>
+                <Text style={[styles.statValue, { color: theme.colors.textPrimary }]}>{completedStats.planned}</Text>
+                <Text style={[styles.statLabel, { color: theme.colors.textMuted }]}>planned</Text>
+              </View>
+              {earlyFinishMs > 0 ? (
+                <View style={styles.statCell}>
+                  {/* Amber = earned: the one reward number on this screen. */}
+                  <Text style={[styles.statValue, { color: theme.colors.amber[500] }]}>−{formatDuration(earlyFinishMs)}</Text>
+                  <Text style={[styles.statLabel, { color: theme.colors.textMuted }]}>early finish</Text>
+                </View>
+              ) : null}
             </View>
+            <View style={[styles.statsTrack, { backgroundColor: isDark ? withAlpha("#ffffff", 8) : withAlpha("#000000", 7) }]}>
+              <View
+                style={[
+                  styles.statsFill,
+                  { width: `${completedStats.usedPct}%`, backgroundColor: isDark ? theme.colors.green[500] : theme.colors.green[600] },
+                ]}
+              />
+            </View>
+            <Text style={[styles.statsFoot, { color: theme.colors.textMuted }]}>
+              Used {completedStats.usedPct}% of your fuel{earlyFinishMs > 0 ? " · early finish reward earned" : ""}
+            </Text>
           </View>
         ) : null}
 
@@ -3163,7 +3184,12 @@ export default function MiniMissionDetail() {
 
         {(() => {
           const focusModeVisible = mission.status === "in_progress" && !isTimerUpState;
-          const inviteOthersVisible = !isTimerCheckInSoloMode;
+          // A finished squad member's "View Squad" opens the same board as the
+          // "Take me to my spot" button below, so show just that one there.
+          // Creators keep "Invite More" (a different action).
+          const duplicatesSpotButton =
+            mission.status === "completed" && Boolean(mission.liveSquadId) && !isLiveMiniCreator;
+          const inviteOthersVisible = !isTimerCheckInSoloMode && !duplicatesSpotButton;
           if (!focusModeVisible && !inviteOthersVisible) return null;
           // Side-by-side (both buttons) keeps the icon stacked above the
           // label — that's the compact pairing already settled on. Alone
@@ -3271,17 +3297,17 @@ export default function MiniMissionDetail() {
           {mission.status === "in_progress" && !isTimerUpState && (
             <>
               <Button
-                title={mission.captureMode === "freeform" ? "Add a Moment" : "Mark Complete"}
+                title={
+                  mission.captureMode === "freeform"
+                    ? momentComposerOn
+                      ? "Complete Mission"
+                      : "Add a Moment"
+                    : "Mark Complete"
+                }
                 onPress={handleMarkComplete}
                 // Third color in the brand trio below Focus Mode (green) /
-                // Invite Others (maroon) — amber, so all three read as
-                // distinct actions instead of two of them both landing on
-                // maroon. theme.colors.amber is the same pack-independent
-                // token used for the flame/reward accents elsewhere, not
-                // the default Button "primary" fill (theme.colors.indigo),
-                // which aliases to maroon specifically on the Minimalist
-                // pack — that alias is exactly why this button was
-                // rendering maroon before.
+                // Invite Others (maroon): amber, so all three read as
+                // distinct actions.
                 style={{
                   backgroundColor: theme.colors.amber[500],
                   borderColor: theme.colors.amber[500],
@@ -3325,11 +3351,7 @@ export default function MiniMissionDetail() {
                   </TouchableOpacity>
                 )
               ) : null}
-              <Button
-                title="Cancel Mission"
-                variant="secondary"
-                onPress={handleCancel}
-              />
+              {/* Cancel lives in the ⋯ menu (top right). */}
             </>
           )}
 
@@ -3412,83 +3434,25 @@ export default function MiniMissionDetail() {
                 mission.completionMemory?.imageUri ||
                 mission.completionMemory?.note ||
                 (mission.completionMemory?.tasks && mission.completionMemory.tasks.length > 0)) && (
-                <View style={styles.completionMomentSection}>
-                  <View style={styles.completionMomentHead}>
-                    <Camera size={16} color={theme.colors.amber[500]} />
-                    <Text style={[styles.completionMomentTitle, { color: theme.colors.textPrimary }]}>
-                      Your moment
-                    </Text>
+                <MiniMomentCards
+                  tasks={momentCards}
+                  startedAt={mission.startedAt}
+                  onIndexChange={hasTaskMoments ? setMomentViewerIndex : undefined}
+                  onPressSlide={(index) => {
+                    if (hasTaskMoments) setMomentViewerIndex(index);
+                    setCompletionImageOpen(true);
+                  }}
+                  headerRight={
                     <TouchableOpacity
                       onPress={handleShareFromMoment}
-                      style={styles.completionMomentShareBtn}
                       accessibilityRole="button"
                       accessibilityLabel="Share this moment"
-                      hitSlop={8}
+                      hitSlop={10}
                     >
                       <Share2 size={16} color={theme.colors.textMuted} />
                     </TouchableOpacity>
-                  </View>
-                  {mission.completionMemory?.tasks && mission.completionMemory.tasks.length > 0 ? (
-                    <MiniMomentCarousel
-                      tasks={mission.completionMemory.tasks}
-                      onIndexChange={setMomentViewerIndex}
-                      onPressSlide={(index) => {
-                        setMomentViewerIndex(index);
-                        setCompletionImageOpen(true);
-                      }}
-                    />
-                  ) : (
-                    <>
-                      {completionImageUri ? (
-                        <Pressable
-                          onPress={() => setCompletionImageOpen(true)}
-                          accessibilityRole="button"
-                          accessibilityLabel="View moment photo"
-                          style={({ pressed }) => [{ opacity: pressed ? 0.92 : 1 }]}
-                        >
-                          <View
-                            style={[
-                              styles.completionImageWrap,
-                              {
-                                borderColor: theme.colors.border,
-                                backgroundColor: theme.colors.surfaceElevated,
-                              },
-                              completionImageAspect != null ? { aspectRatio: completionImageAspect } : null,
-                            ]}
-                          >
-                            <Image
-                              source={{ uri: completionImageUri }}
-                              style={styles.completionImage}
-                              resizeMode="cover"
-                              onLoad={(e) => {
-                                const w = e.nativeEvent.source?.width;
-                                const h = e.nativeEvent.source?.height;
-                                if (typeof w === "number" && typeof h === "number" && w > 0 && h > 0) {
-                                  setCompletionImageAspect(w / h);
-                                }
-                              }}
-                            />
-                          </View>
-                        </Pressable>
-                      ) : null}
-                      {mission.completionMemory?.note ? (
-                        <View
-                          style={[
-                            styles.completionNoteBox,
-                            {
-                              borderColor: theme.colors.border,
-                              backgroundColor: theme.colors.surface,
-                            },
-                          ]}
-                        >
-                          <Text style={[styles.completionNoteText, { color: theme.colors.textPrimary }]}>
-                            {mission.completionMemory.note}
-                          </Text>
-                        </View>
-                      ) : null}
-                    </>
-                  )}
-                </View>
+                  }
+                />
               )}
             </>
           )}
@@ -3504,6 +3468,7 @@ export default function MiniMissionDetail() {
             </View>
           )}
         </View>
+
 
         {mission.status === "completed" && mission.liveSquadId ? (
           <TouchableOpacity
@@ -3524,77 +3489,40 @@ export default function MiniMissionDetail() {
           </TouchableOpacity>
         ) : null}
 
-        {/* Motivational quotes — glass card at the bottom, only while timer is running */}
-        {mission.status === "in_progress" && !isTimerUpState && !completeSheetOpen && (
-          <TouchableOpacity
-            activeOpacity={0.8}
-            onPress={() => animateQuoteChange((quoteIdx + 1) % QUOTES.length)}
-            style={[
-              quoteStyles.glassCard,
-              {
-                backgroundColor: isDark
-                  ? "rgba(255,255,255,0.04)"
-                  : "rgba(255,255,255,0.5)",
-                borderColor: isDark
-                  ? "rgba(255,255,255,0.08)"
-                  : "rgba(0,0,0,0.06)",
-                borderRadius: theme.radius.lg,
-              },
-            ]}
-          >
-            <Animated.View
-              style={[quoteStyles.textWrap, { opacity: quoteFade }]}
-            >
-              <Text
-                style={[
-                  quoteStyles.quoteText,
-                  {
-                    color: isDark
-                      ? "rgba(255,255,255,0.7)"
-                      : "rgba(0,0,0,0.55)",
-                  },
-                ]}
-              >
-                “{QUOTES[quoteIdx].text}”
-              </Text>
-              <Text
-                style={[
-                  quoteStyles.quoteAuthor,
-                  {
-                    color: isDark
-                      ? "rgba(255,255,255,0.35)"
-                      : "rgba(0,0,0,0.35)",
-                  },
-                ]}
-              >
-                {" · "}
-                {QUOTES[quoteIdx].author}
-              </Text>
-            </Animated.View>
-            {/* Pagination dots */}
-            <View style={quoteStyles.dotsRow}>
-              {[0, 1, 2].map((dotIdx) => (
-                <View
-                  key={dotIdx}
-                  style={[
-                    quoteStyles.dot,
-                    {
-                      backgroundColor:
-                        quoteIdx % 3 === dotIdx
-                          ? isDark
-                            ? "rgba(255,255,255,0.5)"
-                            : "rgba(0,0,0,0.35)"
-                          : isDark
-                            ? "rgba(255,255,255,0.12)"
-                            : "rgba(0,0,0,0.1)",
-                    },
-                  ]}
-                />
-              ))}
-            </View>
-          </TouchableOpacity>
-        )}
+
+        {momentComposerOn ? (
+          <View onLayout={(e) => (momentLogYRef.current = e.nativeEvent.layout.y)}>
+          <MiniMomentLog
+            entries={
+              inlineMoments.mode === "checklist"
+                ? Object.values(draftTaskEntries)
+                : draftMemoryEntries
+            }
+            startedAt={mission.startedAt}
+            title={
+              inlineMoments.mode === "checklist" && inlineMoments.checklist
+                ? `Logged · ${Object.keys(draftTaskEntries).length} of ${inlineMoments.checklist.length}`
+                : `Your moments · ${draftMemoryEntries.length}`
+            }
+            onOptions={handleInlineMomentOptions}
+          />
+          </View>
+        ) : null}
       </ScrollView>
+
+      {momentComposerOn && inlineMoments.mode ? (
+        <LiveSquadComposer
+          mode={inlineMoments.mode}
+          tasks={inlineMoments.checklist}
+          loggedTaskIds={inlineMoments.loggedTaskIds}
+          remainingTasks={inlineMoments.remainingTasks}
+          onSendText={inlineMoments.postText}
+          onPhoto={inlineMoments.openPhoto}
+          onTask={inlineMoments.openTask}
+          onPosted={scrollToLatestMoment}
+        />
+      ) : null}
+      {inlineMoments.sheetElement}
 
       {completionImageUri || (mission.completionMemory?.tasks && mission.completionMemory.tasks.length > 0) ? (
         <Modal
@@ -3750,6 +3678,18 @@ const styles = StyleSheet.create({
   },
   metaText: { fontWeight: "700" },
   actions: { gap: 10 },
+  statusLine: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 6 },
+  statusDot: { width: 7, height: 7, borderRadius: 4 },
+  statusLineText: { fontSize: 13, fontWeight: "800" },
+  statusLineSub: { fontSize: 13, fontWeight: "600", flexShrink: 1 },
+  statsCard: { borderRadius: 22, padding: 16, gap: 12, marginBottom: 16 },
+  statsRow: { flexDirection: "row", gap: 8 },
+  statCell: { flex: 1, gap: 2 },
+  statValue: { fontSize: 22, fontWeight: "900", letterSpacing: -0.4, fontVariant: ["tabular-nums"] },
+  statLabel: { fontSize: 12, fontWeight: "600" },
+  statsTrack: { height: 4, borderRadius: 2, overflow: "hidden" },
+  statsFill: { height: 4, borderRadius: 2 },
+  statsFoot: { fontSize: 12, fontWeight: "500" },
   progressBarWrap: { marginBottom: 14 },
   // Focus Mode / Invite Others — a matched brand-colored pair, side by
   // side. Solid fill with white icon/text in both themes, matching the
@@ -4256,38 +4196,3 @@ const focusStyles = StyleSheet.create({
   },
 });
 
-const quoteStyles = StyleSheet.create({
-  glassCard: {
-    marginTop: 20,
-    padding: 20,
-    borderWidth: 1,
-    alignItems: "center",
-  },
-  textWrap: { alignItems: "center", paddingHorizontal: 8 },
-  quoteText: {
-    fontSize: 14,
-    fontStyle: "italic",
-    textAlign: "center",
-    lineHeight: 22,
-    letterSpacing: 0.3,
-  },
-  quoteAuthor: {
-    fontSize: 11,
-    fontWeight: "700",
-    marginTop: 8,
-    letterSpacing: 0.5,
-    textTransform: "uppercase",
-  },
-  dotsRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    marginTop: 12,
-  },
-  dot: {
-    width: 5,
-    height: 5,
-    borderRadius: 2.5,
-  },
-});

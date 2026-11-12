@@ -11,7 +11,7 @@ import { syncLiveMiniMissionProgress } from "./liveMiniMissionsApi";
  * logged with neither a note nor a photo ("just mark done") are kept too — every
  * logged task should show up, not just the ones with proof.
  */
-function buildLiveMiniMemoryGallery(
+export function buildLiveMiniMemoryGallery(
   tasks: StreakMemoryTaskEntry[] | undefined,
 ): LiveMiniMemoryGalleryItem[] | null {
   if (!tasks || tasks.length === 0) return null;

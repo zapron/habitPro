@@ -5,6 +5,7 @@ import {
   Easing,
   Image,
   Modal,
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -17,7 +18,7 @@ import {
 import { useFocusEffect } from "@react-navigation/native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ArrowLeft, Check, Flame, Info, ListChecks, MoreHorizontal, Radio, Timer, Trophy, UserPlus, Users, X } from "lucide-react-native";
+import { ArrowLeft, Check, Flame, Info, ListChecks, MoreHorizontal, Radio, Trophy, UserPlus, Users, X } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import { Text } from "../../src/components/AppText";
 import { GlassTopHighlight } from "../../src/components/GlassTopHighlight";
@@ -49,6 +50,8 @@ import {
 } from "../../src/lib/liveMiniMissionsApi";
 import { LiveSquadMomentsFeed } from "../../src/components/liveMini/LiveSquadMomentsFeed";
 import { LiveSquadRaceCards } from "../../src/components/liveMini/LiveSquadRaceCards";
+import { LiveSquadComposer } from "../../src/components/liveMini/LiveSquadComposer";
+import { useLiveSquadMoments } from "../../src/components/liveMini/useLiveSquadMoments";
 import { syncLiveMiniFromLocalMission } from "../../src/lib/liveMiniMissionProgress";
 import { backOrReplace } from "../../src/lib/navigation";
 import { traceAsync } from "../../src/lib/perfTrace";
@@ -56,6 +59,7 @@ import { parseTaskChecklist } from "../../src/lib/sync";
 import { useHabitStore } from "../../src/store/habitStore";
 import type { MiniMission } from "../../src/types/habit";
 import type {
+  LiveMiniMemoryGalleryItem,
   LiveMiniMomentHeart,
   LiveMiniParticipantRow,
   LiveMiniParticipantStatus,
@@ -64,7 +68,6 @@ import type {
   LiveMiniSquadSnapshot,
 } from "../../src/types/liveMiniMission";
 import { formatDateTimeDisplay } from "../../src/utils/dateDisplay";
-import { storageThumbnailUri } from "../../src/utils/imageThumbnail";
 import { levelFromTotalXp } from "../../src/utils/xpLevel";
 import { withAlpha } from "../../src/styles/theme";
 
@@ -120,20 +123,7 @@ function initialsFromLabel(label: LiveMiniProfileLabel | undefined): string {
   return `${first}${second ?? ""}`.toUpperCase();
 }
 
-function formatMinutesLabel(minutes: number | null | undefined): string {
-  if (typeof minutes !== "number" || !Number.isFinite(minutes)) return "--";
-  if (minutes >= 60) {
-    const h = Math.floor(minutes / 60);
-    const m = minutes % 60;
-    return m > 0 ? `${h}h ${m}m` : `${h}h`;
-  }
-  return `${minutes}m`;
-}
 
-function withImageVersion(url: string, version: string | null | undefined): string {
-  if (!version) return url;
-  return `${url}${url.includes("?") ? "&" : "?"}v=${encodeURIComponent(version)}`;
-}
 
 function formatShortDateTime(iso?: string | null): string {
   if (!iso) return "Not set";
@@ -153,26 +143,6 @@ function formatInviteExpiry(expiresAt: string | null | undefined): string | null
   return `Invite expires in ${days}d`;
 }
 
-function statusCopy(status: LiveMiniParticipantStatus): string {
-  switch (status) {
-    case "invited":
-      return "Invited";
-    case "expired":
-      return "Expired";
-    case "declined":
-      return "Declined";
-    case "joined":
-      return "Joined";
-    case "in_progress":
-      return "On mission";
-    case "completed":
-      return "Done";
-    case "missed":
-      return "Missed";
-    case "cancelled":
-      return "Cancelled";
-  }
-}
 
 function isTerminalLiveMiniStatus(status: LiveMiniParticipantStatus): boolean {
   return status === "completed" || status === "missed" || status === "cancelled" || status === "declined" || status === "expired";
@@ -197,11 +167,6 @@ function participantSortValue(row: LiveMiniParticipantRow): number {
   return 3;
 }
 
-function rankFor(row: LiveMiniParticipantRow, completed: LiveMiniParticipantRow[]): number | null {
-  if (row.status !== "completed" || row.final_elapsed_seconds == null) return null;
-  const idx = completed.findIndex((p) => p.id === row.id);
-  return idx >= 0 ? idx + 1 : null;
-}
 
 function ordinalLabel(rank: number): string {
   if (rank === 1) return "1st";
@@ -601,178 +566,6 @@ const PulsingOnMissionDot = memo(function PulsingOnMissionDot({ color }: { color
   );
 });
 
-const ParticipantCard = memo(function ParticipantCard({
-  row,
-  rank,
-  profile,
-  isMe,
-  hideOpenMine,
-  localMission,
-  highlightFinish,
-  liveNowMs,
-  onOpenMine,
-  onOpenImage,
-  onOpenPlayerJourney,
-}: {
-  row: LiveMiniParticipantRow;
-  rank: number | null;
-  profile: LiveMiniProfileLabel | undefined;
-  isMe: boolean;
-  /** The "Your timer" row above already offers Open; don't repeat it in my card. */
-  hideOpenMine?: boolean;
-  localMission?: MiniMission;
-  highlightFinish: boolean;
-  liveNowMs: number;
-  onOpenMine: () => void;
-  onOpenImage: (uri: string) => void;
-  onOpenPlayerJourney: (userId: string, profile?: LiveMiniProfileLabel) => void;
-}) {
-  const { theme, isDark } = useTheme();
-  const finishGlow = useRef(new Animated.Value(0)).current;
-  const planned = row.planned_minutes ?? localMission?.estimatedMinutes ?? null;
-  const reserve = row.reserve_minutes ?? 0;
-  const totalMinutes = planned != null ? planned + reserve : null;
-  const level =
-    profile?.xp != null && Number.isFinite(profile.xp)
-      ? levelFromTotalXp(profile.xp)
-      : null;
-  const elapsedSeconds =
-    row.status === "completed"
-      ? row.final_elapsed_seconds ?? null
-      : row.status === "in_progress" && row.started_at
-        ? Math.max(0, Math.floor((liveNowMs - new Date(row.started_at).getTime()) / 1000))
-        : null;
-  const totalSeconds = Math.max(60, (totalMinutes ?? 1) * 60);
-  const progress = elapsedSeconds == null ? 0 : Math.min(1, elapsedSeconds / totalSeconds);
-  const showProgress = row.status === "completed" || row.status === "in_progress";
-  const memoryImage = row.memory_image_url ? withImageVersion(row.memory_image_url, row.updated_at) : null;
-  const memoryThumbnail = useMemo(
-    () => (memoryImage ? storageThumbnailUri(memoryImage, 820, 456, 64) : null),
-    [memoryImage],
-  );
-  const playerName = displayName(profile);
-
-  const handlePlayerJourneyPress = useCallback(() => {
-    onOpenPlayerJourney(row.user_id, profile);
-  }, [onOpenPlayerJourney, profile, row.user_id]);
-
-  useEffect(() => {
-    if (!highlightFinish) return;
-    finishGlow.setValue(0.18);
-    Animated.timing(finishGlow, {
-      toValue: 0,
-      duration: 2200,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: true,
-    }).start();
-  }, [finishGlow, highlightFinish]);
-
-  // You are green, everyone else maroon: the two colors of the logo.
-  const personColor = isMe
-    ? isDark ? theme.colors.green[500] : theme.colors.green[600]
-    : isDark ? "#c2405d" : theme.colors.maroon[500];
-  const dropped = row.status === "missed" || row.status === "cancelled" || row.status === "declined" || row.status === "expired";
-  const ringColor = dropped || row.status === "invited" || row.status === "joined" ? theme.colors.textMuted : personColor;
-  const statusColor =
-    row.status === "completed" || row.status === "in_progress"
-      ? isDark ? theme.colors.green[500] : theme.colors.green[600]
-      : row.status === "missed"
-        ? theme.colors.red[500]
-        : theme.colors.textMuted;
-  const subLine =
-    row.status === "completed"
-      ? `${rank ? `${ordinalLabel(rank)} · ` : ""}${formatLiveMiniElapsed(row.final_elapsed_seconds)} of ${formatMinutesLabel(totalMinutes)} · locked`
-      : row.status === "in_progress"
-        ? `${elapsedSeconds == null ? "--" : formatLiveMiniElapsed(elapsedSeconds)} of ${formatMinutesLabel(totalMinutes)}${reserve > 0 ? ` · ${reserve}m reserve` : ""}`
-        : totalMinutes
-          ? `${formatMinutesLabel(totalMinutes)} timer`
-          : "Waiting for timer";
-
-  return (
-    <View
-      style={[
-        styles.participantCard,
-        { borderBottomColor: theme.colors.border, opacity: dropped ? 0.62 : 1 },
-      ]}
-    >
-      <Animated.View
-        pointerEvents="none"
-        style={[styles.finishGlow, { backgroundColor: theme.colors.green[500], opacity: finishGlow }]}
-      />
-      <View style={styles.participantRow}>
-        <View style={[styles.participantAvatar, { borderColor: ringColor, backgroundColor: withAlpha(ringColor, isDark ? 16 : 10) }]}>
-          {profile?.avatarUrl ? (
-            <Image source={{ uri: profile.avatarUrl }} style={styles.participantAvatarPhoto} />
-          ) : (
-            <Text style={[styles.participantAvatarText, { color: ringColor }]}>{initialsFromLabel(profile)}</Text>
-          )}
-        </View>
-        <View style={styles.nameBlock}>
-          <View style={styles.participantNameRow}>
-            <Pressable
-              onPress={handlePlayerJourneyPress}
-              hitSlop={6}
-              accessibilityRole="button"
-              accessibilityLabel={`Open player journey for ${playerName}`}
-              style={({ pressed }) => [styles.participantNamePressable, pressed ? styles.participantNamePressed : null]}
-            >
-              <Text style={[styles.participantName, { color: theme.colors.textPrimary }]} numberOfLines={1}>
-                {playerName}
-              </Text>
-            </Pressable>
-            {level != null ? (
-              <Text style={[styles.participantLevel, { color: theme.colors.textMuted }]}>Lv {level}</Text>
-            ) : null}
-            <View style={styles.participantStatus}>
-              {row.status === "in_progress" ? <PulsingOnMissionDot color={statusColor} /> : null}
-              <Text style={[styles.participantStatusText, { color: statusColor }]}>
-                {isMe && row.status !== "in_progress" && row.status !== "completed" ? `You · ${statusCopy(row.status)}` : statusCopy(row.status)}
-              </Text>
-            </View>
-          </View>
-          {showProgress ? (
-            <View style={[styles.participantTrack, { backgroundColor: isDark ? withAlpha(theme.colors.sheen, 8) : withAlpha(theme.colors.sheen, 6) }]}>
-              <View style={[styles.participantFill, { width: `${Math.max(0.03, progress) * 100}%`, backgroundColor: personColor }]} />
-            </View>
-          ) : null}
-          <Text style={[styles.participantSub, { color: theme.colors.textMuted }]} numberOfLines={1}>
-            {subLine}
-          </Text>
-        </View>
-      </View>
-
-      {/* Moments live in the Squad moments feed below; this is only the
-          single-photo memory from older builds. */}
-      {!(row.memory_gallery && row.memory_gallery.length > 0) && memoryImage ? (
-        <Pressable
-          onPress={() => onOpenImage(memoryImage)}
-          accessibilityRole="button"
-          accessibilityLabel="View squad memory photo"
-          style={({ pressed }) => ({ opacity: pressed ? 0.92 : 1 })}
-        >
-          <Image source={{ uri: memoryThumbnail ?? memoryImage }} style={styles.memoryImage} resizeMode="cover" />
-        </Pressable>
-      ) : null}
-      {!(row.memory_gallery && row.memory_gallery.length > 0) && row.memory_note ? (
-        <Text style={[styles.memoryNote, { color: theme.colors.textSecondary }]} numberOfLines={4}>
-          {row.memory_note}
-        </Text>
-      ) : null}
-
-      {isMe && localMission && !hideOpenMine ? (
-        <Button
-          title="Open my timer"
-          variant="subtle"
-          icon={<Timer size={16} color={theme.colors.cyan[400]} />}
-          onPress={onOpenMine}
-          style={styles.openMineButton}
-          textStyle={styles.openMineText}
-        />
-      ) : null}
-    </View>
-  );
-});
-
 export default function LiveMiniSquadScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ id?: string }>();
@@ -851,10 +644,16 @@ export default function LiveMiniSquadScreen() {
     finishHighlightTimersRef.current = {};
   }, [squadId, userId]);
 
-  const localLiveMission = useMemo(
-    () => miniMissions.find((m) => m.liveSquadId === squadId),
-    [miniMissions, squadId],
-  );
+  // Your mission for this squad on this device. The squad row names it exactly
+  // (local_mini_mission_id); the liveSquadId match is the fallback, preferring a
+  // running one so an older linked mission can't shadow the live run.
+  const myLocalMissionId = snapshot?.participants.find((p) => p.user_id === userId)?.local_mini_mission_id ?? null;
+  const localLiveMission = useMemo(() => {
+    const byId = myLocalMissionId ? miniMissions.find((m) => m.id === myLocalMissionId) : undefined;
+    if (byId) return byId;
+    const linked = miniMissions.filter((m) => m.liveSquadId === squadId);
+    return linked.find((m) => m.status === "in_progress") ?? linked[0];
+  }, [miniMissions, myLocalMissionId, squadId]);
 
   const load = useCallback(
     async (silent = false, options?: { force?: boolean }) => {
@@ -1008,6 +807,16 @@ export default function LiveMiniSquadScreen() {
     [loadHearts, squadId, userId],
   );
 
+  // The feed only needs "Xm ago" precision, so it gets a clock that moves
+  // every 30s instead of every second, plus raw rows (stable between loads)
+  // and a stable tile handler. Otherwise every moment row, photos included,
+  // re-rendered once a second and the screen stuttered on photo-heavy runs.
+  const feedClockMs = Math.floor(liveNowMs / 30_000) * 30_000;
+  const handleOpenFeedTile = useCallback((item: { label: string; note: string | null; uri: string | null }) => {
+    setOpenImageUri(null);
+    setOpenGalleryTile(item);
+  }, []);
+
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
@@ -1064,6 +873,21 @@ export default function LiveMiniSquadScreen() {
     [router, userId],
   );
 
+  // Race card tap: your own card opens your mission (what "Open my timer" did);
+  // anyone else's opens their journey (what tapping their name did).
+  const handlePressRaceCard = useCallback(
+    (row: LiveMiniParticipantRow) => {
+      if (userId && row.user_id === userId) {
+        const mid = row.local_mini_mission_id ?? localLiveMission?.id;
+        if (mid) router.push(`/mini/${mid}`);
+        else onOpenPlayerJourney(row.user_id);
+        return;
+      }
+      onOpenPlayerJourney(row.user_id, snapshot?.profiles[row.user_id]);
+    },
+    [localLiveMission?.id, onOpenPlayerJourney, router, snapshot?.profiles, userId],
+  );
+
   const squad = snapshot?.squad ?? null;
   /** Lets an invitee see what they're committing to before accepting, not just after tapping Mark Complete. */
   const invitedTaskChecklist = useMemo(() => parseTaskChecklist(squad?.task_checklist), [squad?.task_checklist]);
@@ -1080,6 +904,66 @@ export default function LiveMiniSquadScreen() {
     });
   }, [snapshot?.participants, liveNowMs]);
   const myParticipant = participants.find((p) => p.user_id === userId);
+
+  // Log / edit / delete your own moments from here while your run is live.
+  const handleMyGalleryChanged = useCallback(
+    (gallery: LiveMiniMemoryGalleryItem[]) => {
+      if (!userId) return;
+      setSnapshot((prev) =>
+        prev
+          ? {
+              ...prev,
+              participants: prev.participants.map((p) => (p.user_id === userId ? { ...p, memory_gallery: gallery } : p)),
+            }
+          : prev,
+      );
+    },
+    [userId],
+  );
+  const myRunLive = myParticipant?.status === "in_progress" && localLiveMission?.status === "in_progress";
+  const squadTaskChecklist = useMemo(
+    () => parseTaskChecklist(snapshot?.squad?.task_checklist),
+    [snapshot?.squad?.task_checklist],
+  );
+  const moments = useLiveSquadMoments(localLiveMission, myRunLive, handleMyGalleryChanged, squadTaskChecklist);
+  const editableTaskIds = useMemo(() => {
+    if (!myRunLive || !localLiveMission) return undefined;
+    const ids = [
+      ...Object.keys(localLiveMission.draftTasks ?? {}),
+      ...(localLiveMission.draftMemories ?? []).map((e) => e.taskId),
+    ];
+    return new Set(ids);
+  }, [localLiveMission, myRunLive]);
+  const { editMoment, deleteMoment } = moments;
+  const handleMomentOptions = useCallback(
+    (taskId: string, label: string) => {
+      showAppAlert(label, undefined, [
+        { text: "Edit", style: "neutral", onPress: () => editMoment(taskId) },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () =>
+            // Let the first dialog close before the confirm opens.
+            setTimeout(
+              () =>
+                showAppAlert("Delete this moment?", "It disappears from the squad feed too.", [
+                  { text: "Cancel", style: "cancel" },
+                  { text: "Delete", style: "destructive", onPress: () => deleteMoment(taskId) },
+                ]),
+              300,
+            ),
+        },
+        { text: "Cancel", style: "cancel" },
+      ]);
+    },
+    [deleteMoment, editMoment],
+  );
+  const mainScrollRef = useRef<ScrollView>(null);
+  const feedYRef = useRef(0);
+  const scrollToFeed = useCallback(() => {
+    // The new moment lands at the top of the feed (newest first): bring it into view.
+    setTimeout(() => mainScrollRef.current?.scrollTo({ y: Math.max(0, feedYRef.current - 8), animated: true }), 120);
+  }, []);
   const hasRunningParticipants = useMemo(
     () => participants.some((p) => p.status === "in_progress" && Boolean(p.started_at)),
     [participants],
@@ -1120,16 +1004,15 @@ export default function LiveMiniSquadScreen() {
   const isDropped = (s: LiveMiniParticipantStatus) =>
     s === "missed" || s === "cancelled" || s === "declined" || s === "expired";
   const raceRows = useMemo(
-    () => sortedParticipants.filter((p) => !isDropped(p.status) && p.status !== "link_requested"),
-    [sortedParticipants],
+    () =>
+      sortedParticipants.filter(
+        (p) => p.status !== "link_requested" && (showAllPlayers || !isDropped(p.status)),
+      ),
+    [showAllPlayers, sortedParticipants],
   );
   const droppedCount = useMemo(
     () => sortedParticipants.filter((p) => isDropped(p.status)).length,
     [sortedParticipants],
-  );
-  const visibleParticipants = useMemo(
-    () => (showAllPlayers ? sortedParticipants : sortedParticipants.filter((p) => !isDropped(p.status))),
-    [showAllPlayers, sortedParticipants],
   );
   const removableParticipants = useMemo(
     () =>
@@ -1138,20 +1021,6 @@ export default function LiveMiniSquadScreen() {
         : [],
     [myParticipant?.role, participants],
   );
-  const myTimerRow = useMemo(() => {
-    if (!myParticipant || myParticipant.status !== "in_progress" || !localLiveMission) return null;
-    const mid = myParticipant.local_mini_mission_id ?? localLiveMission.id;
-    const deadline = myParticipant.deadline_at
-      ? new Date(myParticipant.deadline_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
-      : null;
-    const moments = myParticipant.memory_gallery?.length ?? 0;
-    return {
-      subtitle: [deadline ? `Deadline ${deadline}` : null, `${moments} moment${moments === 1 ? "" : "s"} logged`]
-        .filter(Boolean)
-        .join(" · "),
-      open: () => router.push(`/mini/${mid}`),
-    };
-  }, [localLiveMission, myParticipant, router]);
 
   useEffect(() => {
     if (!hasRunningParticipants) return undefined;
@@ -1573,7 +1442,10 @@ export default function LiveMiniSquadScreen() {
         )
       ) : (
         <ScrollView
+          ref={mainScrollRef}
           showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -1594,36 +1466,23 @@ export default function LiveMiniSquadScreen() {
               profiles={snapshot.profiles}
               bottomText={bottomText}
             />
-          ) : (
-            <LiveSquadRaceCards
-              rows={raceRows}
-              profiles={snapshot.profiles}
-              userId={userId}
-              nowMs={liveNowMs}
-              completedRows={completedRows}
-            />
-          )}
-
-          {myTimerRow ? (
-            <View style={[styles.timerRow, { borderColor: theme.colors.border }]}>
-              <Timer size={20} color={isDark ? theme.colors.green[500] : theme.colors.green[600]} />
-              <View style={styles.timerRowText}>
-                <Text style={[styles.timerRowTitle, { color: theme.colors.textPrimary }]}>Your timer</Text>
-                <Text style={[styles.timerRowSub, { color: theme.colors.textMuted }]} numberOfLines={1}>
-                  {myTimerRow.subtitle}
-                </Text>
-              </View>
-              <TouchableOpacity
-                onPress={myTimerRow.open}
-                activeOpacity={0.85}
-                style={[styles.timerRowButton, { backgroundColor: theme.colors.indigo[500] }]}
-                accessibilityRole="button"
-                accessibilityLabel="Open my timer"
-              >
-                <Text style={styles.timerRowButtonText}>Open</Text>
-              </TouchableOpacity>
-            </View>
           ) : null}
+          <LiveSquadRaceCards
+            rows={raceRows}
+            profiles={snapshot.profiles}
+            userId={userId}
+            nowMs={liveNowMs}
+            completedRows={completedRows}
+            onPressCard={handlePressRaceCard}
+          />
+          {droppedCount > 0 ? (
+            <TouchableOpacity onPress={() => setShowAllPlayers((v) => !v)} hitSlop={8} accessibilityRole="button">
+              <Text style={[styles.hiddenPlayersText, { color: theme.colors.textMuted }]}>
+                {droppedCount} {droppedCount === 1 ? "player" : "players"} dropped out · {showAllPlayers ? "Hide" : "Show"}
+              </Text>
+            </TouchableOpacity>
+          ) : null}
+
 
           {inviteActionable ? (
             <View style={[styles.acceptCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, ...theme.shadow.card }]}>
@@ -1724,80 +1583,36 @@ export default function LiveMiniSquadScreen() {
             </View>
           ) : null}
 
-          <View style={styles.playersHeader}>
-            <Text style={[styles.sectionLabel, styles.playersHeaderLabel, { color: theme.colors.textMuted }]}>
-              Participants
-            </Text>
-            {droppedCount > 0 ? (
-              <View
-                style={[styles.filterGroup, { backgroundColor: theme.colors.surfaceElevated }]}
-                accessibilityRole="radiogroup"
-                accessibilityLabel="Which players to show"
-              >
-                {[
-                  { key: "run", label: `${squadSettled ? "Finished" : "In the run"} · ${sortedParticipants.length - droppedCount}`, on: !showAllPlayers },
-                  { key: "all", label: `All · ${sortedParticipants.length}`, on: showAllPlayers },
-                ].map((opt) => (
-                  <TouchableOpacity
-                    key={opt.key}
-                    onPress={() => setShowAllPlayers(opt.key === "all")}
-                    activeOpacity={0.85}
-                    accessibilityRole="radio"
-                    accessibilityState={{ selected: opt.on }}
-                    style={[styles.filterChip, opt.on ? { backgroundColor: theme.colors.textPrimary } : null]}
-                  >
-                    <Text style={[styles.filterChipText, { color: opt.on ? theme.colors.background : theme.colors.textMuted }]}>
-                      {opt.label}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            ) : null}
-          </View>
-          {visibleParticipants.map((row) => (
-            <ParticipantCard
-              key={row.id}
-              row={row}
-              rank={rankFor(row, completedRows)}
-              profile={snapshot.profiles[row.user_id]}
-              isMe={row.user_id === userId}
-              hideOpenMine={row.user_id === userId && myTimerRow != null}
-              localMission={row.user_id === userId ? localLiveMission : undefined}
-              highlightFinish={finishHighlightIds.has(row.id)}
-              liveNowMs={liveNowMs}
-              onOpenMine={() => {
-                const mid = row.local_mini_mission_id ?? localLiveMission?.id;
-                if (mid) router.push(`/mini/${mid}`);
-              }}
-              onOpenImage={(uri) => {
-                setOpenGalleryTile(null);
-                setOpenImageUri(uri);
-              }}
-              onOpenPlayerJourney={onOpenPlayerJourney}
-            />
-          ))}
-          {!showAllPlayers && droppedCount > 0 ? (
-            <TouchableOpacity onPress={() => setShowAllPlayers(true)} hitSlop={8} accessibilityRole="button">
-              <Text style={[styles.hiddenPlayersText, { color: theme.colors.textMuted }]}>
-                {droppedCount} {droppedCount === 1 ? "player" : "players"} who dropped out hidden · Show
-              </Text>
-            </TouchableOpacity>
-          ) : null}
 
+            <View onLayout={(e) => (feedYRef.current = e.nativeEvent.layout.y)}>
           <LiveSquadMomentsFeed
-            participants={participants}
-            profiles={snapshot.profiles}
-            userId={userId}
-            hearts={hearts}
-            nowMs={liveNowMs}
-            onToggleHeart={handleToggleHeart}
-            onOpenTile={(item) => {
-              setOpenImageUri(null);
-              setOpenGalleryTile(item);
-            }}
-          />
+              participants={snapshot.participants}
+              profiles={snapshot.profiles}
+              userId={userId}
+              hearts={hearts}
+              nowMs={feedClockMs}
+              onToggleHeart={handleToggleHeart}
+              onOpenTile={handleOpenFeedTile}
+              editableTaskIds={editableTaskIds}
+              onMomentOptions={handleMomentOptions}
+            />
+          </View>
         </ScrollView>
       )}
+
+      {snapshot && squad && moments.mode ? (
+        <LiveSquadComposer
+          mode={moments.mode}
+          tasks={moments.checklist}
+          loggedTaskIds={moments.loggedTaskIds}
+          remainingTasks={moments.remainingTasks}
+          onSendText={moments.postText}
+          onPhoto={moments.openPhoto}
+          onTask={moments.openTask}
+          onPosted={scrollToFeed}
+        />
+      ) : null}
+      {moments.sheetElement}
 
       {snapshot ? (
         <LiveSquadDetailsSheet

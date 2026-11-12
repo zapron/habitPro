@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Animated, Easing, Image, Pressable, StyleSheet, View } from "react-native";
-import { Heart } from "lucide-react-native";
+import { Heart, MoreHorizontal } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import { Text } from "../AppText";
 import { useTheme } from "../../context/ThemeContext";
@@ -25,6 +25,11 @@ import type {
 const AVATAR = 26;
 const COLLAPSED_COUNT = 4;
 const MIN_RATIO = 0.56; // tallest photo we allow (9:16)
+/** Real aspect ratios already measured, by image url: a remounted or newly
+ * revealed photo starts at its true height instead of jumping from 4:3. */
+const ratioCache = new Map<string, number>();
+/** "Show earlier" mounts this many more rows per frame, not all at once. */
+const REVEAL_BATCH = 4;
 const MAX_RATIO = 1.9; // widest
 
 type FeedItem = {
@@ -47,6 +52,9 @@ type Props = {
   nowMs: number;
   onToggleHeart: (subjectUserId: string, taskId: string, on: boolean) => void;
   onOpenTile: (item: { label: string; note: string | null; uri: string | null }) => void;
+  /** Your own moments you can still edit/delete (your run is live, drafts on this device). */
+  editableTaskIds?: Set<string>;
+  onMomentOptions?: (taskId: string, label: string) => void;
 };
 
 function withVersion(url: string, version: string | null | undefined): string {
@@ -91,6 +99,8 @@ export const LiveSquadMomentsFeed = memo(function LiveSquadMomentsFeed({
   nowMs,
   onToggleHeart,
   onOpenTile,
+  editableTaskIds,
+  onMomentOptions,
 }: Props) {
   const { theme, isDark } = useTheme();
   const { showToast } = useToast();
@@ -148,11 +158,35 @@ export const LiveSquadMomentsFeed = memo(function LiveSquadMomentsFeed({
   }, [items, profiles, showToast, userId]);
 
   // Long runs (an 11-moment gym session) stay short: newest few, rest on tap.
-  const [expanded, setExpanded] = useState(false);
-  const shown = expanded ? items : items.slice(0, COLLAPSED_COUNT);
-  const hiddenCount = items.length - shown.length;
+  const [visibleCount, setVisibleCount] = useState(COLLAPSED_COUNT);
+  const [revealing, setRevealing] = useState(false);
+  const shown = items.slice(0, Math.max(COLLAPSED_COUNT, visibleCount));
+  const hiddenCount = revealing ? 0 : items.length - shown.length;
+  // Reveal the rest a few rows per frame so a run with many photos does not
+  // mount (and decode) every image in one frame.
+  useEffect(() => {
+    if (!revealing) return undefined;
+    if (visibleCount >= items.length) {
+      setRevealing(false);
+      return undefined;
+    }
+    const id = requestAnimationFrame(() => setVisibleCount((c) => c + REVEAL_BATCH));
+    return () => cancelAnimationFrame(id);
+  }, [items.length, revealing, visibleCount]);
 
   const anyRunning = participants.some((p) => p.status === "in_progress");
+  const moreButton =
+    hiddenCount > 0 ? (
+      <Pressable
+        onPress={() => setRevealing(true)}
+        accessibilityRole="button"
+        style={({ pressed }) => [styles.moreButton, { borderColor: theme.colors.border, opacity: pressed ? 0.8 : 1 }]}
+      >
+        <Text style={[styles.moreText, { color: theme.colors.textPrimary }]}>
+          Show {hiddenCount} earlier moment{hiddenCount === 1 ? "" : "s"}
+        </Text>
+      </Pressable>
+    ) : null;
   if (items.length === 0 && !anyRunning) return null;
 
   return (
@@ -186,21 +220,12 @@ export const LiveSquadMomentsFeed = memo(function LiveSquadMomentsFeed({
               nowMs={nowMs}
               onToggleHeart={onToggleHeart}
               onOpenTile={onOpenTile}
+              onOptions={isMine && editableTaskIds?.has(item.taskId) ? onMomentOptions : undefined}
             />
           );
         })
       )}
-      {hiddenCount > 0 ? (
-        <Pressable
-          onPress={() => setExpanded(true)}
-          accessibilityRole="button"
-          style={({ pressed }) => [styles.moreButton, { borderColor: theme.colors.border, opacity: pressed ? 0.8 : 1 }]}
-        >
-          <Text style={[styles.moreText, { color: theme.colors.textPrimary }]}>
-            Show {hiddenCount} earlier moment{hiddenCount === 1 ? "" : "s"}
-          </Text>
-        </Pressable>
-      ) : null}
+      {moreButton}
     </View>
   );
 });
@@ -216,6 +241,7 @@ const MomentRow = memo(function MomentRow({
   nowMs,
   onToggleHeart,
   onOpenTile,
+  onOptions,
 }: {
   item: FeedItem;
   profile: LiveMiniProfileLabel | undefined;
@@ -227,9 +253,10 @@ const MomentRow = memo(function MomentRow({
   nowMs: number;
   onToggleHeart: (subjectUserId: string, taskId: string, on: boolean) => void;
   onOpenTile: (item: { label: string; note: string | null; uri: string | null }) => void;
+  onOptions?: (taskId: string, label: string) => void;
 }) {
   const { theme, isDark } = useTheme();
-  const [ratio, setRatio] = useState(4 / 3);
+  const [ratio, setRatio] = useState(() => (item.imageUrl ? ratioCache.get(item.imageUrl) : undefined) ?? 4 / 3);
   const sweep = useRef(new Animated.Value(0)).current;
   const pop = useRef(new Animated.Value(1)).current;
   const prevCountRef = useRef(heartCount);
@@ -311,7 +338,7 @@ const MomentRow = memo(function MomentRow({
       <View style={styles.metaRow}>
         <View style={[styles.avatar, { borderColor: accent, backgroundColor: withAlpha(accent, isDark ? 18 : 10) }]}>
           {profile?.avatarUrl ? (
-            <Image source={{ uri: profile.avatarUrl }} style={styles.avatarPhoto} />
+            <Image source={{ uri: profile.avatarUrl }} style={styles.avatarPhoto} resizeMethod="resize" fadeDuration={0} />
           ) : (
             <Text style={[styles.avatarText, { color: accent }]}>{initialsFor(profile)}</Text>
           )}
@@ -326,6 +353,17 @@ const MomentRow = memo(function MomentRow({
           <Text style={[styles.meta, { color: theme.colors.textMuted }]} numberOfLines={1}>
             {meta}
           </Text>
+        ) : null}
+        {onOptions ? (
+          <Pressable
+            onPress={() => onOptions(item.taskId, item.label)}
+            hitSlop={10}
+            accessibilityRole="button"
+            accessibilityLabel={`Edit or delete ${item.label}`}
+            style={({ pressed }) => [styles.optionsButton, { opacity: pressed ? 0.6 : 1 }]}
+          >
+            <MoreHorizontal size={18} color={theme.colors.textMuted} />
+          </Pressable>
         ) : null}
       </View>
 
@@ -342,9 +380,17 @@ const MomentRow = memo(function MomentRow({
                 source={{ uri: thumb }}
                 style={[styles.photo, { aspectRatio: ratio }]}
                 resizeMode="cover"
+                // Android decodes at full size (1280px uploads) unless told to
+                // downsample to the view: that was the "load more" stutter.
+                resizeMethod="resize"
+                fadeDuration={120}
                 onLoad={(e) => {
                   const { width, height } = e.nativeEvent.source ?? {};
-                  if (width && height) setRatio(Math.min(MAX_RATIO, Math.max(MIN_RATIO, width / height)));
+                  if (width && height) {
+                    const r = Math.min(MAX_RATIO, Math.max(MIN_RATIO, width / height));
+                    if (item.imageUrl) ratioCache.set(item.imageUrl, r);
+                    if (Math.abs(r - ratio) > 0.01) setRatio(r);
+                  }
                 }}
               />
             </Pressable>
@@ -378,6 +424,7 @@ const MomentRow = memo(function MomentRow({
 });
 
 const styles = StyleSheet.create({
+  optionsButton: { width: 28, height: 24, marginLeft: 2, alignItems: "flex-end", justifyContent: "center" },
   section: { marginTop: 22 },
   headerRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 14 },
   sectionLabel: { fontSize: 12, fontWeight: "900", letterSpacing: 1.2, textTransform: "uppercase" },
