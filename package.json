@@ -31,7 +31,8 @@
     "build:ios": "eas build -p ios --profile production",
     "update:preview": "eas update --channel preview --environment preview",
     "update:production": "eas update --channel production --environment production",
-    "ship:production": "bash scripts/ship-production.sh"
+    "ship:production": "bash scripts/ship-production.sh",
+    "ota:production": "bash scripts/ota-production.sh"
   },
   "dependencies": {
     "@expo-google-fonts/dm-sans": "^0.4.2",
