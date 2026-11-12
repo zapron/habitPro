@@ -1,12 +1,13 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Animated, Easing, Image, Pressable, StyleSheet, View } from "react-native";
-import { Heart, MoreHorizontal } from "lucide-react-native";
+import { Animated, Easing, Image, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { Heart, MoreHorizontal, X } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import { Text } from "../AppText";
 import { useTheme } from "../../context/ThemeContext";
 import { useToast } from "../../context/ToastContext";
 import { withAlpha } from "../../styles/theme";
 import { storageThumbnailUri } from "../../utils/imageThumbnail";
+import { MomentsViewToggle, type MomentsView } from "../MomentsViewToggle";
 import type {
   LiveMiniMomentHeart,
   LiveMiniParticipantRow,
@@ -20,9 +21,13 @@ import type {
  * Brand rule (two people in the logo): you are green, everyone else is maroon.
  * Hearts are silent: no notification, the owner's card plays a soft fill
  * sweep from the top when a new heart lands.
+ *
+ * Tapping a race card filters this feed to that player (filterUserId).
+ * List | Cards: Cards shows one swipe shelf per player, in race order.
  */
 
-const AVATAR = 26;
+const AVATAR = 22;
+const PHOTO_MAX_H = 320;
 const COLLAPSED_COUNT = 4;
 const MIN_RATIO = 0.56; // tallest photo we allow (9:16)
 /** Real aspect ratios already measured, by image url: a remounted or newly
@@ -55,6 +60,11 @@ type Props = {
   /** Your own moments you can still edit/delete (your run is live, drafts on this device). */
   editableTaskIds?: Set<string>;
   onMomentOptions?: (taskId: string, label: string) => void;
+  /** Show only this player's moments (a race card is tapped). */
+  filterUserId?: string | null;
+  onClearFilter?: () => void;
+  /** Player order for the Cards view shelves (race order). */
+  shelfOrder?: string[];
 };
 
 function withVersion(url: string, version: string | null | undefined): string {
@@ -101,6 +111,9 @@ export const LiveSquadMomentsFeed = memo(function LiveSquadMomentsFeed({
   onOpenTile,
   editableTaskIds,
   onMomentOptions,
+  filterUserId = null,
+  onClearFilter,
+  shelfOrder,
 }: Props) {
   const { theme, isDark } = useTheme();
   const { showToast } = useToast();
@@ -157,26 +170,53 @@ export const LiveSquadMomentsFeed = memo(function LiveSquadMomentsFeed({
     if (fresh) showToast(`${nameFor(profiles[fresh.userId])} just added ${fresh.label}`, "info");
   }, [items, profiles, showToast, userId]);
 
+  const [view, setView] = useState<MomentsView>("list");
+  const filtered = useMemo(
+    () => (filterUserId ? items.filter((i) => i.userId === filterUserId) : items),
+    [filterUserId, items],
+  );
+
   // Long runs (an 11-moment gym session) stay short: newest few, rest on tap.
   const [visibleCount, setVisibleCount] = useState(COLLAPSED_COUNT);
   const [revealing, setRevealing] = useState(false);
-  const shown = items.slice(0, Math.max(COLLAPSED_COUNT, visibleCount));
-  const hiddenCount = revealing ? 0 : items.length - shown.length;
+  const shown = filtered.slice(0, Math.max(COLLAPSED_COUNT, visibleCount));
+  const hiddenCount = revealing ? 0 : filtered.length - shown.length;
   // Reveal the rest a few rows per frame so a run with many photos does not
   // mount (and decode) every image in one frame.
   useEffect(() => {
     if (!revealing) return undefined;
-    if (visibleCount >= items.length) {
+    if (visibleCount >= filtered.length) {
       setRevealing(false);
       return undefined;
     }
     const id = requestAnimationFrame(() => setVisibleCount((c) => c + REVEAL_BATCH));
     return () => cancelAnimationFrame(id);
-  }, [items.length, revealing, visibleCount]);
+  }, [filtered.length, revealing, visibleCount]);
+
+  // Cards view: one shelf per player, race order, each oldest to newest.
+  const shelves = useMemo(() => {
+    if (view !== "cards") return [];
+    const byUser = new Map<string, FeedItem[]>();
+    for (const item of filtered) {
+      const list = byUser.get(item.userId) ?? [];
+      list.push(item);
+      byUser.set(item.userId, list);
+    }
+    const order = [...(shelfOrder ?? []), ...byUser.keys()];
+    const seen = new Set<string>();
+    const out: { userId: string; items: FeedItem[] }[] = [];
+    for (const uid of order) {
+      if (seen.has(uid)) continue;
+      seen.add(uid);
+      const list = byUser.get(uid);
+      if (list?.length) out.push({ userId: uid, items: [...list].sort((a, b) => a.sortMs - b.sortMs) });
+    }
+    return out;
+  }, [filtered, shelfOrder, view]);
 
   const anyRunning = participants.some((p) => p.status === "in_progress");
   const moreButton =
-    hiddenCount > 0 ? (
+    view === "list" && hiddenCount > 0 ? (
       <Pressable
         onPress={() => setRevealing(true)}
         accessibilityRole="button"
@@ -193,18 +233,52 @@ export const LiveSquadMomentsFeed = memo(function LiveSquadMomentsFeed({
     <View style={styles.section}>
       <View style={styles.headerRow}>
         <Text style={[styles.sectionLabel, { color: theme.colors.textMuted }]}>
-          Squad moments{items.length > 0 ? ` · ${items.length}` : ""}
+          {filterUserId
+            ? `Moments · ${filtered.length} of ${items.length}`
+            : `Squad moments${items.length > 0 ? ` · ${items.length}` : ""}`}
         </Text>
-        {items.length > 0 ? (
-          <Text style={[styles.headerHint, { color: theme.colors.textMuted }]}>Newest first</Text>
-        ) : null}
+        {items.length > 0 ? <MomentsViewToggle value={view} onChange={setView} /> : null}
       </View>
-      {items.length === 0 ? (
+      {filterUserId ? (
+        <View style={styles.filterRow}>
+          <View style={[styles.filterChip, { borderColor: theme.colors.textPrimary }]}>
+            <Text style={[styles.filterText, { color: theme.colors.textPrimary }]} numberOfLines={1}>
+              Only {filterUserId === userId ? "you" : nameFor(profiles[filterUserId])}
+            </Text>
+            {onClearFilter ? (
+              <Pressable
+                onPress={onClearFilter}
+                hitSlop={10}
+                accessibilityRole="button"
+                accessibilityLabel="Show everyone's moments"
+                style={[styles.filterClear, { backgroundColor: theme.colors.surfaceElevated }]}
+              >
+                <X size={12} color={theme.colors.textPrimary} strokeWidth={2.8} />
+              </Pressable>
+            ) : null}
+          </View>
+          <Text style={[styles.filterHint, { color: theme.colors.textMuted }]} numberOfLines={1}>
+            Tap a name for their journey
+          </Text>
+        </View>
+      ) : null}
+      {filtered.length === 0 ? (
         <Text style={[styles.empty, { color: theme.colors.textSecondary }]}>
-          Moments show up here the second anyone logs one.
+          {filterUserId ? "No moments from them yet." : "Moments show up here the second anyone logs one."}
         </Text>
+      ) : view === "cards" ? (
+        shelves.map((shelf) => (
+          <MomentShelf
+            key={shelf.userId}
+            items={shelf.items}
+            profile={profiles[shelf.userId]}
+            isMine={shelf.userId === userId}
+            accent={shelf.userId === userId ? green : maroon}
+            onOpenTile={onOpenTile}
+          />
+        ))
       ) : (
-        shown.map((item) => {
+        shown.map((item, index) => {
           const isMine = item.userId === userId;
           const stats = heartStats.get(item.key);
           return (
@@ -221,11 +295,88 @@ export const LiveSquadMomentsFeed = memo(function LiveSquadMomentsFeed({
               onToggleHeart={onToggleHeart}
               onOpenTile={onOpenTile}
               onOptions={isMine && editableTaskIds?.has(item.taskId) ? onMomentOptions : undefined}
+              last={index === shown.length - 1 && !moreButton}
             />
           );
         })
       )}
       {moreButton}
+    </View>
+  );
+});
+
+const SHELF_CARD_W = 132;
+const SHELF_CARD_H = 150;
+
+/** Cards view: one player's moments as a left-to-right swipe shelf. */
+const MomentShelf = memo(function MomentShelf({
+  items,
+  profile,
+  isMine,
+  accent,
+  onOpenTile,
+}: {
+  items: FeedItem[];
+  profile: LiveMiniProfileLabel | undefined;
+  isMine: boolean;
+  accent: string;
+  onOpenTile: (item: { label: string; note: string | null; uri: string | null }) => void;
+}) {
+  const { theme, isDark } = useTheme();
+  const name = isMine ? "You" : nameFor(profile);
+  return (
+    <View style={styles.shelf}>
+      <View style={styles.metaRow}>
+        <View style={[styles.avatar, { borderColor: accent, backgroundColor: withAlpha(accent, isDark ? 18 : 10) }]}>
+          {profile?.avatarUrl ? (
+            <Image source={{ uri: profile.avatarUrl }} style={styles.avatarPhoto} resizeMethod="resize" fadeDuration={0} />
+          ) : (
+            <Text style={[styles.avatarText, { color: accent }]}>{initialsFor(profile)}</Text>
+          )}
+        </View>
+        <Text style={[styles.name, { color: isMine ? accent : theme.colors.textPrimary }]} numberOfLines={1}>
+          {name}
+        </Text>
+        <Text style={[styles.meta, { color: theme.colors.textMuted }]}>
+          {items.length} moment{items.length === 1 ? "" : "s"}
+        </Text>
+      </View>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        snapToInterval={SHELF_CARD_W + 8}
+        decelerationRate="fast"
+        style={styles.shelfOuter}
+        contentContainerStyle={styles.shelfStrip}
+      >
+        {items.map((item) => {
+          const thumb = item.imageUrl ? storageThumbnailUri(item.imageUrl, 300, 340, 65, "cover") : null;
+          const into = intoRunLabel(item.loggedAtMs, item.startedAtMs) ?? item.label;
+          return (
+            <Pressable
+              key={item.key}
+              onPress={() => onOpenTile({ label: item.label, note: item.note, uri: item.imageUrl })}
+              accessibilityRole="button"
+              accessibilityLabel={`View ${item.label} by ${name}`}
+              style={({ pressed }) => [
+                styles.shelfCard,
+                { backgroundColor: theme.colors.surfaceElevated, opacity: pressed ? 0.88 : 1 },
+              ]}
+            >
+              {thumb ? (
+                <Image source={{ uri: thumb }} style={styles.shelfPhoto} resizeMode="cover" resizeMethod="resize" fadeDuration={120} />
+              ) : (
+                <Text style={[styles.shelfNote, { color: theme.colors.textPrimary }]} numberOfLines={5}>
+                  {item.note ?? "Marked done"}
+                </Text>
+              )}
+              <Text style={[styles.shelfMeta, { color: theme.colors.textMuted }]} numberOfLines={1}>
+                {into}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
     </View>
   );
 });
@@ -242,7 +393,9 @@ const MomentRow = memo(function MomentRow({
   onToggleHeart,
   onOpenTile,
   onOptions,
+  last = false,
 }: {
+  last?: boolean;
   item: FeedItem;
   profile: LiveMiniProfileLabel | undefined;
   isMine: boolean;
@@ -257,6 +410,11 @@ const MomentRow = memo(function MomentRow({
 }) {
   const { theme, isDark } = useTheme();
   const [ratio, setRatio] = useState(() => (item.imageUrl ? ratioCache.get(item.imageUrl) : undefined) ?? 4 / 3);
+  // Photo keeps its real shape but never taller than PHOTO_MAX_H (a tall
+  // portrait narrows instead of filling the screen), like the mission log.
+  const [bodyW, setBodyW] = useState(0);
+  const photoH = bodyW > 0 ? Math.min(PHOTO_MAX_H, bodyW / ratio) : 0;
+  const photoW = photoH * ratio;
   const sweep = useRef(new Animated.Value(0)).current;
   const pop = useRef(new Animated.Value(1)).current;
   const prevCountRef = useRef(heartCount);
@@ -335,6 +493,11 @@ const MomentRow = memo(function MomentRow({
 
   return (
     <View style={styles.moment}>
+      <View style={styles.rail}>
+        <View style={[styles.dot, { backgroundColor: accent }]} />
+        {!last ? <View style={[styles.line, { backgroundColor: theme.colors.border }]} /> : null}
+      </View>
+      <View style={styles.body} onLayout={(e) => setBodyW(Math.round(e.nativeEvent.layout.width))}>
       <View style={styles.metaRow}>
         <View style={[styles.avatar, { borderColor: accent, backgroundColor: withAlpha(accent, isDark ? 18 : 10) }]}>
           {profile?.avatarUrl ? (
@@ -369,7 +532,7 @@ const MomentRow = memo(function MomentRow({
 
       {thumb ? (
         <>
-          <View style={[styles.photoWrap, { backgroundColor: elevated }]}>
+          <View style={[styles.photoWrap, { backgroundColor: elevated, width: photoW || "100%", height: photoH || undefined }]}>
             <Pressable
               onPress={() => onOpenTile({ label: item.label, note: item.note, uri: item.imageUrl })}
               accessibilityRole="button"
@@ -378,7 +541,7 @@ const MomentRow = memo(function MomentRow({
             >
               <Image
                 source={{ uri: thumb }}
-                style={[styles.photo, { aspectRatio: ratio }]}
+                style={photoH ? { width: photoW, height: photoH } : [styles.photo, { aspectRatio: ratio }]}
                 resizeMode="cover"
                 // Android decodes at full size (1280px uploads) unless told to
                 // downsample to the view: that was the "load more" stutter.
@@ -398,9 +561,9 @@ const MomentRow = memo(function MomentRow({
             {sweepLayer}
           </View>
           {item.note ? (
-            <Text style={[styles.photoNote, { color: theme.colors.textSecondary }]} numberOfLines={2}>
-              {item.note}
-            </Text>
+            <View style={[styles.noteBubble, { backgroundColor: elevated }]}>
+              <Text style={[styles.textNote, { color: theme.colors.textPrimary }]}>{item.note}</Text>
+            </View>
           ) : null}
         </>
       ) : (
@@ -411,7 +574,7 @@ const MomentRow = memo(function MomentRow({
             accessibilityLabel={`View ${item.label} by ${name}`}
             style={styles.bubbleText}
           >
-            <Text style={[styles.textNote, { color: theme.colors.textPrimary }]} numberOfLines={4}>
+            <Text style={[styles.textNote, { color: theme.colors.textPrimary }]}>
               {item.note ?? "Marked done"}
             </Text>
           </Pressable>
@@ -419,6 +582,7 @@ const MomentRow = memo(function MomentRow({
           {sweepLayer}
         </View>
       )}
+      </View>
     </View>
   );
 });
@@ -428,9 +592,34 @@ const styles = StyleSheet.create({
   section: { marginTop: 22 },
   headerRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 14 },
   sectionLabel: { fontSize: 12, fontWeight: "900", letterSpacing: 1.2, textTransform: "uppercase" },
-  headerHint: { fontSize: 12, fontWeight: "600" },
+  filterRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: -4, marginBottom: 16 },
+  filterChip: {
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 1,
+    paddingLeft: 12,
+    paddingRight: 5,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    flexShrink: 1,
+  },
+  filterText: { fontSize: 13, fontWeight: "700", flexShrink: 1 },
+  filterClear: { width: 22, height: 22, borderRadius: 11, alignItems: "center", justifyContent: "center" },
+  filterHint: { marginLeft: "auto", fontSize: 12, flexShrink: 1 },
+  shelf: { gap: 8, marginBottom: 20 },
+  shelfOuter: { marginHorizontal: -16 },
+  shelfStrip: { gap: 8, paddingHorizontal: 16 },
+  shelfCard: { width: SHELF_CARD_W, height: SHELF_CARD_H, borderRadius: 16, overflow: "hidden" },
+  shelfPhoto: { flex: 1, width: "100%" },
+  shelfNote: { flex: 1, padding: 12, fontSize: 14, lineHeight: 19, fontWeight: "600" },
+  shelfMeta: { paddingHorizontal: 10, paddingVertical: 7, fontSize: 11, fontVariant: ["tabular-nums"] },
   empty: { fontSize: 14, lineHeight: 20 },
-  moment: { gap: 8, marginBottom: 20 },
+  moment: { flexDirection: "row", gap: 10, marginBottom: 18 },
+  rail: { width: 14, alignItems: "center", paddingTop: 9, gap: 4 },
+  dot: { width: 8, height: 8, borderRadius: 4 },
+  line: { flex: 1, width: StyleSheet.hairlineWidth * 2, marginBottom: -18 },
+  body: { flex: 1, minWidth: 0, gap: 8 },
   metaRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   avatar: {
     width: AVATAR,
@@ -446,24 +635,22 @@ const styles = StyleSheet.create({
   name: { fontSize: 14, fontWeight: "800", flexShrink: 1 },
   label: { fontSize: 13, fontWeight: "700", flexShrink: 1 },
   meta: { marginLeft: "auto", fontSize: 12, fontWeight: "500", fontVariant: ["tabular-nums"] },
-  photoWrap: { borderRadius: 18, overflow: "hidden" },
+  photoWrap: { borderRadius: 16, overflow: "hidden" },
   photo: { width: "100%" },
-  photoNote: { fontSize: 14, lineHeight: 20 },
+  noteBubble: { alignSelf: "flex-start", maxWidth: "100%", borderRadius: 16, paddingHorizontal: 13, paddingVertical: 9 },
   bubble: {
+    alignSelf: "flex-start",
+    maxWidth: "100%",
     flexDirection: "row",
     alignItems: "flex-end",
-    gap: 8,
-    marginLeft: AVATAR + 8,
-    paddingVertical: 12,
-    paddingLeft: 14,
-    paddingRight: 8,
-    borderTopLeftRadius: 4,
-    borderTopRightRadius: 18,
-    borderBottomLeftRadius: 18,
-    borderBottomRightRadius: 18,
+    gap: 6,
+    paddingVertical: 9,
+    paddingLeft: 13,
+    paddingRight: 6,
+    borderRadius: 16,
     overflow: "hidden",
   },
-  bubbleText: { flex: 1 },
+  bubbleText: { flexShrink: 1, paddingRight: 4 },
   textNote: { fontSize: 15, lineHeight: 21, fontWeight: "500" },
   heartChip: { flexDirection: "row", alignItems: "center", gap: 5, minHeight: 32, minWidth: 32, paddingHorizontal: 8, borderRadius: 16, justifyContent: "center" },
   heartOnPhoto: { position: "absolute", right: 10, bottom: 10, minHeight: 36, paddingHorizontal: 10, backgroundColor: "rgba(15,14,20,0.62)" },

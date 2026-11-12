@@ -1,4 +1,4 @@
-import { memo, useState } from "react";
+import { memo, useState, type ReactNode } from "react";
 import { Image, Pressable, StyleSheet, View } from "react-native";
 import { MoreHorizontal } from "lucide-react-native";
 import { Text } from "./AppText";
@@ -8,7 +8,8 @@ import type { StreakMemoryTaskEntry } from "../types/habit";
 /**
  * Mini mission screen while the run is live: your moments as a running log,
  * newest first (same as the squad feed). Each row has ⋯ for Edit / Delete.
- * Neutrals only; the newest (top) dot is green.
+ * Neutrals only; the newest (top) dot is green. After the run it is the
+ * read-only List view (no onOptions: no ⋯, no green dot).
  */
 
 const MIN_RATIO = 0.6;
@@ -28,11 +29,14 @@ type Props = {
   entries: StreakMemoryTaskEntry[];
   startedAt?: string | null;
   title: string;
-  onOptions: (taskId: string, label: string) => void;
+  /** Edit / Delete while the run is live; omit for the read-only finished log. */
+  onOptions?: (taskId: string, label: string) => void;
   onOpenPhoto?: (uri: string) => void;
+  /** Trailing header control (the List | Cards toggle on a finished run). */
+  headerRight?: ReactNode;
 };
 
-export const MiniMomentLog = memo(function MiniMomentLog({ entries, startedAt, title, onOptions, onOpenPhoto }: Props) {
+export const MiniMomentLog = memo(function MiniMomentLog({ entries, startedAt, title, onOptions, onOpenPhoto, headerRight }: Props) {
   const { theme, isDark } = useTheme();
   const green = isDark ? theme.colors.green[500] : theme.colors.green[600];
   const [ratios, setRatios] = useState<Record<string, number>>({});
@@ -44,9 +48,10 @@ export const MiniMomentLog = memo(function MiniMomentLog({ entries, startedAt, t
     <View style={styles.section}>
       <View style={styles.header}>
         <Text style={[styles.label, { color: theme.colors.textMuted }]}>{title}</Text>
-        {ordered.length > 0 ? (
-          <Text style={[styles.hint, { color: theme.colors.textMuted }]}>Editable until you finish</Text>
-        ) : null}
+        {headerRight ??
+          (onOptions && ordered.length > 0 ? (
+            <Text style={[styles.hint, { color: theme.colors.textMuted }]}>Editable until you finish</Text>
+          ) : null)}
       </View>
       {ordered.length === 0 ? (
         <Text style={[styles.empty, { color: theme.colors.textSecondary }]}>
@@ -56,7 +61,7 @@ export const MiniMomentLog = memo(function MiniMomentLog({ entries, startedAt, t
         ordered.map((e, i) => {
           const uri = e.proofUrls[0];
           const meta = intoRun(e.loggedAt, startedAt);
-          const newest = i === 0;
+          const newest = i === 0 && Boolean(onOptions);
           const last = i === ordered.length - 1;
           const ratio = ratios[e.taskId] ?? 4 / 3;
           return (
@@ -71,15 +76,17 @@ export const MiniMomentLog = memo(function MiniMomentLog({ entries, startedAt, t
                     {e.label}
                   </Text>
                   {meta ? <Text style={[styles.meta, { color: theme.colors.textMuted }]}>{meta}</Text> : null}
-                  <Pressable
-                    onPress={() => onOptions(e.taskId, e.label)}
-                    hitSlop={10}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Edit or delete ${e.label}`}
-                    style={({ pressed }) => [styles.options, { opacity: pressed ? 0.6 : 1 }]}
-                  >
-                    <MoreHorizontal size={18} color={theme.colors.textMuted} />
-                  </Pressable>
+                  {onOptions ? (
+                    <Pressable
+                      onPress={() => onOptions(e.taskId, e.label)}
+                      hitSlop={10}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Edit or delete ${e.label}`}
+                      style={({ pressed }) => [styles.options, { opacity: pressed ? 0.6 : 1 }]}
+                    >
+                      <MoreHorizontal size={18} color={theme.colors.textMuted} />
+                    </Pressable>
+                  ) : null}
                 </View>
                 {uri ? (
                   <Pressable
@@ -122,7 +129,7 @@ export const MiniMomentLog = memo(function MiniMomentLog({ entries, startedAt, t
 
 const styles = StyleSheet.create({
   section: { gap: 12, marginTop: 20 },
-  header: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between" },
+  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", minHeight: 34 },
   label: { fontSize: 12, fontWeight: "900", letterSpacing: 1.2, textTransform: "uppercase" },
   hint: { fontSize: 12, fontWeight: "600" },
   empty: { fontSize: 14, lineHeight: 20 },

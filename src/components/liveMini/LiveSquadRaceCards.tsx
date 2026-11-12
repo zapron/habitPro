@@ -17,9 +17,10 @@ import type {
  * the fourth peeks). The ring is time left. You are green, everyone else
  * maroon (the two colors of the logo); a timer under 10% turns amber.
  * Order comes from the screen (finished first, then running, then waiting),
- * except your own card, which always leads. Tap a card to open it (yours: your
- * mission; others: their journey). Tap a running timer to flip every timer
- * between time left (counting down) and time in (counting up).
+ * except your own card, which always leads. Tap a card to filter the moments
+ * feed to that player (tap again to clear); tap the name itself to open it
+ * (yours: your mission; others: their journey). Tap a running timer to flip
+ * every timer between time left (counting down) and time in (counting up).
  */
 
 const COMPACT_GAP = 8;
@@ -33,7 +34,12 @@ type Props = {
   nowMs: number;
   /** finished rows, fastest first: decides "1st", "2nd"... */
   completedRows: LiveMiniParticipantRow[];
+  /** Card body: filter the feed to this player. */
   onPressCard?: (row: LiveMiniParticipantRow) => void;
+  /** The name: open their journey (or your own mission). */
+  onPressName?: (row: LiveMiniParticipantRow) => void;
+  /** Player the feed is filtered to; other cards dim. */
+  selectedUserId?: string | null;
 };
 
 function ordinal(n: number): string {
@@ -89,6 +95,8 @@ export const LiveSquadRaceCards = memo(function LiveSquadRaceCards({
   nowMs,
   completedRows,
   onPressCard,
+  onPressName,
+  selectedUserId = null,
 }: Props) {
   const { theme, isDark } = useTheme();
   const [countUp, setCountUp] = useState(false);
@@ -174,6 +182,21 @@ export const LiveSquadRaceCards = memo(function LiveSquadRaceCards({
     const r = ring / 2 - 3;
     const circ = 2 * Math.PI * r;
     const Arrow = countUp ? ArrowUp : ArrowDown;
+    const selected = selectedUserId === c.row.user_id;
+    const dimmed = Boolean(selectedUserId) && !selected;
+    const nameColor = c.isMe ? green : c.color === muted ? theme.colors.textSecondary : c.color;
+    const nameText = (
+      <Text
+        style={[
+          styles.name,
+          onPressName ? styles.nameLink : null,
+          { color: nameColor, textDecorationColor: withAlpha(nameColor, 60) },
+        ]}
+        numberOfLines={1}
+      >
+        {c.name}
+      </Text>
+    );
     const timerText = (
       <Text
         style={[compact ? styles.bigCompact : styles.bigWide, { color: theme.colors.textPrimary }]}
@@ -201,12 +224,30 @@ export const LiveSquadRaceCards = memo(function LiveSquadRaceCards({
           compact ? [styles.cardCompact, { width: compactW }] : styles.cardWide,
           {
             backgroundColor: c.isMe ? withAlpha(green, isDark ? 7 : 5) : cardBg,
-            borderColor: c.isMe ? withAlpha(green, isDark ? 45 : 50) : theme.colors.border,
-            opacity: pressed ? 0.9 : 1,
+            borderColor: selected
+              ? theme.colors.textPrimary
+              : c.isMe
+                ? withAlpha(green, isDark ? 45 : 50)
+                : theme.colors.border,
+            borderWidth: selected ? 1.5 : 1,
+            opacity: dimmed ? 0.45 : pressed ? 0.9 : 1,
           },
         ]}
         accessibilityRole="button"
+        accessibilityState={{ selected }}
         accessibilityLabel={`${c.name}${c.isMe ? " (you)" : ""}, ${c.tag}, ${c.big} ${c.sub}`}
+        accessibilityHint={selected ? "Shows everyone's moments again" : "Shows only their moments"}
+        // The name is a nested link that screen readers can't reach inside the card.
+        accessibilityActions={
+          onPressName ? [{ name: "openName", label: c.isMe ? "Open your mission" : `Open ${c.name}'s journey` }] : undefined
+        }
+        onAccessibilityAction={
+          onPressName
+            ? (e) => {
+                if (e.nativeEvent.actionName === "openName") onPressName(c.row);
+              }
+            : undefined
+        }
       >
         {compact ? (
           <Text style={[styles.tagCompact, { color: c.tagColor }]} numberOfLines={1}>
@@ -249,9 +290,19 @@ export const LiveSquadRaceCards = memo(function LiveSquadRaceCards({
           ) : null}
         </View>
         <View style={compact ? styles.textCompact : styles.textWide}>
-          <Text style={[styles.name, { color: c.isMe ? green : c.color === muted ? theme.colors.textSecondary : c.color }]} numberOfLines={1}>
-            {c.name}
-          </Text>
+          {onPressName ? (
+            <Pressable
+              onPress={() => onPressName(c.row)}
+              hitSlop={8}
+              accessibilityRole="link"
+              accessibilityLabel={c.isMe ? "Open your mission" : `Open ${c.name}'s journey`}
+              style={({ pressed }) => [compact ? styles.nameTapCompact : null, { opacity: pressed ? 0.6 : 1 }]}
+            >
+              {nameText}
+            </Pressable>
+          ) : (
+            nameText
+          )}
           {c.running ? (
             <Pressable
               onPress={() => setCountUp((v) => !v)}
@@ -289,7 +340,13 @@ export const LiveSquadRaceCards = memo(function LiveSquadRaceCards({
       <View style={styles.headerRow}>
         <Text style={[styles.label, { color: theme.colors.textMuted }]}>{compact ? "Leaderboard" : "The race"}</Text>
         <Text style={[styles.hint, { color: theme.colors.textMuted }]}>
-          {compact ? (cards.length > 3 ? `Swipe for all ${cards.length}` : `${cards.length} players`) : "First finish locks the pace"}
+          {selectedUserId
+            ? "Tap again to show all"
+            : compact
+              ? cards.length > 3
+                ? `Swipe for all ${cards.length}`
+                : `${cards.length} players`
+              : "First finish locks the pace"}
         </Text>
       </View>
       {compact ? (
@@ -332,6 +389,8 @@ const styles = StyleSheet.create({
   textWide: { gap: 2 },
   textCompact: { alignItems: "center", gap: 2, alignSelf: "stretch" },
   name: { fontSize: 13, fontWeight: "800" },
+  nameLink: { textDecorationLine: "underline", textDecorationStyle: "dotted" },
+  nameTapCompact: { alignSelf: "stretch", alignItems: "center" },
   bigWide: { fontSize: 28, fontWeight: "900", letterSpacing: -0.6, fontVariant: ["tabular-nums"] },
   bigCompact: { fontSize: 22, textAlign: "center", alignSelf: "stretch", fontWeight: "900", letterSpacing: -0.4, fontVariant: ["tabular-nums"] },
   sub: { fontSize: 12, fontVariant: ["tabular-nums"], flexShrink: 1 },

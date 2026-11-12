@@ -105,6 +105,7 @@ import { MiniChecklistSheet } from "../../src/components/MiniChecklistSheet";
 import { MiniFreeformSheet } from "../../src/components/MiniFreeformSheet";
 import { MiniMomentCards } from "../../src/components/MiniMomentCards";
 import { MiniMomentLog } from "../../src/components/MiniMomentLog";
+import { MomentsViewToggle, type MomentsView } from "../../src/components/MomentsViewToggle";
 import { LiveSquadComposer } from "../../src/components/liveMini/LiveSquadComposer";
 import { useLiveSquadMoments } from "../../src/components/liveMini/useLiveSquadMoments";
 import { syncLiveMiniFromLocalMission } from "../../src/lib/liveMiniMissionProgress";
@@ -1464,6 +1465,8 @@ export default function MiniMissionDetail() {
   const [missionDetailsOpen, setMissionDetailsOpen] = useState(false);
   const [completionImageAspect, setCompletionImageAspect] = useState<number | null>(null);
   const [completionImageOpen, setCompletionImageOpen] = useState(false);
+  // Finished run: the moments log (List, default) or today's swipe cards.
+  const [doneMomentsView, setDoneMomentsView] = useState<MomentsView>("list");
   /** Checklist mini missions only — which logged task the full-screen viewer is currently showing. */
   const [momentViewerIndex, setMomentViewerIndex] = useState(0);
   const [keepScreenOn, setKeepScreenOn] = useState(false);
@@ -2973,6 +2976,24 @@ export default function MiniMissionDetail() {
           <ArrowLeft size={theme.icon.lg} color={theme.colors.textPrimary} />
         </TouchableOpacity>
         <View style={styles.headerActions}>
+          {mission?.liveSquadId && mission.status === "in_progress" && !isMiniMissionFailed && !isTimerUpState ? (
+            // One tap to the squad board while the run is live (was Invite More, then Open Squad).
+            <TouchableOpacity
+              style={[
+                styles.liveBoardPill,
+                { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
+              ]}
+              activeOpacity={0.8}
+              onPress={openLiveSquadBoard}
+              accessibilityRole="button"
+              accessibilityLabel="Open live board"
+            >
+              <View
+                style={[styles.liveBoardDot, { backgroundColor: isDark ? theme.colors.green[500] : theme.colors.green[600] }]}
+              />
+              <Text style={[styles.liveBoardText, { color: theme.colors.textPrimary }]}>Live board</Text>
+            </TouchableOpacity>
+          ) : null}
           <TouchableOpacity
             style={[
               styles.iconButton,
@@ -3185,7 +3206,7 @@ export default function MiniMissionDetail() {
         {(() => {
           const focusModeVisible = mission.status === "in_progress" && !isTimerUpState;
           // A finished squad member's "View Squad" opens the same board as the
-          // "Take me to my spot" button below, so show just that one there.
+          // "Show me my spot" button below, so show just that one there.
           // Creators keep "Invite More" (a different action).
           const duplicatesSpotButton =
             mission.status === "completed" && Boolean(mission.liveSquadId) && !isLiveMiniCreator;
@@ -3429,11 +3450,57 @@ export default function MiniMissionDetail() {
 
           {mission.status === "completed" && (
             <>
+              {mission.status === "completed" && mission.liveSquadId ? (
+                <TouchableOpacity
+                  style={[
+                    styles.liveSquadCta,
+                    {
+                      borderRadius: theme.radius.md,
+                      backgroundColor: theme.colors.maroon[500],
+                    },
+                  ]}
+                  activeOpacity={0.88}
+                  onPress={openLiveSquadBoard}
+                  accessibilityRole="button"
+                  accessibilityLabel="Open Live Squad board"
+                >
+                  <Radio size={19} color="#fff" />
+                  <Text style={styles.liveSquadCtaText}>Show me my spot</Text>
+                </TouchableOpacity>
+              ) : null}
               {/* Moment captured */}
               {(mission.completionMemory?.imageUrl ||
                 mission.completionMemory?.imageUri ||
                 mission.completionMemory?.note ||
-                (mission.completionMemory?.tasks && mission.completionMemory.tasks.length > 0)) && (
+                (mission.completionMemory?.tasks && mission.completionMemory.tasks.length > 0)) &&
+                (doneMomentsView === "list" && momentCards.length > 1 ? (
+                  // Same top spacing as the cards, so the header stays put when toggling.
+                  <View style={styles.doneMomentsLogWrap}>
+                  <MiniMomentLog
+                    entries={momentCards}
+                    startedAt={mission.startedAt}
+                    title={`Your moments · ${momentCards.length}`}
+                    onOpenPhoto={(uri) => {
+                      const index = momentCards.findIndex((m) => m.proofUrls[0] === uri);
+                      if (hasTaskMoments && index >= 0) setMomentViewerIndex(index);
+                      setCompletionImageOpen(true);
+                    }}
+                    headerRight={
+                      <View style={styles.doneMomentsHeaderRight}>
+                        <TouchableOpacity
+                          onPress={handleShareFromMoment}
+                          accessibilityRole="button"
+                          accessibilityLabel="Share a moment"
+                          hitSlop={10}
+                        >
+                          <Share2 size={16} color={theme.colors.textMuted} />
+                        </TouchableOpacity>
+                        <MomentsViewToggle value={doneMomentsView} onChange={setDoneMomentsView} />
+                      </View>
+                    }
+                  />
+                  </View>
+                ) : (
                 <MiniMomentCards
                   tasks={momentCards}
                   startedAt={mission.startedAt}
@@ -3443,17 +3510,22 @@ export default function MiniMissionDetail() {
                     setCompletionImageOpen(true);
                   }}
                   headerRight={
-                    <TouchableOpacity
-                      onPress={handleShareFromMoment}
-                      accessibilityRole="button"
-                      accessibilityLabel="Share this moment"
-                      hitSlop={10}
-                    >
-                      <Share2 size={16} color={theme.colors.textMuted} />
-                    </TouchableOpacity>
+                    <>
+                      <TouchableOpacity
+                        onPress={handleShareFromMoment}
+                        accessibilityRole="button"
+                        accessibilityLabel="Share this moment"
+                        hitSlop={10}
+                      >
+                        <Share2 size={16} color={theme.colors.textMuted} />
+                      </TouchableOpacity>
+                      {momentCards.length > 1 ? (
+                        <MomentsViewToggle value={doneMomentsView} onChange={setDoneMomentsView} />
+                      ) : null}
+                    </>
                   }
                 />
-              )}
+                ))}
             </>
           )}
 
@@ -3470,24 +3542,7 @@ export default function MiniMissionDetail() {
         </View>
 
 
-        {mission.status === "completed" && mission.liveSquadId ? (
-          <TouchableOpacity
-            style={[
-              styles.liveSquadCta,
-              {
-                borderRadius: theme.radius.md,
-                backgroundColor: theme.colors.maroon[500],
-              },
-            ]}
-            activeOpacity={0.88}
-            onPress={openLiveSquadBoard}
-            accessibilityRole="button"
-            accessibilityLabel="Open Live Squad board"
-          >
-            <Radio size={19} color="#fff" />
-            <Text style={styles.liveSquadCtaText}>Take me to my spot</Text>
-          </TouchableOpacity>
-        ) : null}
+
 
 
         {momentComposerOn ? (
@@ -3588,6 +3643,19 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 8,
   },
+  doneMomentsLogWrap: { marginTop: -16 },
+  doneMomentsHeaderRight: { flexDirection: "row", alignItems: "center", gap: 12 },
+  liveBoardPill: {
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+  },
+  liveBoardDot: { width: 7, height: 7, borderRadius: 4 },
+  liveBoardText: { fontSize: 13, fontWeight: "800" },
   iconButton: {
     width: 40,
     height: 40,

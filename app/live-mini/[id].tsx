@@ -873,9 +873,17 @@ export default function LiveMiniSquadScreen() {
     [router, userId],
   );
 
-  // Race card tap: your own card opens your mission (what "Open my timer" did);
-  // anyone else's opens their journey (what tapping their name did).
-  const handlePressRaceCard = useCallback(
+  // Race card tap filters the moments feed to that player (tap again to clear).
+  const [feedFilterUserId, setFeedFilterUserId] = useState<string | null>(null);
+  const handleFilterByCard = useCallback(
+    (row: LiveMiniParticipantRow) => setFeedFilterUserId((cur) => (cur === row.user_id ? null : row.user_id)),
+    [],
+  );
+  const clearFeedFilter = useCallback(() => setFeedFilterUserId(null), []);
+
+  // Name on a race card: yours opens your mission (what "Open my timer" did);
+  // anyone else's opens their journey.
+  const handlePressRaceName = useCallback(
     (row: LiveMiniParticipantRow) => {
       if (userId && row.user_id === userId) {
         const mid = row.local_mini_mission_id ?? localLiveMission?.id;
@@ -1010,6 +1018,7 @@ export default function LiveMiniSquadScreen() {
       ),
     [showAllPlayers, sortedParticipants],
   );
+  const raceShelfOrder = useMemo(() => sortedParticipants.map((p) => p.user_id), [sortedParticipants]);
   const droppedCount = useMemo(
     () => sortedParticipants.filter((p) => isDropped(p.status)).length,
     [sortedParticipants],
@@ -1473,7 +1482,9 @@ export default function LiveMiniSquadScreen() {
             userId={userId}
             nowMs={liveNowMs}
             completedRows={completedRows}
-            onPressCard={handlePressRaceCard}
+            onPressCard={handleFilterByCard}
+            onPressName={handlePressRaceName}
+            selectedUserId={feedFilterUserId}
           />
           {droppedCount > 0 ? (
             <TouchableOpacity onPress={() => setShowAllPlayers((v) => !v)} hitSlop={8} accessibilityRole="button">
@@ -1595,6 +1606,9 @@ export default function LiveMiniSquadScreen() {
               onOpenTile={handleOpenFeedTile}
               editableTaskIds={editableTaskIds}
               onMomentOptions={handleMomentOptions}
+              filterUserId={feedFilterUserId}
+              onClearFilter={clearFeedFilter}
+              shelfOrder={raceShelfOrder}
             />
           </View>
         </ScrollView>

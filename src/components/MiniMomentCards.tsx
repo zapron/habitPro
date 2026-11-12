@@ -74,11 +74,6 @@ export const MiniMomentCards = memo(function MiniMomentCards({
           {title} · {tasks.length}
         </Text>
         <View style={styles.headerRight}>
-          {tasks.length > 1 ? (
-            <Text style={[styles.counter, { color: theme.colors.textMuted }]}>
-              {active + 1} / {tasks.length} · swipe
-            </Text>
-          ) : null}
           {headerRight}
         </View>
       </View>
@@ -143,16 +138,21 @@ export const MiniMomentCards = memo(function MiniMomentCards({
           );
         })}
       </ScrollView>
+      {tasks.length > 1 ? (
+        <Text style={[styles.counter, { color: theme.colors.textMuted }]}>
+          {active + 1} of {tasks.length} · swipe
+        </Text>
+      ) : null}
     </View>
   );
 });
 
 const styles = StyleSheet.create({
   section: { gap: 10, marginTop: 4 },
-  header: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between" },
+  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", minHeight: 34 },
   label: { fontSize: 12, fontWeight: "900", letterSpacing: 1.2, textTransform: "uppercase" },
   headerRight: { flexDirection: "row", alignItems: "center", gap: 12 },
-  counter: { fontSize: 12, fontWeight: "600", fontVariant: ["tabular-nums"] },
+  counter: { fontSize: 12, fontWeight: "600", fontVariant: ["tabular-nums"], textAlign: "center" },
   stripOuter: { marginHorizontal: -12 },
   strip: { gap: GAP, paddingHorizontal: 12, alignItems: "flex-start" },
   photo: { width: "100%", maxHeight: 440, borderRadius: 20 },
