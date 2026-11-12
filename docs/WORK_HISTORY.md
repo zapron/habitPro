@@ -2,6 +2,19 @@
 
 This is a concise chronological log for future sessions. Keep secrets out of this file.
 
+## 2026-11-11 → 2026-11-12 (live squad 16h, live moments, hearts, refined screen)
+
+Full detail in `docs/CURRENT_WORK.md`.
+- **Commits** on `release/1.1.39-chapters`, pushed (`main` still `f487de8`):
+  - `28ace16` fix: allow 16h timers in live squads (the cap was 480; invite from a 16h mission failed).
+  - `3818eb0` feat: moments sync while running, Squad moments feed, silent hearts.
+  - `7ca4aef` feat: refined live squad screen (race cards, options sheet, player rows, filter).
+- **Migrations pushed:** `20261111120000` (cap 960), `20261111121000` (in-progress gallery + participants in realtime; realtime had never been on), `20261112120000` (`live_mini_moment_hearts`, no notifications).
+- **OTAs:** `fdce0526`, `d641ddeb` (runtime 1.1.40; bundle key checked).
+- **Validation:** `tsc` clean; local `db:reset` + SQL RLS tests for each migration; production schema checked after each push; screen run in the iOS simulator on a local demo squad. Photo moments and the Your-timer row were not seen in the simulator.
+- **Not built:** mini mission detail redesign (canvas only); redesigned finished board for settled squads.
+- **Decisions:** no cheer, comments or push for hearts yet; you = green, partner = maroon; live ranking rules deferred.
+
 ## 2026-11-08 → 2026-11-10 (rolling Chapter week, 1.1.40 force update)
 
 Full detail in `docs/CURRENT_WORK.md`.

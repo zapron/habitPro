@@ -1,6 +1,60 @@
 # HabitPro Current Work
 
-Last updated: 2026-11-10: Chapters on a rolling 7-day week (3 posts), new Chapter card, tap-to-stop recorder, and the 1.1.40 force update are all live in production (migrations pushed, OTA `97410bbb`, `video_moments` on for everyone). Photo Repair is planned and paused. See the newest entry below.
+Last updated: 2026-11-12: Live squads got 16h timers, live moment sync, a Squad moments feed with silent hearts, and a refined squad screen (race cards, options sheet, player rows, filter). All committed (`28ace16`, `3818eb0`, `7ca4aef`), pushed, migrations pushed, OTA `d641ddeb` live. The mini mission detail redesign is a design canvas only. See the newest entry below.
+
+## Session Handoff (2026-11-11 → 2026-11-12: live squad 16h, live moments, hearts, refined screen)
+
+**State:**
+- `release/1.1.39-chapters` is at `7ca4aef`, pushed to origin. `main` is still at `f487de8` (not fast-forwarded).
+- Commits:
+  - `28ace16` fix: allow 16h timers in live squads.
+  - `3818eb0` feat: live squad moments sync while running, squad feed, silent hearts.
+  - `7ca4aef` feat: refined live squad screen.
+  - `app/live-mini/[id].tsx` holds changes from all three phases, so it went into `7ca4aef` whole. The first two commits alone do not show 16h on the join screen.
+- Uncommitted: nothing in the app. Only `.claude/` and `.mcp.json` (local noise, never commit).
+
+**Migrations (all three tested with local `db:reset`, then pushed to production by the user and checked there):**
+- `20261111120000_live_mini_sixteen_hour_cap.sql`: planned-minutes cap 480 → 960 in the participant check and `rpc_create_live_mini_squad`, `rpc_accept_live_mini_invite`, `rpc_request_join_live_mini_squad_v1`. The user-facing bug: inviting from a 16h mini mission failed with "planned minutes must be 1-480".
+- `20261111121000_live_mini_live_memory_sync.sql`: `rpc_sync_live_mini_progress` stores `memory_gallery` while `in_progress` too. `live_mini_participants` was added to the `supabase_realtime` publication. It had never been in it, so `subscribeLiveMiniSquad` never fired before this; boards only refreshed on focus or pull.
+- `20261112120000_live_mini_moment_hearts.sql`: table `live_mini_moment_hearts` (squad, subject user, task id, liker), RLS (participants read; insert as yourself on another participant's moment; delete your own), in realtime. No notification row is written, so hearts never push.
+
+**OTAs (production, runtime 1.1.40, both platforms, `.env.local` moved aside, bundle checked: `goog_` RevenueCat key, no test key, no local DB address):**
+- `fdce0526`: 16h cap + live moment sync.
+- `d641ddeb`: feed, hearts, refined squad screen. The user approved it after seeing the screen in the simulator.
+- Running `npm run update:production` from Claude is sometimes blocked by the auto-mode classifier as a production deploy. When that happens the user runs `npm run ship:production -- "msg"`.
+
+**What the app does now (live squads):**
+- Mini mission screen (`app/mini/[id].tsx`): a debounced effect pushes draft moments to the squad on every add, edit or delete while `in_progress`. An empty list clears the strip. `liveMiniMissionProgress.ts` sends gallery items with `loggedAt`.
+- Squad screen (`app/live-mini/[id].tsx`):
+  - Header: back, title, live line, and a ⋯ options sheet holding Squad details, Invite more and Manage participants.
+  - `LiveSquadRaceCards` while the run is on: 2 players side by side, 3+ as swipe cards; the ring shows time left; you are green, others maroon, amber under 10%.
+  - "Your timer" row (shows only when this device holds the local mission).
+  - Compact participant rows with an "In the run / All" filter. It reads "Finished" once the squad is settled.
+  - `LiveSquadMomentsFeed`: one timeline, newest four plus Show earlier; uncropped photos via `storageThumbnailUri(..., "contain")`; text moments as bubbles; an in-app toast for other people's new moments; a heart with a fill-sweep animation.
+- Settled squads still show the old `LiveSquadHero` (pace squares). The redesigned finished board exists only on the design canvas.
+- Old app builds keep working. Their moments sync only at complete and without `loggedAt`, so the feed shows them without "Xm ago".
+
+**Design canvases (claude.ai artifacts, private):**
+- Live Squad Refined: https://claude.ai/artifact/2oc174k61sa9JBNHJbqLuR. The user chose "swipe cards" over fuel tanks and podium, and asked to drop the logo-as-race idea.
+- Mini Mission Detail Refined: https://claude.ai/artifact/BqNPoJzbLeRDvNnxqFTvNB (completed solo, completed live squad, running). **Not built.** The user will decide next.
+- Earlier canvas, Live Squad Moments: https://claude.ai/artifact/WpzowMUpSeBDmXxq8q71Rr.
+
+**Product decisions:**
+- No Cheer, no comments, no notifications for hearts for now. A push per moment would spam (10 moments would mean 10 pushes). Revisit later.
+- Brand rule in designs: logo green = you, logo maroon = partner. One maroon primary action per screen.
+- Live ranking rules are deferred. The race order uses the existing participant sort (finished, running, waiting).
+
+**Local-only leftovers:**
+- The local DB has demo users `zap_demo`, `lifter_demo` and `quit_demo` (ids `…0002`-`…0004`, password from the seed script) and a demo squad "Deep work Sunday" (`11111111-2222-4333-8444-555555555555`). The next `db:reset` wipes them.
+- `test_friend` kept its name.
+- The simulator is signed in to the local dev account.
+
+**Also this session (marketing, untracked):** "Kal se pakka" reel v9 at `marketing/videos/habitpro-kalse-reel-v9.mp4`; README Versions row added. Open question: keep "NOW IN BETA ON" + TestFlight in the outro?
+
+**Next:**
+1. User decides on the mini mission detail redesign (canvas above). If approved, build it: header ⋯ (move delete off the main header), stats card instead of the reward banner, moments as swipe cards, one sticky action.
+2. Optionally bring the redesigned finished board to settled squads.
+3. Fast-forward `main` to `7ca4aef` when the user wants it.
 
 ## Session Handoff (2026-11-08 → 2026-11-10: rolling Chapter week, 1.1.40 force update)
 
