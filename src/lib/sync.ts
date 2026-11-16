@@ -546,6 +546,7 @@ function parseStreakMemoryTaskEntries(v: unknown): StreakMemoryTaskEntry[] | und
         ? e.proofUrls.filter((u): u is string => typeof u === "string")
         : [];
       const includedInShare = typeof e.includedInShare === "boolean" ? e.includedInShare : undefined;
+      const isCover = e.isCover === true;
       return {
         taskId,
         label,
@@ -553,6 +554,7 @@ function parseStreakMemoryTaskEntries(v: unknown): StreakMemoryTaskEntry[] | und
         loggedAt,
         ...(note ? { note } : {}),
         ...(includedInShare !== undefined ? { includedInShare } : {}),
+        ...(isCover ? { isCover } : {}),
       };
     })
     .filter((entry): entry is StreakMemoryTaskEntry => entry !== null);
@@ -1599,7 +1601,8 @@ function mergeDirtyLocalIntoRemote(
   for (const mission of local.miniMissions) {
     if (!mission.draftTasks || !belongsToUser(mission, userId)) continue;
     const merged = miniMissionsById.get(mission.id);
-    if (!merged || merged.status !== "in_progress" || merged.draftTasks) continue;
+    // Missed runs keep them too: the mission screen shows them, and Retry picks them up.
+    if (!merged || (merged.status !== "in_progress" && merged.status !== "missed") || merged.draftTasks) continue;
     miniMissionsById.set(mission.id, { ...merged, draftTasks: mission.draftTasks });
   }
 
@@ -1609,7 +1612,8 @@ function mergeDirtyLocalIntoRemote(
   for (const mission of local.miniMissions) {
     if (!mission.draftMemories || !belongsToUser(mission, userId)) continue;
     const merged = miniMissionsById.get(mission.id);
-    if (!merged || merged.status !== "in_progress" || merged.draftMemories) continue;
+    // Missed runs keep them too: the mission screen shows them, and Retry picks them up.
+    if (!merged || (merged.status !== "in_progress" && merged.status !== "missed") || merged.draftMemories) continue;
     miniMissionsById.set(mission.id, { ...merged, draftMemories: mission.draftMemories });
   }
 

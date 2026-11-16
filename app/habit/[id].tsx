@@ -122,6 +122,7 @@ import { shouldAnnounceChapter } from "../../src/features/videoMoments/chapterTo
 import { fetchClaimedChapters, uploadAndClaimVideoMoment } from "../../src/features/videoMoments/api";
 import { useChapterRecorder } from "../../src/features/videoMoments/ChapterRecorder";
 import { CHAPTER_SLIDE_ID, chapterSlideLabel } from "../../src/features/videoMoments/chapterSlides";
+import { coverFirst, toggleCover } from "../../src/utils/momentCover";
 import type { ChecklistChapter } from "../../src/features/videoMoments/ChecklistChapterRow";
 
 const LOCKED_CHECKIN_MSG =
@@ -1521,6 +1522,16 @@ export default function HabitDetail() {
         [habit, patchStreakMemory],
     );
 
+    /** Stars one task's photo as the post's cover. Local-only — Share/Update publishes it. */
+    const handleToggleTaskCover = useCallback(
+        (dateStr: string, taskId: string) => {
+            if (!habit) return;
+            const tasks = habit.streakMemories?.[dateStr]?.tasks ?? [];
+            patchStreakMemory(habit.id, dateStr, { tasks: toggleCover(tasks, taskId) });
+        },
+        [habit, patchStreakMemory],
+    );
+
     /**
      * Shares (or updates) this day's catalog. Reuses postCommunityWin's existing
      * upsert-on-(user_id, mini_mission_id) behavior — a second share for the same
@@ -1557,7 +1568,7 @@ export default function HabitDetail() {
                 return;
             }
             const tasks = mem?.tasks ?? [];
-            const taskGallery = tasks
+            const taskGallery = coverFirst(tasks)
                 .filter((t) => t.includedInShare !== false && t.proofUrls[0] && /^https?:\/\//.test(t.proofUrls[0]))
                 .map((t) => ({
                     taskId: t.taskId,
@@ -2487,6 +2498,10 @@ export default function HabitDetail() {
                         onToggleTaskInclusion={(taskId) => {
                             if (!checklistDayUi) return;
                             handleToggleTaskInclusion(checklistDayUi.dateStr, taskId);
+                        }}
+                        onToggleTaskCover={(taskId) => {
+                            if (!checklistDayUi) return;
+                            handleToggleTaskCover(checklistDayUi.dateStr, taskId);
                         }}
                         onMarkComplete={() => {
                             if (!checklistDayUi) return;

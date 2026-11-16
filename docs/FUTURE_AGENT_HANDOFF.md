@@ -51,7 +51,8 @@ Then inspect the files relevant to the user request.
 
 ## Current User Priorities
 
-- **Most current, as of 2026-11-10:** 1.1.40 is live in both stores, force update included, and Chapters (`video_moments`) are on for all Premium users. Next candidates, in the user's words:
+- **Most current, as of 2026-11-13:** next big task is **Paid Repair**. Read `docs/PAID_REPAIR_PLAN.md` first; its decisions D1-D8 need the user's answers before any code. Latest app work is `e60441c` (OTA `268977bf`), see the top of `docs/CURRENT_WORK.md`.
+- **As of 2026-11-10:** 1.1.40 is live in both stores, force update included, and Chapters (`video_moments`) are on for all Premium users. Next candidates, in the user's words:
   - Photo Repair: a paid ₹10 repair that adds photos and counts toward Chapters. Planned, paused by the user.
   - Possibly "Video repair" using a Chapter credit.
   - The report autohide flag.

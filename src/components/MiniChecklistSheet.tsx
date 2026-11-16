@@ -18,6 +18,8 @@ type Props = {
   onSelectTask: (task: TaskChecklistItem) => void;
   /** Toggle whether a logged task's photo is included when this mission publishes to Community. */
   onToggleTaskInclusion: (taskId: string) => void;
+  /** Stars a photo as the post's cover (first slide). */
+  onToggleTaskCover?: (taskId: string) => void;
   onComplete: (opts: { publishToCommunity: boolean }) => void;
   onClose: () => void;
 };
@@ -45,6 +47,7 @@ export function MiniChecklistSheet({
   canPublishCommunity,
   onSelectTask,
   onToggleTaskInclusion,
+  onToggleTaskCover,
   onComplete,
   onClose,
 }: Props) {
@@ -132,6 +135,11 @@ export function MiniChecklistSheet({
                   inclusion={
                     shareable
                       ? { included: entry?.includedInShare !== false, onToggle: () => onToggleTaskInclusion(task.id) }
+                      : undefined
+                  }
+                  cover={
+                    shareable && onToggleTaskCover && shareableTasks.length > 1
+                      ? { isCover: entry?.isCover === true, onToggle: () => onToggleTaskCover(task.id) }
                       : undefined
                   }
                   onPress={() => onSelectTask(task)}

@@ -18,7 +18,7 @@ import {
 import { useFocusEffect } from "@react-navigation/native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ArrowLeft, Check, Flame, Info, ListChecks, MoreHorizontal, Radio, Trophy, UserPlus, Users, X } from "lucide-react-native";
+import { ArrowLeft, Check, Info, ListChecks, MoreHorizontal, Radio, UserPlus, Users, X } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import { Text } from "../../src/components/AppText";
 import { GlassTopHighlight } from "../../src/components/GlassTopHighlight";
@@ -68,7 +68,6 @@ import type {
   LiveMiniSquadSnapshot,
 } from "../../src/types/liveMiniMission";
 import { formatDateTimeDisplay } from "../../src/utils/dateDisplay";
-import { levelFromTotalXp } from "../../src/utils/xpLevel";
 import { withAlpha } from "../../src/styles/theme";
 
 const QUICK_MINUTES = [
@@ -90,12 +89,6 @@ const LONG_PRESETS = [
 const LIVE_MINI_BOARD_RELOAD_TTL_MS = 12_000;
 const LIVE_MINI_REALTIME_DEBOUNCE_MS = 350;
 
-/** Same square-grid language and rank palette as `CohortLeaderHero` — one
- * consistent "ranking" visual across both screens instead of two different
- * progress-bar treatments. */
-const PACE_SQUARE_COUNT = 14;
-const PACE_RANK2_COLOR = "#4B4BB0";
-
 function clampMinutes(value: number): number {
   return Math.max(1, Math.min(960, Math.round(value)));
 }
@@ -113,14 +106,6 @@ function displayName(label: LiveMiniProfileLabel | undefined): string {
 function shortDisplayName(label: LiveMiniProfileLabel | undefined, fallback = "Member"): string {
   const name = displayName(label).replace(/^@/, "");
   return name || fallback;
-}
-
-function initialsFromLabel(label: LiveMiniProfileLabel | undefined): string {
-  const raw = shortDisplayName(label, "M").trim();
-  const parts = raw.split(/\s+/).filter(Boolean);
-  const first = parts[0]?.[0] ?? "M";
-  const second = parts.length > 1 ? parts[1]?.[0] : raw.replace(/[^A-Za-z0-9]/g, "")[1];
-  return `${first}${second ?? ""}`.toUpperCase();
 }
 
 
@@ -167,13 +152,6 @@ function participantSortValue(row: LiveMiniParticipantRow): number {
   return 3;
 }
 
-
-function ordinalLabel(rank: number): string {
-  if (rank === 1) return "1st";
-  if (rank === 2) return "2nd";
-  if (rank === 3) return "3rd";
-  return `${rank}th`;
-}
 
 function LiveSquadDetailsSheet({
   visible,
@@ -312,215 +290,6 @@ function LiveSquadDetailsSheet({
     </Modal>
   );
 }
-
-const LiveSquadHero = memo(function LiveSquadHero({
-  completedRows,
-  participants,
-  profiles,
-  bottomText,
-}: {
-  completedRows: LiveMiniParticipantRow[];
-  participants: LiveMiniParticipantRow[];
-  profiles: Record<string, LiveMiniProfileLabel>;
-  bottomText: string;
-}) {
-  const { theme, isDark } = useTheme();
-  const leader = completedRows[0] ?? null;
-  const runnerUp = completedRows[1] ?? null;
-  const topRows = completedRows.slice(0, 3);
-  const leaderProfile = leader ? profiles[leader.user_id] : undefined;
-  const leaderLevel =
-    leaderProfile?.xp != null && Number.isFinite(leaderProfile.xp)
-      ? levelFromTotalXp(leaderProfile.xp)
-      : null;
-  const leaderName = leader ? shortDisplayName(leaderProfile) : "Squad";
-  const maxSeconds = Math.max(
-    60,
-    ...topRows.map((row) =>
-      Math.max(
-        ((row.planned_minutes ?? 0) + (row.reserve_minutes ?? 0)) * 60,
-        row.final_elapsed_seconds ?? 0,
-      ),
-    ),
-  );
-  const boardCanStillFlip = participants.some(
-    (p) => p.status === "invited" || p.status === "joined" || p.status === "in_progress",
-  );
-  const squadSettled =
-    participants.length > 0 && participants.every((p) => isTerminalLiveMiniStatus(p.status));
-  const allCompleted = participants.length > 0 && participants.every((p) => p.status === "completed");
-  const paceSquareColors = [theme.colors.amber[900], PACE_RANK2_COLOR, theme.colors.green[900]];
-  const activeRows = participants.filter((p) => p.status === "in_progress");
-  const waitingCount = participants.filter((p) => p.status === "invited" || p.status === "joined").length;
-  const activeCount = activeRows.length;
-  const leaderGapSeconds =
-    leader && runnerUp && leader.final_elapsed_seconds != null && runnerUp.final_elapsed_seconds != null
-      ? Math.max(0, runnerUp.final_elapsed_seconds - leader.final_elapsed_seconds)
-      : null;
-  const emptyHeroTitle =
-    squadSettled
-      ? "Squad run ended"
-      : activeCount > 1
-      ? `${activeCount} are racing the clock`
-      : activeCount === 1
-        ? `${shortDisplayName(profiles[activeRows[0].user_id])} is racing the clock`
-        : "Squad is warming up";
-  const emptyHeroSubtitle =
-    squadSettled
-      ? "No ranked finish this time. Results stay locked."
-      : activeCount > 0
-      ? waitingCount > 0
-        ? `One finish can flip the board. ${waitingCount} still choosing a timer.`
-        : "First finisher locks the pace."
-      : bottomText;
-
-  return (
-    <View
-      style={[
-        styles.heroCard,
-        {
-          backgroundColor: theme.colors.surface,
-          borderColor: theme.colors.border,
-          ...theme.shadow.card,
-        },
-      ]}
-    >
-      <GlassTopHighlight radius={20} />
-      {leader ? (
-        <>
-          <View style={styles.heroTopRow}>
-            <View
-              style={[
-                styles.heroAvatar,
-                {
-                  backgroundColor: isDark ? withAlpha(theme.colors.indigo[400], 22) : withAlpha(theme.colors.indigo[500], 12),
-                  borderColor: isDark ? withAlpha(theme.colors.indigo[400], 40) : withAlpha(theme.colors.indigo[500], 25),
-                },
-              ]}
-            >
-              {leaderProfile?.avatarUrl ? (
-                <Image
-                  source={{ uri: leaderProfile.avatarUrl }}
-                  style={styles.heroAvatarPhoto}
-                  resizeMode="cover"
-                  accessibilityLabel={`${leaderName}'s profile picture`}
-                />
-              ) : (
-                <Text style={[styles.heroAvatarText, { color: theme.colors.indigo[400] }]}>
-                  {initialsFromLabel(leaderProfile)}
-                </Text>
-              )}
-            </View>
-            <View style={styles.heroLeaderText}>
-              <View style={styles.heroNameRow}>
-                <Text style={[styles.heroLeaderName, { color: theme.colors.textPrimary }]} numberOfLines={1}>
-                  {leaderName}
-                </Text>
-                {leaderLevel != null ? (
-                  <View
-                    style={[
-                      styles.levelPill,
-                      { backgroundColor: "transparent", borderColor: theme.colors.border },
-                    ]}
-                  >
-                    <Text style={[styles.levelPillText, { color: theme.colors.textMuted }]}>Lv {leaderLevel}</Text>
-                  </View>
-                ) : null}
-              </View>
-              <Text style={[styles.heroSubtitle, { color: theme.colors.textMuted }]} numberOfLines={2}>
-                {runnerUp
-                  ? boardCanStillFlip
-                    ? leaderGapSeconds != null && leaderGapSeconds > 0
-                      ? `${formatLiveMiniElapsed(leaderGapSeconds)} ahead. One finish can flip it.`
-                      : "Tied at the top. One finish can flip it."
-                    : "Fastest finish is locked."
-                  : activeCount > 0 && boardCanStillFlip
-                    ? "First finish is on the board. Chasers still running."
-                    : boardCanStillFlip
-                      ? "Fastest finisher on the board."
-                    : "Final fastest finish."}
-              </Text>
-            </View>
-          </View>
-
-          <View style={styles.paceRows}>
-            {topRows.map((row, index) => {
-              const elapsed = row.final_elapsed_seconds ?? 0;
-              const progress = Math.min(1, elapsed / maxSeconds);
-              const squareColor = paceSquareColors[index] ?? paceSquareColors[paceSquareColors.length - 1];
-              return (
-                <View key={row.id} style={styles.paceRow}>
-                  <Text style={[styles.paceLabel, { color: theme.colors.textMuted }]} numberOfLines={1}>
-                    {ordinalLabel(index + 1)} - {shortDisplayName(profiles[row.user_id])}
-                  </Text>
-                  <View style={styles.paceSquareGrid}>
-                    {Array.from({ length: PACE_SQUARE_COUNT }, (_, i) => {
-                      const filled = i < Math.round(progress * PACE_SQUARE_COUNT);
-                      return (
-                        <View
-                          key={i}
-                          style={[
-                            styles.paceSquare,
-                            {
-                              backgroundColor: filled
-                                ? squareColor
-                                : isDark ? withAlpha(theme.colors.sheen, 9) : withAlpha(theme.colors.sheen, 6),
-                            },
-                          ]}
-                        />
-                      );
-                    })}
-                  </View>
-                  <Text style={[styles.paceValue, { color: theme.colors.textSecondary }]}>
-                    {formatLiveMiniElapsed(row.final_elapsed_seconds)}
-                  </Text>
-                </View>
-              );
-            })}
-          </View>
-
-          <View style={[styles.heroNarrative, { borderTopColor: theme.colors.border }]}>
-            <Trophy size={26} color={theme.colors.amber[900]} />
-            <Text style={[styles.heroNarrativeText, { color: theme.colors.textSecondary }]}>
-              <Text style={{ color: theme.colors.textPrimary, fontWeight: "900" }}>{leaderName}</Text>
-              {boardCanStillFlip ? " leads with " : allCompleted ? " wins with " : " leads the final board with "}
-              <Text style={{ color: theme.colors.indigo[400], fontWeight: "900" }}>
-                {formatLiveMiniElapsed(leader.final_elapsed_seconds)}
-              </Text>
-              {boardCanStillFlip
-                ? runnerUp
-                  ? ", but the board can still flip."
-                  : ". Waiting for the next finisher."
-                : allCompleted
-                  ? ". Squad board is final."
-                  : "."}
-            </Text>
-          </View>
-        </>
-      ) : (
-        <View style={styles.emptyHeroRow}>
-          <View
-            style={[
-              styles.emptyHeroIcon,
-              {
-                backgroundColor: isDark ? withAlpha(theme.colors.cyan[400], 13) : withAlpha(theme.colors.cyan[500], 10),
-                borderColor: theme.colors.border,
-              },
-            ]}
-          >
-            <Flame size={28} color={theme.colors.cyan[400]} />
-          </View>
-          <View style={styles.emptyHeroCopy}>
-            <Text style={[styles.heroLeaderName, { color: theme.colors.textPrimary }]}>{emptyHeroTitle}</Text>
-            <Text style={[styles.heroSubtitle, { color: theme.colors.textMuted }]}>
-              {emptyHeroSubtitle}
-            </Text>
-          </View>
-        </View>
-      )}
-    </View>
-  );
-});
 
 const PulsingOnMissionDot = memo(function PulsingOnMissionDot({ color }: { color: string }) {
   const pulse = useRef(new Animated.Value(0)).current;
@@ -1274,17 +1043,6 @@ export default function LiveMiniSquadScreen() {
     setManualMinutes(String(next));
   };
 
-  const bottomText =
-    inviteActionable
-      ? "Choose your timer. Accept starts it immediately."
-      : myParticipant?.status === "expired"
-        ? "This invite expired. You can still view the board."
-        : myParticipant?.status === "completed"
-          ? "Your result is locked on the squad board."
-          : myParticipant?.status === "in_progress"
-            ? "Finish before your timer runs out to rank."
-            : "Squad results update as people finish.";
-
   return (
     <Screen>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={theme.colors.background} />
@@ -1468,14 +1226,6 @@ export default function LiveMiniSquadScreen() {
             { paddingBottom: Math.max(insets.bottom, 24) + 8 },
           ]}
         >
-          {squadSettled ? (
-            <LiveSquadHero
-              completedRows={completedRows}
-              participants={participants}
-              profiles={snapshot.profiles}
-              bottomText={bottomText}
-            />
-          ) : null}
           <LiveSquadRaceCards
             rows={raceRows}
             profiles={snapshot.profiles}
@@ -1835,43 +1585,6 @@ const styles = StyleSheet.create({
     gap: 7,
   },
   metaChipText: { fontSize: 12, lineHeight: 16, fontWeight: "800" },
-  heroCard: { borderWidth: 1, borderRadius: 20, padding: 16, marginBottom: 18 },
-  heroTopRow: { flexDirection: "row", alignItems: "center", gap: 12 },
-  heroAvatar: {
-    width: 62,
-    height: 62,
-    borderRadius: 999,
-    borderWidth: 2,
-    alignItems: "center",
-    justifyContent: "center",
-    overflow: "hidden",
-  },
-  heroAvatarText: { fontSize: 21, fontWeight: "900", letterSpacing: 0.2 },
-  heroAvatarPhoto: { width: 62, height: 62 },
-  heroLeaderText: { flex: 1, minWidth: 0 },
-  heroNameRow: { flexDirection: "row", alignItems: "center", gap: 8, minWidth: 0 },
-  heroLeaderName: { fontSize: 18, lineHeight: 23, fontWeight: "900", flexShrink: 1 },
-  levelPill: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 4 },
-  levelPillText: { fontSize: 11, lineHeight: 14, fontWeight: "900", letterSpacing: 0.2 },
-  heroSubtitle: { fontSize: 13, lineHeight: 18, fontWeight: "800", marginTop: 4 },
-  paceRows: { gap: 10, marginTop: 18 },
-  paceRow: { flexDirection: "row", alignItems: "center", gap: 10 },
-  paceLabel: { width: 92, fontSize: 11, lineHeight: 15, fontWeight: "900" },
-  paceSquareGrid: { flex: 1, minWidth: 56, flexDirection: "row", alignItems: "center", gap: 3 },
-  paceSquare: { flex: 1, aspectRatio: 1, borderRadius: 2, minWidth: 0 },
-  paceValue: { width: 50, textAlign: "right", fontSize: 12, fontWeight: "900", fontVariant: ["tabular-nums"] },
-  heroNarrative: { borderTopWidth: 1, marginTop: 18, paddingTop: 16, flexDirection: "row", alignItems: "center", gap: 14 },
-  heroNarrativeText: { flex: 1, minWidth: 0, fontSize: 14, lineHeight: 21, fontWeight: "700" },
-  emptyHeroRow: { flexDirection: "row", alignItems: "center", gap: 14 },
-  emptyHeroIcon: {
-    width: 58,
-    height: 58,
-    borderRadius: 999,
-    borderWidth: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  emptyHeroCopy: { flex: 1, minWidth: 0 },
   acceptCard: { borderWidth: 1, borderRadius: 18, padding: 14, gap: 12, marginBottom: 18 },
   acceptTitle: { fontSize: 18, fontWeight: "900" },
   acceptBody: { fontSize: 13, lineHeight: 18, fontWeight: "600" },

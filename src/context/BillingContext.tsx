@@ -314,7 +314,7 @@ function isUnsafeAndroidTestStoreKey(apiKey: string): boolean {
 }
 
 export function BillingProvider({ children }: { children: React.ReactNode }) {
-  const { session } = useAuth();
+  const { session, initializing: authInitializing } = useAuth();
   const [ready, setReady] = useState(false);
   const [customerInfo, setCustomerInfo] = useState<CustomerInfo | null>(null);
   const [customerInfoUserId, setCustomerInfoUserId] = useState<string | null>(null);
@@ -327,6 +327,9 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
   const activeBillingUserIdRef = useRef<string | null>(null);
   const identitySyncRef = useRef<Promise<void>>(Promise.resolve());
   const lastInactiveAtRef = useRef<number | null>(null);
+  // Set once a signed-in user has been sent to RevenueCat, so logOut runs
+  // only on a real sign-out (logOut always mints a new anonymous customer).
+  const hadRevenueCatUserRef = useRef(false);
   const isExpoGo = shouldSkipNativePurchases();
 
   const { androidApiKey, iosApiKey } = getRevenueCatConfig();
@@ -477,17 +480,24 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
     }
 
     if (configuredRef.current) return;
+    // Wait until the saved session is restored. Configuring first used to
+    // see a null user for a moment, call logOut, and create a fresh
+    // anonymous RevenueCat customer on every cold start.
+    if (authInitializing) return;
     configuredRef.current = true;
+    const initialUserId = userId;
 
     // Defer the native RevenueCat SDK init off the startup critical path so it
     // never competes with the first render / splash dismissal.
     // (Intentionally not cancelled on cleanup: configure must run exactly once,
     // and configuredRef is already latched.)
     void InteractionManager.runAfterInteractions(() => {
-      Purchases.configure({ apiKey });
+      Purchases.configure(initialUserId ? { apiKey, appUserID: initialUserId } : { apiKey });
+      if (initialUserId) hadRevenueCatUserRef.current = true;
       setReady(true);
     });
-  }, [apiKey, configured, isExpoGo]);
+    // userId is read once, at configure time; later changes go through logIn.
+  }, [apiKey, authInitializing, configured, isExpoGo]);
 
   useEffect(() => {
     if (!ready || !configured || isExpoGo) return;
@@ -497,15 +507,20 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
     void (async () => {
       try {
         if (!requestedUserId) {
-          await runRevenueCatIdentityTask(async () => {
-            await Purchases.logOut();
-          });
+          if (hadRevenueCatUserRef.current) {
+            await runRevenueCatIdentityTask(async () => {
+              if (await Purchases.isAnonymous()) return;
+              await Purchases.logOut();
+            });
+            hadRevenueCatUserRef.current = false;
+          }
           if (!cancelled && activeBillingUserIdRef.current === null) {
             setCustomerInfo(null);
             setCustomerInfoUserId(null);
           }
           return;
         }
+        hadRevenueCatUserRef.current = true;
         await ensureRevenueCatUser(requestedUserId);
         if (cancelled || activeBillingUserIdRef.current !== requestedUserId) return;
         await Purchases.invalidateCustomerInfoCache();

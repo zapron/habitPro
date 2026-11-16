@@ -1,6 +1,74 @@
 # HabitPro Current Work
 
-Last updated: 2026-11-12: Live squads got 16h timers, live moment sync, a Squad moments feed with silent hearts, and a refined squad screen (race cards, options sheet, player rows, filter). All committed (`28ace16`, `3818eb0`, `7ca4aef`), pushed, migrations pushed, OTA `d641ddeb` live. The mini mission detail redesign is a design canvas only. See the newest entry below.
+Last updated: 2026-11-14: Removed the leader card from the top of the finished squad board, and added server checks for streak repairs and habit-day Community posts (migration `20261114120000`, local only, not pushed). Both are uncommitted. Earlier: `e60441c` live by OTA `268977bf`. Next big task: Paid Repair (`docs/PAID_REPAIR_PLAN.md`).
+
+## Session Handoff (2026-11-14: squad leader card removed, repair and post server checks)
+
+**Uncommitted:**
+- **`app/live-mini/[id].tsx`:** the finished board no longer shows the `LiveSquadHero` card ("X leads the final board with …", pace squares). The race cards are now the top of the board.
+  - Deleted with it: the component, its styles, `bottomText`, the pace constants, `initialsFromLabel`, `ordinalLabel`, and the `Flame`, `Trophy` and `levelFromTotalXp` imports.
+  - `tsc` is clean. **Not checked on screen.** `db:reset` wiped the local demo squads, so there was no finished board to look at.
+- **`supabase/migrations/20261114120000_repair_and_post_server_checks.sql`:**
+  - `rpc_request_streak_repair`:
+    - charges at least 40 XP (the app's lowest tier, which is what the app shows for a just-missed day);
+    - rejects dates in the future, more than 3 days back, before the mission started or the user joined (`outside_repair_window`), already done (`already_complete`), or with an unknown habit (`habit_not_found`);
+    - a retry of an applied repair still returns the same id.
+  - New `before insert or update of mini_mission_id` trigger on `community_wins`, for habit-day posts (`habitwin:`):
+    - no day more than 1 ahead (`invalid_post_date`);
+    - a day 2+ back must be in `completed_dates` (`post_day_not_done`);
+    - re-posts of existing rows and habits not yet synced are let through.
+  - **Tested locally:** `npm run db:reset` passed, plus SQL checks of 12 cases (all as expected).
+  - **Not tested:** the group (squad vote) path. **Not pushed:** the user pushes it with `npm run ship:production`.
+- **`src/lib/streakRepairApi.ts`, `src/lib/communityWinsApi.ts`:** friendly messages for the new error codes.
+- **`src/constants/streakRepair.ts`:** removed the unused `STREAK_REPAIR_COOLDOWN_DAYS`. A cooldown never applied; enforcing one would be a product change.
+- **`app/mini/[id].tsx`, failed missions:** they now show "Your moments · N", a read-only log of the moments captured before the timer ran out. The source is the local drafts: `draftTasks` for checklists, otherwise `draftMemories`. There is no photo viewer on tap yet.
+- **`src/lib/sync.ts`:** the remote merge now keeps local drafts for `missed` missions too (before, it kept them only for `in_progress`, so a pull that marked a run missed dropped its moments). Moments already dropped this way can't come back, though a live squad board still has them.
+- **`app/mini/[id].tsx`, Invite button:** once your own live squad run is done or failed, "Invite More" / "View Squad" is hidden for everyone, creators included. "Show me my spot" / "Open Live Squad" opens the board, and creators can still invite from the board's ⋯ menu.
+- **Not checked on a device:** any of the above.
+- Release order: the migration first (`ship:production`), then the app changes ride the same OTA. Old apps are fine with the migration; they just see raw error codes in rare cases.
+
+## Session Handoff (2026-11-12 → 2026-11-13: live board pill, List/Cards, squad feed filter, Paid Repair plan)
+
+**State:**
+- `release/1.1.39-chapters` is at `e60441c`. **Not pushed:** `8a64779`, `60499a2`, `cf963f5`, `e60441c` are local only. `main` is still at `f487de8`.
+- Commits:
+  - `8a64779` feat: add moments in place on mission and squad screens.
+  - `60499a2` docs: log 2026-11-11 to 11-12.
+  - `cf963f5` chore: `npm run ota:production -- "msg"` (`scripts/ota-production.sh`): an OTA with no db push. It refuses if `supabase/migrations` has uncommitted changes, and moves `.env.local` aside, restoring it afterwards.
+  - `e60441c` feat: live board pill, list/cards views, filter squad feed by player.
+- Uncommitted: only `.claude/` and `.mcp.json` (local noise, never commit), plus this session's doc updates (`docs/PAID_REPAIR_PLAN.md` is new; CURRENT_WORK, WORK_HISTORY and FUTURE_AGENT_HANDOFF are edited).
+- No migrations this session.
+
+**OTA:** production, runtime 1.1.40, both platforms, update group `268977bf-ad3c-4acd-9323-891f1350167e`. Message: "Live board pill, list/cards moment views, filter squad feed by player, timeline feed".
+
+**What changed in the app (`e60441c`):**
+- **Mission screen, `app/mini/[id].tsx`:**
+  - While a live squad run is on, the header shows a "Live board" pill (green dot) that opens the board directly. It is hidden when the mission failed or the timer ran out.
+  - After Complete, the button reads "Show me my spot" and sits above the moments.
+  - Moments open in **List** (the read-only `MiniMomentLog`, the default). A List | Cards toggle (`src/components/MomentsViewToggle.tsx`) switches to the swipe cards (`MiniMomentCards`, counter "X of N · swipe" below).
+  - `MiniMomentLog` now takes an optional `onOptions` and a `headerRight`.
+- **Squad board, `app/live-mini/[id].tsx`, `LiveSquadRaceCards`, `LiveSquadMomentsFeed`:**
+  - Tapping a race card (any time, mid-race too) filters the feed to that player. Tap again, or the ✕ on the "Only @name" chip, to show everyone.
+  - Tapping the **name** (dotted underline) opens their journey; your own name opens your mission.
+  - Feed List view is a dot timeline like the mission log: smaller photos (max height 320), note bubbles, full text.
+  - Cards view is one swipe shelf per player, in race order.
+- **Checked on the iOS simulator with local data:** completed "Tea break", the "Gym session" board, the live pill, and the pill hiding on failure.
+- **Not checked:** Android, checklist missions, the pill's tap navigation, own-name tap.
+
+**Design canvas** for these views: "Mission and Board Views", built from the canvas type in this session's scratchpad (`views/project/`). It is a private claude.ai artifact.
+
+**Paid Repair (next task, planning only):**
+- The full plan is in `docs/PAID_REPAIR_PLAN.md`: what exists, gaps, open decisions D1-D8, the credit-ledger architecture, end-to-end cases, and build order.
+- Gaps found in existing code, **not fixed:**
+  - `rpc_request_streak_repair` trusts the client's `p_xp_cost`.
+  - The 14-day repair cooldown constant is never used.
+  - Repair eligibility is client-only.
+  - Community posts have no server date check.
+
+**Next:**
+1. Start Paid Repair in a fresh chat: read `docs/PAID_REPAIR_PLAN.md`, get the user's answers to D1-D8, then build in the plan's order.
+2. Push the 4 local commits when the user asks.
+3. Still open from before: the mini mission detail redesign canvas (https://claude.ai/artifact/BqNPoJzbLeRDvNnxqFTvNB) is partly covered by `e60441c`; the rest is not built.
 
 ## Session Handoff (2026-11-11 → 2026-11-12: live squad 16h, live moments, hearts, refined screen)
 

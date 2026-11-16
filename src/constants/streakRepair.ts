@@ -1,8 +1,5 @@
 export const STREAK_REPAIR_WINDOW_HOURS = 24;
 
-/** Solo + group: allow at most 1 repair per user per rolling window. */
-export const STREAK_REPAIR_COOLDOWN_DAYS = 14;
-
 /** Group missions: approvals required to apply a repair. */
 export const STREAK_REPAIR_SQUAD_APPROVALS_REQUIRED = 2;
 

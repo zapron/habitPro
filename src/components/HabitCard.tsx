@@ -368,9 +368,11 @@ interface HabitCardProps {
      * normal themed card.
      */
     redesignPalette?: typeof redesignPalette | null;
+    /** Small muted line under the title, e.g. "Ended 12 Nov" on Reports. */
+    subtitle?: string;
 }
 
-export const HabitCard = memo(({ item, nowMs, index, redesignPalette }: HabitCardProps) => {
+export const HabitCard = memo(({ item, nowMs, index, redesignPalette, subtitle }: HabitCardProps) => {
     const router = useRouter();
     const { theme, isDark } = useTheme();
     const reduceMotion = useReducedMotion();
@@ -666,6 +668,11 @@ export const HabitCard = memo(({ item, nowMs, index, redesignPalette }: HabitCar
                     >
                         {item.title}
                     </Text>
+                    {subtitle ? (
+                        <Text style={[styles.cardSubtitle, { color: rp ? rp.textMuted : theme.colors.textMuted }]}>
+                            {subtitle}
+                        </Text>
+                    ) : null}
 
                     {item.challengeGroupId || showQuickMarkComplete ? (
                       <View style={styles.cardButtons}>
@@ -868,6 +875,7 @@ const styles = StyleSheet.create({
     ringCenterInner: { alignItems: "center", justifyContent: "center" },
     ringInner: { alignItems: 'center', justifyContent: 'center', paddingTop: 2 },
     cardTitle: { fontWeight: '800', marginBottom: 12, flexShrink: 1, fontSize: 18, lineHeight: 24 },
+    cardSubtitle: { fontSize: 12, fontWeight: '600', marginTop: -8, marginBottom: 12 },
     cardStats: { flexDirection: 'row', alignItems: 'center', marginTop: 10, flexWrap: 'nowrap', gap: 6 },
     cardStreak: { fontWeight: '600', fontSize: 12 },
     cardProgress: { flexShrink: 0 },

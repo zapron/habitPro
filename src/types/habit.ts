@@ -25,6 +25,8 @@ export interface StreakMemoryTaskEntry {
    * same flag, same "Share/Update catalog" action either way.
    */
   includedInShare?: boolean;
+  /** Starred as the cover: leads the shared gallery. At most one per memory. */
+  isCover?: boolean;
 }
 
 /** Optional capture when marking a day complete. */

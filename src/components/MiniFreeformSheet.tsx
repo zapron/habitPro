@@ -19,6 +19,8 @@ type Props = {
   onRemoveEntry: (entryId: string) => void;
   /** Toggle whether a logged moment's photo is included when this mission publishes to Community. */
   onToggleEntryInclusion: (entryId: string) => void;
+  /** Stars a photo as the post's cover (first slide). */
+  onToggleEntryCover?: (entryId: string) => void;
   onComplete: (opts: { publishToCommunity: boolean }) => void;
   onClose: () => void;
 };
@@ -41,6 +43,7 @@ export function MiniFreeformSheet({
   onSelectEntry,
   onRemoveEntry,
   onToggleEntryInclusion,
+  onToggleEntryCover,
   onComplete,
   onClose,
 }: Props) {
@@ -114,6 +117,11 @@ export function MiniFreeformSheet({
                   inclusion={
                     shareable
                       ? { included: entry.includedInShare !== false, onToggle: () => onToggleEntryInclusion(entry.taskId) }
+                      : undefined
+                  }
+                  cover={
+                    shareable && onToggleEntryCover && shareableEntries.length > 1
+                      ? { isCover: entry.isCover === true, onToggle: () => onToggleEntryCover(entry.taskId) }
                       : undefined
                   }
                   onRemove={() => onRemoveEntry(entry.taskId)}

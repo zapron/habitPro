@@ -2,6 +2,22 @@
 
 This is a concise chronological log for future sessions. Keep secrets out of this file.
 
+## 2026-11-14 (squad leader card removed, repair and post server checks)
+
+- **Uncommitted:**
+  - Removed `LiveSquadHero` from the finished squad board.
+  - Migration `20261114120000_repair_and_post_server_checks.sql`: repair XP floor of 40, server date window for repairs, date check on new habit-day Community posts. Local `db:reset` and 12 SQL cases passed. Not pushed.
+  - Friendly error text for the new codes; deleted the unused cooldown constant.
+- **Not checked:** the squad screen on device; the group repair path.
+
+## 2026-11-12 → 2026-11-13 (live board pill, List/Cards, squad feed filter, Paid Repair plan)
+
+Full detail in `docs/CURRENT_WORK.md`.
+- **Commits** on `release/1.1.39-chapters`, **not pushed**: `8a64779` (moments in place), `60499a2` (docs), `cf963f5` (`ota:production` script), `e60441c` (live board pill, List/Cards views, feed filter by player, timeline feed).
+- **OTA** `268977bf` production, runtime 1.1.40. No migrations.
+- **Validation:** iOS simulator with local data. Android not checked.
+- **Planned, not built:** Paid Repair, see `docs/PAID_REPAIR_PLAN.md`. Pre-existing gaps noted there: client-sent XP cost, unused cooldown, client-only repair eligibility, no server date check on Community posts.
+
 ## 2026-11-11 → 2026-11-12 (live squad 16h, live moments, hearts, refined screen)
 
 Full detail in `docs/CURRENT_WORK.md`.

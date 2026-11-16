@@ -42,6 +42,7 @@ import {
   Share2,
   TreePine,
   MoreHorizontal,
+  Pencil,
 } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import {
@@ -89,6 +90,7 @@ import {
 } from "../../src/lib/communityWinsApi";
 import { MAX_RESERVE_FUEL_MINUTES } from "../../src/constants/miniMission";
 import { formatTimeDisplay } from "../../src/utils/dateDisplay";
+import { coverFirst, toggleCover } from "../../src/utils/momentCover";
 import { GlassTopHighlight } from "../../src/components/GlassTopHighlight";
 import {
   MINI_MISSION_DETAIL_KEEP_AWAKE_TAG,
@@ -103,6 +105,7 @@ import {
 } from "../../src/lib/streakMemoryStorage";
 import { MiniChecklistSheet } from "../../src/components/MiniChecklistSheet";
 import { MiniFreeformSheet } from "../../src/components/MiniFreeformSheet";
+import { MiniMomentsEditSheet } from "../../src/components/MiniMomentsEditSheet";
 import { MiniMomentCards } from "../../src/components/MiniMomentCards";
 import { MiniMomentLog } from "../../src/components/MiniMomentLog";
 import { MomentsViewToggle, type MomentsView } from "../../src/components/MomentsViewToggle";
@@ -1499,6 +1502,8 @@ export default function MiniMissionDetail() {
     | null
   >(null);
   const [freeformCompleting, setFreeformCompleting] = useState(false);
+  const [editMomentsOpen, setEditMomentsOpen] = useState(false);
+  const [editMomentsSaving, setEditMomentsSaving] = useState(false);
 
   /**
    * Live squads: push draft moments to the squad board while the mission runs
@@ -1931,6 +1936,12 @@ export default function MiniMissionDetail() {
   // While the run is live, moments are added from a bar at the bottom (like a
   // chat) and listed above it, each with Edit / Delete. Same drafts and capture
   // sheet as before; the squad sync effect above still pushes them.
+  const failedMomentEntries = useMemo<StreakMemoryTaskEntry[]>(() => {
+    if (!isMiniMissionFailed) return [];
+    const fromTasks = Object.values(draftTaskEntries);
+    return fromTasks.length > 0 ? fromTasks : draftMemoryEntries;
+  }, [isMiniMissionFailed, draftTaskEntries, draftMemoryEntries]);
+
   const momentComposerOn =
     mission?.status === "in_progress" &&
     !isTimerUpState &&
@@ -2257,6 +2268,18 @@ export default function MiniMissionDetail() {
     });
   };
 
+  /** Stars one logged task's photo as the cover (only one at a time). */
+  const handleToggleMiniTaskCover = (taskId: string) => {
+    if (!mission) return;
+    const before = Object.values(draftTaskEntries);
+    for (const next of toggleCover(before, taskId)) {
+      const prev = before.find((e) => e.taskId === next.taskId);
+      if ((prev?.isCover === true) !== (next.isCover === true)) {
+        useHabitStore.getState().setMiniMissionDraftTask(mission.id, next.taskId, next);
+      }
+    }
+  };
+
   /**
    * Finalizes a checklist mini mission from whatever tasks have been logged so far —
    * logging zero tasks is allowed, same as a classic completion with no memory.
@@ -2275,8 +2298,11 @@ export default function MiniMissionDetail() {
     if (!mission) return;
     setChecklistCompleting(true);
     try {
-      const tasks = Object.values(draftTaskEntries);
-      const cover = tasks.find((t) => /^https?:\/\//.test(t.proofUrls[0] ?? "")) ?? tasks[0];
+      const tasks = coverFirst(Object.values(draftTaskEntries));
+      const cover =
+        tasks.find((t) => t.includedInShare !== false && /^https?:\/\//.test(t.proofUrls[0] ?? "")) ??
+        tasks.find((t) => /^https?:\/\//.test(t.proofUrls[0] ?? "")) ??
+        tasks[0];
       const completedAt = new Date(timerFrozenAtMs ?? Date.now()).toISOString();
       const completionMemory: StreakMemory | null =
         tasks.length > 0
@@ -2430,6 +2456,17 @@ export default function MiniMissionDetail() {
     });
   };
 
+  /** Stars one moment's photo as the cover (only one at a time). */
+  const handleToggleFreeformMemoryCover = (entryId: string) => {
+    if (!mission) return;
+    for (const next of toggleCover(draftMemoryEntries, entryId)) {
+      const prev = draftMemoryEntries.find((e) => e.taskId === next.taskId);
+      if ((prev?.isCover === true) !== (next.isCover === true)) {
+        useHabitStore.getState().setMiniMissionFreeformMemory(mission.id, next.taskId, next);
+      }
+    }
+  };
+
   /** Finalizes a freeform mission. Structurally identical to handleChecklistCompleteCommit
    * — the only difference is draftMemoryEntries is already an array, no Object.values()
    * needed — everything downstream (completionMemory shape, Community gallery filter,
@@ -2438,8 +2475,11 @@ export default function MiniMissionDetail() {
     if (!mission) return;
     setFreeformCompleting(true);
     try {
-      const tasks = draftMemoryEntries;
-      const cover = tasks.find((t) => /^https?:\/\//.test(t.proofUrls[0] ?? "")) ?? tasks[0];
+      const tasks = coverFirst(draftMemoryEntries);
+      const cover =
+        tasks.find((t) => t.includedInShare !== false && /^https?:\/\//.test(t.proofUrls[0] ?? "")) ??
+        tasks.find((t) => /^https?:\/\//.test(t.proofUrls[0] ?? "")) ??
+        tasks[0];
       const completedAt = new Date(timerFrozenAtMs ?? Date.now()).toISOString();
       const completionMemory: StreakMemory | null =
         tasks.length > 0
@@ -2529,6 +2569,67 @@ export default function MiniMissionDetail() {
     }
   };
 
+  /**
+   * Saves the Edit moments sheet on a finished mission: the new order/hidden
+   * flags go into completionMemory, and a live Community post and squad board
+   * are updated to match.
+   */
+  const handleSaveEditedMoments = async (entries: StreakMemoryTaskEntry[]) => {
+    if (!mission || mission.status !== "completed") return;
+    const isUploaded = (t: StreakMemoryTaskEntry) => /^https?:\/\//.test(t.proofUrls[0] ?? "");
+    const gallery = entries
+      .filter((t) => t.includedInShare !== false && isUploaded(t))
+      .map((t) => ({ taskId: t.taskId, label: t.label, note: t.note ?? null, imageUrl: t.proofUrls[0] }));
+    const isPublic = mission.visibility === "public";
+    if (isPublic && gallery.length === 0) {
+      setEditMomentsOpen(false);
+      showAppAlert(
+        "Keep one photo",
+        "Your post needs at least one photo. Keep one IN POST, or remove the post from Community first.",
+        [{ text: "OK", onPress: () => setEditMomentsOpen(true) }],
+      );
+      return;
+    }
+    const cover = entries.find((t) => t.includedInShare !== false && isUploaded(t)) ?? entries.find(isUploaded);
+    setEditMomentsSaving(true);
+    try {
+      useHabitStore.getState().patchMiniCompletionMemory(mission.id, {
+        tasks: entries,
+        ...(cover ? { imageUrl: cover.proofUrls[0] } : {}),
+      });
+      const updated = useHabitStore.getState().getMiniMission(mission.id);
+      const completedAt = updated?.completedAt ?? mission.completedAt ?? new Date().toISOString();
+      let failure: string | null = null;
+      if (isPublic) {
+        const res = await postCommunityWin({
+          miniMissionId: mission.id,
+          title: mission.title,
+          completedAt,
+          memoryNote: gallery[0]?.note ?? null,
+          memoryImageUrl: gallery[0]?.imageUrl ?? null,
+          memoryGallery: gallery,
+          liveSquadId: mission.liveSquadId ?? null,
+        });
+        if (res.ok === false) failure = res.error;
+      }
+      if (updated?.liveSquadId) {
+        void syncLiveMiniFromLocalMission(updated, {
+          completedAt,
+          memoryNote: updated.completionMemory?.note ?? null,
+          memoryImageUrl: updated.completionMemory?.imageUrl ?? null,
+        });
+      }
+      setEditMomentsOpen(false);
+      if (failure) {
+        showAppAlert("Saved, but the post didn’t update", failure, [{ text: "OK" }]);
+      } else {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+    } finally {
+      setEditMomentsSaving(false);
+    }
+  };
+
   const handleVisibilityChange = (next: MissionVisibility) => {
     if (!mission) return;
     const prev = mission.visibility ?? "solo";
@@ -2603,15 +2704,24 @@ export default function MiniMissionDetail() {
             lastVisibilityRef.current = null;
             return;
           }
-          const postHocGallery = (mission.completionMemory?.tasks ?? [])
-            .filter((t) => t.proofUrls[0] && /^https?:\/\//.test(t.proofUrls[0]))
+          // Same filter as publishing from the complete sheet: moments switched
+          // to HIDDEN there stay out of the post when it's published later.
+          const postHocGallery = coverFirst(mission.completionMemory?.tasks ?? [])
+            .filter((t) => t.includedInShare !== false && t.proofUrls[0] && /^https?:\/\//.test(t.proofUrls[0]))
             .map((t) => ({ taskId: t.taskId, label: t.label, note: t.note ?? null, imageUrl: t.proofUrls[0] }));
+          const hasTaskMomentsToShare = (mission.completionMemory?.tasks?.length ?? 0) > 0;
           const res = await postCommunityWin({
             miniMissionId: mission.id,
             title: mission.title,
             completedAt: mission.completedAt ?? new Date().toISOString(),
-            memoryNote: mission.completionMemory?.note ?? null,
-            memoryImageUrl: mission.completionMemory?.imageUrl ?? null,
+            memoryNote: hasTaskMomentsToShare
+              ? (postHocGallery[0]?.note ??
+                mission.completionMemory?.tasks?.find((t) => t.includedInShare !== false && t.note)?.note ??
+                null)
+              : (mission.completionMemory?.note ?? null),
+            memoryImageUrl: hasTaskMomentsToShare
+              ? (postHocGallery[0]?.imageUrl ?? null)
+              : (mission.completionMemory?.imageUrl ?? null),
             ...(postHocGallery.length > 0 ? { memoryGallery: postHocGallery } : {}),
             liveSquadId: mission.liveSquadId ?? null,
           });
@@ -2824,6 +2934,19 @@ export default function MiniMissionDetail() {
         />
       </LazyMount>
 
+      <LazyMount visible={editMomentsOpen} unmountOnExit>
+        <MiniMomentsEditSheet
+          visible={editMomentsOpen}
+          missionTitle={mission.title}
+          entries={mission.completionMemory?.tasks ?? []}
+          postedToCommunity={mission.visibility === "public"}
+          inSquad={Boolean(mission.liveSquadId)}
+          saving={editMomentsSaving}
+          onSave={(entries) => void handleSaveEditedMoments(entries)}
+          onClose={() => setEditMomentsOpen(false)}
+        />
+      </LazyMount>
+
       {mission.taskChecklist && mission.taskChecklist.length > 0 ? (
         <>
           <LazyMount visible={completeSheetOpen} unmountOnExit>
@@ -2850,6 +2973,7 @@ export default function MiniMissionDetail() {
                 });
               }}
               onToggleTaskInclusion={handleToggleMiniTaskInclusion}
+              onToggleTaskCover={handleToggleMiniTaskCover}
               onComplete={(opts) => void handleChecklistCompleteCommit(opts)}
               onClose={() => {
                 setCompleteSheetOpen(false);
@@ -2893,6 +3017,7 @@ export default function MiniMissionDetail() {
               onSelectEntry={(entry) => setFreeformMemoryUi({ kind: "edit", entry })}
               onRemoveEntry={handleRemoveFreeformMemory}
               onToggleEntryInclusion={handleToggleFreeformMemoryInclusion}
+              onToggleEntryCover={handleToggleFreeformMemoryCover}
               onComplete={(opts) => void handleFreeformCompleteCommit(opts)}
               onClose={() => {
                 setCompleteSheetOpen(false);
@@ -3205,11 +3330,12 @@ export default function MiniMissionDetail() {
 
         {(() => {
           const focusModeVisible = mission.status === "in_progress" && !isTimerUpState;
-          // A finished squad member's "View Squad" opens the same board as the
-          // "Show me my spot" button below, so show just that one there.
-          // Creators keep "Invite More" (a different action).
+          // Once your own squad run is over (done or failed), the button below
+          // ("Show me my spot" / "Open Live Squad") already opens the board, and
+          // "Invite More" there only showed a closed board. Creators can still
+          // invite from the board's ⋯ menu while others are running.
           const duplicatesSpotButton =
-            mission.status === "completed" && Boolean(mission.liveSquadId) && !isLiveMiniCreator;
+            (mission.status === "completed" || isMiniMissionFailed) && Boolean(mission.liveSquadId);
           const inviteOthersVisible = !isTimerCheckInSoloMode && !duplicatesSpotButton;
           if (!focusModeVisible && !inviteOthersVisible) return null;
           // Side-by-side (both buttons) keeps the icon stacked above the
@@ -3445,6 +3571,14 @@ export default function MiniMissionDetail() {
               ) : (
                 <Button title="Retry" onPress={handleRetryFailed} />
               )}
+              {failedMomentEntries.length > 0 ? (
+                // What was captured before the timer ran out (kept as drafts).
+                <MiniMomentLog
+                  entries={failedMomentEntries}
+                  startedAt={mission.startedAt}
+                  title={`Your moments · ${failedMomentEntries.length}`}
+                />
+              ) : null}
             </>
           )}
 
@@ -3487,6 +3621,16 @@ export default function MiniMissionDetail() {
                     }}
                     headerRight={
                       <View style={styles.doneMomentsHeaderRight}>
+                        {mission.status === "completed" && hasTaskMoments ? (
+                          <TouchableOpacity
+                            onPress={() => setEditMomentsOpen(true)}
+                            accessibilityRole="button"
+                            accessibilityLabel="Edit moments"
+                            hitSlop={10}
+                          >
+                            <Pencil size={15} color={theme.colors.textMuted} />
+                          </TouchableOpacity>
+                        ) : null}
                         <TouchableOpacity
                           onPress={handleShareFromMoment}
                           accessibilityRole="button"
@@ -3511,6 +3655,16 @@ export default function MiniMissionDetail() {
                   }}
                   headerRight={
                     <>
+                      {mission.status === "completed" && hasTaskMoments ? (
+                        <TouchableOpacity
+                          onPress={() => setEditMomentsOpen(true)}
+                          accessibilityRole="button"
+                          accessibilityLabel="Edit moments"
+                          hitSlop={10}
+                        >
+                          <Pencil size={15} color={theme.colors.textMuted} />
+                        </TouchableOpacity>
+                      ) : null}
                       <TouchableOpacity
                         onPress={handleShareFromMoment}
                         accessibilityRole="button"

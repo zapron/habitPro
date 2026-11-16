@@ -24,6 +24,8 @@ type Props = {
   onSelectTask: (task: TaskChecklistItem) => void;
   /** Toggle whether a logged task's photo is included the next time this day is shared/updated. */
   onToggleTaskInclusion: (taskId: string) => void;
+  /** Stars a photo as the post's cover (first slide). */
+  onToggleTaskCover?: (taskId: string) => void;
   /** Explicit "Mark Day Complete" — advances the streak/XP and fires the squad notification. */
   onMarkComplete: () => void;
   onShare: () => void;
@@ -70,6 +72,7 @@ export function ChecklistDaySheet({
   sharing,
   onSelectTask,
   onToggleTaskInclusion,
+  onToggleTaskCover,
   onMarkComplete,
   onShare,
   onUnshare,
@@ -184,6 +187,11 @@ export function ChecklistDaySheet({
                   inclusion={
                     shareable
                       ? { included: entry?.includedInShare !== false, onToggle: () => onToggleTaskInclusion(task.id) }
+                      : undefined
+                  }
+                  cover={
+                    shareable && onToggleTaskCover && shareableTasks.length > 1
+                      ? { isCover: entry?.isCover === true, onToggle: () => onToggleTaskCover(task.id) }
                       : undefined
                   }
                   onPress={() => onSelectTask(task)}

@@ -32,12 +32,22 @@ type StreakRepairPageResult = {
   profileLabels?: Record<string, ProfileLabel>;
 };
 
+/** Friendly text for server checks in `rpc_request_streak_repair`. */
+const REPAIR_ERROR_TEXT: Record<string, string> = {
+  outside_repair_window: "Only the day you just missed can be repaired, within 24 hours.",
+  already_complete: "That day is already done.",
+  habit_not_found: "This mission hasn't synced yet. Try again in a moment.",
+  insufficient_xp: "Not enough XP for this repair.",
+};
+
 function actionError(error: { message?: string } | null | undefined): StreakRepairActionFailure {
-  const message = String(error?.message ?? "Streak repair failed.");
+  const raw = String(error?.message ?? "Streak repair failed.");
+  const code = Object.keys(REPAIR_ERROR_TEXT).find((k) => raw.includes(k));
+  const message = code ? REPAIR_ERROR_TEXT[code] : raw;
   return {
     ok: false,
     error: message,
-    reason: message.toLowerCase().includes("premium_required") ? "premium_required" : undefined,
+    reason: raw.toLowerCase().includes("premium_required") ? "premium_required" : undefined,
   };
 }
 

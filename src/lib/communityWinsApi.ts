@@ -211,6 +211,14 @@ function isPremiumPolicyError(error: { code?: string; message?: string } | null 
   return error?.code === "42501" || msg.includes("row-level security") || msg.includes("violates row-level security");
 }
 
+/** Server date checks on habit-day posts (`_community_check_habit_streak_win_date`). */
+function postDateErrorMessage(message: string | undefined): string | null {
+  const m = String(message ?? "");
+  if (m.includes("post_day_not_done")) return "That day isn't done yet, so it can't be shared.";
+  if (m.includes("invalid_post_date")) return "That day hasn't happened yet.";
+  return null;
+}
+
 export async function postCommunityWin(input: {
   miniMissionId: string;
   title: string;
@@ -282,7 +290,7 @@ export async function postCommunityWin(input: {
       ok: false,
       error: isPremiumPolicyError(error)
         ? "Membership is still activating. Try again in a moment."
-        : error.message,
+        : postDateErrorMessage(error.message) ?? error.message,
       reason: isPremiumPolicyError(error) ? "premium_required" : undefined,
     };
   }

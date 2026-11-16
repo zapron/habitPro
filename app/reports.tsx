@@ -9,6 +9,7 @@ import { useShallow } from "zustand/react/shallow";
 import { Text } from "../src/components/AppText";
 import { Screen } from "../src/components/Screen";
 import { HabitCard } from "../src/components/HabitCard";
+import { formatDateDisplay } from "../src/utils/dateDisplay";
 import { useTheme } from "../src/context/ThemeContext";
 import { useAuth } from "../src/context/AuthContext";
 import { useHabitStore } from "../src/store/habitStore";
@@ -26,6 +27,24 @@ const ReportsFlashList = FlashList as any;
 const habitKeyExtractor = (item: { id: string }) => item.id;
 
 type Segment = "pending" | "accomplished" | "failed";
+
+/** When a finished mission ended: its report time, else its last day. */
+function reportEndRaw(h: Habit): string | undefined {
+  const lastDone = h.completedDates.length > 0 ? [...h.completedDates].sort().at(-1) : undefined;
+  return h.missionReportAt ?? h.endDate ?? lastDone ?? h.startDate;
+}
+
+function reportSortMs(h: Habit): number {
+  const raw = reportEndRaw(h);
+  const ms = raw ? new Date(raw).getTime() : 0;
+  return Number.isFinite(ms) ? ms : 0;
+}
+
+/** "Ended 12 Nov 2026" from the same date the list is sorted by. */
+function endedLabel(h: Habit): string | undefined {
+  const label = formatDateDisplay(reportEndRaw(h));
+  return label ? `Ended ${label}` : undefined;
+}
 
 /**
  * Finished main missions, opened from the quiet "Reports ›" link on Home.
@@ -120,14 +139,24 @@ export default function ReportsScreen() {
     }
   }, [accomplishedFetchedCount, failedFetchedCount, loadingMore, mergeFetchedHabit, segment]);
 
+  // Newest first: the mission that just ended (or was just reported) sits on top.
   const listData = useMemo(() => {
-    if (segment === "pending") return habits.filter((h) => needsMainMissionOutcome(h, nowMs));
-    return habits.filter((h) => h.missionReport === segment);
+    const rows =
+      segment === "pending"
+        ? habits.filter((h) => needsMainMissionOutcome(h, nowMs))
+        : habits.filter((h) => h.missionReport === segment);
+    return [...rows].sort((a, b) => reportSortMs(b) - reportSortMs(a));
   }, [habits, segment, nowMs]);
 
   const renderItem = useCallback(
     ({ item, index }: { item: Habit; index: number }) => (
-      <HabitCard item={item} nowMs={nowMs} index={index} redesignPalette={rp ? redesignPalette : null} />
+      <HabitCard
+        item={item}
+        nowMs={nowMs}
+        index={index}
+        redesignPalette={rp ? redesignPalette : null}
+        subtitle={endedLabel(item)}
+      />
     ),
     [nowMs, rp],
   );

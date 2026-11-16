@@ -12,6 +12,7 @@ import {
   StatusBar,
   Image,
   Platform,
+  Linking,
 } from "react-native";
 import * as AppleAuthentication from "expo-apple-authentication";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -25,6 +26,7 @@ import { HabitProMark } from "../../src/components/HabitProMark";
 import { SPLASH_WORDMARK_PRO_COLOR } from "../../src/constants/splash";
 import { showAppAlert } from "../../src/context/AppDialogContext";
 import { withAlpha } from "../../src/styles/theme";
+import { getPublicLinks } from "../../src/lib/env";
 
 type FocusKey = "email" | "password" | "confirmPassword" | null;
 
@@ -516,6 +518,25 @@ export default function LoginScreen() {
               )}
             </>
           )}
+          <Text style={[styles.legal, { color: theme.colors.textMuted }]}>
+            By continuing, you agree to our{" "}
+            <Text
+              style={styles.legalLink}
+              accessibilityRole="link"
+              onPress={() => void Linking.openURL(getPublicLinks().terms)}
+            >
+              Terms
+            </Text>{" "}
+            and{" "}
+            <Text
+              style={styles.legalLink}
+              accessibilityRole="link"
+              onPress={() => void Linking.openURL(getPublicLinks().privacy)}
+            >
+              Privacy Policy
+            </Text>
+            .
+          </Text>
         </View>
       </ScrollView>
     </Screen>
@@ -523,6 +544,15 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
+  legal: {
+    marginTop: 24,
+    fontSize: 12,
+    lineHeight: 18,
+    textAlign: "center",
+  },
+  legalLink: {
+    textDecorationLine: "underline",
+  },
   backdropLayer: {
     ...StyleSheet.absoluteFillObject,
     overflow: "hidden",

@@ -1,6 +1,6 @@
 import { Text } from "./AppText";
 import { Image, Pressable, StyleSheet, View } from "react-native";
-import { Check, ChevronRight, NotebookPen, Plus, X } from "lucide-react-native";
+import { Check, ChevronRight, NotebookPen, Plus, Star, X } from "lucide-react-native";
 import { useTheme } from "../context/ThemeContext";
 import { withAlpha } from "../styles/theme";
 
@@ -13,6 +13,8 @@ type Props = {
   photoUri?: string;
   /** Present only for a shareable (uploaded-photo) entry — renders the IN POST / HIDDEN pill. */
   inclusion?: { included: boolean; onToggle: () => void };
+  /** Present only for a photo entry — a star that makes this photo the post's cover (first slide). */
+  cover?: { isCover: boolean; onToggle: () => void };
   /** Free-form entries can be removed; renders a muted ✕ instead of the chevron. */
   onRemove?: () => void;
   onPress: () => void;
@@ -24,7 +26,7 @@ type Props = {
  * MiniFreeformSheet. Shows what was logged (the photo, or a note icon) instead
  * of striking the task out, so all three sheets look and read the same.
  */
-export function TaskProofRow({ label, meta, state, photoUri, inclusion, onRemove, onPress, accessibilityLabel }: Props) {
+export function TaskProofRow({ label, meta, state, photoUri, inclusion, cover, onRemove, onPress, accessibilityLabel }: Props) {
   const { theme } = useTheme();
   const logged = state === "photo" || state === "note";
   const checkBadge = (
@@ -42,7 +44,13 @@ export function TaskProofRow({ label, meta, state, photoUri, inclusion, onRemove
     >
       {state === "photo" && photoUri ? (
         <View>
-          <Image source={{ uri: photoUri }} style={[styles.thumb, { backgroundColor: theme.colors.surfaceElevated }]} />
+          <Image
+            source={{ uri: photoUri }}
+            // A 40px thumb of a full camera photo: decode it small, or a sheet
+            // with a dozen moments stutters while scrolling (Android).
+            resizeMethod="resize"
+            style={[styles.thumb, { backgroundColor: theme.colors.surfaceElevated }]}
+          />
           {checkBadge}
         </View>
       ) : logged ? (
@@ -72,6 +80,24 @@ export function TaskProofRow({ label, meta, state, photoUri, inclusion, onRemove
           {meta}
         </Text>
       </View>
+      {cover ? (
+        <Pressable
+          onPress={(e) => {
+            e.stopPropagation();
+            cover.onToggle();
+          }}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel={cover.isCover ? "Cover photo — tap to unset" : "Make this the cover photo"}
+          style={styles.coverBtn}
+        >
+          <Star
+            size={16}
+            color={cover.isCover ? theme.colors.textPrimary : theme.colors.textMuted}
+            fill={cover.isCover ? theme.colors.textPrimary : "transparent"}
+          />
+        </Pressable>
+      ) : null}
       {inclusion ? (
         <Pressable
           onPress={(e) => {
@@ -143,4 +169,5 @@ const styles = StyleSheet.create({
   includePill: { borderRadius: 9999, paddingVertical: 5, paddingHorizontal: 9 },
   includePillText: { fontSize: 10, fontWeight: "800", letterSpacing: 0.6 },
   removeBtn: { width: 24, height: 24, alignItems: "center", justifyContent: "center" },
+  coverBtn: { width: 26, height: 26, alignItems: "center", justifyContent: "center" },
 });
