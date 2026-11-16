@@ -6,7 +6,7 @@ import { X } from "lucide-react-native";
 import { useTheme } from "../context/ThemeContext";
 import { TaskProofRow } from "./TaskProofRow";
 import type { StreakMemoryTaskEntry } from "../types/habit";
-import { coverFirst, toggleCover } from "../utils/momentCover";
+import { inShareOrder, shareOrderNumber, toggleIncludedInShare, toggleShareOrder } from "../utils/momentCover";
 
 type Props = {
   visible: boolean;
@@ -46,7 +46,6 @@ export function MiniMomentsEditSheet({
     // Reset only when the sheet opens, not on every parent render.
   }, [visible]);
 
-  const ordered = coverFirst(draft);
   const photoCount = draft.filter(isUploaded).length;
   const shownCount = draft.filter((e) => isUploaded(e) && e.includedInShare !== false).length;
   const where = [postedToCommunity ? "your Community post" : null, inSquad ? "your squad board" : null]
@@ -56,10 +55,7 @@ export function MiniMomentsEditSheet({
     ? `Saving updates ${where}.`
     : "Hidden photos stay out of the post if you publish later.";
 
-  const toggleInclusion = (taskId: string) =>
-    setDraft((prev) =>
-      prev.map((e) => (e.taskId === taskId ? { ...e, includedInShare: e.includedInShare === false } : e)),
-    );
+  const toggleInclusion = (taskId: string) => setDraft((prev) => toggleIncludedInShare(prev, taskId));
 
   return (
     <Modal
@@ -105,7 +101,9 @@ export function MiniMomentsEditSheet({
           </View>
 
           <ScrollView style={styles.list} showsVerticalScrollIndicator={false}>
-            {ordered.map((entry) => {
+            {/* Rows stay put while numbering — a row jumping under the finger
+                makes the next tap land on the wrong photo. Save applies the order. */}
+            {draft.map((entry) => {
               const photoUri = entry.proofUrls[0];
               const uploaded = isUploaded(entry);
               return (
@@ -114,11 +112,14 @@ export function MiniMomentsEditSheet({
                   label={entry.label}
                   state={photoUri ? "photo" : "note"}
                   photoUri={photoUri}
-                  meta={entry.isCover ? "Cover" : entry.note || (photoUri ? "Photo" : "Note")}
+                  meta={entry.note || (photoUri ? "Photo" : "Note")}
                   inclusion={uploaded ? { included: entry.includedInShare !== false, onToggle: () => toggleInclusion(entry.taskId) } : undefined}
-                  cover={
-                    uploaded && photoCount > 1
-                      ? { isCover: entry.isCover === true, onToggle: () => setDraft((prev) => toggleCover(prev, entry.taskId)) }
+                  order={
+                    uploaded && entry.includedInShare !== false && photoCount > 1
+                      ? {
+                          number: shareOrderNumber(draft, entry.taskId),
+                          onToggle: () => setDraft((prev) => toggleShareOrder(prev, entry.taskId)),
+                        }
                       : undefined
                   }
                   onPress={() => {
@@ -130,11 +131,11 @@ export function MiniMomentsEditSheet({
           </ScrollView>
 
           <Text style={[styles.hint, { color: theme.colors.textMuted }]}>
-            ★ puts a photo first · HIDDEN keeps it off the post. {hint}
+            Tap photos in the order you want them · HIDDEN keeps one off the post. {hint}
           </Text>
 
           <Pressable
-            onPress={() => onSave(coverFirst(draft))}
+            onPress={() => onSave(inShareOrder(draft))}
             disabled={saving}
             accessibilityRole="button"
             style={[styles.saveBtn, { backgroundColor: theme.colors.green[500], opacity: saving ? 0.7 : 1 }]}

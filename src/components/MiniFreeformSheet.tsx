@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Flag, X } from "lucide-react-native";
 import { useTheme } from "../context/ThemeContext";
 import { TaskProofRow } from "./TaskProofRow";
+import { shareOrderNumber } from "../utils/momentCover";
 import type { StreakMemoryTaskEntry } from "../types/habit";
 
 type Props = {
@@ -19,8 +20,8 @@ type Props = {
   onRemoveEntry: (entryId: string) => void;
   /** Toggle whether a logged moment's photo is included when this mission publishes to Community. */
   onToggleEntryInclusion: (entryId: string) => void;
-  /** Stars a photo as the post's cover (first slide). */
-  onToggleEntryCover?: (entryId: string) => void;
+  /** Tap a photo's thumbnail to set its place in the post (1 = cover). */
+  onToggleEntryOrder?: (entryId: string) => void;
   onComplete: (opts: { publishToCommunity: boolean }) => void;
   onClose: () => void;
 };
@@ -43,7 +44,7 @@ export function MiniFreeformSheet({
   onSelectEntry,
   onRemoveEntry,
   onToggleEntryInclusion,
-  onToggleEntryCover,
+  onToggleEntryOrder,
   onComplete,
   onClose,
 }: Props) {
@@ -119,9 +120,9 @@ export function MiniFreeformSheet({
                       ? { included: entry.includedInShare !== false, onToggle: () => onToggleEntryInclusion(entry.taskId) }
                       : undefined
                   }
-                  cover={
-                    shareable && onToggleEntryCover && shareableEntries.length > 1
-                      ? { isCover: entry.isCover === true, onToggle: () => onToggleEntryCover(entry.taskId) }
+                  order={
+                    shareable && entry.includedInShare !== false && onToggleEntryOrder && shareableEntries.length > 1
+                      ? { number: shareOrderNumber(entries, entry.taskId), onToggle: () => onToggleEntryOrder(entry.taskId) }
                       : undefined
                   }
                   onRemove={() => onRemoveEntry(entry.taskId)}

@@ -90,7 +90,7 @@ import {
 } from "../../src/lib/communityWinsApi";
 import { MAX_RESERVE_FUEL_MINUTES } from "../../src/constants/miniMission";
 import { formatTimeDisplay } from "../../src/utils/dateDisplay";
-import { coverFirst, toggleCover } from "../../src/utils/momentCover";
+import { inShareOrder, toggleIncludedInShare, toggleShareOrder } from "../../src/utils/momentCover";
 import { GlassTopHighlight } from "../../src/components/GlassTopHighlight";
 import {
   MINI_MISSION_DETAIL_KEEP_AWAKE_TAG,
@@ -2258,26 +2258,36 @@ export default function MiniMissionDetail() {
    * gallery filter (and the completionMemory.tasks it persists) both read this same
    * field afterward.
    */
-  const handleToggleMiniTaskInclusion = (taskId: string) => {
-    if (!mission) return;
-    const entry = draftTaskEntries[taskId];
-    if (!entry) return;
-    useHabitStore.getState().setMiniMissionDraftTask(mission.id, taskId, {
-      ...entry,
-      includedInShare: entry.includedInShare === false,
-    });
+  /**
+   * Hiding or numbering one photo can renumber the others, so write back every
+   * entry that changed (the store setters take one entry at a time).
+   */
+  const writeChangedDrafts = (
+    before: StreakMemoryTaskEntry[],
+    after: StreakMemoryTaskEntry[],
+    write: (entry: StreakMemoryTaskEntry) => void,
+  ) => {
+    for (const next of after) {
+      const prev = before.find((e) => e.taskId === next.taskId);
+      if (JSON.stringify(prev) !== JSON.stringify(next)) write(next);
+    }
   };
 
-  /** Stars one logged task's photo as the cover (only one at a time). */
-  const handleToggleMiniTaskCover = (taskId: string) => {
+  const handleToggleMiniTaskInclusion = (taskId: string) => {
     if (!mission) return;
     const before = Object.values(draftTaskEntries);
-    for (const next of toggleCover(before, taskId)) {
-      const prev = before.find((e) => e.taskId === next.taskId);
-      if ((prev?.isCover === true) !== (next.isCover === true)) {
-        useHabitStore.getState().setMiniMissionDraftTask(mission.id, next.taskId, next);
-      }
-    }
+    writeChangedDrafts(before, toggleIncludedInShare(before, taskId), (e) =>
+      useHabitStore.getState().setMiniMissionDraftTask(mission.id, e.taskId, e),
+    );
+  };
+
+  /** A tap on a logged task's photo: its place in the post (1 = cover). */
+  const handleToggleMiniTaskOrder = (taskId: string) => {
+    if (!mission) return;
+    const before = Object.values(draftTaskEntries);
+    writeChangedDrafts(before, toggleShareOrder(before, taskId), (e) =>
+      useHabitStore.getState().setMiniMissionDraftTask(mission.id, e.taskId, e),
+    );
   };
 
   /**
@@ -2298,7 +2308,7 @@ export default function MiniMissionDetail() {
     if (!mission) return;
     setChecklistCompleting(true);
     try {
-      const tasks = coverFirst(Object.values(draftTaskEntries));
+      const tasks = inShareOrder(Object.values(draftTaskEntries));
       const cover =
         tasks.find((t) => t.includedInShare !== false && /^https?:\/\//.test(t.proofUrls[0] ?? "")) ??
         tasks.find((t) => /^https?:\/\//.test(t.proofUrls[0] ?? "")) ??
@@ -2448,23 +2458,17 @@ export default function MiniMissionDetail() {
 
   const handleToggleFreeformMemoryInclusion = (entryId: string) => {
     if (!mission) return;
-    const entry = draftMemoryEntries.find((e) => e.taskId === entryId);
-    if (!entry) return;
-    useHabitStore.getState().setMiniMissionFreeformMemory(mission.id, entryId, {
-      ...entry,
-      includedInShare: entry.includedInShare === false,
-    });
+    writeChangedDrafts(draftMemoryEntries, toggleIncludedInShare(draftMemoryEntries, entryId), (e) =>
+      useHabitStore.getState().setMiniMissionFreeformMemory(mission.id, e.taskId, e),
+    );
   };
 
-  /** Stars one moment's photo as the cover (only one at a time). */
-  const handleToggleFreeformMemoryCover = (entryId: string) => {
+  /** A tap on a moment's photo: its place in the post (1 = cover). */
+  const handleToggleFreeformMemoryOrder = (entryId: string) => {
     if (!mission) return;
-    for (const next of toggleCover(draftMemoryEntries, entryId)) {
-      const prev = draftMemoryEntries.find((e) => e.taskId === next.taskId);
-      if ((prev?.isCover === true) !== (next.isCover === true)) {
-        useHabitStore.getState().setMiniMissionFreeformMemory(mission.id, next.taskId, next);
-      }
-    }
+    writeChangedDrafts(draftMemoryEntries, toggleShareOrder(draftMemoryEntries, entryId), (e) =>
+      useHabitStore.getState().setMiniMissionFreeformMemory(mission.id, e.taskId, e),
+    );
   };
 
   /** Finalizes a freeform mission. Structurally identical to handleChecklistCompleteCommit
@@ -2475,7 +2479,7 @@ export default function MiniMissionDetail() {
     if (!mission) return;
     setFreeformCompleting(true);
     try {
-      const tasks = coverFirst(draftMemoryEntries);
+      const tasks = inShareOrder(draftMemoryEntries);
       const cover =
         tasks.find((t) => t.includedInShare !== false && /^https?:\/\//.test(t.proofUrls[0] ?? "")) ??
         tasks.find((t) => /^https?:\/\//.test(t.proofUrls[0] ?? "")) ??
@@ -2706,7 +2710,7 @@ export default function MiniMissionDetail() {
           }
           // Same filter as publishing from the complete sheet: moments switched
           // to HIDDEN there stay out of the post when it's published later.
-          const postHocGallery = coverFirst(mission.completionMemory?.tasks ?? [])
+          const postHocGallery = inShareOrder(mission.completionMemory?.tasks ?? [])
             .filter((t) => t.includedInShare !== false && t.proofUrls[0] && /^https?:\/\//.test(t.proofUrls[0]))
             .map((t) => ({ taskId: t.taskId, label: t.label, note: t.note ?? null, imageUrl: t.proofUrls[0] }));
           const hasTaskMomentsToShare = (mission.completionMemory?.tasks?.length ?? 0) > 0;
@@ -2973,7 +2977,7 @@ export default function MiniMissionDetail() {
                 });
               }}
               onToggleTaskInclusion={handleToggleMiniTaskInclusion}
-              onToggleTaskCover={handleToggleMiniTaskCover}
+              onToggleTaskOrder={handleToggleMiniTaskOrder}
               onComplete={(opts) => void handleChecklistCompleteCommit(opts)}
               onClose={() => {
                 setCompleteSheetOpen(false);
@@ -3017,7 +3021,7 @@ export default function MiniMissionDetail() {
               onSelectEntry={(entry) => setFreeformMemoryUi({ kind: "edit", entry })}
               onRemoveEntry={handleRemoveFreeformMemory}
               onToggleEntryInclusion={handleToggleFreeformMemoryInclusion}
-              onToggleEntryCover={handleToggleFreeformMemoryCover}
+              onToggleEntryOrder={handleToggleFreeformMemoryOrder}
               onComplete={(opts) => void handleFreeformCompleteCommit(opts)}
               onClose={() => {
                 setCompleteSheetOpen(false);

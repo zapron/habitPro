@@ -1,5 +1,5 @@
 import type { MiniMission, StreakMemoryTaskEntry } from "../types/habit";
-import { coverFirst } from "../utils/momentCover";
+import { inShareOrder } from "../utils/momentCover";
 import type { LiveMiniMemoryGalleryItem, LiveMiniParticipantStatus } from "../types/liveMiniMission";
 import { getMiniRemainingMs } from "../utils/miniMissionTime";
 import { syncLiveMiniMissionProgress } from "./liveMiniMissionsApi";
@@ -17,7 +17,7 @@ export function buildLiveMiniMemoryGallery(
 ): LiveMiniMemoryGalleryItem[] | null {
   if (!tasks || tasks.length === 0) return null;
   // Moments the owner switched to HIDDEN stay off the squad board too.
-  const items = coverFirst(tasks).filter((t) => t.includedInShare !== false).map((t): LiveMiniMemoryGalleryItem => ({
+  const items = inShareOrder(tasks).filter((t) => t.includedInShare !== false).map((t): LiveMiniMemoryGalleryItem => ({
     taskId: t.taskId,
     label: t.label,
     note: t.note ?? null,

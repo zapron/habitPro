@@ -547,6 +547,10 @@ function parseStreakMemoryTaskEntries(v: unknown): StreakMemoryTaskEntry[] | und
         : [];
       const includedInShare = typeof e.includedInShare === "boolean" ? e.includedInShare : undefined;
       const isCover = e.isCover === true;
+      const shareOrder =
+        typeof e.shareOrder === "number" && Number.isFinite(e.shareOrder) && e.shareOrder > 0
+          ? e.shareOrder
+          : undefined;
       return {
         taskId,
         label,
@@ -555,6 +559,7 @@ function parseStreakMemoryTaskEntries(v: unknown): StreakMemoryTaskEntry[] | und
         ...(note ? { note } : {}),
         ...(includedInShare !== undefined ? { includedInShare } : {}),
         ...(isCover ? { isCover } : {}),
+        ...(shareOrder !== undefined ? { shareOrder } : {}),
       };
     })
     .filter((entry): entry is StreakMemoryTaskEntry => entry !== null);

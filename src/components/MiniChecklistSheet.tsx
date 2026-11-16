@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Flag, X } from "lucide-react-native";
 import { useTheme } from "../context/ThemeContext";
 import { TaskProofRow } from "./TaskProofRow";
+import { shareOrderNumber } from "../utils/momentCover";
 import type { StreakMemoryTaskEntry, TaskChecklistItem } from "../types/habit";
 
 type Props = {
@@ -18,8 +19,8 @@ type Props = {
   onSelectTask: (task: TaskChecklistItem) => void;
   /** Toggle whether a logged task's photo is included when this mission publishes to Community. */
   onToggleTaskInclusion: (taskId: string) => void;
-  /** Stars a photo as the post's cover (first slide). */
-  onToggleTaskCover?: (taskId: string) => void;
+  /** Tap a photo's thumbnail to set its place in the post (1 = cover). */
+  onToggleTaskOrder?: (taskId: string) => void;
   onComplete: (opts: { publishToCommunity: boolean }) => void;
   onClose: () => void;
 };
@@ -47,7 +48,7 @@ export function MiniChecklistSheet({
   canPublishCommunity,
   onSelectTask,
   onToggleTaskInclusion,
-  onToggleTaskCover,
+  onToggleTaskOrder,
   onComplete,
   onClose,
 }: Props) {
@@ -137,9 +138,9 @@ export function MiniChecklistSheet({
                       ? { included: entry?.includedInShare !== false, onToggle: () => onToggleTaskInclusion(task.id) }
                       : undefined
                   }
-                  cover={
-                    shareable && onToggleTaskCover && shareableTasks.length > 1
-                      ? { isCover: entry?.isCover === true, onToggle: () => onToggleTaskCover(task.id) }
+                  order={
+                    shareable && entry && entry.includedInShare !== false && onToggleTaskOrder && shareableTasks.length > 1
+                      ? { number: shareOrderNumber(loggedTasks, entry.taskId), onToggle: () => onToggleTaskOrder(task.id) }
                       : undefined
                   }
                   onPress={() => onSelectTask(task)}

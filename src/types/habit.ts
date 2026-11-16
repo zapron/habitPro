@@ -25,7 +25,9 @@ export interface StreakMemoryTaskEntry {
    * same flag, same "Share/Update catalog" action either way.
    */
   includedInShare?: boolean;
-  /** Starred as the cover: leads the shared gallery. At most one per memory. */
+  /** Position in the shared post (1 = cover), set by tapping photos in order. */
+  shareOrder?: number;
+  /** Older single "cover" star; read as shareOrder 1 when nothing is numbered. */
   isCover?: boolean;
 }
 

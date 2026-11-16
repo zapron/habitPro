@@ -122,7 +122,7 @@ import { shouldAnnounceChapter } from "../../src/features/videoMoments/chapterTo
 import { fetchClaimedChapters, uploadAndClaimVideoMoment } from "../../src/features/videoMoments/api";
 import { useChapterRecorder } from "../../src/features/videoMoments/ChapterRecorder";
 import { CHAPTER_SLIDE_ID, chapterSlideLabel } from "../../src/features/videoMoments/chapterSlides";
-import { coverFirst, toggleCover } from "../../src/utils/momentCover";
+import { inShareOrder, toggleIncludedInShare, toggleShareOrder } from "../../src/utils/momentCover";
 import type { ChecklistChapter } from "../../src/features/videoMoments/ChecklistChapterRow";
 
 const LOCKED_CHECKIN_MSG =
@@ -1514,20 +1514,17 @@ export default function HabitDetail() {
         (dateStr: string, taskId: string) => {
             if (!habit) return;
             const tasks = habit.streakMemories?.[dateStr]?.tasks ?? [];
-            const nextTasks = tasks.map((t) =>
-                t.taskId === taskId ? { ...t, includedInShare: t.includedInShare === false } : t,
-            );
-            patchStreakMemory(habit.id, dateStr, { tasks: nextTasks });
+            patchStreakMemory(habit.id, dateStr, { tasks: toggleIncludedInShare(tasks, taskId) });
         },
         [habit, patchStreakMemory],
     );
 
-    /** Stars one task's photo as the post's cover. Local-only — Share/Update publishes it. */
-    const handleToggleTaskCover = useCallback(
+    /** A tap on a task's photo: its place in the post. Local-only — Share/Update publishes it. */
+    const handleToggleTaskOrder = useCallback(
         (dateStr: string, taskId: string) => {
             if (!habit) return;
             const tasks = habit.streakMemories?.[dateStr]?.tasks ?? [];
-            patchStreakMemory(habit.id, dateStr, { tasks: toggleCover(tasks, taskId) });
+            patchStreakMemory(habit.id, dateStr, { tasks: toggleShareOrder(tasks, taskId) });
         },
         [habit, patchStreakMemory],
     );
@@ -1568,7 +1565,7 @@ export default function HabitDetail() {
                 return;
             }
             const tasks = mem?.tasks ?? [];
-            const taskGallery = coverFirst(tasks)
+            const taskGallery = inShareOrder(tasks)
                 .filter((t) => t.includedInShare !== false && t.proofUrls[0] && /^https?:\/\//.test(t.proofUrls[0]))
                 .map((t) => ({
                     taskId: t.taskId,
@@ -2499,9 +2496,9 @@ export default function HabitDetail() {
                             if (!checklistDayUi) return;
                             handleToggleTaskInclusion(checklistDayUi.dateStr, taskId);
                         }}
-                        onToggleTaskCover={(taskId) => {
+                        onToggleTaskOrder={(taskId) => {
                             if (!checklistDayUi) return;
-                            handleToggleTaskCover(checklistDayUi.dateStr, taskId);
+                            handleToggleTaskOrder(checklistDayUi.dateStr, taskId);
                         }}
                         onMarkComplete={() => {
                             if (!checklistDayUi) return;
