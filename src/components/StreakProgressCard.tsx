@@ -363,46 +363,73 @@ export function StreakProgressCard({ streak, completedCount, totalDays, ringColo
                 ]}
             >
                 <GlassTopHighlight radius={theme.radius.lg} />
-                <View style={styles.row}>
-                    <View style={styles.contentCol}>
-                        {intensity !== 'none' ? (
-                            <Text style={[styles.title, { color: tierColor }]} numberOfLines={1}>
-                                {label}
+                {chapter ? (
+                    // With a Chapter the week strip below is the card's only bar: the
+                    // campaign bar shrinks to "Day 7 of 30" on the headline's line.
+                    <View style={styles.lineRow}>
+                        <Text
+                            style={
+                                intensity !== 'none'
+                                    ? [styles.title, styles.titleLight, styles.flexText, { color: tierColor }]
+                                    : [
+                                          styles.eyebrow,
+                                          styles.flexText,
+                                          { color: theme.colors.textSecondary, fontSize: theme.typography.micro },
+                                      ]
+                            }
+                            numberOfLines={1}
+                        >
+                            {intensity !== 'none' ? label : 'Campaign Progress'}
+                        </Text>
+                        <Text style={[styles.dayLine, { color: theme.colors.textMuted }]} numberOfLines={1}>
+                            <Text style={{ color: theme.colors.textSecondary, fontWeight: '700' }}>
+                                Day {completedCount}
                             </Text>
-                        ) : (
-                            <Text
-                                style={[
-                                    styles.eyebrow,
-                                    { color: theme.colors.textSecondary, fontSize: theme.typography.micro },
-                                ]}
-                            >
-                                Campaign Progress
-                            </Text>
-                        )}
-                        <View style={styles.barRow}>
-                            <View style={[styles.barTrack, { backgroundColor: theme.colors.slate[700] }]}>
-                                <Animated.View
-                                    pointerEvents="none"
-                                    style={[styles.barFill, { transform: [{ scaleX: fillScale }] }]}
+                            {' '}of {totalDays}
+                        </Text>
+                    </View>
+                ) : (
+                    <View style={styles.row}>
+                        <View style={styles.contentCol}>
+                            {intensity !== 'none' ? (
+                                <Text style={[styles.title, { color: tierColor }]} numberOfLines={1}>
+                                    {label}
+                                </Text>
+                            ) : (
+                                <Text
+                                    style={[
+                                        styles.eyebrow,
+                                        { color: theme.colors.textSecondary, fontSize: theme.typography.micro },
+                                    ]}
                                 >
-                                    <LinearGradient
-                                        colors={[barColorSoft, barColor]}
-                                        start={{ x: 0, y: 0 }}
-                                        end={{ x: 1, y: 0 }}
-                                        style={StyleSheet.absoluteFill}
-                                    />
-                                </Animated.View>
-                                <Text style={styles.barPct} numberOfLines={1}>
-                                    {displayPct}%
+                                    Campaign Progress
+                                </Text>
+                            )}
+                            <View style={styles.barRow}>
+                                <View style={[styles.barTrack, { backgroundColor: theme.colors.slate[700] }]}>
+                                    <Animated.View
+                                        pointerEvents="none"
+                                        style={[styles.barFill, { transform: [{ scaleX: fillScale }] }]}
+                                    >
+                                        <LinearGradient
+                                            colors={[barColorSoft, barColor]}
+                                            start={{ x: 0, y: 0 }}
+                                            end={{ x: 1, y: 0 }}
+                                            style={StyleSheet.absoluteFill}
+                                        />
+                                    </Animated.View>
+                                    <Text style={styles.barPct} numberOfLines={1}>
+                                        {displayPct}%
+                                    </Text>
+                                </View>
+                                <Text style={styles.dayCount} numberOfLines={1}>
+                                    <Text style={{ color: barColor, fontWeight: '800' }}>{completedCount}</Text>
+                                    <Text style={{ color: theme.colors.textMuted }}>/{totalDays} d</Text>
                                 </Text>
                             </View>
-                            <Text style={styles.dayCount} numberOfLines={1}>
-                                <Text style={{ color: barColor, fontWeight: '800' }}>{completedCount}</Text>
-                                <Text style={{ color: theme.colors.textMuted }}>/{totalDays} d</Text>
-                            </Text>
                         </View>
                     </View>
-                </View>
+                )}
                 {chapter ? <ChapterRow status={chapter} onPress={onPressChapter} /> : null}
             </View>
         </View>
@@ -427,6 +454,9 @@ const styles = StyleSheet.create({
     contentCol: { flex: 1, minWidth: 0, gap: 8, justifyContent: 'center' },
     eyebrow: { fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1 },
     title: { fontSize: 16, fontWeight: '800', letterSpacing: 0.2 },
+    titleLight: { fontWeight: '700' },
+    lineRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+    dayLine: { fontSize: 13, fontWeight: '600', flexShrink: 0 },
     barRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
     barTrack: { flex: 1, height: 13, borderRadius: 999, overflow: 'hidden', justifyContent: 'center' },
     barFill: {
