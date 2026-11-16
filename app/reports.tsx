@@ -40,10 +40,10 @@ function reportSortMs(h: Habit): number {
   return Number.isFinite(ms) ? ms : 0;
 }
 
-/** "Ended 12 Nov 2026" from the same date the list is sorted by. */
+/** "12/Nov/26" from the same date the list is sorted by (month name: no US/UK mix-up). */
 function endedLabel(h: Habit): string | undefined {
   const label = formatDateDisplay(reportEndRaw(h));
-  return label ? `Ended ${label}` : undefined;
+  return label ? label.replace(/-/g, "/") : undefined;
 }
 
 /**
@@ -155,7 +155,7 @@ export default function ReportsScreen() {
         nowMs={nowMs}
         index={index}
         redesignPalette={rp ? redesignPalette : null}
-        subtitle={endedLabel(item)}
+        gridCaption={endedLabel(item)}
       />
     ),
     [nowMs, rp],
